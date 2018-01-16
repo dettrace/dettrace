@@ -1,13 +1,20 @@
-CXXFLAGS = -g -Wall -O0 -std=c++14
-CXX =g++
+CXX = g++
+# Using features from the C++17 Standard: pair and pattern matching with auto.
+DEBUG =  -O0 -g
+CXXFLAGS = $(DEBUG) -std=c++1z -Wall $(INCLUDE)
+LIBS = -pthread
+
+INCLUDE = -I ../include/
+
 src = $(wildcard *.cpp)
 obj = $(src:.cpp=.o)
-dep = $(obj:.o=.d)  # one dependency file for each source
+dep = $(obj:.o=.d)
 
-detTrace: $(obj)
-	$(CXX) $(CXXFLAGS) $^ -o $@
 
--include $(dep)   # include all dep files in the makefile
+dettrace: $(obj) $(libs)
+	$(CXX) $(CXXFLAGS) $(LIBS) $^ -o $@
+
+-include $(dep)
 
 # rule to generate a dep file by using the C preprocessor
 # (see man cpp for details on the -MM and -MT options)
@@ -16,8 +23,8 @@ detTrace: $(obj)
 
 .PHONY: clean
 clean:
-	@rm $(obj) detTrace
-	@rm -f $(dep)
-
+	$(RM) $(obj)
+	$(RM) $(dep)
+	$(RM) dettrace
 # Credits to the awesome makefile guide:
 # http://nuclear.mutantstargoat.com/articles/make/
