@@ -52,7 +52,7 @@ uint64_t ptracer::arg6(){
   return regs.r9;
 }
 
-long ptracer::getEventMessage(){
+uint64_t ptracer::getEventMessage(){
   long event;
   doPtrace(PTRACE_GETEVENTMSG, traceePid, nullptr, &event);
 
@@ -86,15 +86,19 @@ void ptracer::updateState(pid_t newPid){
   return;
 }
 
+pid_t ptracer::getPid(){
+  return traceePid;
+}
+
 void ptracer::setOptions(pid_t pid){
-    doPtrace(PTRACE_SETOPTIONS, pid, NULL, (void*)
-	   // PTRACE_O_EXITKILL | // If Tracer exits. Send SIGKIll signal to all tracees.
-	   (PTRACE_O_TRACECLONE | // Automatically enroll child of tracee.
-	   // clone is called
-	   PTRACE_O_TRACEEXEC |
-	   PTRACE_O_TRACEFORK |
-	   PTRACE_O_TRACEVFORK |
-	   // PTRACE_O_TRACEEXIT | // Stop tracee when it exits.
+  doPtrace(PTRACE_SETOPTIONS, pid, NULL, (void*)
+	   (PTRACE_O_EXITKILL | // If Tracer exits. Send SIGKIll signal to all tracees.
+	    PTRACE_O_TRACECLONE | // Automatically enroll child of tracee.
+	    // clone is called
+	    PTRACE_O_TRACEEXEC |
+	    PTRACE_O_TRACEFORK |
+	    PTRACE_O_TRACEVFORK |
+	    // PTRACE_O_TRACEEXIT | // Stop tracee when it exits.
 	    PTRACE_O_TRACESYSGOOD));
   return;
 }
@@ -133,6 +137,11 @@ long ptracer::doPtrace(enum __ptrace_request request, pid_t pid, void *addr, voi
   return val;
 }
 
+
+void ptracer::writeArg1(uint64_t val){
+  regs.rdi = val;
+  doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
+}
 
 void ptracer::writeArg3(uint64_t val){
   regs.rdx = val;

@@ -60,12 +60,23 @@ bool cloneSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void cloneSystemCall::handleDetPost(state &s, ptracer &t){
+  s.log.writeToLog(Importance::info, "IN CLONE!\n");
   // Non deterministic failure due to signal.
-  if((int64_t)t.getReturnValue() == -1){
+  pid_t returnPid = t.getReturnValue();
+  if(returnPid == -1){
     if(errno == EINTR){
       throw runtime_error("Clone system call failed:\n" + string { strerror(errno) });
     }
   }
+
+  // The ptrace option for fork handles most of the logic for forking. We merely need
+  // to make sure to return the correct value here!
+  pid_t vpid = s.pidMap.getVirtualValue(returnPid);
+  t.setReturnRegister(vpid);
+
+  // In older versions of ptrace, the tid value was cached to skip getpid calls. This
+  // is no longer done as it creates inconsistencies between process related system calls
+  // done through libc and those done directly. Long story short, nothing for us to do.
 
   return;
 }
@@ -109,6 +120,10 @@ execveSystemCall::execveSystemCall(long syscallNumber, string syscallName):
 }
 
 bool execveSystemCall::handleDetPre(state &s, ptracer &t){
+  char* filenameAddr = (char*) t.arg1();
+  string filename = t.readTraceeCString(filenameAddr, s.traceePid);
+  s.log.writeToLog(Importance::extra, "Execve on: %s\n", filename.c_str());
+
   return true;
 }
 
@@ -128,6 +143,8 @@ bool exit_groupSystemCall::handleDetPre(state &s, ptracer &t){
 void exit_groupSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
+// =======================================================================================
+
 // =======================================================================================
 fstatSystemCall::fstatSystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
@@ -153,7 +170,7 @@ bool fstatfsSystemCall::handleDetPre(state &s, ptracer &t){
 
 void fstatfsSystemCall::handleDetPost(state &s, ptracer &t){
   // Read values written to by system call.
-  struct statfs stats = readFromTracee((struct statfs*) t.arg2(), s.traceePid);
+  struct statfs stats = ptracer::readFromTracee((struct statfs*) t.arg2(), s.traceePid);
 
 
   if(t.getReturnValue() == 0){
@@ -162,11 +179,24 @@ void fstatfsSystemCall::handleDetPost(state &s, ptracer &t){
     zeroOutStatfs(stats);
 
     // Write back result for child.
-    writeToTracee<struct statfs>((struct statfs*) t.arg2(), stats, s.traceePid);
+    ptracer::writeToTracee<struct statfs>((struct statfs*) t.arg2(), stats, s.traceePid);
   }else{
     s.log.writeToLog(Importance::info, "Negative number returned from fstatfs call\n" );
   }
 
+  return;
+}
+// =======================================================================================
+futexSystemCall::futexSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool futexSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void futexSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
@@ -193,8 +223,7 @@ bool getpidSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void getpidSystemCall::handleDetPost(state &s, ptracer &t){
-  // This is the post call, return register holds pid.
-  pid_t realPid = t.getReturnValue();
+  pid_t realPid = t.getPid();
   s.log.writeToLog(Importance::info, "Process real pid: %d\n", realPid);
 
   pid_t vPid = s.pidMap.getVirtualValue(realPid);
@@ -206,6 +235,46 @@ void getpidSystemCall::handleDetPost(state &s, ptracer &t){
   s.log.writeToLog(Importance::info, "Process vPid: %d\n", vPid);
 
   t.setReturnRegister(vPid);
+  return;
+}
+// =======================================================================================
+getppidSystemCall::getppidSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool getppidSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void getppidSystemCall::handleDetPost(state &s, ptracer &t){
+  pid_t parentPid = s.ppid;
+  s.log.writeToLog(Importance::info, "Process real ppid: %d\n", parentPid);
+
+  pid_t vppid = s.pidMap.getVirtualValue(parentPid);
+
+  if(vppid == -1){
+    throw runtime_error("Real pid " + to_string(parentPid) + " not in map!\n");
+  }
+
+  s.log.writeToLog(Importance::info, "Process vppid: %d\n", vppid);
+
+  t.setReturnRegister(vppid);
+  return;
+}
+// =======================================================================================
+getuidSystemCall::getuidSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool getuidSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void getuidSystemCall::handleDetPost(state &s, ptracer &t){
+  int nobodyUid = 65534;
+  t.setReturnRegister(nobodyUid);
   return;
 }
 // =======================================================================================
@@ -403,7 +472,7 @@ bool statfsSystemCall::handleDetPre(state &s, ptracer &t){
 
 void statfsSystemCall::handleDetPost(state &s, ptracer &t){
   // Read values written to by system call.
-  struct statfs stats = readFromTracee((struct statfs*) t.arg2(), s.traceePid);
+  struct statfs stats = ptracer::readFromTracee((struct statfs*) t.arg2(), s.traceePid);
 
 
   if(t.getReturnValue() == 0){
@@ -412,7 +481,7 @@ void statfsSystemCall::handleDetPost(state &s, ptracer &t){
     zeroOutStatfs(stats);
 
     // Write back result for child.
-    writeToTracee<struct statfs>((struct statfs*) t.arg2(), stats, s.traceePid);
+    ptracer::writeToTracee<struct statfs>((struct statfs*) t.arg2(), stats, s.traceePid);
   }else{
     s.log.writeToLog(Importance::info, "Negative number returned from statfs call:\n.");
   }
@@ -432,7 +501,7 @@ bool timeSystemCall::handleDetPre(state &s, ptracer &t){
 void timeSystemCall::handleDetPost(state &s, ptracer &t){
   // Write new value.
   // CHECK IF NULL TODO.
-  writeToTracee<time_t>((time_t*) t.arg1(), (time_t) s.clock, s.traceePid);
+  ptracer::writeToTracee<time_t>((time_t*) t.arg1(), (time_t) s.clock, s.traceePid);
 
   return;
 }
@@ -461,8 +530,8 @@ bool utimensatSystemCall::handleDetPre(state &s, ptracer &t){
   };
 
   // Write our struct to the tracee's memory.
-  writeToTracee(& (ourTimespec[0]), clockTime, s.traceePid);
-  writeToTracee(& (ourTimespec[1]), clockTime, s.traceePid);
+  ptracer::writeToTracee(& (ourTimespec[0]), clockTime, s.traceePid);
+  ptracer::writeToTracee(& (ourTimespec[1]), clockTime, s.traceePid);
 
   // Point system call to new address.
   t.writeArg3((uint64_t) ourTimespec);
@@ -471,6 +540,53 @@ bool utimensatSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void utimensatSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+wait4SystemCall::wait4SystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool wait4SystemCall::handleDetPre(state &s, ptracer &t){
+  pid_t vpid = t.arg1();
+  // Figure out what to do based on vpid value passed. (See man waitpid 2):
+
+  // (< -1) wait for any child process whose process group ID  is  equal  to  the
+  // absolute value of pid.
+  // TODO: Nondeterministic based on scheduling of processes? Is there any guarantee
+  // on which one will be returned?
+  if(vpid < -1){
+    throw runtime_error("wait4 error: unimplemented case for pid < -1!");
+  }
+
+  // (== -1) wait for any child process.
+  // TODO: Same issue as case above.
+  if(vpid == -1){
+    throw runtime_error("wait4 error: unimplemented case for pid == -1!");
+  }
+
+  // (== 0) wait for any child process whose process group ID is equal to that of
+  // the calling process.
+  // TODO: Same issue as case above.
+  if(vpid == 0){
+    throw runtime_error("wait4 error: unimplemented case for pid == 0!");
+  }
+
+  // (> 0) wait for the child whose process ID is equal to the value of pid.
+  // Most common case. Map pid from virtual to real.
+  int realPid = s.pidMap.getRealValue(vpid);
+  if(realPid == -1){
+    throw runtime_error("wait4 error: requested for vpid does not exist: " +
+			to_string(vpid));
+  }
+
+  // Set realPid as value for system call to use for wait.
+  t.writeArg1(realPid);
+  return true;
+}
+
+void wait4SystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================

@@ -56,7 +56,7 @@ void logger::writeToLog(Importance imp, std::string format, ...){
     }
     break;
   default:
-    fprintf(fin, "  [Detbox %d] Warning Unknown DEBUG level %d.\n", pid, debugLevel);
+    fprintf(fin, "  Warning Unknown DEBUG level %d.\n", debugLevel);
     break;
   }
 
@@ -64,7 +64,6 @@ void logger::writeToLog(Importance imp, std::string format, ...){
     if(padding){
       fprintf(fin, "  ");
     }
-    fprintf(fin, "  [Detbox %d] ", pid);
     va_start(args, format);
     vfprintf(fin, format.c_str(), args);
     va_end(args);

@@ -7,6 +7,9 @@
 
 using namespace std;
 
+// Needed to avoid recursive dependencies between classes.
+class state;
+
 /**
  * Class to hold handling function per system call.
  * You should derive from this class and implement handleDeterministically() using

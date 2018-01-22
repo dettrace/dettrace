@@ -23,6 +23,7 @@
 #include <iostream>
 #include <tuple>
 #include <thread>
+#include <stack>
 
 #include "logger.hpp"
 #include "valueMapper.hpp"
@@ -103,28 +104,25 @@ void runTracer(int debugLevel, pid_t startingPid){
   // Logger to write all messages to.
   logger log {stderr, debugLevel};
 
-  // TODO: Add a global state?
-
   // State represents all state we wish to maintain between subsequent system calls, e.g.
-  // vpid mappings, logical time, etc.
+  // logical time, etc.
   // Since we may have multiple processes and threads, we hold a state per pid. TODO:
   // do different threads have the same pid but different tid? I think so, tid might
   // be better.
   map<pid_t, state> states;
+  // Global pidMap shared by entire process trees. This is global to maintain a consistent
+  // view of virtual to real pid mappings accross all processes.
+  valueMapper pidMap {log, "Vpid <-> Rpid Mapper"};
+
   // Set state for first process.
-  states.emplace(startingPid, state {log, startingPid});
+  states.emplace(startingPid,
+		 state {log, startingPid, pidMap, /* Pretend our parent is init */ 1});
 
   // Explicitly add the mapping between vPid <-> rPid (realPid).
-  // TODO: Fix!
-  // states[startingPid].pidMap.addEntryValue(startingPid);
+  pidMap.addEntryValue(startingPid);
 
-  // Needed to tell ptrace to continue process from last event.
-  pid_t lastPid = startingPid;
-
-  // Initialized in pre-system call event, remains valid all the way until post-system
-  // call event. This saves us having to refetch the system call on the post-systemcall
-  // stop.
-  unique_ptr<systemCall> systemcall;
+  // Tell ptrace which stopped process to continue running.
+  pid_t nextPid = startingPid;
 
   // Wait for first process to be ready! First process is special and we must set
   // the options ourselves. Thereafter, ptracer::setOptions will handle this for new
@@ -132,19 +130,20 @@ void runTracer(int debugLevel, pid_t startingPid){
   ptracer tracer { startingPid };
   ptracer::setOptions(startingPid);
 
+  stack<pid_t> processHier {};
+
   // Loop to iterate over all events (signals, system calls, etc) that ptrace catches
   // we skip the ones we don't care about.
-  while(states.size() != 0){
+
+  while(true){
     pid_t traceesPid;
     int status;
 
-    ptraceEvent ret = getNextEvent(lastPid, traceesPid, status);
-    lastPid = traceesPid;
+    ptraceEvent ret = getNextEvent(nextPid, traceesPid, status);
+    nextPid = traceesPid;
 
     // We have never seen this pid before. Add it to our table of states.
     if(states.count(traceesPid) == 0){
-      log.writeToLog(Importance::info, "Added process [%d] to states map.", traceesPid);
-      states.emplace(traceesPid, state {log, traceesPid} );
       // First time seeing this process set ptrace options.
       ptracer::setOptions(traceesPid);
     }
@@ -153,8 +152,17 @@ void runTracer(int debugLevel, pid_t startingPid){
 
     // This process is done.
     if(ret == ptraceEvent::exit){
+      log.writeToLog(Importance::inter, "Process [%d] has finished.\n", traceesPid);
+      if(processHier.empty()){
+	// We're done. Exit
+	break;
+      }
       // Pop entry from map.
       states.erase(traceesPid);
+      // Set next pid to our parent.
+      nextPid = processHier.top();
+      processHier.pop();
+      log.unsetPadding();
       continue;
     }
 
@@ -166,40 +174,49 @@ void runTracer(int debugLevel, pid_t startingPid){
 
       // pre-exit to system call.
       if(currState.syscallStopState == syscallState::pre){
-	log.writeToLog(Importance::info, "Ptrace syscall-pre!\n");
+	// log.writeToLog(Importance::info, "[%d] ptrace syscall-pre!\n", traceesPid);
 	currState.syscallStopState = syscallState::post;
 
-	int syscallNumber = tracer.getSystemCallNumber();
-	string syscallName = systemCallMappings[syscallNumber];
+	int syscallNum = tracer.getSystemCallNumber();
+	currState.systemcall = getSystemCall(syscallNum, systemCallMappings[syscallNum]);
 
 	// No idea what this system call is! error out.
-	if(syscallNumber > 0 && syscallNumber > SYSTEM_CALL_COUNT){
-	  throw runtime_error("Unkown system call number: " +  to_string(syscallNumber));
+	if(syscallNum > 0 && syscallNum > SYSTEM_CALL_COUNT){
+	  throw runtime_error("Unkown system call number: " + to_string(syscallNum));
 	}
 
-	log.writeToLog(Importance::info,"Intercepted system call #%d: %s\n",
-		       syscallNumber, syscallName.c_str());
-
-	systemcall = getSystemCall(syscallNumber, syscallName);
+	const string red("\033[1;31m");
+	const string reset("\033[0m");
+	// Fancy bold red names :3
+	log.writeToLog(Importance::inter,"[Time %d][Pid %d] Intercepted " + red +
+		       "%s" + reset + "(#%d)\n",
+		       currState.clock, traceesPid,
+		       currState.systemcall->syscallName.c_str(), syscallNum);
 
 	// Tick clock once per syscall pre-post pair. Notice we don't tick on every event
 	// as signals are asynchronous events.
 	currState.clock++;
 	log.setPadding();
 
-	currState.doSystemcall = systemcall->handleDetPre(currState, tracer);
+	currState.doSystemcall = currState.systemcall->handleDetPre(currState, tracer);
 	continue;
       }
       // Post system call exit.
       else{
-	log.writeToLog(Importance::info, "Ptrace syscall-post!\n");
+	// log.writeToLog(Importance::info, "[%d] ptrace syscall-post!\n", traceesPid);
 	currState.syscallStopState = syscallState::pre;
 
-	// System call was done in the last iteration.
-	log.writeToLog(Importance::info,"Syscall returned with value: %d\n",
+	log.writeToLog(Importance::info,"%s value before post-interception: %d\n",
+		       currState.systemcall->syscallName.c_str(),
 		       tracer.getReturnValue());
 
-	systemcall->handleDetPost(currState, tracer);
+	currState.systemcall->handleDetPost(currState, tracer);
+
+	// System call was done in the last iteration.
+	log.writeToLog(Importance::inter,"%s returned with value: %d\n",
+		       currState.systemcall->syscallName.c_str(),
+		       tracer.getReturnValue());
+
 	log.unsetPadding();
 
 	continue;
@@ -209,39 +226,54 @@ void runTracer(int debugLevel, pid_t startingPid){
     // We have encountered a call to fork, vfork, clone. Spawn a new thread that
     // will trace that new process.
     if(ret == ptraceEvent::fork){
-      log.writeToLog(Importance::inter, "Caught fork event!\n");
-      pid_t newProcess = (pid_t) tracer.getEventMessage();
-      log.writeToLog(Importance::info, "Starting new tracer thread for tracee: %d\n",
-		     newProcess);
-      // Call this function recursively in another thread. Pretty neat :o
-      // thread t(ptraceParent, debugLevel, newProcess);
-      // TODO: Eventually we might multiplex the processes. For now, let child
-      // run to completion.
-      log.writeToLog(Importance::info, "Parent tracer waiting for thread to finish...\n");
-      // t.join();
-      log.writeToLog(Importance::info, "Tracer thread done!\n");
+      log.writeToLog(Importance::inter, "[%d] Caught fork event!\n", traceesPid);
+      // Current scheduling policy: Let child run to completion.
+      nextPid = tracer.getEventMessage();
+      pid_t newChildPid = nextPid; /*tracer.getEventMessage();*/
+      pid_t parentsPid = traceesPid;
+      // Push parent id to process stack.
+      processHier.push(parentsPid);
+      // nextPid = parentsPid;
+
+      // Add this new process to our states.
+      log.writeToLog(Importance::info, "Added process [%d] to states map.\n", newChildPid);
+      states.emplace(newChildPid, state {log, newChildPid, pidMap, parentsPid} );
+      pidMap.addEntryValue(newChildPid);
+
+      // Wait for child to be ready.
+      log.writeToLog(Importance::info, "Waiting for child to be ready for tracing...\n");
+      int thisPid = waitpid(newChildPid, &status, 0);
+
+      if(thisPid == -1){
+	throw runtime_error("waitpid failed:" + string { strerror(errno) });
+      }
+      log.writeToLog(Importance::info, "Child ready.\n", thisPid);
+
+      continue;
     }
 
     if(ret == ptraceEvent::clone){
       // Nothing to do for now...
-      log.writeToLog(Importance::inter, "Caught clone event!\n");
+      log.writeToLog(Importance::inter, "[%d] caught clone event!\n", traceesPid);
       continue;
     }
 
     if(ret == ptraceEvent::exec){
       // Nothing to do for now... New process is already automatically ptraced by
       // our tracer.
-      log.writeToLog(Importance::inter, "Caught execve!\n");
+      log.writeToLog(Importance::inter, "[%d] Caught execve!\n", traceesPid);
       continue;
     }
 
     if(ret == ptraceEvent::signal){
       // Nothing for now. Kelly's code will go here.
-      log.writeToLog(Importance::inter, "Tracer: Received signal: %d\n", WSTOPSIG(status));
+      log.writeToLog(Importance::inter, "[%d] tracer: Received signal: %d\n",
+		     traceesPid, WSTOPSIG(status));
       continue;
     }
 
-    throw runtime_error("Uknown return value for ptracer::getNextEvent()\n");
+    throw runtime_error(to_string(traceesPid) +
+			"Uknown return value for ptracer::getNextEvent()\n");
   }
 
   return;
@@ -263,6 +295,9 @@ ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status){
 
   // Intercept any system call.
   traceesPid = waitpid(-1, &status, 0);
+  if(traceesPid == -1){
+    throw runtime_error("waitpid failed:" + string { strerror(errno) });
+  }
 
   // Check if tracee has exited.
   if (WIFEXITED(status)){
@@ -375,10 +410,16 @@ unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName){
     return make_unique<fstatSystemCall>(syscallNumber, syscallName);
   case SYS_fstatfs:
     return make_unique<fstatfsSystemCall>(syscallNumber, syscallName);
+  case SYS_futex:
+    return make_unique<futexSystemCall>(syscallNumber, syscallName);
   case SYS_getdents:
     return make_unique<getdentsSystemCall>(syscallNumber, syscallName);
   case SYS_getpid:
     return make_unique<getpidSystemCall>(syscallNumber, syscallName);
+  case SYS_getppid:
+    return make_unique<getppidSystemCall>(syscallNumber, syscallName);
+  case SYS_getuid:
+    return make_unique<getuidSystemCall>(syscallNumber, syscallName);
   case SYS_ioctl:
     return make_unique<ioctlSystemCall>(syscallNumber, syscallName);
   case SYS_munmap:
@@ -411,6 +452,8 @@ unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName){
     return make_unique<timeSystemCall>(syscallNumber, syscallName);
   case SYS_utimensat:
     return make_unique<utimensatSystemCall>(syscallNumber, syscallName);
+  case SYS_wait4:
+    return make_unique<wait4SystemCall>(syscallNumber, syscallName);
   case SYS_write:
     return make_unique<writeSystemCall>(syscallNumber, syscallName);
   }

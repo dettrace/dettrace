@@ -82,7 +82,7 @@ public:
  *       unsigned long newtls);
  *
  * Underlying implementation for both creating threads and new processes.
- * Modern day fork() does a clone under the hood. Dettrace 
+ * Modern day fork() does a clone under the hood. Dettrace.
  */
 class cloneSystemCall : public systemCall{
 public:
@@ -192,6 +192,22 @@ public:
   void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
+
+/**
+ *    int futex(int *uaddr, int futex_op, int val, const struct timespec *timeout,
+ *              int *uaddr2, int val3);
+ *
+ * Fast mutex.
+ * TODO: Understand what these guys even do.
+ */
+class futexSystemCall : public systemCall{
+public:
+  futexSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+
+// =======================================================================================
 /**
  *
  * int getdents(unsigned int fd, struct linux_dirent *dirp, unsigned int count);
@@ -222,6 +238,38 @@ public:
 class getpidSystemCall : public systemCall{
 public:
   getpidSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ * pid_t getppid();
+ *
+ * Returns the pid of the calling process.
+ *
+ * Obviously nondeterministic. We instead keep a map of real pids to virtual pid mappings.
+ * The running process only gets to observe virtual pids, but all system calls that
+ * require pids, use real pids by mapping back.
+ * TODO: ppid has interesting semantics where the return value actually depends on whether
+ * the parent process has terminated or not.
+ */
+class getppidSystemCall : public systemCall{
+public:
+  getppidSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ * uid_t getuid(void);
+ *
+ * getuid() returns the real user ID of the calling process.
+ *
+ * We pretend to be 65534 "nobody"
+ */
+class getuidSystemCall : public systemCall{
+public:
+  getuidSystemCall(long syscallName, string syscallNumber);
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
@@ -518,6 +566,23 @@ public:
   void handleDetPost(state& s, ptracer& t) override;
 };
 
+// =======================================================================================
+/**
+ *
+ * pid_t wait4(pid_t pid, int *wstatus, int options, struct rusage *rusage);
+ *
+ * Wait for the specified process, usually blocks but depends on `options` parameter.
+ * Populates `wstatus` with information on the process `pid` that we `wait4` for.
+ *
+ * TODO: So far, all I do is translate the vpid to a real pid. There is probably more
+ * to be done to make it fully deterministic!
+ */
+class wait4SystemCall : public systemCall{
+public:
+  wait4SystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
 // =======================================================================================
 /**
  *
