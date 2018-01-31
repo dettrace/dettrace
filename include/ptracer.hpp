@@ -36,6 +36,7 @@ enum class ptraceEvent {
   exec,        /// Execve event.
   clone,       /// Clone event.
   fork,        /// fork event.
+  vfork,        /// fork event.
 };
 
 /**

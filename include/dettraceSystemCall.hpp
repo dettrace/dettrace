@@ -74,6 +74,19 @@ public:
 };
 // =======================================================================================
 /**
+ * int chmod(const char *pathname, mode_t mode);
+ *
+ * The  chmod() and fchmod() system calls change a files mode bits.
+ * FILESYSTEM RELATED.
+ */
+class chmodSystemCall : public systemCall{
+public:
+  chmodSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
  * long
  * clone(unsigned long flags,
  *       void *child_stack,
@@ -108,13 +121,31 @@ public:
 // =======================================================================================
 /*
  *
+ * int dup(int oldfd);
+ *
+ * The  dup() system call creates a copy of the file descriptor oldfd, using the lowest-
+ * numbered unused file descriptor for the new descriptor.
+ *
+ * As long as our threads are determinstic, file descriptors should be deterministic too.
+ *
+ */
+class dupSystemCall : public systemCall{
+public:
+  dupSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/*
+ *
  * int dup2(int oldfd, int newfd);
  *
  * The dup2() system call performs the same task as dup(), but instead of using the low‐
  * est-numbered unused file descriptor, it uses the file descriptor number specified  in
  * newfd.
  *
- * I keep forgetting if file descriptors are deterministic or not when we add threads.
+ * As long as our threads are determinstic, file descriptors should be deterministic too.
+ *
  */
 class dup2SystemCall : public systemCall{
 public:
@@ -155,6 +186,25 @@ public:
 };
 // =======================================================================================
 /**
+ *
+ * int fcntl(int fd, int cmd, ... arg );
+ *
+ * performs  one  of the operations described below on the open file descriptor
+ * fd.  The operation is determined by cmd. Duplicating a file descriptor,
+ * File descriptor flags, File status flags, Advisory record locking, ...
+ *
+ * FILESYSTEM RELATED.
+ *
+ * Seems nondeterministic based on the per process record locking.
+ */
+class fcntlSystemCall : public systemCall{
+public:
+  fcntlSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
  * fstat()
  *
  * These functions return information about a file, in the buffer pointed to by statbuf.
@@ -169,6 +219,7 @@ public:
  *
  * TODO
  * FILESYSTEM RELATED.
+ * Notice we do the exact same thing for lstat, stat, and fstat.
  */
 class fstatSystemCall : public systemCall{
 public:
@@ -192,7 +243,6 @@ public:
   void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
-
 /**
  *    int futex(int *uaddr, int futex_op, int val, const struct timespec *timeout,
  *              int *uaddr2, int val3);
@@ -207,6 +257,22 @@ public:
   void handleDetPost(state& s, ptracer& t) override;
 };
 
+// =======================================================================================
+/**
+ *
+ * char* getcwd(char *buf, size_t size);
+ *
+ * FILESYSTEM RELATED.
+ *
+ * Nothing to do. I guess changes based on starting working directory? But this is part
+ * the input to our program.
+ */
+class getcwdSystemCall : public systemCall{
+public:
+  getcwdSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
 // =======================================================================================
 /**
  *
@@ -259,6 +325,21 @@ public:
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
+// =======================================================================================
+/**
+ *
+ * int getrusage(int who, struct rusage *usage);
+ *
+ * returns resource usage measures for who.
+ *
+ */
+class getrusageSystemCall : public systemCall{
+public:
+  getrusageSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+
 // =======================================================================================
 /**
  * uid_t getuid(void);
@@ -350,6 +431,41 @@ public:
 };
 // =======================================================================================
 /**
+ * off_t lseek(int fd, off_t offset, int whence);
+ *
+ * repositions the file offset of the open file description associated with the file
+ * descriptor fd to the argument offset according  to  the  directive whence.
+ *
+ * Under threads, this could be non deterministic if two threads are using the same
+ * file descriptior? But if we assume deterministic thread execution this shouldn't
+ * be an issue :)
+ * FILESYSTEM RELATED.
+ *
+ */
+class lseekSystemCall : public systemCall{
+public:
+  lseekSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ * int lstat(const char *pathname, struct stat *statbuf);
+ *
+ * lstat()  is  identical to stat(), except that if pathname is a symbolic link,
+ * then it returns information about the link itself, not the file that it refers to.
+ *
+ * FILESYSTEM RELATED.
+ * Notice we do the exact same thing for lstat, stat, and fstat.
+ */
+class lstatSystemCall : public systemCall{
+public:
+  lstatSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
  * Given  a  pathname for a file, open() returns a file descriptor, a small, nonnegative
  * integer for use in subsequent system calls (read(2),  write(2),  lseek(2),  fcntl(2),
  * etc.)
@@ -426,6 +542,26 @@ public:
 class readSystemCall : public systemCall{
 public:
   readSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
+ * ssize_t readlink(const char *pathname, char *buf, size_t bufsiz);
+ *
+ * readlink() places the contents of the symbolic link pathname in the buffer buf, which
+ * has size bufsiz.  readlink() does not append a null byte to buf.  It will  (silently)
+ * truncate  the  contents (to a length of bufsiz characters), in case the buffer is too
+ * small to hold all of the contents.
+ *
+ * FILESYSTEM RELATED.
+ * TODO: This could be nondeterminism based on the value the symlink points to from
+ * call to call.
+ */
+class readlinkSystemCall : public systemCall{
+public:
+  readlinkSystemCall(long syscallName, string syscallNumber);
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
@@ -539,6 +675,38 @@ public:
 };
 // =======================================================================================
 /**
+ *
+ * int stat(const char *pathname, struct stat *statbuf);
+ *
+ * stat() and retrieve information about the file pointed to by pathname.
+ *
+ * FILESYSTEM RELATED.
+ * TODO: Figure out semantics of all fields in struct stat* statbuf.
+ * Notice we do the exact same thing for lstat, stat, and fstat.
+ */
+class statSystemCall : public systemCall{
+public:
+  statSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
+ * int sysinfo(struct sysinfo *info);
+ *
+ * sysinfo()  returns  certain  statistics on memory and swap usage, as well as the load
+ * average.
+ *
+ */
+class sysinfoSystemCall : public systemCall{
+public:
+  sysinfoSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
  * TODO: Document and verify implementation.
  * TODO: Add logical clock for rt_sigprocmask.
  * Return results from our logical clock.
@@ -546,6 +714,47 @@ public:
 class timeSystemCall : public systemCall{
 public:
   timeSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
+ * mode_t umask(mode_t mask);
+ *
+ * umask()  sets  the  calling  process's file mode creation mask (umask) to mask & 0777
+ * (i.e., only the file permission bits of mask are  used),  and  returns  the  previous
+ * value of the mask.
+ *
+ * As explained in the notes, this is suffers from race conditions with threads. If we
+ * have deterministic threading, this shouldn't be an issue.
+ *
+ * The mask could change from subsequent call to call, but if we consider the file
+ * metadata part of our input, it should be fine.
+ * FILESYSTEM RELATED
+ */
+class umaskSystemCall : public systemCall{
+public:
+  umaskSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
+ * int unlink(const char *pathname);
+ *
+ * unlink()  deletes  a  name  from the filesystem.  If that name was the last link to a
+ * file and no processes have the file open, the file is deleted and the  space  it  was
+ * using is made available for reuse.
+ *
+ * Similarly to other system calls, under deterministic threads and processes, this
+ * should be deterministic.
+ * FILESYSTEM RELATED
+ */
+class unlinkSystemCall : public systemCall{
+public:
+  unlinkSystemCall(long syscallName, string syscallNumber);
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
@@ -566,6 +775,32 @@ public:
   void handleDetPost(state& s, ptracer& t) override;
 };
 
+// =======================================================================================
+/**
+ *
+ * pid_t vfork(void);
+ *
+ * The vfork() function has the same effect as fork(2), except that the
+ * behavior is undefined if the process created by  vfork()  either  modifies  any  data
+ * other  than  a variable of type pid_t used to store the return value from vfork(), or
+ * returns from the function in which vfork() was called, or calls  any  other  function
+ * before successfully calling _exit(2) or one of the exec(3) family of functions.
+ *
+ * vfork() is a special case of clone(2).  It is used to create  new  processes  without
+ * copying  the page tables of the parent process.  It may be useful in performance-sen‐
+ * sitive applications where a  child  is  created  which  then  immediately  issues  an
+ * execve(2).
+ *
+ * This system call should be deterministic as long as we have the child run to completion
+ * before letting the parent run, notice this is not the exact behavior of vfork, as if
+ * the child execve's then the parent will no longer be suspended.
+ */
+class vforkSystemCall : public systemCall{
+public:
+  vforkSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
 // =======================================================================================
 /**
  *

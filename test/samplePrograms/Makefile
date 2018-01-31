@@ -1,4 +1,4 @@
-OBJECTS=simpleFork inverseFork nestedFork
+OBJECTS=simpleFork inverseFork nestedFork vfork
 
 all: $(OBJECTS)
 

@@ -26,7 +26,6 @@ logger::logger(FILE* myFile, int debugLevel){
 void logger::writeToLog(Importance imp, std::string format, ...){
   va_list args;
   bool print = false;
-  pid_t pid = syscall(SYS_getpid);
 
   /* Print information based on debug level. */
   switch(debugLevel){
