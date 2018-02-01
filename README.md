@@ -5,7 +5,7 @@
 Using `ptrace` we are able to run programs deterministically. All system calls are caught
 and determinized by our tracer.
 
-## Installation
+## Making
 Working on any recent Linux system you should be able to `make` from this directory.
 
 We use C++17 features not yet implemented in older compilers. It should work with GCC
@@ -29,3 +29,8 @@ output.
 ## Unimplemented System Calls
 We use a whitelist to determinizing system calls. Therefore any system call not implemented
 will throw a runtime exception.
+
+## Testing
+Unit tests are automatically built in the compilation step. You may run these tests from
+the script `./runTests.sh`. This script merely calls `./dettrace` on the unit tests with
+ASLR turned off.

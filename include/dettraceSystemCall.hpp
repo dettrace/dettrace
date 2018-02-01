@@ -317,7 +317,8 @@ public:
  * The running process only gets to observe virtual pids, but all system calls that
  * require pids, use real pids by mapping back.
  * TODO: ppid has interesting semantics where the return value actually depends on whether
- * the parent process has terminated or not.
+ * the parent process has terminated or not. We will probably ignore this and always return
+ * the original parent's pid.
  */
 class getppidSystemCall : public systemCall{
 public:

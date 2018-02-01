@@ -3,13 +3,18 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <climits>
+
+#include <sys/time.h>
+#include <sys/resource.h>
+
 #include "dettraceSystemCall.hpp"
 #include "ptracer.hpp"
 
 // =======================================================================================
 // Prototypes for common functions.
 void zeroOutStatfs(struct statfs& stats);
-void zeroOutStat(struct stat& stats);
+void zeroOutStat(struct stat& stats, long clock);
 void handleStatFamily(state& s, ptracer& t, string syscallName);
 // =======================================================================================
 accessSystemCall::accessSystemCall(long syscallNumber, string syscallName):
@@ -331,7 +336,34 @@ bool getrusageSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void getrusageSystemCall::handleDetPost(state &s, ptracer &t){
-  // TODO. Block all nondeterministic.
+  struct rusage* usagePtr = (struct rusage*) t.arg2();
+
+  if(usagePtr == nullptr){
+    s.log.writeToLog(Importance::info, "getrusage pointer null.");
+  }else{
+    struct rusage usage = ptracer::readFromTracee(usagePtr, t.getPid());
+    usage.ru_utime = timeval { .tv_sec =  (long) s.clock,
+			       .tv_usec = (long )s.clock };  /* user CPU time used */
+    usage.ru_stime = timeval { .tv_sec =  (long) s.clock,
+			       .tv_usec = (long )s.clock };  /* system CPU time used */
+    usage.ru_maxrss = LONG_MAX;                    /* maximum resident set size */
+    usage.ru_ixrss = LONG_MAX;                     /* integral shared memory size */
+    usage.ru_idrss = LONG_MAX;    		   /* integral unshared data size */
+    usage.ru_isrss = LONG_MAX;    		   /* integral unshared stack size */
+    usage.ru_minflt = LONG_MAX;   		   /* page reclaims (soft page faults) */
+    usage.ru_majflt = LONG_MAX;   		   /* page faults (hard page faults) */
+    usage.ru_nswap = LONG_MAX;    		   /* swaps */
+    usage.ru_inblock = LONG_MAX;  		   /* block input operations */
+    usage.ru_oublock = LONG_MAX;  		   /* block output operations */
+    usage.ru_msgsnd = LONG_MAX;   		   /* IPC messages sent */
+    usage.ru_msgrcv = LONG_MAX;   		   /* IPC messages received */
+    usage.ru_nsignals = LONG_MAX; 		   /* signals received */
+    usage.ru_nvcsw = LONG_MAX;    		   /* voluntary context switches */
+    usage.ru_nivcsw = LONG_MAX;   		   /* involuntary context switches */
+
+    ptracer::writeToTracee(usagePtr, usage, t.getPid());
+  }
+
   return;
 }
 // =======================================================================================
@@ -474,9 +506,28 @@ bool prlimit64SystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void prlimit64SystemCall::handleDetPost(state &s, ptracer &t){
+  // int prlimit(pid_t pid, int resource, const struct rlimit *new_limit,
+  // struct rlimit *old_limit);
+
+  // TODO: This is a really complicated system calls. We must match against
+  // resource, and set resonable values for each. Ideally we would also have
+  // a per process hashtable that "remembers" what the limits set for each field
+  // by the user were. A subsequent call to prlimit/prlimit64 would return the
+  // correct values: either the value on the hashtable, or a default sensible
+  // value.
+
+
+  // struct rlimit* rlimPtr = (struct rlimit*) t.arg4();
+  // if(rlimPtr == nullptr){
+    // s.log.writeToLog(Importance::info, "Null rlimi pointer.");
+  // }else{
+    // struct rlimit limit = ptracer::readFromTracee(rlimPtr, t.getPid());
+    // limit.rlim_cur = 1024;
+    // limit.rlim_cur = 2048;
+  // }
+
   return;
 }
-
 // =======================================================================================
 readSystemCall::readSystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
@@ -825,8 +876,34 @@ void zeroOutStatfs(struct statfs& stats){
     stats.f_flags = 1;   /* Mount flags of filesystem */
 }
 // =======================================================================================
-void zeroOutStat(struct stat& stats){
-  // TODO.
+void zeroOutStat(struct stat& stats, long clock){
+  stats.st_atim = timespec { .tv_sec =  clock,
+			     .tv_nsec = clock };  /* user CPU time used */
+  stats.st_mtim = timespec { .tv_sec =  clock,
+			     .tv_nsec = clock };
+  stats.st_ctim = timespec { .tv_sec = clock,
+			     .tv_nsec = clock };  /* user CPU time used */
+
+  stats.st_dev = 1;         /* ID of device containing file */
+
+  // st_ino = ;         /* TODO: Inode number */
+  // st_mode holds the permissions to the file. If we zero it out libc functions
+  // will think we don't have access to this file. Hence we keep our permissions
+  // as part of the stat.
+  // mode_t    st_mode;        /* File type and mode */
+
+  stats.st_nlink = 1;       /* Number of hard links */
+  stats.st_uid = 65534;         /* User ID of owner */
+  stats.st_gid = 1;         /* Group ID of owner */
+  stats.st_rdev = 1;        /* Device ID (if special file) */
+
+  // Program will stall if we put some arbitrary value here: TODO.
+  // stats.st_size = 512;        /* Total size, in bytes */
+
+  stats.st_blksize = 512;     /* Block size for filesystem I/O */
+  stats.st_blocks = 1;      /* Number of 512B blocks allocated */
+
+  return;
 }
 // =======================================================================================
 void handleStatFamily(state& s, ptracer& t, string syscallName){
@@ -839,7 +916,7 @@ void handleStatFamily(state& s, ptracer& t, string syscallName){
 
   if(t.getReturnValue() == 0){
     struct stat myStat = ptracer::readFromTracee(statPtr, s.traceePid);
-    zeroOutStat(myStat);
+    zeroOutStat(myStat, s.clock);
 
     // Write back result for child.
     ptracer::writeToTracee(statPtr, myStat, s.traceePid);
