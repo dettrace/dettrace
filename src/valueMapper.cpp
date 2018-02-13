@@ -2,6 +2,8 @@
 #include "logger.hpp"
 #include "valueMapper.hpp"
 
+using namespace std;
+
 int valueMapper::addEntryValue(int realValue){
   myLogger.writeToLog(Importance::info, "%s: Added mapping %d -> %d\n",  mappingName.c_str(),
                       realValue, freshValue);
@@ -33,9 +35,8 @@ int valueMapper::getVirtualValue(int realValue){
                         realValue, returnValue);
     return returnValue;
   }else{
-    myLogger.writeToLog(Importance::info, "%s: getVirtualValue(%d) does not exist\n",
-                        mappingName.c_str(), realValue);
-    return -1;
+    throw runtime_error(mappingName + ": getVirtualValue(" +
+			to_string(realValue) + ") does not exist\n");
   }
 }
 

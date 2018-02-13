@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
+#include <sched.h>
 
 // Simple program testing ordering for processes.
 // Parent should print pid of 1.

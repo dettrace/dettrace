@@ -31,7 +31,7 @@ public:
    * of state.
    * @ppid: Parent pid of this process.
    */
-  state(logger& log, pid_t myPid, valueMapper& pidMap, pid_t ppid);
+  state(logger& log, pid_t myPid, /*valueMapper& pidMap,*/ pid_t ppid);
 
   /**
    * Logical clock. Ticks for every event: system call, signal, etc.
@@ -46,12 +46,12 @@ public:
   /* Parent's process ID number. This is needed for consistency when children
    * ask for their parent's pid.
    */
-  int ppid = -1;
+  // int ppid = -1;
 
   /* Isomorphism between pids to pids and back. Uses two hash tables.
    * This is a reference to a single pidMap that is shared between all states.
    */
-  valueMapper& pidMap;
+  // valueMapper& pidMap;
   /*
    * Isomorphism between inodes and vitual inodes.
    */

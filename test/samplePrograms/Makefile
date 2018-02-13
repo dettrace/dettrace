@@ -1,4 +1,4 @@
-OBJECTS=simpleFork inverseFork nestedFork vfork
+OBJECTS=simpleFork inverseFork nestedFork vfork clock_gettime helloWorld getpid
 
 all: $(OBJECTS)
 

@@ -15,13 +15,13 @@ execution::execution(int debugLevel, pid_t startingPid):
   nextPid {startingPid},
   // Waits for first process to be ready! Probably not good to have this kind of
   // dependency of a initialization list?
-  tracer{startingPid},
-  pidMap {log, "vpid <-> pid mapper"}{
+  tracer{startingPid}/*,
+  pidMap {log, "vpid <-> pid mapper"}*/{
     // Explicitly add the mapping between vPid <-> rPid (realPid).
-    pidMap.addEntryValue(startingPid);
+    // pidMap.addEntryValue(startingPid);
     // Set state for first process.
     states.emplace(startingPid,
-		   state {log, startingPid, pidMap,/* Pretend our parent is init */ 1});
+		   state {log, startingPid, /*pidMap,*//* Our parent */ 0});
 
     // First process is special and we must set
     // the options ourselves. Thereafter, ptracer::setOptions will handle this for new
@@ -226,8 +226,8 @@ pid_t execution::handleForkEvent(){
 
   // Add this new process to our states.
   log.writeToLog(Importance::info, "Added process [%d] to states map.\n", newChildPid);
-  states.emplace(newChildPid, state {log, newChildPid, pidMap, parentsPid} );
-  pidMap.addEntryValue(newChildPid);
+  states.emplace(newChildPid, state {log, newChildPid, /*pidMap,*/ parentsPid} );
+  //  pidMap.addEntryValue(newChildPid);
 
   return newChildPid;
 }
@@ -322,6 +322,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<mmapSystemCall>(syscallNumber, syscallName);
     case SYS_mprotect:
       return make_unique<mprotectSystemCall>(syscallNumber, syscallName);
+    case SYS_nanosleep:
+      return make_unique<nanosleepSystemCall>(syscallNumber, syscallName);
     case SYS_lseek:
       return make_unique<lseekSystemCall>(syscallNumber, syscallName);
     case SYS_lstat:
@@ -376,6 +378,7 @@ ptraceEvent execution::getNextEvent(pid_t currentPid, pid_t& traceesPid, int& st
   // Tell the process that we just intercepted an event for to continue, with us tracking
   // it's system calls. If this is the first time this function is called, it will be the
   // starting process. Which we expect to be in a waiting state.
+  cout << "Current pid: " << currentPid << endl;
   ptracer::doPtrace(PTRACE_SYSCALL, currentPid, 0, 0);
 
   // Intercept any system call.

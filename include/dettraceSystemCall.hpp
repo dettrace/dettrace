@@ -432,6 +432,23 @@ public:
 };
 // =======================================================================================
 /**
+ * int nanosleep(const struct timespec *req, struct timespec *rem);
+ *
+ * nanosleep()  suspends  the  execution of the calling thread until either at least the
+ * time specified in *req has elapsed. rem is populated with the time left if this system
+ * call was interrupted by a signal.
+
+ * Surprisingly, I think this sytem was is deterministic for our purposes if we have a
+ * handle on signals.
+ */
+class nanosleepSystemCall : public systemCall{
+public:
+  nanosleepSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
  * off_t lseek(int fd, off_t offset, int whence);
  *
  * repositions the file offset of the open file description associated with the file
@@ -768,6 +785,8 @@ public:
  * TODO FILESYSTEM RELATED.
  *
  * Definitely not deterministic! We use our logical clock to set the file timestamps.
+ * This is an issue for the case where both times entries are null. From utimensat(2):
+ * > If times is NULL, then both timestamps are set to the current time.
  */
 class utimensatSystemCall : public systemCall{
 public:
