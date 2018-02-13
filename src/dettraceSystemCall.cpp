@@ -121,6 +121,19 @@ void closeSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
+connectSystemCall::connectSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool connectSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void connectSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
 dupSystemCall::dupSystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
   return;
@@ -326,6 +339,19 @@ void getppidSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
+getrlimitSystemCall::getrlimitSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool getrlimitSystemCall::handleDetPre(state& s, ptracer& t){
+  return true;
+}
+
+void getrlimitSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
 getrusageSystemCall::getrusageSystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
   return;
@@ -382,6 +408,19 @@ void getuidSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
+getxattrSystemCall::getxattrSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool getxattrSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void getxattrSystemCall::handleDetPost(state& s, ptracer &t){
+  return;
+}
+// =======================================================================================
 ioctlSystemCall::ioctlSystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
   return;
@@ -392,6 +431,19 @@ bool ioctlSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void ioctlSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+lgetxattrSystemCall::lgetxattrSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool lgetxattrSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void lgetxattrSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
@@ -489,6 +541,19 @@ void lstatSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
+pollSystemCall::pollSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool pollSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void pollSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
 prlimit64SystemCall::prlimit64SystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
   return;
@@ -556,6 +621,32 @@ void readlinkSystemCall::handleDetPost(state &s, ptracer &t){
   // Nothing for now.
   return;
 }
+// ========================================================================================
+readvSystemCall::readvSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool readvSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void readvSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// ========================================================================================
+recvmsgSystemCall::recvmsgSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool recvmsgSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void recvmsgSystemCall::handleDetPost(state &s, ptracer &t){
+ return;
+}
 // =======================================================================================
 rt_sigprocmaskSystemCall::rt_sigprocmaskSystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
@@ -582,6 +673,19 @@ bool rt_sigactionSystemCall::handleDetPre(state &s, ptracer &t){
 
 void rt_sigactionSystemCall::handleDetPost(state &s, ptracer &t){
 
+  return;
+}
+// =======================================================================================
+sendtoSystemCall::sendtoSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool sendtoSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void sendtoSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
@@ -622,6 +726,19 @@ bool sigaltstackSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void sigaltstackSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+socketSystemCall::socketSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool socketSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void socketSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================

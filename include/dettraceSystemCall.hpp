@@ -119,6 +119,22 @@ public:
   void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
+/**
+ *
+ * int connect(int sockfd, const struct sockaddr *addr, socklen_t
+ * addrlen);
+ *  
+ *  The connect() system call connects the socket referred to by the file descriptor sockfd to the address specified by addr. 
+ *  The addrlen argument specifies the size of addr. The format of the address in addr is determined by the address space of the socket sockfd.
+ *
+ */
+class connectSystemCall : public systemCall{
+public:
+  connectSystemCall(long syscallNAme, string syscallNumber);
+  bool handleDetPre(state &s, ptracer &t) override;
+  void handleDetPost(state &s, ptracer &t) override;
+};
+// =======================================================================================
 /*
  *
  * int dup(int oldfd);
@@ -329,6 +345,27 @@ public:
 // =======================================================================================
 /**
  *
+ *
+ *        The getrlimit() and setrlimit() system calls get and set resource
+ *               limits respectively.  Each resource has an associated soft and hard
+ *                      limit, as defined by the rlimit structure.
+ *
+ *
+ *                                 
+ *        int getrlimit(int resource, struct rlimit *rlim);                        
+ *             
+ *	                  
+ *
+ */ 
+class getrlimitSystemCall : public systemCall{
+public:
+  getrlimitSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
  * int getrusage(int who, struct rusage *usage);
  *
  * returns resource usage measures for who.
@@ -358,6 +395,24 @@ public:
 // =======================================================================================
 /**
  *
+ *  ssize_t lgetxattr(const char *path, const char *name,
+ *                   void *value, size_t size);
+ *
+ *
+ *
+ *  getxattr() retrieves the value of the extended attribute identified by name and associated with the given path in the file system. The length of the attribute value is returned.
+ *
+ *
+ */
+class getxattrSystemCall : public systemCall{
+public:
+  getxattrSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
  * int ioctl(int fd, unsigned long request, ...);
  *
  * The  ioctl()  function manipulates the underlying device parameters of special files.
@@ -369,6 +424,21 @@ public:
 class ioctlSystemCall : public systemCall{
 public:
   ioctlSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
+ *  ssize_t lgetxattr(const char *path, const char *name,
+ *                   void *value, size_t size);
+ *
+ * lgetxattr() is identical to getxattr(), except in the case of a symbolic link, where the link itself is interrogated, not the file that it refers to.
+ *
+ */
+class lgetxattrSystemCall : public systemCall{
+public:
+  lgetxattrSystemCall(long syscallName, string syscallNumber);
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
@@ -515,6 +585,21 @@ public:
 // =======================================================================================
 /**
  *
+ *
+ *  int poll(struct pollfd *fds, nfds_t nfds, int timeout);*
+ *
+ *  wait for one of a set of fds to become ready to perform I/O
+ *
+ */
+class pollSystemCall : public systemCall{
+public:
+  pollSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state &s, ptracer &t) override;
+  void handleDetPost(state &s, ptracer &t) override;
+};
+// =======================================================================================
+/**
+ *
  * int prlimit64(pid_t pid, int resource, const struct rlimit *new_limit,
                    struct rlimit *old_limit);
  *
@@ -568,6 +653,35 @@ public:
 };
 // =======================================================================================
 /**
+ *
+ *
+ * ssize_t readv(int fd, const struct iovec *iov, int iovcnt);
+ *
+ * read or write data into multiple buffers
+ * 
+ *
+ */
+class readvSystemCall : public systemCall{
+public:
+  readvSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state &s, ptracer &t) override;
+  void handleDetPost(state &s, ptracer &t) override;
+};
+// =======================================================================================
+/**
+ * ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags);
+ * 
+ * recvmsg() call is used to receive messages from a socket and amy be used to receive
+ * data on a socket whether or not it is connection-oriented.
+ */
+class recvmsgSystemCall : public systemCall{
+public:
+  recvmsgSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state &s, ptracer &t) override;
+  void handleDetPost(state &s, ptracer &t) override;
+};
+// =======================================================================================
+/**
  * rt_sigprocmask()
  * is  used to fetch and/or change the signal mask of the calling thread.
  * The signal mask is the set of signals whose delivery is  currently  blocked  for  the
@@ -603,6 +717,25 @@ public:
   rt_sigactionSystemCall(long syscallName, string syscallNumber);
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
+ *
+ *  ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
+ *                 const struct sockaddr *dest_addr, socklen_t addrlen);
+ *
+ *  If sendto() is used on a connection-mode (SOCK_STREAM, SOCK_SEQPACKET) socket, the arguments dest_addr and addrlen are ignored 
+ *  (and the error EISCONN may be returned when they are not NULL and 0), and the error ENOTCONN is returned when the socket was not 
+ *  actually connected. Otherwise, the address of the target is given by dest_addr with addrlen specifying its size. 
+ *  For sendmsg(), the address of the target is given by msg.msg_name, with msg.msg_namelen specifying its size.
+ *
+ */
+class sendtoSystemCall : public systemCall{
+public:
+  sendtoSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state &s, ptracer &t) override;
+  void handleDetPost(state &s, ptracer &t) override;
 };
 // =======================================================================================
 /**
@@ -662,6 +795,23 @@ public:
   sigaltstackSystemCall(long syscallName, string syscallNumber);
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
+ * int socket(int domain, int type, int protocol);
+ * 
+ * socket() creates an endpoint for communication and returns a file
+ * descriptor that refers to that endpoint.  The file descriptor
+ * returned by a successful call will be the lowest-numbered file
+ * descriptor not currently open for the process.
+ *
+ */
+class socketSystemCall : public systemCall{
+public:
+  socketSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state &s, ptracer &t) override;
+  void handleDetPost(state &s, ptracer &t) override;
 };
 // =======================================================================================
 /**

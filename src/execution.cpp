@@ -286,6 +286,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<cloneSystemCall>(syscallNumber, syscallName);
     case SYS_close:
       return make_unique<closeSystemCall>(syscallNumber, syscallName);
+    case SYS_connect:
+      return make_unique<connectSystemCall>(syscallNumber, syscallName);
     case SYS_dup:
       return make_unique<dupSystemCall>(syscallNumber, syscallName);
     case SYS_dup2:
@@ -310,12 +312,18 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<getpidSystemCall>(syscallNumber, syscallName);
     case SYS_getppid:
       return make_unique<getppidSystemCall>(syscallNumber, syscallName);
+    case SYS_getrlimit:
+      return make_unique<getrlimitSystemCall>(syscallNumber, syscallName);
     case SYS_getrusage:
       return make_unique<getrusageSystemCall>(syscallNumber, syscallName);
     case SYS_getuid:
       return make_unique<getuidSystemCall>(syscallNumber, syscallName);
+    case SYS_getxattr:
+      return make_unique<getxattrSystemCall>(syscallNumber, syscallName);
     case SYS_ioctl:
       return make_unique<ioctlSystemCall>(syscallNumber, syscallName);
+    case SYS_lgetxattr:
+      return make_unique<lgetxattrSystemCall>(syscallNumber, syscallName);
     case SYS_munmap:
       return make_unique<munmapSystemCall>(syscallNumber, syscallName);
     case SYS_mmap:
@@ -330,22 +338,32 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<openSystemCall>(syscallNumber, syscallName);
     case SYS_openat:
       return make_unique<openatSystemCall>(syscallNumber, syscallName);
+    case SYS_poll:
+      return make_unique<pollSystemCall>(syscallNumber, syscallName);
     case SYS_prlimit64:
       return make_unique<prlimit64SystemCall>(syscallNumber, syscallName);
     case SYS_read:
       return make_unique<readSystemCall>(syscallNumber, syscallName);
     case SYS_readlink:
       return make_unique<readlinkSystemCall>(syscallNumber, syscallName);
+    case SYS_readv:
+      return make_unique<readvSystemCall>(syscallNumber, syscallName);
+    case SYS_recvmsg:
+      return make_unique<recvmsgSystemCall>(syscallNumber, syscallName);
     case SYS_rt_sigprocmask:
       return make_unique<rt_sigprocmaskSystemCall>(syscallNumber, syscallName);
     case SYS_rt_sigaction:
       return make_unique<rt_sigactionSystemCall>(syscallNumber, syscallName);
+    case SYS_sendto:
+      return make_unique<sendtoSystemCall>(syscallNumber, syscallName);
     case SYS_set_robust_list:
       return make_unique<set_robust_listSystemCall>(syscallNumber, syscallName);
     case SYS_set_tid_address:
       return make_unique<set_tid_addressSystemCall>(syscallNumber, syscallName);
     case SYS_sigaltstack:
       return make_unique<sigaltstackSystemCall>(syscallNumber, syscallName);
+    case SYS_socket:
+      return make_unique<socketSystemCall>(syscallNumber, syscallName);
     case SYS_statfs:
       return make_unique<statfsSystemCall>(syscallNumber, syscallName);
     case SYS_stat:
