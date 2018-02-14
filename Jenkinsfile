@@ -1,5 +1,7 @@
 pipeline {
-  agent any
+  agent {
+    label 'linux-sice-RHEL'
+  }
 
   stages {
     stage('Build') {
