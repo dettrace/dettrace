@@ -1,11 +1,16 @@
 pipeline {
-    agent any
+  agent any
 
-    stages {
-        stage('Build') {
-            steps {
-                sh './runTests.sh'
-            }
-        }
+  environment {
+    PATH = "$PATH"
+  }
+
+  stages {
+    stage('Build') {
+      steps {
+        echo "PATH is: $PATH"
+		sh './runTests.sh'
+      }
     }
+  }
 }
