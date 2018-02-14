@@ -8,10 +8,7 @@ pipeline {
       steps {
         echo "PATH is: $PATH"
         sh "lsb_release -a"
-        sh "module add gcc || echo ok"
-        sh "which -a gcc"        
-        sh "gcc -v"
-        sh "bash runTests.sh"
+        sh "bash -c 'module add gcc; ./runTests.sh'"
       }
     }
   }
