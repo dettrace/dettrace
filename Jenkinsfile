@@ -1,6 +1,6 @@
 pipeline {
   agent {
-    label 'linux-sice-RHEL'
+    label 'linux-ubuntu-1404'
   }
 
   stages {
