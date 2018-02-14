@@ -27,7 +27,7 @@ We support the debugging flag `--debug N` for N from [1, 5]. Where 5 is the most
 output.
 
 ## Unimplemented System Calls
-We use a whitelist to determinizing system calls. Therefore any system call not implemented
+We use a whitelist to determinize system calls. Therefore any system call not implemented
 will throw a runtime exception.
 
 ## Testing
