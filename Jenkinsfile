@@ -4,6 +4,11 @@ pipeline {
     label 'linux-ubuntu-1404'
   }
 
+  triggers {
+      // Try to create a webhook:
+      pollSCM('')
+  }
+
   stages {
     stage('Build') {
       steps {
