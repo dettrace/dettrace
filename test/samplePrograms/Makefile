@@ -1,9 +1,9 @@
-OBJECTS=simpleFork inverseFork nestedFork vfork clock_gettime helloWorld getpid
+OBJECTS=simpleFork inverseFork nestedFork vfork clock_gettime helloWorld getpid uname
 
 all: $(OBJECTS)
 
 $(OBJECTS):%:%.c
-	g++ $< -o $@
+	g++ $< -g -o $@
 
 .PHONY: clean
 clean:

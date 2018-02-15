@@ -2,6 +2,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <sys/utsname.h>
 
 #include <climits>
 
@@ -84,17 +85,12 @@ bool cloneSystemCall::handleDetPre(state &s, ptracer &t){
 
 void cloneSystemCall::handleDetPost(state &s, ptracer &t){
   // Non deterministic failure due to signal.
-  // pid_t returnPid = t.getReturnValue();
-  // if(returnPid == -1){
-    // if(errno == EINTR){
-      // throw runtime_error("Clone system call failed:\n" + string { strerror(errno) });
-    // }
-  // }
-
-  // The ptrace option for fork handles most of the logic for forking. We merely need
-  // to make sure to return the correct value here!
-  // pid_t vpid = s.pidMap.getVirtualValue(returnPid);
-  // t.setReturnRegister(vpid);
+  pid_t returnPid = t.getReturnValue();
+  if(returnPid == -1){
+    if(errno == EINTR){
+      throw runtime_error("Clone system call failed:\n" + string { strerror(errno) });
+    }
+  }
 
   // In older versions of ptrace, the tid value was cached to skip getpid calls. This
   // is no longer done as it creates inconsistencies between process related system calls
@@ -288,18 +284,6 @@ bool getpidSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void getpidSystemCall::handleDetPost(state &s, ptracer &t){
-  // pid_t realPid = t.getPid();
-  // s.log.writeToLog(Importance::info, "Process real pid: %d\n", realPid);
-
-  // pid_t vPid = s.pidMap.getVirtualValue(realPid);
-
-  // if(vPid == -1){
-    // throw runtime_error("Real pid " + to_string(realPid) + " not in map!\n");
-  // }
-
-  // s.log.writeToLog(Importance::info, "Process vPid: %d\n", vPid);
-
-  // t.setReturnRegister(vPid);
   return;
 }
 // =======================================================================================
@@ -313,18 +297,6 @@ bool getppidSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void getppidSystemCall::handleDetPost(state &s, ptracer &t){
-  // pid_t parentPid = s.ppid;
-  // s.log.writeToLog(Importance::info, "Process real ppid: %d\n", parentPid);
-
-  // pid_t vppid = s.pidMap.getVirtualValue(parentPid);
-
-  // if(vppid == -1){
-    // throw runtime_error("Real pid " + to_string(parentPid) + " not in map!\n");
-  // }
-
-  // s.log.writeToLog(Importance::info, "Process vppid: %d\n", vppid);
-
-  // t.setReturnRegister(vppid);
   return;
 }
 // =======================================================================================
@@ -788,6 +760,27 @@ void umaskSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
+unameSystemCall::unameSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool unameSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void unameSystemCall::handleDetPost(state &s, ptracer &t){
+  // Populate the utsname struct with our own generic data.
+  struct utsname* utsnamePtr = (struct utsname*) t.arg1();
+
+  if(utsnamePtr != nullptr){
+    struct utsname myUts = {};
+    // I'm lazy. It gets the zero:
+    ptracer::writeToTracee(utsnamePtr, myUts, t.getPid());
+  }
+  return;
+}
+// =======================================================================================
 unlinkSystemCall::unlinkSystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
   return;
@@ -852,18 +845,7 @@ bool vforkSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void vforkSystemCall::handleDetPost(state &s, ptracer &t){
-  // Non deterministic failure due to signal.
-  // pid_t returnPid = t.getReturnValue();
-  // if(returnPid == -1){
-    // if(errno == EINTR){
-      // throw runtime_error("Clone system call failed:\n" + string { strerror(errno) });
-    // }
-  // }
-
-  // The ptrace option for fork handles most of the logic for forking. We merely need
-  // to make sure to return the correct value here!
-  // pid_t vpid = s.pidMap.getVirtualValue(returnPid);
-  // t.setReturnRegister(vpid);
+  // The ptrace option for fork handles most of the logic for forking.
   return;
 }
 // =======================================================================================
@@ -873,40 +855,6 @@ wait4SystemCall::wait4SystemCall(long syscallNumber, string syscallName):
 }
 
 bool wait4SystemCall::handleDetPre(state &s, ptracer &t){
-  pid_t vpid = t.arg1();
-  // Figure out what to do based on vpid value passed. (See man waitpid 2):
-
-  // (< -1) wait for any child process whose process group ID  is  equal  to  the
-  // absolute value of pid.
-  // TODO: Nondeterministic based on scheduling of processes? Is there any guarantee
-  // on which one will be returned?
-  if(vpid < -1){
-    throw runtime_error("wait4 error: unimplemented case for pid < -1!");
-  }
-
-  // (== -1) wait for any child process.
-  // TODO: Same issue as case above.
-  if(vpid == -1){
-    throw runtime_error("wait4 error: unimplemented case for pid == -1!");
-  }
-
-  // (== 0) wait for any child process whose process group ID is equal to that of
-  // the calling process.
-  // TODO: Same issue as case above.
-  if(vpid == 0){
-    throw runtime_error("wait4 error: unimplemented case for pid == 0!");
-  }
-
-  // (> 0) wait for the child whose process ID is equal to the value of pid.
-  // Most common case. Map pid from virtual to real.
-  // int realPid = s.pidMap.getRealValue(vpid);
-  // if(realPid == -1){
-    // throw runtime_error("wait4 error: requested for vpid does not exist: " +
-			// to_string(vpid));
-  // }
-
-  // Set realPid as value for system call to use for wait.
-  // t.writeArg1(realPid);
   return true;
 }
 

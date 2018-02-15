@@ -58,18 +58,13 @@ int main(int argc, char** argv){
   int optIndex, debugLevel;
   tie(optIndex, debugLevel) = parseProgramArguments(argc, argv);
 
-  // Set up pid namespace.
-  // int ret = unshare(CLONE_NEWUSER);
-  // if(ret == -1){
-    // printf("Unable to unshare new user: %s\n", strerror(errno));
-    // return 1;
-  // }
-
-  // ret = unshare(CLONE_NEWPID);
-  // if(ret == -1){
-    // printf("Unable to unshare new pid: %s\n", strerror(errno));
-    // return 1;
-  // }
+  // Set up new user namespace. This is needed as we will have root access withing
+  // our own user namespace. Other namepspace commands require CAP_SYS_ADMIN to work.
+  int ret = unshare(CLONE_NEWUSER | CLONE_NEWPID | CLONE_NEWNS);
+  if(ret == -1){
+    printf("Unable to create namespaces: %s\n", strerror(errno));
+    return 1;
+  }
 
   pid_t pid = fork();
   if(pid == -1){

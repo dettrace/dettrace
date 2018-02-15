@@ -760,6 +760,21 @@ public:
 // =======================================================================================
 /**
  *
+ * int uname(struct utsname *buf);
+ *
+ * uname()  returns  system information in the structure pointed to by buf.
+ *
+ *
+ */
+class unameSystemCall : public systemCall{
+public:
+  unameSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
  * int unlink(const char *pathname);
  *
  * unlink()  deletes  a  name  from the filesystem.  If that name was the last link to a
