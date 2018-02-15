@@ -22,6 +22,7 @@
 
 #include <iostream>
 #include <tuple>
+#include <sched.h>
 
 #include "logger.hpp"
 #include "valueMapper.hpp"
@@ -54,10 +55,23 @@ unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
  * system call interception.
  */
 int main(int argc, char** argv){
-  pid_t pid = fork();
-
   int optIndex, debugLevel;
   tie(optIndex, debugLevel) = parseProgramArguments(argc, argv);
+
+  // Set up new user namespace. This is needed as we will have root access withing
+  // our own user namespace. Other namepspace commands require CAP_SYS_ADMIN to work.
+  int ret = unshare(CLONE_NEWUSER | CLONE_NEWPID | CLONE_NEWNS);
+  if(ret == -1){
+    printf("Unable to create namespaces: %s\n", strerror(errno));
+    return 1;
+  }
+
+  pid_t pid = fork();
+  if(pid == -1){
+    printf("Fork failed. Reason: %s\n", strerror(errno));
+    return 1;
+  }
+
   // Child.
   if(pid == 0){
     runTracee(optIndex, argc, argv);
@@ -94,10 +108,9 @@ void runTracee(int optIndex, int argc, char** argv){
 // =======================================================================================
 /**
  * Parent is the tracer. Trace child by intercepting all system call and signals child
- * produces.
- * TODO: One tracer may trace multiple child threads. We will probably have a single central
- * tracer tracing multiple threads or processes, they can be differentiated based on the pid
- * or tid (thread id).
+ * produces. This process will take care of running children deterministically and
+ * sequentially.
+ *
  */
 void runTracer(int debugLevel, pid_t startingPid){
   execution exe {debugLevel, startingPid};

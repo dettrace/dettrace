@@ -15,13 +15,9 @@ execution::execution(int debugLevel, pid_t startingPid):
   nextPid {startingPid},
   // Waits for first process to be ready! Probably not good to have this kind of
   // dependency of a initialization list?
-  tracer{startingPid},
-  pidMap {log, "vpid <-> pid mapper"}{
-    // Explicitly add the mapping between vPid <-> rPid (realPid).
-    pidMap.addEntryValue(startingPid);
+  tracer{startingPid}{
     // Set state for first process.
-    states.emplace(startingPid,
-		   state {log, startingPid, pidMap,/* Pretend our parent is init */ 1});
+    states.emplace(startingPid, state {log, startingPid});
 
     // First process is special and we must set
     // the options ourselves. Thereafter, ptracer::setOptions will handle this for new
@@ -76,7 +72,7 @@ void execution::handlePreSystemCall(state& currState){
 
   currState.doSystemcall = currState.systemcall->handleDetPre(currState, tracer);
 
-  if(systemCall == "fork" || systemCall == "vfork"){
+  if(systemCall == "fork" || systemCall == "vfork" || systemCall == "clone"){
     int status;
     // This event is known to be either a fork/vfork event or a signal.
     ptraceEvent e = execution::getNextEvent(traceesPid, traceesPid, status);
@@ -137,7 +133,7 @@ void execution::runProgram(){
       log.writeToLog(Importance::info, "Setting options for: %d\n", nextPid);
       // First time seeing this process set ptrace options.
       ptracer::setOptions(traceesPid);
-      continue;
+      // DO NOT CONTINUE! Fall down to the correct case.
     }
 
     // Current process is done.
@@ -226,8 +222,7 @@ pid_t execution::handleForkEvent(){
 
   // Add this new process to our states.
   log.writeToLog(Importance::info, "Added process [%d] to states map.\n", newChildPid);
-  states.emplace(newChildPid, state {log, newChildPid, pidMap, parentsPid} );
-  pidMap.addEntryValue(newChildPid);
+  states.emplace(newChildPid, state {log, newChildPid} );
 
   return newChildPid;
 }
@@ -330,6 +325,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<mmapSystemCall>(syscallNumber, syscallName);
     case SYS_mprotect:
       return make_unique<mprotectSystemCall>(syscallNumber, syscallName);
+    case SYS_nanosleep:
+      return make_unique<nanosleepSystemCall>(syscallNumber, syscallName);
     case SYS_lseek:
       return make_unique<lseekSystemCall>(syscallNumber, syscallName);
     case SYS_lstat:
@@ -374,6 +371,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<timeSystemCall>(syscallNumber, syscallName);
     case SYS_umask:
       return make_unique<umaskSystemCall>(syscallNumber, syscallName);
+    case SYS_uname:
+      return make_unique<unameSystemCall>(syscallNumber, syscallName);
     case SYS_unlink:
       return make_unique<unlinkSystemCall>(syscallNumber, syscallName);
     case SYS_utimensat:

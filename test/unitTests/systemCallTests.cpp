@@ -15,6 +15,7 @@
 #include <sys/syscall.h>    /* For SYS_write, etc */
 
 #include <sys/time.h>
+#include <sys/sysinfo.h>
 #include <sys/resource.h>
 
 #include <tuple>
@@ -151,13 +152,22 @@ TEST_CASE("prlimit64", "prlimit64"){
 }
 
 TEST_CASE("sysinfo", "sysinfo"){
-  // TODO
+  struct sysinfo info;
+  sysinfo(&info);
+
+  REQUIRE(info.uptime == LONG_MAX);
+  REQUIRE(info.totalram == LONG_MAX);
+  REQUIRE(info.freehigh == LONG_MAX);
+  REQUIRE(info.loads[2] == LONG_MAX);
+  REQUIRE(info.sharedram == LONG_MAX);
+  REQUIRE(info.totalswap == LONG_MAX);
+  REQUIRE(info.procs == SHRT_MAX);
+  REQUIRE(info.freeswap == LONG_MAX);
 }
 
 TEST_CASE("utimensat", "utimensat"){
-  // TODO
+  // Huh, it's actually impossible to check if the timestamp is working
+  // as a unit test since we cannot stat the timestamps!
   // int fd = open("./test.txt", O_RDWR);
-  // int dirfd = open("./", O_RDONLY);
-  // const struct timespec times[2] = {timespec {}, {}};
-  // utimensat(dirfd, "./test.txt", times, 0);
+  // futimens(fd, nullptr);
 }
