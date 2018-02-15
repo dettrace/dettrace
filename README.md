@@ -3,7 +3,7 @@
 
 [![Build Status](http://parfunc-ci.soic.indiana.edu/buildStatus/icon?job=detTrace)](http://parfunc-ci.soic.indiana.edu/job/detTrace/)
 
-[![Build Status](https://parfunc-ci.soic.indiana.edu/detTrace/lastBuild/buildStatus)](https://parfunc-ci.soic.indiana.edu/detTrace/lastBuild/)
+[![Build Status](http://parfunc-ci.soic.indiana.edu/job/detTrace/lastBuild/buildStatus)](http://parfunc-ci.soic.indiana.edu/job/detTrace/lastBuild/)
 
 ## Overview
 Using `ptrace` we are able to run programs deterministically. All system calls are caught
