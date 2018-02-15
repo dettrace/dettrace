@@ -1,4 +1,3 @@
-
 # Top-level Makefile to capture different actions you can take.
 all: build tests
 

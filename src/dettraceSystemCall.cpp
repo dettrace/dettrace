@@ -2,11 +2,13 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <sys/utsname.h>
 
 #include <climits>
 
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/sysinfo.h>
 
 #include "dettraceSystemCall.hpp"
 #include "ptracer.hpp"
@@ -16,6 +18,7 @@
 void zeroOutStatfs(struct statfs& stats);
 void zeroOutStat(struct stat& stats, long clock);
 void handleStatFamily(state& s, ptracer& t, string syscallName);
+bool isPrefix(const string& data, const string& prefix);
 // =======================================================================================
 accessSystemCall::accessSystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
@@ -89,11 +92,6 @@ void cloneSystemCall::handleDetPost(state &s, ptracer &t){
     }
   }
 
-  // The ptrace option for fork handles most of the logic for forking. We merely need
-  // to make sure to return the correct value here!
-  pid_t vpid = s.pidMap.getVirtualValue(returnPid);
-  t.setReturnRegister(vpid);
-
   // In older versions of ptrace, the tid value was cached to skip getpid calls. This
   // is no longer done as it creates inconsistencies between process related system calls
   // done through libc and those done directly. Long story short, nothing for us to do.
@@ -166,8 +164,8 @@ execveSystemCall::execveSystemCall(long syscallNumber, string syscallName):
 }
 
 bool execveSystemCall::handleDetPre(state &s, ptracer &t){
-  char* filenameAddr = (char*) t.arg1();
-  string filename = t.readTraceeCString(filenameAddr, s.traceePid);
+  const char* filenameAddr = (const char*) t.arg1();
+  string filename = ptracer::readTraceeCString(filenameAddr, s.traceePid);
   s.log.writeToLog(Importance::extra, "Execve on: %s\n", filename.c_str());
 
   return true;
@@ -299,18 +297,6 @@ bool getpidSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void getpidSystemCall::handleDetPost(state &s, ptracer &t){
-  pid_t realPid = t.getPid();
-  s.log.writeToLog(Importance::info, "Process real pid: %d\n", realPid);
-
-  pid_t vPid = s.pidMap.getVirtualValue(realPid);
-
-  if(vPid == -1){
-    throw runtime_error("Real pid " + to_string(realPid) + " not in map!\n");
-  }
-
-  s.log.writeToLog(Importance::info, "Process vPid: %d\n", vPid);
-
-  t.setReturnRegister(vPid);
   return;
 }
 // =======================================================================================
@@ -324,18 +310,6 @@ bool getppidSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void getppidSystemCall::handleDetPost(state &s, ptracer &t){
-  pid_t parentPid = s.ppid;
-  s.log.writeToLog(Importance::info, "Process real ppid: %d\n", parentPid);
-
-  pid_t vppid = s.pidMap.getVirtualValue(parentPid);
-
-  if(vppid == -1){
-    throw runtime_error("Real pid " + to_string(parentPid) + " not in map!\n");
-  }
-
-  s.log.writeToLog(Importance::info, "Process vppid: %d\n", vppid);
-
-  t.setReturnRegister(vppid);
   return;
 }
 // =======================================================================================
@@ -470,7 +444,27 @@ bool openSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void openSystemCall::handleDetPost(state &s, ptracer &t){
-  // Deterministic file descriptors?
+  const char* pathnamePtr = (const char*)t.arg1();
+  string pathname = ptracer::readTraceeCString(pathnamePtr, t.getPid());
+
+  char linkArray[PATH_MAX];
+  // Assume symlink.
+  ssize_t ret = readlink(pathname.c_str(), linkArray, PATH_MAX);
+  // Null is not automatically placed.
+  linkArray[ret] = '\0';
+  const string zoneinfo { "/usr/share/zoneinfo/"};
+  string link { linkArray };
+
+  // Write our own string to bottom of stack.
+
+  // This is a symbolic link!
+  if(ret != -1){
+    if(isPrefix(link, zoneinfo)){
+      t.setReturnRegister(-1);
+    }
+  }
+  s.log.writeToLog(Importance::inter, "Implicit argument: %s\n", pathname.c_str());
+
   return;
 }
 // =======================================================================================
@@ -511,6 +505,26 @@ bool mprotectSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void mprotectSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+nanosleepSystemCall::nanosleepSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool nanosleepSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void nanosleepSystemCall::handleDetPost(state &s, ptracer &t){
+  // Check return value. We wish we could check for EINTR but we can't as I don't
+  // know a way to get errno from tracee. Instead we merely fail if nanosleep returns
+  // -1.
+  if(t.getReturnValue() == (u_int64_t)-1){
+    throw runtime_error("nanosleep returned with error.");
+  }
+
   return;
 }
 // =======================================================================================
@@ -798,6 +812,29 @@ bool sysinfoSystemCall::handleDetPre(state &s, ptracer &t){
 
 void sysinfoSystemCall::handleDetPost(state &s, ptracer &t){
   // TODO. Mask out the stuff we don't want the user to see.
+  struct sysinfo* infoPtr = (struct sysinfo *) t.arg1();
+  if(infoPtr == nullptr){
+    return;
+  }
+
+  struct sysinfo info;
+  info.uptime = LONG_MAX;
+  info.totalram = LONG_MAX;
+  info.freeram = LONG_MAX;
+  info.sharedram = LONG_MAX;
+  info.bufferram = LONG_MAX;
+  info.totalswap = LONG_MAX;
+  info.freeswap = LONG_MAX;
+  info.procs = SHRT_MAX;
+  info.totalhigh = LONG_MAX;
+  info.freehigh = LONG_MAX;
+
+
+  info.loads[0] = LONG_MAX;
+  info.loads[1] = LONG_MAX;
+  info.loads[2] = LONG_MAX;
+
+  ptracer::writeToTracee(infoPtr, info, t.getPid());
   return;
 }
 // =======================================================================================
@@ -840,6 +877,27 @@ void umaskSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
+unameSystemCall::unameSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool unameSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void unameSystemCall::handleDetPost(state &s, ptracer &t){
+  // Populate the utsname struct with our own generic data.
+  struct utsname* utsnamePtr = (struct utsname*) t.arg1();
+
+  if(utsnamePtr != nullptr){
+    struct utsname myUts = {};
+    // I'm lazy. It gets the zero:
+    ptracer::writeToTracee(utsnamePtr, myUts, t.getPid());
+  }
+  return;
+}
+// =======================================================================================
 unlinkSystemCall::unlinkSystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
   return;
@@ -861,7 +919,11 @@ utimensatSystemCall::utimensatSystemCall(long syscallNumber, string syscallName)
 bool utimensatSystemCall::handleDetPre(state &s, ptracer &t){
   // int utimensat(int dirfd, const char *pathname,
   //               const struct timespec times[2], int flags);
-  // Set times to our own logical time for deterministic time.
+  // Set times to our own logical time for deterministic time only if times is null.
+  if((const struct timespec*) t.arg3() != nullptr){
+    // Nothing to do, user specified his/her own time which should be deterministic.
+    return true;
+  }
 
   // We need somewhere to store a timespec struct if our struct is null. We will write
   // this data below the current stack pointer accounting for the red zone, known to be
@@ -900,18 +962,7 @@ bool vforkSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void vforkSystemCall::handleDetPost(state &s, ptracer &t){
-  // Non deterministic failure due to signal.
-  pid_t returnPid = t.getReturnValue();
-  if(returnPid == -1){
-    if(errno == EINTR){
-      throw runtime_error("Clone system call failed:\n" + string { strerror(errno) });
-    }
-  }
-
-  // The ptrace option for fork handles most of the logic for forking. We merely need
-  // to make sure to return the correct value here!
-  pid_t vpid = s.pidMap.getVirtualValue(returnPid);
-  t.setReturnRegister(vpid);
+  // The ptrace option for fork handles most of the logic for forking.
   return;
 }
 // =======================================================================================
@@ -921,40 +972,6 @@ wait4SystemCall::wait4SystemCall(long syscallNumber, string syscallName):
 }
 
 bool wait4SystemCall::handleDetPre(state &s, ptracer &t){
-  pid_t vpid = t.arg1();
-  // Figure out what to do based on vpid value passed. (See man waitpid 2):
-
-  // (< -1) wait for any child process whose process group ID  is  equal  to  the
-  // absolute value of pid.
-  // TODO: Nondeterministic based on scheduling of processes? Is there any guarantee
-  // on which one will be returned?
-  if(vpid < -1){
-    throw runtime_error("wait4 error: unimplemented case for pid < -1!");
-  }
-
-  // (== -1) wait for any child process.
-  // TODO: Same issue as case above.
-  if(vpid == -1){
-    throw runtime_error("wait4 error: unimplemented case for pid == -1!");
-  }
-
-  // (== 0) wait for any child process whose process group ID is equal to that of
-  // the calling process.
-  // TODO: Same issue as case above.
-  if(vpid == 0){
-    throw runtime_error("wait4 error: unimplemented case for pid == 0!");
-  }
-
-  // (> 0) wait for the child whose process ID is equal to the value of pid.
-  // Most common case. Map pid from virtual to real.
-  int realPid = s.pidMap.getRealValue(vpid);
-  if(realPid == -1){
-    throw runtime_error("wait4 error: requested for vpid does not exist: " +
-			to_string(vpid));
-  }
-
-  // Set realPid as value for system call to use for wait.
-  t.writeArg1(realPid);
   return true;
 }
 
@@ -1042,5 +1059,11 @@ void handleStatFamily(state& s, ptracer& t, string syscallName){
 		     + syscallName + "call\n");
   }
   return;
+}
+// =======================================================================================
+bool isPrefix(const string& data, const string& prefix){
+    auto mismatch = std::mismatch(data.begin(),   data.end(),
+                                  prefix.begin(), prefix.end()).second;
+    return mismatch == prefix.end();
 }
 // =======================================================================================

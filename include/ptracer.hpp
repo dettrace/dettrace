@@ -166,7 +166,7 @@ public:
    * Undefined behavior will happen if the location is not actually a C-string.
    * @retval str: A Cpp string version of readAddress.
    */
-  static string readTraceeCString(char* source, pid_t traceePid);
+  static string readTraceeCString(const char* source, pid_t traceePid);
   
   /**
    * Write a value

@@ -48,7 +48,7 @@ private:
 
   // Global pidMap shared by entire process trees. This is global to maintain a consistent
   // view of virtual to real pid mappings accross all processes.
-  valueMapper pidMap;
+  // valueMapper pidMap;
 
   // As we fork, we must let children process run, the child could itself fork. So we
   // require a stack to know who the parent was.
