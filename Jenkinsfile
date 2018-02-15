@@ -1,4 +1,5 @@
 pipeline {
+  // This is designed to run on Cutter @ IU
   agent {
     label 'linux-ubuntu-1404'
   }
@@ -8,7 +9,8 @@ pipeline {
       steps {
         echo "PATH is: $PATH"
         sh "lsb_release -a"
-        sh "bash -c 'module add gcc; ./runTests.sh'"
+        // Warning: this has global side effects.  Cannot run twice on one machine:
+        sh "make docker"
       }
     }
   }
