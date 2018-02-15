@@ -2,9 +2,15 @@ OBJECTS=simpleFork inverseFork nestedFork vfork clock_gettime helloWorld getpid 
 
 all: $(OBJECTS)
 
+test:
+	./inverseFork
+	./nestedFork
+	./simpleFork
+	./vfork
+
 $(OBJECTS):%:%.c
 	g++ $< -g -o $@
 
-.PHONY: clean
+.PHONY: clean test
 clean:
 	$(RM) $(OBJECTS)

@@ -18,7 +18,10 @@ docker:
 run-docker:
 	docker run -it ${DOCKER_NAME}:${DOCKER_TAG}
 
-.PHONY: clean
+test-docker:
+	docker run -it ${DOCKER_NAME}:${DOCKER_TAG} /detTrace/runTests.sh
+
+.PHONY: clean docker run-docker
 clean:
 	$(RM) src/dettrace
 	make -C ./src/ clean

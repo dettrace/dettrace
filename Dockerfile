@@ -8,3 +8,5 @@ ADD ./ /detTrace/
 
 RUN cd /detTrace/src && make && \
     mv /detTrace/src/dettrace /usr/bin/
+
+WORKDIR /detTrace/
