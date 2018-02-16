@@ -13,6 +13,7 @@
 #include "dettraceSystemCall.hpp"
 #include "ptracer.hpp"
 
+using namespace std;
 // =======================================================================================
 // Prototypes for common functions.
 void zeroOutStatfs(struct statfs& stats);
@@ -444,8 +445,13 @@ bool openSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void openSystemCall::handleDetPost(state &s, ptracer &t){
+  // TODO: In the future I hope to replace these brittle path checks with some filesystem
+  // containerization support.
   const char* pathnamePtr = (const char*)t.arg1();
   string pathname = ptracer::readTraceeCString(pathnamePtr, t.getPid());
+
+  s.log.writeToLog(Importance::info, "Openat-ing path: " +
+		   logger::makeTextColored(Color::green, pathname) + "\n");
 
   char linkArray[PATH_MAX];
   // Assume symlink.
@@ -463,7 +469,6 @@ void openSystemCall::handleDetPost(state &s, ptracer &t){
       t.setReturnRegister(-1);
     }
   }
-  s.log.writeToLog(Importance::inter, "Implicit argument: %s\n", pathname.c_str());
 
   return;
 }
@@ -474,6 +479,17 @@ openatSystemCall::openatSystemCall(long syscallNumber, string syscallName):
 }
 
 bool openatSystemCall::handleDetPre(state &s, ptracer &t){
+  // TODO. The same work done in open should be done here!
+  const char* pathnamePtr = (const char*)t.arg2();
+
+  if(pathnamePtr != nullptr){
+    string pathname = ptracer::readTraceeCString(pathnamePtr, t.getPid());
+
+    s.log.writeToLog(Importance::info, "Openat-ing path: " +
+		     logger::makeTextColored(Color::green, pathname) + "\n");
+
+  }
+
   return true;
 }
 
