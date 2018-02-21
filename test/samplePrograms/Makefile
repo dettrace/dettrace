@@ -1,4 +1,4 @@
-OBJECTS=simpleFork inverseFork nestedFork vfork clock_gettime helloWorld getpid uname
+OBJECTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname
 
 all: $(OBJECTS)
 
