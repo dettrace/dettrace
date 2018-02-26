@@ -288,6 +288,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<brkSystemCall>(syscallNumber, syscallName);
     case SYS_chmod:
       return make_unique<chmodSystemCall>(syscallNumber, syscallName);
+    case SYS_clock_gettime:
+      return make_unique<clock_gettimeSystemCall>(syscallNumber, syscallName);
     case SYS_clone:
       return make_unique<cloneSystemCall>(syscallNumber, syscallName);
     case SYS_close:

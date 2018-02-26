@@ -5,6 +5,7 @@
 #include <sys/utsname.h>
 
 #include <climits>
+#include <cstring>
 
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -71,6 +72,28 @@ bool chmodSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void chmodSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+clock_gettimeSystemCall::clock_gettimeSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool clock_gettimeSystemCall::handleDetPre(state &s, ptracer &t) {
+  return true;
+}
+
+void clock_gettimeSystemCall::handleDetPost(state &s, ptracer &t) {
+  struct timespec* tp = (struct timespec*) t.arg2();
+
+  if (tp != nullptr) {
+    struct timespec myTp = {};
+    myTp.tv_sec = s.clock;
+    myTp.tv_nsec = 0;
+
+    ptracer::writeToTracee(tp, myTp, t.getPid());
+  }
   return;
 }
 // =======================================================================================
@@ -638,6 +661,12 @@ bool readSystemCall::handleDetPre(state &s, ptracer &t){
 
 void readSystemCall::handleDetPost(state &s, ptracer &t){
   // TODO: Handle number of bytest read.
+  ssize_t bytes_read = t.getReturnValue();
+  ssize_t bytes_requested = t.arg3();
+  if (bytes_read != bytes_requested && bytes_read != 0) {
+    throw runtime_error("number of bytes read: " + to_string(bytes_read) 
+		    	+ " \nnumber of bytes requested: " + to_string(bytes_requested));
+  }
   return;
 }
 // =======================================================================================
@@ -911,9 +940,27 @@ void unameSystemCall::handleDetPost(state &s, ptracer &t){
   // Populate the utsname struct with our own generic data.
   struct utsname* utsnamePtr = (struct utsname*) t.arg1();
 
+  // example struct utsname from acggrid28
+  //uname({sysname="Linux", nodename="acggrid28", release="4.4.114-42-default", version="#1 SMP Tue Feb 6 10:58:10 UTC 2018 (b6ee9ae)", machine="x86_64", domainname="(none)"}
   if(utsnamePtr != nullptr){
-    struct utsname myUts = {};
-    // I'm lazy. It gets the zero:
+    struct utsname myUts = {}; // initializes to all zeroes
+
+    // compiler-time check to ensure that each member is large enough
+    // magic due to https://stackoverflow.com/questions/3553296/c-sizeof-single-struct-member
+    const uint32_t MEMBER_LENGTH = 60;
+    if (sizeof(((struct utsname*)0)->sysname) < MEMBER_LENGTH ||
+        sizeof(((struct utsname*)0)->release) < MEMBER_LENGTH ||
+        sizeof(((struct utsname*)0)->version) < MEMBER_LENGTH ||
+        sizeof(((struct utsname*)0)->machine) < MEMBER_LENGTH) {
+      throw runtime_error("unameSystemCall::handleDetPost: struct utsname members too small!");
+    }
+
+    // NB: this is our standard environment
+    strncpy(myUts.sysname, "Linux", MEMBER_LENGTH);
+    strncpy(myUts.release, "4.0", MEMBER_LENGTH);
+    strncpy(myUts.version, "#1", MEMBER_LENGTH);
+    strncpy(myUts.machine, "x86_64", MEMBER_LENGTH);
+    
     ptracer::writeToTracee(utsnamePtr, myUts, t.getPid());
   }
   return;
