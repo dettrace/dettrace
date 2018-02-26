@@ -5,6 +5,7 @@
 #include <sys/utsname.h>
 
 #include <climits>
+#include <cstring>
 
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -906,9 +907,27 @@ void unameSystemCall::handleDetPost(state &s, ptracer &t){
   // Populate the utsname struct with our own generic data.
   struct utsname* utsnamePtr = (struct utsname*) t.arg1();
 
+  // example struct utsname from acggrid28
+  //uname({sysname="Linux", nodename="acggrid28", release="4.4.114-42-default", version="#1 SMP Tue Feb 6 10:58:10 UTC 2018 (b6ee9ae)", machine="x86_64", domainname="(none)"}
   if(utsnamePtr != nullptr){
-    struct utsname myUts = {};
-    // I'm lazy. It gets the zero:
+    struct utsname myUts = {}; // initializes to all zeroes
+
+    // compiler-time check to ensure that each member is large enough
+    // magic due to https://stackoverflow.com/questions/3553296/c-sizeof-single-struct-member
+    const uint32_t MEMBER_LENGTH = 60;
+    if (sizeof(((struct utsname*)0)->sysname) < MEMBER_LENGTH ||
+        sizeof(((struct utsname*)0)->release) < MEMBER_LENGTH ||
+        sizeof(((struct utsname*)0)->version) < MEMBER_LENGTH ||
+        sizeof(((struct utsname*)0)->machine) < MEMBER_LENGTH) {
+      throw runtime_error("unameSystemCall::handleDetPost: struct utsname members too small!");
+    }
+
+    // NB: this is our standard environment
+    strncpy(myUts.sysname, "Linux", MEMBER_LENGTH);
+    strncpy(myUts.release, "4.0", MEMBER_LENGTH);
+    strncpy(myUts.version, "#1", MEMBER_LENGTH);
+    strncpy(myUts.machine, "x86_64", MEMBER_LENGTH);
+    
     ptracer::writeToTracee(utsnamePtr, myUts, t.getPid());
   }
   return;
