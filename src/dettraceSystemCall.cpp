@@ -658,6 +658,12 @@ bool readSystemCall::handleDetPre(state &s, ptracer &t){
 
 void readSystemCall::handleDetPost(state &s, ptracer &t){
   // TODO: Handle number of bytest read.
+  ssize_t bytes_read = t.getReturnValue();
+  ssize_t bytes_requested = t.arg3();
+  if (bytes_read != bytes_requested && bytes_read != 0) {
+    throw runtime_error("number of bytes read: " + to_string(bytes_read) 
+		    	+ " \nnumber of bytes requested: " + to_string(bytes_requested));
+  }
   return;
 }
 // =======================================================================================
