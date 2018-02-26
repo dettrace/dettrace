@@ -129,10 +129,25 @@ string ptracer::readTraceeCString(const char* readAddress, pid_t traceePid){
 
 
 long ptracer::doPtrace(enum __ptrace_request request, pid_t pid, void *addr, void *data){
-  long val = ptrace(request, pid, addr, data);
+  /*
+Return Value
+On success, PTRACE_PEEK* requests return the requested data, while other
+requests return zero. On error, all requests return -1, and errno is set
+appropriately. Since the value returned by a successful PTRACE_PEEK* request may
+be -1, the caller must clear errno before the call, and then check it afterward
+to determine whether or not an error occurred.
+  -- ptrace manpage
+  */
 
-  if(val == -1){
-    throw runtime_error("Ptrace failed with error: " + string { strerror(errno) });
+  errno = 0;
+  const long val = ptrace(request, pid, addr, data);
+
+  if (PTRACE_PEEKTEXT == request || PTRACE_PEEKDATA == request || PTRACE_PEEKUSER == request) {
+    if (0 != errno) {
+      throw runtime_error("Ptrace_peek* failed with error: " + string { strerror(errno) } );
+    }
+  } else if (-1 == val) {
+    throw runtime_error("Ptrace failed with error: " + string { strerror(errno) } );
   }
   return val;
 }
