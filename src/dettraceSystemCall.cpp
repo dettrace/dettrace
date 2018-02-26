@@ -75,6 +75,28 @@ void chmodSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
+clock_gettimeSystemCall::clock_gettimeSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool clock_gettimeSystemCall::handleDetPre(state &s, ptracer &t) {
+  return true;
+}
+
+void clock_gettimeSystemCall::handleDetPost(state &s, ptracer &t) {
+  struct timespec* tp = (struct timespec*) t.arg2();
+
+  if (tp != nullptr) {
+    struct timespec myTp = {};
+    myTp.tv_sec = s.clock;
+    myTp.tv_nsec = 0;
+
+    ptracer::writeToTracee(tp, myTp, t.getPid());
+  }
+  return;
+}
+// =======================================================================================
 cloneSystemCall::cloneSystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
   return;

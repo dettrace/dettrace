@@ -85,6 +85,19 @@ public:
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
+
+// =======================================================================================
+/**
+*
+* int clock_gettime(clockid_t clk_id, struct timespec *tp); 
+*
+*/
+class clock_gettimeSystemCall : public systemCall{
+public:
+  clock_gettimeSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
 // =======================================================================================
 /**
  * long
