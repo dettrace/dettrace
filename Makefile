@@ -4,6 +4,7 @@ all: build tests
 build:
 	cd src && ${MAKE}
 	cp src/dettrace bin/
+	cp src/libdet.so lib/
 
 tests:
 	make -C ./test/unitTests/

@@ -25,6 +25,14 @@ class systemCall;
  * Logger.
  */
 class state{
+private:
+  /**
+   * Logical clock. Ticks only on time related system calls where the user can observe
+   * time since we want to present progress.
+   * See [[https://github.com/upenn-acg/detTrace/issues/24][Github issue]] for more
+   * information.
+   */
+  size_t clock = 0;
 public:
   /**
    * @pidMap: Notice this is a reference -> same map is shared among all instances of
@@ -32,11 +40,6 @@ public:
    * @ppid: Parent pid of this process.
    */
   state(logger& log, pid_t myPid);
-
-  /**
-   * Logical clock. Ticks for every event: system call, signal, etc.
-   */
-  size_t clock = 0;
 
   /**
    * The pid of the process represented by this state.
@@ -72,6 +75,16 @@ public:
    * the methods to work properly.
    */
   unique_ptr<systemCall> systemcall;
+
+  /**
+   * Increase value of internal logical clock.
+   */
+  void incrementTime();
+
+  /**
+   * Get value of internal logical clock.
+   */
+  int getLogicalTime();
 };
 
 #endif

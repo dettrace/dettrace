@@ -1,3 +1,4 @@
+#include <sys/personality.h>
 #include <sys/ptrace.h>
 #include <sys/reg.h>     /* For constants ORIG_EAX, etc */
 #include <sys/syscall.h>    /* For SYS_write, etc */
@@ -19,6 +20,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdarg.h>
+#include <libgen.h>
 
 #include <iostream>
 #include <tuple>
@@ -66,6 +68,13 @@ int main(int argc, char** argv){
     return 1;
   }
 
+  // Disable ASLR for our child
+  ret = personality(PER_LINUX | ADDR_NO_RANDOMIZE);
+  if(ret == -1){
+    printf("Unable to disable ASLR: %s\n", strerror(errno));
+    return 1;
+  }
+
   pid_t pid = fork();
   if(pid == -1){
     printf("Fork failed. Reason: %s\n", strerror(errno));
@@ -94,10 +103,21 @@ void runTracee(int optIndex, int argc, char** argv){
   memcpy(traceeCommand, & argv[optIndex], newArgc * sizeof(char*));
   traceeCommand[newArgc - 1] = NULL;
 
+  // Find absolute path to our file.
+  char argv0[strlen(argv[0])];
+  // Use a copy since dirname may mutate contents.
+  strcpy(argv0, argv[0]);
+  string pathToExe{ dirname(argv0) };
+  // Wipe out rest environment for process?
+  string ldpreload {"LD_PRELOAD=" + pathToExe + "/../lib/libdet.so"};
+  char *const envs[] = {(char* const)ldpreload.c_str() ,NULL};
+
   // Stop ourselves until the tracer is ready. This ensures the tracer has time to get set
   //up.
   raise(SIGSTOP);
-  int val = execvp(traceeCommand[0], traceeCommand);
+  // execvpe() duplicates the actions of the shell in searching  for  an executable file
+  // if the specified filename does not contain a slash (/) character.
+  int val = execvpe(traceeCommand[0], traceeCommand, envs);
   if(val == -1){
     throw runtime_error("Unable to exec your program. Reason\n" +
 			string { strerror(errno) });

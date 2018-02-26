@@ -59,11 +59,8 @@ void execution::handlePreSystemCall(state& currState){
   string systemCall = currState.systemcall->syscallName;
   string redColoredSyscall = logger::makeTextColored(Color::red, systemCall);
   log.writeToLog(Importance::inter,"[Time %d][Pid %d] Intercepted %s (#%d)\n",
-		 currState.clock, traceesPid, redColoredSyscall.c_str(), syscallNum);
-
-  // Tick clock once per syscall pre-post pair. Notice we don't tick on every event
-  // as signals are asynchronous events.
-  currState.clock++;
+		 currState.getLogicalTime(), traceesPid, redColoredSyscall.c_str(),
+		 syscallNum);
 
   log.setPadding();
 
@@ -397,6 +394,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<wait4SystemCall>(syscallNumber, syscallName);
     case SYS_write:
       return make_unique<writeSystemCall>(syscallNumber, syscallName);
+    case SYS_writev:
+      return make_unique<writevSystemCall>(syscallNumber, syscallName);
     }
 
     // Generic system call. Throws error.

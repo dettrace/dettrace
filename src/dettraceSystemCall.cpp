@@ -343,10 +343,12 @@ void getrusageSystemCall::handleDetPost(state &s, ptracer &t){
     s.log.writeToLog(Importance::info, "getrusage pointer null.");
   }else{
     struct rusage usage = ptracer::readFromTracee(usagePtr, t.getPid());
-    usage.ru_utime = timeval { .tv_sec =  (long) s.clock,
-			       .tv_usec = (long )s.clock };  /* user CPU time used */
-    usage.ru_stime = timeval { .tv_sec =  (long) s.clock,
-			       .tv_usec = (long )s.clock };  /* system CPU time used */
+    /* user CPU time used */
+    usage.ru_utime = timeval { .tv_sec =  (long) s.getLogicalTime(),
+			       .tv_usec = (long )s.getLogicalTime() };
+    /* system CPU time used */
+    usage.ru_stime = timeval { .tv_sec =  (long) s.getLogicalTime(),
+			       .tv_usec = (long )s.getLogicalTime() };
     usage.ru_maxrss = LONG_MAX;                    /* maximum resident set size */
     usage.ru_ixrss = LONG_MAX;                     /* integral shared memory size */
     usage.ru_idrss = LONG_MAX;    		   /* integral unshared data size */
@@ -365,6 +367,7 @@ void getrusageSystemCall::handleDetPost(state &s, ptracer &t){
     ptracer::writeToTracee(usagePtr, usage, t.getPid());
   }
 
+  s.incrementTime();
   return;
 }
 // =======================================================================================
@@ -876,7 +879,9 @@ void timeSystemCall::handleDetPost(state &s, ptracer &t){
     return;
   }
 
-  ptracer::writeToTracee(timePtr, (time_t) s.clock, s.traceePid);
+  ptracer::writeToTracee(timePtr, (time_t) s.getLogicalTime(), s.traceePid);
+  // Tick up time.
+  s.incrementTime();
   return;
 }
 // =======================================================================================
@@ -950,8 +955,8 @@ bool utimensatSystemCall::handleDetPre(state &s, ptracer &t){
 
   // Create our own struct with our time.
   timespec clockTime = {
-    .tv_sec = (time_t) s.clock,
-    .tv_nsec = (time_t) s.clock,
+    .tv_sec = (time_t) s.getLogicalTime(),
+    .tv_nsec = (time_t) s.getLogicalTime()
   };
 
   // Write our struct to the tracee's memory.
@@ -960,7 +965,7 @@ bool utimensatSystemCall::handleDetPre(state &s, ptracer &t){
 
   // Point system call to new address.
   t.writeArg3((uint64_t) ourTimespec);
-
+  s.incrementTime();
   return true;
 }
 
@@ -1006,6 +1011,19 @@ bool writeSystemCall::handleDetPre(state &s, ptracer &t){
 
 void writeSystemCall::handleDetPost(state &s, ptracer &t){
   // TODO: Handle bytes written.
+  return;
+}
+// =======================================================================================
+writevSystemCall::writevSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool writevSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void writevSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
@@ -1066,7 +1084,8 @@ void handleStatFamily(state& s, ptracer& t, string syscallName){
 
   if(t.getReturnValue() == 0){
     struct stat myStat = ptracer::readFromTracee(statPtr, s.traceePid);
-    zeroOutStat(myStat, s.clock);
+    zeroOutStat(myStat, s.getLogicalTime());
+    s.incrementTime();
 
     // Write back result for child.
     ptracer::writeToTracee(statPtr, myStat, s.traceePid);

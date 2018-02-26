@@ -1006,6 +1006,26 @@ public:
 // =======================================================================================
 /**
  *
+ * ssize_t writev(int fd, const struct iovec *iov, int iovcnt)
+ *
+ * The  writev()  system call writes iovcnt buffers of data described by iov to the file
+ * associated with the file descriptor fd ("gather output").
+ *
+ * Non deterministic!
+ * Same problem as regular writes.
+ *
+ */
+class writevSystemCall : public systemCall{
+public:
+  writevSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+
+
+// =======================================================================================
+/**
+ *
  * ssize_t write(int fd, const void *buf, size_t count);
  *
  * write()  writes up to count bytes from the buffer pointed buf to the file referred to
