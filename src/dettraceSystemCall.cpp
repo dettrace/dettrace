@@ -349,6 +349,15 @@ bool getrlimitSystemCall::handleDetPre(state& s, ptracer& t){
 }
 
 void getrlimitSystemCall::handleDetPost(state &s, ptracer &t){
+  struct rlimit* rp = (struct rlimit*) t.arg2();
+  if (rp != nullptr) {
+    struct rlimit noLimits = {};
+    noLimits.rlim_cur = RLIM_INFINITY;
+    noLimits.rlim_max = RLIM_INFINITY;
+    
+    ptracer::writeToTracee(rp, noLimits, t.getPid());
+  }
+
   return;
 }
 // =======================================================================================
