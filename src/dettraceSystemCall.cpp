@@ -3,6 +3,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <sys/utsname.h>
+#include <sys/ioctl.h>
 
 #include <climits>
 #include <cstring>
@@ -28,6 +29,7 @@ accessSystemCall::accessSystemCall(long syscallNumber, string syscallName):
 }
 
 bool accessSystemCall::handleDetPre(state &s, ptracer &t){
+  s.log.writeToLog(Importance::info, "access: path=" + t.readTraceeCString((const char*)t.arg1(), t.getPid()));
   return true;
 }
 
@@ -305,6 +307,7 @@ bool getcwdSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void getcwdSystemCall::handleDetPost(state &s, ptracer &t){
+  s.log.writeToLog(Importance::info, "getcwd: cwd=" + t.readTraceeCString((const char*)t.arg1(), t.getPid()));
   return;
 }
 // =======================================================================================
@@ -422,6 +425,15 @@ bool getrlimitSystemCall::handleDetPre(state& s, ptracer& t){
 }
 
 void getrlimitSystemCall::handleDetPost(state &s, ptracer &t){
+  struct rlimit* rp = (struct rlimit*) t.arg2();
+  if (rp != nullptr) {
+    struct rlimit noLimits = {};
+    noLimits.rlim_cur = RLIM_INFINITY;
+    noLimits.rlim_max = RLIM_INFINITY;
+    
+    ptracer::writeToTracee(rp, noLimits, t.getPid());
+  }
+
   return;
 }
 // =======================================================================================
@@ -469,6 +481,26 @@ void getrusageSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
+gettimeofdaySystemCall::gettimeofdaySystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+bool gettimeofdaySystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+void gettimeofdaySystemCall::handleDetPost(state &s, ptracer &t){
+  struct timeval* tp = (struct timeval*) t.arg1();
+  if (nullptr != tp) {
+    struct timeval myTv = {};
+    myTv.tv_sec = s.getLogicalTime();
+    myTv.tv_usec = 0;
+    
+    ptracer::writeToTracee(tp, myTv, t.getPid());
+    s.incrementTime();
+  }
+  return;
+}
+// =======================================================================================
 getuidSystemCall::getuidSystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
   return;
@@ -507,6 +539,12 @@ bool ioctlSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void ioctlSystemCall::handleDetPost(state &s, ptracer &t){
+  const uint64_t request = t.arg2();
+  if (TCGETS == request || TIOCGWINSZ == request) {
+    t.setReturnRegister((uint64_t) -ENOTTY);
+  } else {
+    throw runtime_error("Unsupported ioctl call: fd="+to_string(t.arg1())+" request=" + to_string(request));
+  }
   return;
 }
 // =======================================================================================
@@ -691,6 +729,7 @@ lstatSystemCall::lstatSystemCall(long syscallNumber, string syscallName):
 }
 
 bool lstatSystemCall::handleDetPre(state &s, ptracer &t){
+  s.log.writeToLog(Importance::info, "lstat: path=" + t.readTraceeCString((const char*)t.arg1(), t.getPid()));
   return true;
 }
 
@@ -717,8 +756,14 @@ prlimit64SystemCall::prlimit64SystemCall(long syscallNumber, string syscallName)
   return;
 }
 
+// for reference, here's the prlimit() prototype
+// int prlimit(pid_t pid, int resource, const struct rlimit *new_limit, struct rlimit *old_limit);
+
 bool prlimit64SystemCall::handleDetPre(state &s, ptracer &t){
-  /* Check if first argument (pid) is non-zero. If so fail. */
+  t.writeArg3(0); // suppress attempts to set new limits
+
+  // Check if first argument (pid) is non-zero. If so fail.
+  // TODO: could also always overwrite first argument with zero
   int pid = (pid_t) t.arg1();
   if(pid != 0){
     throw runtime_error("prlimit64: We do not support prlimit64 on other processes.\n "
@@ -729,25 +774,23 @@ bool prlimit64SystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void prlimit64SystemCall::handleDetPost(state &s, ptracer &t){
-  // int prlimit(pid_t pid, int resource, const struct rlimit *new_limit,
-  // struct rlimit *old_limit);
-
-  // TODO: This is a really complicated system calls. We must match against
-  // resource, and set resonable values for each. Ideally we would also have
-  // a per process hashtable that "remembers" what the limits set for each field
-  // by the user were. A subsequent call to prlimit/prlimit64 would return the
-  // correct values: either the value on the hashtable, or a default sensible
-  // value.
-
-
-  // struct rlimit* rlimPtr = (struct rlimit*) t.arg4();
-  // if(rlimPtr == nullptr){
-    // s.log.writeToLog(Importance::info, "Null rlimi pointer.");
-  // }else{
-    // struct rlimit limit = ptracer::readFromTracee(rlimPtr, t.getPid());
-    // limit.rlim_cur = 1024;
-    // limit.rlim_cur = 2048;
-  // }
+  /* To bypass the complexity of this system call (lots of different resources,
+   * dynamic limits, ...) we just always say everything is unlimited, and ignore
+   * requests from the application to try to increase the soft limit.
+   *
+   * Alternatively, we could track limits dynamically per-process and preserve
+   * the illusion that they can be changed. It may be possible to actually
+   * change limits deterministically in many cases, if need be, so long as the
+   * starting limits are deterministic.
+  */
+  struct rlimit* rp = (struct rlimit*) t.arg4();
+  if (rp != nullptr) {
+    struct rlimit noLimits = {};
+    noLimits.rlim_cur = RLIM_INFINITY;
+    noLimits.rlim_max = RLIM_INFINITY;
+    
+    ptracer::writeToTracee(rp, noLimits, t.getPid());
+  }
 
   return;
 }
@@ -758,17 +801,25 @@ readSystemCall::readSystemCall(long syscallNumber, string syscallName):
 }
 
 bool readSystemCall::handleDetPre(state &s, ptracer &t){
+  s.preIp = t.regs.rip;
   return true;
 }
 
 void readSystemCall::handleDetPost(state &s, ptracer &t){
-  // TODO: Handle number of bytest read.
-  // ssize_t bytes_read = t.getReturnValue();
-  // ssize_t bytes_requested = t.arg3();
-  // if (bytes_read != bytes_requested && bytes_read != 0) {
-    // throw runtime_error("number of bytes read: " + to_string(bytes_read)
-		    	// + " \nnumber of bytes requested: " + to_string(bytes_requested));
-  // }
+  // TODO: 
+  if (t.getReturnValue() == (uint64_t) -1) {
+    throw runtime_error("read returned -1 with some error");
+  }
+  ssize_t bytes_read = t.getReturnValue();
+  ssize_t bytes_requested = t.arg3();
+  if (bytes_read != bytes_requested && bytes_read != 0) {
+    t.writeArg2(t.arg2() + bytes_read);
+    t.writeArg3(t.arg3() - bytes_read);
+    t.writeIp(s.preIp);
+    s.preIp = 0;
+    //throw runtime_error("number of bytes read: " + to_string(bytes_read) 
+    //		    	+ " \nnumber of bytes requested: " + to_string(bytes_requested));
+  }
   return;
 }
 // =======================================================================================
@@ -939,6 +990,7 @@ statSystemCall::statSystemCall(long syscallNumber, string syscallName):
 }
 
 bool statSystemCall::handleDetPre(state &s, ptracer &t){
+  s.log.writeToLog(Importance::info, "stat: path=" + t.readTraceeCString((const char*)t.arg1(), t.getPid()));
   return true;
 }
 
