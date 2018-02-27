@@ -29,6 +29,7 @@ accessSystemCall::accessSystemCall(long syscallNumber, string syscallName):
 }
 
 bool accessSystemCall::handleDetPre(state &s, ptracer &t){
+  s.log.writeToLog(Importance::info, "access: path=" + t.readTraceeCString((const char*)t.arg1(), t.getPid()));
   return true;
 }
 
@@ -297,6 +298,7 @@ bool getcwdSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void getcwdSystemCall::handleDetPost(state &s, ptracer &t){
+  s.log.writeToLog(Importance::info, "getcwd: cwd=" + t.readTraceeCString((const char*)t.arg1(), t.getPid()));
   return;
 }
 // =======================================================================================
@@ -626,6 +628,7 @@ lstatSystemCall::lstatSystemCall(long syscallNumber, string syscallName):
 }
 
 bool lstatSystemCall::handleDetPre(state &s, ptracer &t){
+  s.log.writeToLog(Importance::info, "lstat: path=" + t.readTraceeCString((const char*)t.arg1(), t.getPid()));
   return true;
 }
 
@@ -859,6 +862,7 @@ statSystemCall::statSystemCall(long syscallNumber, string syscallName):
 }
 
 bool statSystemCall::handleDetPre(state &s, ptracer &t){
+  s.log.writeToLog(Importance::info, "stat: path=" + t.readTraceeCString((const char*)t.arg1(), t.getPid()));
   return true;
 }
 
