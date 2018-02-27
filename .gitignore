@@ -5,3 +5,5 @@ GPATH
 GRTAGS
 GTAGS
 .clang_complete
+*.so
+
