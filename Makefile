@@ -4,6 +4,7 @@ all: build tests
 build:
 	cd src && ${MAKE}
 	cp src/dettrace bin/
+	cp src/libdet.so lib/
 
 tests:
 	make -C ./test/unitTests/
@@ -19,7 +20,7 @@ run-docker:
 	docker run -it ${DOCKER_NAME}:${DOCKER_TAG}
 
 test-docker:
-	docker run -it ${DOCKER_NAME}:${DOCKER_TAG} /detTrace/runTests.sh
+	docker run ${DOCKER_NAME}:${DOCKER_TAG} python3 /detTrace/runTests.py
 
 .PHONY: clean docker run-docker
 clean:

@@ -85,6 +85,19 @@ public:
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
+
+// =======================================================================================
+/**
+*
+* int clock_gettime(clockid_t clk_id, struct timespec *tp); 
+*
+*/
+class clock_gettimeSystemCall : public systemCall{
+public:
+  clock_gettimeSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
 // =======================================================================================
 /**
  * long
@@ -377,7 +390,20 @@ public:
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
-
+// =======================================================================================
+/**
+ *
+ * int gettimeofday(struct timeval *tv, struct timezone *tz);
+ *
+ * gives the number of seconds and microseconds since the Epoch
+ *
+ */
+class gettimeofdaySystemCall : public systemCall{
+public:
+  gettimeofdaySystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
 // =======================================================================================
 /**
  * uid_t getuid(void);
@@ -1003,6 +1029,26 @@ public:
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
+// =======================================================================================
+/**
+ *
+ * ssize_t writev(int fd, const struct iovec *iov, int iovcnt)
+ *
+ * The  writev()  system call writes iovcnt buffers of data described by iov to the file
+ * associated with the file descriptor fd ("gather output").
+ *
+ * Non deterministic!
+ * Same problem as regular writes.
+ *
+ */
+class writevSystemCall : public systemCall{
+public:
+  writevSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+
+
 // =======================================================================================
 /**
  *

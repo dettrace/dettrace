@@ -36,7 +36,7 @@ using namespace experimental;
 TEST_CASE("time system call", "time"){
   time_t tloc;
   syscall(SYS_time, &tloc);
-  REQUIRE(64 == tloc);
+  REQUIRE(7 == tloc);
 }
 
 TEST_CASE("statfs system call", "statfs"){
@@ -97,7 +97,7 @@ TEST_CASE("getrusage", "getrusage"){
 
   REQUIRE(usage.ru_maxrss == LONG_MAX);
   REQUIRE(usage.ru_nsignals == LONG_MAX);
-  REQUIRE(usage.ru_utime.tv_sec == 139);
+  REQUIRE(usage.ru_utime.tv_sec == 8);
 }
 
 TEST_CASE("getuid", "getuid"){
@@ -118,8 +118,8 @@ TEST_CASE("stat", "stat"){
   int ret = stat("./", &statbuf);
   statFamilyTests(statbuf);
   REQUIRE(statbuf.st_atim.tv_nsec == statbuf.st_atim.tv_sec);
-  REQUIRE(statbuf.st_atim.tv_nsec == 169);
-  REQUIRE(statbuf.st_atim.tv_sec == 169);
+  REQUIRE(statbuf.st_atim.tv_nsec == 9);
+  REQUIRE(statbuf.st_atim.tv_sec == 9);
 }
 
 
@@ -129,8 +129,8 @@ TEST_CASE("fstat", "fstat"){
   int ret = fstat(fd, &statbuf);
   statFamilyTests(statbuf);
   REQUIRE(statbuf.st_atim.tv_nsec == statbuf.st_atim.tv_sec);
-  REQUIRE(statbuf.st_atim.tv_nsec == 185);
-  REQUIRE(statbuf.st_atim.tv_sec == 185);
+  REQUIRE(statbuf.st_atim.tv_nsec == 10);
+  REQUIRE(statbuf.st_atim.tv_sec == 10);
 }
 
 
@@ -139,8 +139,8 @@ TEST_CASE("lstat", "lstat"){
   int ret = lstat("./", &statbuf);
   statFamilyTests(statbuf);
   REQUIRE(statbuf.st_atim.tv_nsec == statbuf.st_atim.tv_sec);
-  REQUIRE(statbuf.st_atim.tv_nsec == 200);
-  REQUIRE(statbuf.st_atim.tv_sec == 200);
+  REQUIRE(statbuf.st_atim.tv_nsec == 11);
+  REQUIRE(statbuf.st_atim.tv_sec == 11);
 }
 
  TEST_CASE("open", "/dev/urandom"){

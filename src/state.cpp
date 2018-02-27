@@ -7,3 +7,11 @@ state::state(logger& log, pid_t traceePid)
     log(log){
   return;
 }
+
+int state::getLogicalTime(){
+  return clock;
+}
+
+void state::incrementTime(){
+  clock++;
+}

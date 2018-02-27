@@ -7,7 +7,7 @@
 
 int main(){
   struct utsname buf;
-  int ret = uname(&buf;)
+  int ret = uname(&buf);
   if(ret == -1){
     printf("Uname failed\nReason: %s\n", strerror(errno));
   }

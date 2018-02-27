@@ -4,19 +4,24 @@
 #include <sys/syscall.h>
 
 #include<string>
+#include <climits>
 
 #include "logger.hpp"
 #include "util.hpp"
 
+#include<stdexcept>
+
+using namespace std;
+
 /*======================================================================================*/
-logger::logger(FILE* myFile, int debugLevel){
+logger::logger(FILE* myFile, int debugLevel):
+debugLevel(debugLevel){
   // Check value of debugLevel.
   if(debugLevel > 5 || debugLevel < 0){
     fprintf(stderr, "The debug level must be between [0, 5].\n");
     exit(1);
   }
 
-  this->debugLevel = debugLevel;
   fin = myFile;
   padding = false;
 
@@ -81,5 +86,29 @@ void logger::unsetPadding(){
   return;
 }
 
+int logger::getDebugLevel(){
+  return debugLevel;
+}
+
+string logger::makeTextColored(Color color, string text){
+  string colorCode;
+  const string reset { "\033[0m" };
+
+  switch(color){
+  case Color::green:
+    colorCode = "\033[1;32m";
+    break;
+  case Color::red:
+    colorCode = "\033[1;31m";
+    break;
+  case Color::blue:
+    colorCode = "\033[1;34m";
+    break;
+  default:
+    throw runtime_error("Unkown color! Please add color code.");
+  }
+
+  return colorCode + text + reset;
+}
 
 /*======================================================================================*/

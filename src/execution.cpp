@@ -26,7 +26,9 @@ execution::execution(int debugLevel, pid_t startingPid):
   }
 // =======================================================================================
 void execution::handleExit(){
-  log.writeToLog(Importance::inter, "Process [%d] has finished.\n", traceesPid);
+  log.writeToLog(Importance::inter,
+		 logger::makeTextColored(Color::blue, "Process [%d] has finished.\n"),
+		 traceesPid);
   if(processHier.empty()){
     // We're done. Exit
     exitLoop = true;
@@ -43,7 +45,6 @@ void execution::handleExit(){
 }
 // =======================================================================================
 void execution::handlePreSystemCall(state& currState){
-  // log.writeToLog(Importance::info, "[%d] ptrace syscall-pre!\n", traceesPid);
   currState.syscallStopState = syscallState::post;
 
   int syscallNum = tracer.getSystemCallNumber();
@@ -54,19 +55,12 @@ void execution::handlePreSystemCall(state& currState){
     throw runtime_error("Unkown system call number: " + to_string(syscallNum));
   }
 
-  // TODO Fix this, ugly.
-  const string red("\033[1;31m");
-  const string reset("\033[0m");
+  // Print!
   string systemCall = currState.systemcall->syscallName;
-  // Fancy bold red names :3
-  log.writeToLog(Importance::inter,"[Time %d][Pid %d] Intercepted " + red +
-		 "%s" + reset + "(#%d)\n",
-		 currState.clock, traceesPid,
-		 systemCall.c_str(), syscallNum);
-
-  // Tick clock once per syscall pre-post pair. Notice we don't tick on every event
-  // as signals are asynchronous events.
-  currState.clock++;
+  string redColoredSyscall = logger::makeTextColored(Color::red, systemCall);
+  log.writeToLog(Importance::inter,"[Time %d][Pid %d] Intercepted %s (#%d)\n",
+		 currState.getLogicalTime(), traceesPid, redColoredSyscall.c_str(),
+		 syscallNum);
 
   log.setPadding();
 
@@ -91,7 +85,7 @@ void execution::handlePostSystemCall(state& currState){
   currState.systemcall->handleDetPost(currState, tracer);
 
   // System call was done in the last iteration.
-  log.writeToLog(Importance::inter,"%s returned with value: %d\n",
+  log.writeToLog(Importance::info,"%s returned with value: %d\n",
 		 currState.systemcall->syscallName.c_str(),
 		 tracer.getReturnValue());
 
@@ -130,7 +124,9 @@ void execution::runProgram(){
     // from the child telling us that it has been stopped. These two events are
     // non deterministic.
     if(states.count(traceesPid) == 0){
-      log.writeToLog(Importance::info, "Setting options for: %d\n", nextPid);
+      log.writeToLog(Importance::info,
+		     logger::makeTextColored(Color::blue, "Setting options for: %d\n"),
+		     nextPid);
       // First time seeing this process set ptrace options.
       ptracer::setOptions(traceesPid);
       // DO NOT CONTINUE! Fall down to the correct case.
@@ -186,7 +182,9 @@ void execution::handleFork(ptraceEvent event){
     newChildPid = handleForkEvent();
 
     // Wait for child to be ready.
-    log.writeToLog(Importance::info, "Waiting for child to be ready for tracing...\n");
+    log.writeToLog(Importance::info,
+		   logger::makeTextColored(Color::blue,
+		     "Waiting for child to be ready for tracing...\n"));
     int status;
 
     int retPid = waitpid(newChildPid, &status, 0);
@@ -198,7 +196,9 @@ void execution::handleFork(ptraceEvent event){
     if(retPid != newChildPid){
       throw runtime_error("wait call return pid does not match new child's pid.");
     }
-    log.writeToLog(Importance::info, "Child ready: %d\n", retPid);
+    log.writeToLog(Importance::info,
+		   logger::makeTextColored(Color::blue, "Child ready: %d\n"),
+		   retPid);
   }else{
     if(event != ptraceEvent::signal){
       throw runtime_error("Expected signal after fork/vfork event!");
@@ -213,7 +213,10 @@ void execution::handleFork(ptraceEvent event){
 }
 // =======================================================================================
 pid_t execution::handleForkEvent(){
-  log.writeToLog(Importance::inter, "[%d] Fork event came before signal!\n", traceesPid);
+  log.writeToLog(Importance::inter,
+		 logger::makeTextColored(Color::blue,
+		   "[%d] Fork event came before signal!\n"),
+		 traceesPid);
   // Current scheduling policy: Let child run to completion.
   pid_t newChildPid = tracer.getEventMessage();
   pid_t parentsPid = traceesPid;
@@ -221,7 +224,9 @@ pid_t execution::handleForkEvent(){
   processHier.push(parentsPid);
 
   // Add this new process to our states.
-  log.writeToLog(Importance::info, "Added process [%d] to states map.\n", newChildPid);
+  log.writeToLog(Importance::info,
+ 		 logger::makeTextColored(Color::blue,"Added process [%d] to states map.\n"),
+		 newChildPid);
   states.emplace(newChildPid, state {log, newChildPid} );
 
   return newChildPid;
@@ -229,7 +234,8 @@ pid_t execution::handleForkEvent(){
 // =======================================================================================
 void execution::handleForkSignal(){
   log.writeToLog(Importance::info,
-		 "[%d] Child fork signal-stop came before fork event.\n",
+		 logger::makeTextColored(Color::blue,
+                   "[%d] Child fork signal-stop came before fork event.\n"),
 		 traceesPid);
   int status;
   // Intercept any system call.
@@ -248,20 +254,25 @@ void execution::handleForkSignal(){
 // =======================================================================================
 void execution::handleClone(){
   // Nothing to do for now...
-  log.writeToLog(Importance::inter, "[%d] caught clone event!\n", traceesPid);
+  log.writeToLog(Importance::inter,
+		 logger::makeTextColored(Color::blue, "[%d] caught clone event!\n"),
+		 traceesPid);
   return;
 }
 // =======================================================================================
 void execution::handleExecve(){
   // Nothing to do for now... New process is already automatically ptraced by
   // our tracer.
-  log.writeToLog(Importance::inter, "[%d] Caught execve!\n", traceesPid);
+  log.writeToLog(Importance::inter,
+		 logger::makeTextColored(Color::blue, "[%d] Caught execve!\n"),
+		 traceesPid);
   return;
 }
 // =======================================================================================
 void execution::handleSignal(int status){
   // Nothing for now. Kelly's code will go here.
-  log.writeToLog(Importance::inter, "[%d] tracer: Received signal: %d\n",
+  log.writeToLog(Importance::inter,
+		 logger::makeTextColored(Color::blue, "[%d] tracer: Received signal: %d\n"),
 		 traceesPid, WSTOPSIG(status));
   return;
 }
@@ -277,6 +288,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<brkSystemCall>(syscallNumber, syscallName);
     case SYS_chmod:
       return make_unique<chmodSystemCall>(syscallNumber, syscallName);
+    case SYS_clock_gettime:
+      return make_unique<clock_gettimeSystemCall>(syscallNumber, syscallName);
     case SYS_clone:
       return make_unique<cloneSystemCall>(syscallNumber, syscallName);
     case SYS_close:
@@ -311,6 +324,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<getrlimitSystemCall>(syscallNumber, syscallName);
     case SYS_getrusage:
       return make_unique<getrusageSystemCall>(syscallNumber, syscallName);
+    case SYS_gettimeofday:
+      return make_unique<gettimeofdaySystemCall>(syscallNumber, syscallName);
     case SYS_getuid:
       return make_unique<getuidSystemCall>(syscallNumber, syscallName);
     case SYS_getxattr:
@@ -383,6 +398,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<wait4SystemCall>(syscallNumber, syscallName);
     case SYS_write:
       return make_unique<writeSystemCall>(syscallNumber, syscallName);
+    case SYS_writev:
+      return make_unique<writevSystemCall>(syscallNumber, syscallName);
     }
 
     // Generic system call. Throws error.

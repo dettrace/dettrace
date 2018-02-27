@@ -3,8 +3,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <sys/utsname.h>
+#include <sys/ioctl.h>
 
 #include <climits>
+#include <cstring>
 
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -13,6 +15,7 @@
 #include "dettraceSystemCall.hpp"
 #include "ptracer.hpp"
 
+using namespace std;
 // =======================================================================================
 // Prototypes for common functions.
 void zeroOutStatfs(struct statfs& stats);
@@ -26,6 +29,7 @@ accessSystemCall::accessSystemCall(long syscallNumber, string syscallName):
 }
 
 bool accessSystemCall::handleDetPre(state &s, ptracer &t){
+  s.log.writeToLog(Importance::info, "access: path=" + t.readTraceeCString((const char*)t.arg1(), t.getPid()));
   return true;
 }
 
@@ -70,6 +74,29 @@ bool chmodSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void chmodSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+clock_gettimeSystemCall::clock_gettimeSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool clock_gettimeSystemCall::handleDetPre(state &s, ptracer &t) {
+  return true;
+}
+
+void clock_gettimeSystemCall::handleDetPost(state &s, ptracer &t) {
+  struct timespec* tp = (struct timespec*) t.arg2();
+
+  if (tp != nullptr) {
+    struct timespec myTp = {};
+    myTp.tv_sec = s.getLogicalTime();
+    myTp.tv_nsec = 0;
+
+    ptracer::writeToTracee(tp, myTp, t.getPid());
+    s.incrementTime();
+  }
   return;
 }
 // =======================================================================================
@@ -271,6 +298,7 @@ bool getcwdSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void getcwdSystemCall::handleDetPost(state &s, ptracer &t){
+  s.log.writeToLog(Importance::info, "getcwd: cwd=" + t.readTraceeCString((const char*)t.arg1(), t.getPid()));
   return;
 }
 // =======================================================================================
@@ -323,6 +351,15 @@ bool getrlimitSystemCall::handleDetPre(state& s, ptracer& t){
 }
 
 void getrlimitSystemCall::handleDetPost(state &s, ptracer &t){
+  struct rlimit* rp = (struct rlimit*) t.arg2();
+  if (rp != nullptr) {
+    struct rlimit noLimits = {};
+    noLimits.rlim_cur = RLIM_INFINITY;
+    noLimits.rlim_max = RLIM_INFINITY;
+    
+    ptracer::writeToTracee(rp, noLimits, t.getPid());
+  }
+
   return;
 }
 // =======================================================================================
@@ -342,10 +379,12 @@ void getrusageSystemCall::handleDetPost(state &s, ptracer &t){
     s.log.writeToLog(Importance::info, "getrusage pointer null.");
   }else{
     struct rusage usage = ptracer::readFromTracee(usagePtr, t.getPid());
-    usage.ru_utime = timeval { .tv_sec =  (long) s.clock,
-			       .tv_usec = (long )s.clock };  /* user CPU time used */
-    usage.ru_stime = timeval { .tv_sec =  (long) s.clock,
-			       .tv_usec = (long )s.clock };  /* system CPU time used */
+    /* user CPU time used */
+    usage.ru_utime = timeval { .tv_sec =  (long) s.getLogicalTime(),
+			       .tv_usec = (long )s.getLogicalTime() };
+    /* system CPU time used */
+    usage.ru_stime = timeval { .tv_sec =  (long) s.getLogicalTime(),
+			       .tv_usec = (long )s.getLogicalTime() };
     usage.ru_maxrss = LONG_MAX;                    /* maximum resident set size */
     usage.ru_ixrss = LONG_MAX;                     /* integral shared memory size */
     usage.ru_idrss = LONG_MAX;    		   /* integral unshared data size */
@@ -364,6 +403,27 @@ void getrusageSystemCall::handleDetPost(state &s, ptracer &t){
     ptracer::writeToTracee(usagePtr, usage, t.getPid());
   }
 
+  s.incrementTime();
+  return;
+}
+// =======================================================================================
+gettimeofdaySystemCall::gettimeofdaySystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+bool gettimeofdaySystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+void gettimeofdaySystemCall::handleDetPost(state &s, ptracer &t){
+  struct timeval* tp = (struct timeval*) t.arg1();
+  if (nullptr != tp) {
+    struct timeval myTv = {};
+    myTv.tv_sec = s.getLogicalTime();
+    myTv.tv_usec = 0;
+    
+    ptracer::writeToTracee(tp, myTv, t.getPid());
+    s.incrementTime();
+  }
   return;
 }
 // =======================================================================================
@@ -405,6 +465,12 @@ bool ioctlSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void ioctlSystemCall::handleDetPost(state &s, ptracer &t){
+  const uint64_t request = t.arg2();
+  if (TCGETS == request || TIOCGWINSZ == request) {
+    t.setReturnRegister((uint64_t) -ENOTTY);
+  } else {
+    throw runtime_error("Unsupported ioctl call: fd="+to_string(t.arg1())+" request=" + to_string(request));
+  }
   return;
 }
 // =======================================================================================
@@ -444,8 +510,13 @@ bool openSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void openSystemCall::handleDetPost(state &s, ptracer &t){
+  // TODO: In the future I hope to replace these brittle path checks with some filesystem
+  // containerization support.
   const char* pathnamePtr = (const char*)t.arg1();
   string pathname = ptracer::readTraceeCString(pathnamePtr, t.getPid());
+
+  s.log.writeToLog(Importance::info, "Openat-ing path: " +
+		   logger::makeTextColored(Color::green, pathname) + "\n");
 
   char linkArray[PATH_MAX];
   // Assume symlink.
@@ -463,7 +534,6 @@ void openSystemCall::handleDetPost(state &s, ptracer &t){
       t.setReturnRegister(-1);
     }
   }
-  s.log.writeToLog(Importance::inter, "Implicit argument: %s\n", pathname.c_str());
 
   return;
 }
@@ -474,6 +544,17 @@ openatSystemCall::openatSystemCall(long syscallNumber, string syscallName):
 }
 
 bool openatSystemCall::handleDetPre(state &s, ptracer &t){
+  // TODO. The same work done in open should be done here!
+  const char* pathnamePtr = (const char*)t.arg2();
+
+  if(pathnamePtr != nullptr){
+    string pathname = ptracer::readTraceeCString(pathnamePtr, t.getPid());
+
+    s.log.writeToLog(Importance::info, "Openat-ing path: " +
+		     logger::makeTextColored(Color::green, pathname) + "\n");
+
+  }
+
   return true;
 }
 
@@ -547,6 +628,7 @@ lstatSystemCall::lstatSystemCall(long syscallNumber, string syscallName):
 }
 
 bool lstatSystemCall::handleDetPre(state &s, ptracer &t){
+  s.log.writeToLog(Importance::info, "lstat: path=" + t.readTraceeCString((const char*)t.arg1(), t.getPid()));
   return true;
 }
 
@@ -573,8 +655,14 @@ prlimit64SystemCall::prlimit64SystemCall(long syscallNumber, string syscallName)
   return;
 }
 
+// for reference, here's the prlimit() prototype
+// int prlimit(pid_t pid, int resource, const struct rlimit *new_limit, struct rlimit *old_limit);
+
 bool prlimit64SystemCall::handleDetPre(state &s, ptracer &t){
-  /* Check if first argument (pid) is non-zero. If so fail. */
+  t.writeArg3(0); // suppress attempts to set new limits
+
+  // Check if first argument (pid) is non-zero. If so fail.
+  // TODO: could also always overwrite first argument with zero
   int pid = (pid_t) t.arg1();
   if(pid != 0){
     throw runtime_error("prlimit64: We do not support prlimit64 on other processes.\n "
@@ -585,25 +673,23 @@ bool prlimit64SystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void prlimit64SystemCall::handleDetPost(state &s, ptracer &t){
-  // int prlimit(pid_t pid, int resource, const struct rlimit *new_limit,
-  // struct rlimit *old_limit);
-
-  // TODO: This is a really complicated system calls. We must match against
-  // resource, and set resonable values for each. Ideally we would also have
-  // a per process hashtable that "remembers" what the limits set for each field
-  // by the user were. A subsequent call to prlimit/prlimit64 would return the
-  // correct values: either the value on the hashtable, or a default sensible
-  // value.
-
-
-  // struct rlimit* rlimPtr = (struct rlimit*) t.arg4();
-  // if(rlimPtr == nullptr){
-    // s.log.writeToLog(Importance::info, "Null rlimi pointer.");
-  // }else{
-    // struct rlimit limit = ptracer::readFromTracee(rlimPtr, t.getPid());
-    // limit.rlim_cur = 1024;
-    // limit.rlim_cur = 2048;
-  // }
+  /* To bypass the complexity of this system call (lots of different resources,
+   * dynamic limits, ...) we just always say everything is unlimited, and ignore
+   * requests from the application to try to increase the soft limit.
+   *
+   * Alternatively, we could track limits dynamically per-process and preserve
+   * the illusion that they can be changed. It may be possible to actually
+   * change limits deterministically in many cases, if need be, so long as the
+   * starting limits are deterministic.
+  */
+  struct rlimit* rp = (struct rlimit*) t.arg4();
+  if (rp != nullptr) {
+    struct rlimit noLimits = {};
+    noLimits.rlim_cur = RLIM_INFINITY;
+    noLimits.rlim_max = RLIM_INFINITY;
+    
+    ptracer::writeToTracee(rp, noLimits, t.getPid());
+  }
 
   return;
 }
@@ -614,11 +700,25 @@ readSystemCall::readSystemCall(long syscallNumber, string syscallName):
 }
 
 bool readSystemCall::handleDetPre(state &s, ptracer &t){
+  s.preIp = t.regs.rip;
   return true;
 }
 
 void readSystemCall::handleDetPost(state &s, ptracer &t){
-  // TODO: Handle number of bytest read.
+  // TODO: 
+  if (t.getReturnValue() == (uint64_t) -1) {
+    throw runtime_error("read returned -1 with some error");
+  }
+  ssize_t bytes_read = t.getReturnValue();
+  ssize_t bytes_requested = t.arg3();
+  if (bytes_read != bytes_requested && bytes_read != 0) {
+    t.writeArg2(t.arg2() + bytes_read);
+    t.writeArg3(t.arg3() - bytes_read);
+    t.writeIp(s.preIp);
+    s.preIp = 0;
+    //throw runtime_error("number of bytes read: " + to_string(bytes_read) 
+    //		    	+ " \nnumber of bytes requested: " + to_string(bytes_requested));
+  }
   return;
 }
 // =======================================================================================
@@ -762,6 +862,7 @@ statSystemCall::statSystemCall(long syscallNumber, string syscallName):
 }
 
 bool statSystemCall::handleDetPre(state &s, ptracer &t){
+  s.log.writeToLog(Importance::info, "stat: path=" + t.readTraceeCString((const char*)t.arg1(), t.getPid()));
   return true;
 }
 
@@ -860,7 +961,9 @@ void timeSystemCall::handleDetPost(state &s, ptracer &t){
     return;
   }
 
-  ptracer::writeToTracee(timePtr, (time_t) s.clock, s.traceePid);
+  ptracer::writeToTracee(timePtr, (time_t) s.getLogicalTime(), s.traceePid);
+  // Tick up time.
+  s.incrementTime();
   return;
 }
 // =======================================================================================
@@ -890,9 +993,27 @@ void unameSystemCall::handleDetPost(state &s, ptracer &t){
   // Populate the utsname struct with our own generic data.
   struct utsname* utsnamePtr = (struct utsname*) t.arg1();
 
+  // example struct utsname from acggrid28
+  //uname({sysname="Linux", nodename="acggrid28", release="4.4.114-42-default", version="#1 SMP Tue Feb 6 10:58:10 UTC 2018 (b6ee9ae)", machine="x86_64", domainname="(none)"}
   if(utsnamePtr != nullptr){
-    struct utsname myUts = {};
-    // I'm lazy. It gets the zero:
+    struct utsname myUts = {}; // initializes to all zeroes
+
+    // compiler-time check to ensure that each member is large enough
+    // magic due to https://stackoverflow.com/questions/3553296/c-sizeof-single-struct-member
+    const uint32_t MEMBER_LENGTH = 60;
+    if (sizeof(((struct utsname*)0)->sysname) < MEMBER_LENGTH ||
+        sizeof(((struct utsname*)0)->release) < MEMBER_LENGTH ||
+        sizeof(((struct utsname*)0)->version) < MEMBER_LENGTH ||
+        sizeof(((struct utsname*)0)->machine) < MEMBER_LENGTH) {
+      throw runtime_error("unameSystemCall::handleDetPost: struct utsname members too small!");
+    }
+
+    // NB: this is our standard environment
+    strncpy(myUts.sysname, "Linux", MEMBER_LENGTH);
+    strncpy(myUts.release, "4.0", MEMBER_LENGTH);
+    strncpy(myUts.version, "#1", MEMBER_LENGTH);
+    strncpy(myUts.machine, "x86_64", MEMBER_LENGTH);
+    
     ptracer::writeToTracee(utsnamePtr, myUts, t.getPid());
   }
   return;
@@ -934,8 +1055,8 @@ bool utimensatSystemCall::handleDetPre(state &s, ptracer &t){
 
   // Create our own struct with our time.
   timespec clockTime = {
-    .tv_sec = (time_t) s.clock,
-    .tv_nsec = (time_t) s.clock,
+    .tv_sec = (time_t) s.getLogicalTime(),
+    .tv_nsec = (time_t) s.getLogicalTime()
   };
 
   // Write our struct to the tracee's memory.
@@ -944,7 +1065,7 @@ bool utimensatSystemCall::handleDetPre(state &s, ptracer &t){
 
   // Point system call to new address.
   t.writeArg3((uint64_t) ourTimespec);
-
+  s.incrementTime();
   return true;
 }
 
@@ -990,6 +1111,19 @@ bool writeSystemCall::handleDetPre(state &s, ptracer &t){
 
 void writeSystemCall::handleDetPost(state &s, ptracer &t){
   // TODO: Handle bytes written.
+  return;
+}
+// =======================================================================================
+writevSystemCall::writevSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool writevSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void writevSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
@@ -1050,7 +1184,8 @@ void handleStatFamily(state& s, ptracer& t, string syscallName){
 
   if(t.getReturnValue() == 0){
     struct stat myStat = ptracer::readFromTracee(statPtr, s.traceePid);
-    zeroOutStat(myStat, s.clock);
+    zeroOutStat(myStat, s.getLogicalTime());
+    s.incrementTime();
 
     // Write back result for child.
     ptracer::writeToTracee(statPtr, myStat, s.traceePid);

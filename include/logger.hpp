@@ -12,6 +12,8 @@
 
 #include<string>
 
+using namespace std;
+
 /*======================================================================================*/
 /**
  * Type representing the priority of messages.
@@ -24,6 +26,12 @@ enum class Importance {
   extra,     /* Extra information not useful most of the time. */
 };
 
+/*======================================================================================*/
+enum class Color{
+  green,
+  red,
+  blue,
+};
 
 /*======================================================================================*/
 class logger {
@@ -42,7 +50,7 @@ public:
    * Uses debugLevel global.
    * Currently:
    * Level 5: Print all.
-   * Level 4: Print information, errors, and intercepted calls.
+   * Level 4: Print information, errors, and intercepted call.s
    * Level 2, 3: Print errors and intercepted calls.
    * Level 1   : Print only errors.
 
@@ -66,11 +74,21 @@ public:
    */
   void unsetPadding();
 
+  /**
+   * Unset padding.
+   */
+  int getDebugLevel();
+
+  /**
+   * Return new string meant to be printed in color to terminal.
+   */
+  static string makeTextColored(Color color, string text);
+
 private:
   /**
    * C++ makes it a pain to initialize this if it's const...
    */
-  int debugLevel;
+  const int debugLevel;
   /**
    * File pointer to write to.
    */
