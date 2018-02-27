@@ -58,6 +58,11 @@ public:
    * It's our job to keep track whether we are on a system call pre or post.
    */
   syscallState syscallStopState = syscallState::pre;
+  
+/*
+ * Insn pointer from predet
+ */
+  uint64_t preIp = 0;
 
   /*
    * We need to know what system call was/is that we are not. This is important in

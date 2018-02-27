@@ -664,17 +664,25 @@ readSystemCall::readSystemCall(long syscallNumber, string syscallName):
 }
 
 bool readSystemCall::handleDetPre(state &s, ptracer &t){
+  s.preIp = t.regs.rip;
   return true;
 }
 
 void readSystemCall::handleDetPost(state &s, ptracer &t){
-  // TODO: Handle number of bytest read.
-  // ssize_t bytes_read = t.getReturnValue();
-  // ssize_t bytes_requested = t.arg3();
-  // if (bytes_read != bytes_requested && bytes_read != 0) {
-    // throw runtime_error("number of bytes read: " + to_string(bytes_read) 
-		    	// + " \nnumber of bytes requested: " + to_string(bytes_requested));
-  // }
+  // TODO: 
+  if (t.getReturnValue() == (uint64_t) -1) {
+    throw runtime_error("read returned -1 with some error");
+  }
+  ssize_t bytes_read = t.getReturnValue();
+  ssize_t bytes_requested = t.arg3();
+  if (bytes_read != bytes_requested && bytes_read != 0) {
+    t.writeArg2(t.arg2() + bytes_read);
+    t.writeArg3(t.arg3() - bytes_read);
+    t.writeIp(s.preIp);
+    s.preIp = 0;
+    //throw runtime_error("number of bytes read: " + to_string(bytes_read) 
+    //		    	+ " \nnumber of bytes requested: " + to_string(bytes_requested));
+  }
   return;
 }
 // =======================================================================================
