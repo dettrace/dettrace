@@ -405,6 +405,26 @@ void getrusageSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
+gettimeofdaySystemCall::gettimeofdaySystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+bool gettimeofdaySystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+void gettimeofdaySystemCall::handleDetPost(state &s, ptracer &t){
+  struct timeval* tp = (struct timeval*) t.arg1();
+  if (nullptr != tp) {
+    struct timeval myTv = {};
+    myTv.tv_sec = s.getLogicalTime();
+    myTv.tv_usec = 0;
+    
+    ptracer::writeToTracee(tp, myTv, t.getPid());
+    s.incrementTime();
+  }
+  return;
+}
+// =======================================================================================
 getuidSystemCall::getuidSystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
   return;

@@ -390,7 +390,20 @@ public:
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
-
+// =======================================================================================
+/**
+ *
+ * int gettimeofday(struct timeval *tv, struct timezone *tz);
+ *
+ * gives the number of seconds and microseconds since the Epoch
+ *
+ */
+class gettimeofdaySystemCall : public systemCall{
+public:
+  gettimeofdaySystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
 // =======================================================================================
 /**
  * uid_t getuid(void);
