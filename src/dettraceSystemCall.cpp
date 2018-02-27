@@ -652,8 +652,14 @@ prlimit64SystemCall::prlimit64SystemCall(long syscallNumber, string syscallName)
   return;
 }
 
+// for reference, here's the prlimit() prototype
+// int prlimit(pid_t pid, int resource, const struct rlimit *new_limit, struct rlimit *old_limit);
+
 bool prlimit64SystemCall::handleDetPre(state &s, ptracer &t){
-  /* Check if first argument (pid) is non-zero. If so fail. */
+  t.writeArg3(0); // suppress attempts to set new limits
+
+  // Check if first argument (pid) is non-zero. If so fail.
+  // TODO: could also always overwrite first argument with zero
   int pid = (pid_t) t.arg1();
   if(pid != 0){
     throw runtime_error("prlimit64: We do not support prlimit64 on other processes.\n "
@@ -664,25 +670,23 @@ bool prlimit64SystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void prlimit64SystemCall::handleDetPost(state &s, ptracer &t){
-  // int prlimit(pid_t pid, int resource, const struct rlimit *new_limit,
-  // struct rlimit *old_limit);
-
-  // TODO: This is a really complicated system calls. We must match against
-  // resource, and set resonable values for each. Ideally we would also have
-  // a per process hashtable that "remembers" what the limits set for each field
-  // by the user were. A subsequent call to prlimit/prlimit64 would return the
-  // correct values: either the value on the hashtable, or a default sensible
-  // value.
-
-
-  // struct rlimit* rlimPtr = (struct rlimit*) t.arg4();
-  // if(rlimPtr == nullptr){
-    // s.log.writeToLog(Importance::info, "Null rlimi pointer.");
-  // }else{
-    // struct rlimit limit = ptracer::readFromTracee(rlimPtr, t.getPid());
-    // limit.rlim_cur = 1024;
-    // limit.rlim_cur = 2048;
-  // }
+  /* To bypass the complexity of this system call (lots of different resources,
+   * dynamic limits, ...) we just always say everything is unlimited, and ignore
+   * requests from the application to try to increase the soft limit.
+   *
+   * Alternatively, we could track limits dynamically per-process and preserve
+   * the illusion that they can be changed. It may be possible to actually
+   * change limits deterministically in many cases, if need be, so long as the
+   * starting limits are deterministic.
+  */
+  struct rlimit* rp = (struct rlimit*) t.arg4();
+  if (rp != nullptr) {
+    struct rlimit noLimits = {};
+    noLimits.rlim_cur = RLIM_INFINITY;
+    noLimits.rlim_max = RLIM_INFINITY;
+    
+    ptracer::writeToTracee(rp, noLimits, t.getPid());
+  }
 
   return;
 }
