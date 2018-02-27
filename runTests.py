@@ -2,6 +2,15 @@ import glob
 import os
 import subprocess
 
+'''
+lst is the same argument as the argument to subprocess.call
+'''
+def callShell(lst):
+    ret = subprocess.call(lst)
+    if ret != 0:
+        print("Failure!")
+        exit(1)
+
 def main():
     # Make everything relative to our location.
     ourLocation = os.path.dirname(os.path.abspath(__file__))
@@ -9,14 +18,11 @@ def main():
 
     # Assure we're using the latest build.
     print("Building program!")
-    ret = subprocess.call(["make"])
-    if ret != 0:
-        print("Failure!")
-        exit(1)
+    callShell(["make"])
 
     # Run unit tests.
     print("Running unit tests.")
-    ret = subprocess.call(["./bin/dettrace", "./test/unitTests/systemCallTests"])
+    callShell(["./bin/dettrace", "./test/unitTests/systemCallTests"])
     # Catch doesn't return a non-zero error code on failure. We slup up the output
     # and check for failure ourselves.
     try:
@@ -26,16 +32,11 @@ def main():
             print("Failure!")
             exit(1)
     except subprocess.CalledProcessError as e:
-        # Let CI know we failed.
-        if ret != 0:
-            print("Failure!")
-            exit(1)
-
-    # Run sample programs, compare output.
-    ret = subprocess.call(["python3", "./test/samplePrograms/compareOutputs.py"])
-    if ret != 0:
         print("Failure!")
         exit(1)
+
+    # Run sample programs, compare output.
+    callShell(["python3", "./test/samplePrograms/compareOutputs.py"])
 
     print("All tests PASSED")
     exit(0)

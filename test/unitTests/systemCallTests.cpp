@@ -1,5 +1,7 @@
 #include "catch.hpp"
+#include <sched.h>
 
+#include <sys/utsname.h>
 #include <stdio.h>
 
 #include <sys/types.h>
@@ -90,6 +92,7 @@ TEST_CASE("starting program sbrk", "sbrk"){
 
 // FORK
 // Catch does not support forking X(
+// Instead we test fork through our ../samplePrograms
 
 TEST_CASE("getrusage", "getrusage"){
   struct rusage usage;
@@ -170,4 +173,27 @@ TEST_CASE("utimensat", "utimensat"){
   // as a unit test since we cannot stat the timestamps!
   // int fd = open("./test.txt", O_RDWR);
   // futimens(fd, nullptr);
+}
+
+TEST_CASE("uname", "uname"){
+  struct utsname buf;
+  int ret = uname(&buf);
+  REQUIRE(ret == 0);
+  REQUIRE(strcmp(buf.sysname, "Linux") == 0);
+  REQUIRE(strcmp(buf.nodename,"") == 0);
+  REQUIRE(strcmp(buf.release, "4.0") == 0);
+  REQUIRE(strcmp(buf.version, "#1") == 0);
+  REQUIRE(strcmp(buf.machine, "x86_64") == 0);
+
+#ifdef _GNU_SOURCE
+  REQUIRE(strcmp(buf.domainname, "") == 0);
+#endif
+}
+
+TEST_CASE("uid/gid", "uid/gid"){
+  // Nobody.
+  REQUIRE(getegid() == 65534);
+  REQUIRE(getgid() == 65534);
+  REQUIRE(geteuid() == 65534);
+  REQUIRE(getpgrp() == 0);
 }

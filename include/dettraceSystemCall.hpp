@@ -216,6 +216,27 @@ public:
 // =======================================================================================
 /**
  *
+ * int faccessat(int dirfd, const char *pathname, int mode, int flags);
+ *
+ * The faccessat() system call operates in exactly the same way as access(), except  for
+ * the differences described here.
+
+ * If the pathname given in pathname is relative, then it is interpreted relative to the
+ * directory referred to by the file descriptor dirfd (rather than relative to the  cur‐
+ * rent  working directory of the calling process, as is done by access() for a relative
+ * pathname).
+ *
+ * FILESYSTEM RELATED.
+ */
+class faccessatSystemCall : public systemCall{
+public:
+  faccessatSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
  * int fcntl(int fd, int cmd, ... arg );
  *
  * performs  one  of the operations described below on the open file descriptor
@@ -317,6 +338,76 @@ public:
 class getdentsSystemCall : public systemCall{
 public:
   getdentsSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
+ * uid_t geteuid(void);
+ *
+ * geteuid() returns the effective user ID of the calling process.
+ * Deterministic and reproducible thanks to our user namespace!
+ */
+class geteuidSystemCall : public systemCall{
+public:
+  geteuidSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
+ * gid_t getegid(void);
+ *
+ * getegid() returns the effective group ID of the calling process.
+ *
+ */
+class getegidSystemCall : public systemCall{
+public:
+  getegidSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
+ * int getgroups(int size, gid_t list[]);
+ *
+ * getgroups()  returns the supplementary group IDs of the calling process in list.
+ *
+ */
+class getgroupsSystemCall : public systemCall{
+public:
+  getgroupsSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
+ * pid_t getpgrp(void);
+ *
+ * getting and setting the process group ID (PGID) of a process.
+ *
+ */
+class getpgrpSystemCall : public systemCall{
+public:
+  getpgrpSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
+ * gid_t getgid(void);gid_t getgid(void);
+ *
+ * getgid() returns the real group ID of the calling process.
+ * Deterministic and reproducible thanks to our user namespace!
+ */
+class getgidSystemCall : public systemCall{
+public:
+  getgidSystemCall(long syscallName, string syscallNumber);
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
@@ -615,6 +706,50 @@ public:
 // =======================================================================================
 /**
  *
+ * int pipe(int pipefd[2]);
+ *
+ * Create a pipe communication channel.
+ * TODO
+ */
+class pipeSystemCall : public systemCall{
+public:
+  pipeSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
+ * The  Linux  pselect6() system call modifies its timeout argument.  However, the glibc
+ * wrapper function hides this behavior by using a local variable for the timeout  argu‐
+ * ment  that is passed to the system call.  Thus, the glibc pselect() function does not
+ * modify its timeout argument; this is the behavior required by POSIX.1-2001.
+ *
+ * The final argument of the pselect6() system call is not a sigset_t * pointer, but  is
+ * instead a structure of the form:
+
+ * struct {
+ *   const kernel_sigset_t *ss;   Pointer to signal set
+ *   size_t ss_len;               Size (in bytes) of object pointed to by 'ss'
+ * };
+
+ * This  allows the system call to obtain both a pointer to the signal set and its size,
+ * while allowing for the fact that most architectures support a maximum of 6  arguments
+ * to  a system call.  See sigprocmask(2) for a discussion of the difference between the
+ * kernel and libc notion of the signal set.
+ *
+ * Create a pipe communication channel.
+ * TODO
+ */
+class pselect6SystemCall : public systemCall{
+public:
+  pselect6SystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
  *
  *  int poll(struct pollfd *fds, nfds_t nfds, int timeout);*
  *
@@ -755,15 +890,48 @@ public:
  *  ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
  *                 const struct sockaddr *dest_addr, socklen_t addrlen);
  *
- *  If sendto() is used on a connection-mode (SOCK_STREAM, SOCK_SEQPACKET) socket, the arguments dest_addr and addrlen are ignored 
- *  (and the error EISCONN may be returned when they are not NULL and 0), and the error ENOTCONN is returned when the socket was not 
- *  actually connected. Otherwise, the address of the target is given by dest_addr with addrlen specifying its size. 
- *  For sendmsg(), the address of the target is given by msg.msg_name, with msg.msg_namelen specifying its size.
+ * If sendto() is used on a connection-mode (SOCK_STREAM, SOCK_SEQPACKET) socket,
+ * the arguments dest_addr and addrlen are ignored (and the error EISCONN may be
+ * returned when they are not NULL and 0), and the error ENOTCONN is returned when
+ * the socket was not actually connected. Otherwise, the address of the target is
+ * given by dest_addr with addrlen specifying its size.  For sendmsg(), the address
+ * of the target is given by msg.msg_name, with msg.msg_namelen specifying its size.
  *
  */
 class sendtoSystemCall : public systemCall{
 public:
   sendtoSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state &s, ptracer &t) override;
+  void handleDetPost(state &s, ptracer &t) override;
+};
+// =======================================================================================
+/**
+ *
+ * int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
+ *            struct timeval *timeout);
+ *
+ * select()  and pselect() allow a program to monitor multiple file descriptors, waiting
+ * until one or more of the file descriptors become "ready" for some class of I/O opera‐
+ * tion (e.g., input possible).
+ *
+ * TODO! Super non deterministic, the most non-deterministic of them all!
+ */
+class selectSystemCall : public systemCall{
+public:
+  selectSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state &s, ptracer &t) override;
+  void handleDetPost(state &s, ptracer &t) override;
+};
+// =======================================================================================
+/**
+ * int setpgid(pid_t pid, pid_t pgid);
+ *
+ * Set a process's PGID.
+ *
+ */
+class setpgidSystemCall : public systemCall{
+public:
+  setpgidSystemCall(long syscallName, string syscallNumber);
   bool handleDetPre(state &s, ptracer &t) override;
   void handleDetPost(state &s, ptracer &t) override;
 };

@@ -116,7 +116,9 @@ void execution::runProgram(){
   while(! exitLoop){
     int status;
 
+    log.writeToLog(Importance::extra, "Waiting for next event...\n");
     ptraceEvent ret = execution::getNextEvent(nextPid, traceesPid, status);
+    log.writeToLog(Importance::extra, "Got new event!...\n");
     nextPid = traceesPid;
 
     // We have never seen this pid before. Add it to our table of states.
@@ -304,6 +306,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<execveSystemCall>(syscallNumber, syscallName);
     case SYS_exit_group:
       return make_unique<exit_groupSystemCall>(syscallNumber, syscallName);
+    case SYS_faccessat:
+      return make_unique<faccessatSystemCall>(syscallNumber, syscallName);
     case SYS_fcntl:
       return make_unique<fcntlSystemCall>(syscallNumber, syscallName);
     case SYS_fstat:
@@ -316,6 +320,16 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<getcwdSystemCall>(syscallNumber, syscallName);
     case SYS_getdents:
       return make_unique<getdentsSystemCall>(syscallNumber, syscallName);
+    case SYS_geteuid:
+      return make_unique<geteuidSystemCall>(syscallNumber, syscallName);
+    case SYS_getgid:
+      return make_unique<getgidSystemCall>(syscallNumber, syscallName);
+    case SYS_getpgrp:
+      return make_unique<getpgrpSystemCall>(syscallNumber, syscallName);
+    case SYS_getegid:
+      return make_unique<getegidSystemCall>(syscallNumber, syscallName);
+    case SYS_getgroups:
+      return make_unique<getgroupsSystemCall>(syscallNumber, syscallName);
     case SYS_getpid:
       return make_unique<getpidSystemCall>(syscallNumber, syscallName);
     case SYS_getppid:
@@ -348,6 +362,10 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<openSystemCall>(syscallNumber, syscallName);
     case SYS_openat:
       return make_unique<openatSystemCall>(syscallNumber, syscallName);
+    case SYS_pipe:
+      return make_unique<pipeSystemCall>(syscallNumber, syscallName);
+    case SYS_pselect6:
+      return make_unique<pselect6SystemCall>(syscallNumber, syscallName);
     case SYS_poll:
       return make_unique<pollSystemCall>(syscallNumber, syscallName);
     case SYS_prlimit64:
@@ -366,6 +384,10 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<rt_sigactionSystemCall>(syscallNumber, syscallName);
     case SYS_sendto:
       return make_unique<sendtoSystemCall>(syscallNumber, syscallName);
+    case SYS_select:
+      return make_unique<selectSystemCall>(syscallNumber, syscallName);
+    case SYS_setpgid:
+      return make_unique<setpgidSystemCall>(syscallNumber, syscallName);
     case SYS_set_robust_list:
       return make_unique<set_robust_listSystemCall>(syscallNumber, syscallName);
     case SYS_set_tid_address:

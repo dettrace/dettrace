@@ -112,9 +112,7 @@ void cloneSystemCall::handleDetPost(state &s, ptracer &t){
   // Non deterministic failure due to signal.
   pid_t returnPid = t.getReturnValue();
   if(returnPid == -1){
-    if(errno == EINTR){
       throw runtime_error("Clone system call failed:\n" + string { strerror(errno) });
-    }
   }
 
   // In older versions of ptrace, the tid value was cached to skip getpid calls. This
@@ -136,9 +134,7 @@ bool closeSystemCall::handleDetPre(state &s, ptracer &t){
 void closeSystemCall::handleDetPost(state &s, ptracer &t){
   // Non deterministic failure due to signal.
   if((int64_t) t.getReturnValue() == -1){
-    if(errno == EINTR){
       throw runtime_error("Close system call failed:\n" + string { strerror(errno) });
-    }
   }
 
   return;
@@ -210,6 +206,19 @@ bool exit_groupSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void exit_groupSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+faccessatSystemCall::faccessatSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool faccessatSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void faccessatSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
@@ -309,6 +318,71 @@ bool getdentsSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void getdentsSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+geteuidSystemCall::geteuidSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool geteuidSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void geteuidSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+getgidSystemCall::getgidSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool getgidSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void getgidSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+getegidSystemCall::getegidSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool getegidSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void getegidSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+getgroupsSystemCall::getgroupsSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool getgroupsSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void getgroupsSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+getpgrpSystemCall::getpgrpSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool getpgrpSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void getpgrpSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
@@ -500,6 +574,33 @@ void openSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
+pipeSystemCall::pipeSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool pipeSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void pipeSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+pselect6SystemCall::pselect6SystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool pselect6SystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void pselect6SystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+
+// =======================================================================================
 openatSystemCall::openatSystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
   return;
@@ -665,7 +766,7 @@ void readSystemCall::handleDetPost(state &s, ptracer &t){
   // ssize_t bytes_read = t.getReturnValue();
   // ssize_t bytes_requested = t.arg3();
   // if (bytes_read != bytes_requested && bytes_read != 0) {
-    // throw runtime_error("number of bytes read: " + to_string(bytes_read) 
+    // throw runtime_error("number of bytes read: " + to_string(bytes_read)
 		    	// + " \nnumber of bytes requested: " + to_string(bytes_requested));
   // }
   return;
@@ -749,6 +850,33 @@ bool sendtoSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void sendtoSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+selectSystemCall::selectSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool selectSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void selectSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+
+setpgidSystemCall::setpgidSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool setpgidSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void setpgidSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
@@ -961,7 +1089,7 @@ void unameSystemCall::handleDetPost(state &s, ptracer &t){
     strncpy(myUts.release, "4.0", MEMBER_LENGTH);
     strncpy(myUts.version, "#1", MEMBER_LENGTH);
     strncpy(myUts.machine, "x86_64", MEMBER_LENGTH);
-    
+
     ptracer::writeToTracee(utsnamePtr, myUts, t.getPid());
   }
   return;
