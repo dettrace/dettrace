@@ -436,7 +436,7 @@ bool ioctlSystemCall::handleDetPre(state &s, ptracer &t){
 void ioctlSystemCall::handleDetPost(state &s, ptracer &t){
   const uint64_t request = t.arg2();
   if (TCGETS == request || TIOCGWINSZ == request) {
-    t.setReturnRegister((uint64_t) -1);
+    t.setReturnRegister((uint64_t) -ENOTTY);
   } else {
     throw runtime_error("Unsupported ioctl call: fd="+to_string(t.arg1())+" request=" + to_string(request));
   }
