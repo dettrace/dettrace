@@ -108,9 +108,13 @@ void runTracee(int optIndex, int argc, char** argv){
   // Use a copy since dirname may mutate contents.
   strcpy(argv0, argv[0]);
   string pathToExe{ dirname(argv0) };
-  // Wipe out rest environment for process?
+  // Create minimal environment.
+  // Note: gcc needs to be somewhere along PATH or it gets very confused, see 
+  // https://github.com/upenn-acg/detTrace/issues/23
   string ldpreload {"LD_PRELOAD=" + pathToExe + "/../lib/libdet.so"};
-  char *const envs[] = {(char* const)ldpreload.c_str() ,NULL};
+  char *const envs[] = {(char* const)ldpreload.c_str(),
+                        (char* const)"PATH=/usr/bin/:/bin",
+                        NULL};
 
   // Stop ourselves until the tracer is ready. This ensures the tracer has time to get set
   //up.
