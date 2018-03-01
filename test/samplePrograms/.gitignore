@@ -1,0 +1,7 @@
+clock_gettime
+getpid
+inverseFork
+nestedFork
+simpleFork
+uname
+vfork
