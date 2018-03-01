@@ -484,6 +484,21 @@ public:
 // =======================================================================================
 /**
  *
+ * pid_t gettid(void);
+ *
+ *  gettid()  returns  the  caller's  thread ID (TID)
+ *
+ * Should be deterministic thanks to user namespace?
+ */
+class gettidSystemCall : public systemCall{
+public:
+  gettidSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
  * int gettimeofday(struct timeval *tv, struct timezone *tz);
  *
  * gives the number of seconds and microseconds since the Epoch
@@ -1064,6 +1079,22 @@ public:
 class sysinfoSystemCall : public systemCall{
 public:
   sysinfoSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
+ * int tgkill(int tgid, int tid, int sig);
+ *
+ * SIGNAL RELATED
+ *
+ * Should be deterministic in the sense that our pid namespace separates us from other
+ * processes. So only processes in our tree can use it. TODO: Deliver signal synchronously?
+ */
+class tgkillSystemCall : public systemCall{
+public:
+  tgkillSystemCall(long syscallName, string syscallNumber);
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };

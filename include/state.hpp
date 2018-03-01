@@ -58,7 +58,12 @@ public:
    * It's our job to keep track whether we are on a system call pre or post.
    */
   syscallState syscallStopState = syscallState::pre;
-  
+
+  /**
+   * Signal to deliver for next time this process runs. Zero means none. Otherwise
+   * this int represents the signal number.
+   */
+  int signalToDeliver = 0;
 /*
  * Insn pointer from predet
  */

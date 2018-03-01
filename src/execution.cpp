@@ -26,9 +26,6 @@ execution::execution(int debugLevel, pid_t startingPid):
   }
 // =======================================================================================
 void execution::handleExit(){
-  log.writeToLog(Importance::inter,
-		 logger::makeTextColored(Color::blue, "Process [%d] has finished.\n"),
-		 traceesPid);
   if(processHier.empty()){
     // We're done. Exit
     exitLoop = true;
@@ -69,7 +66,7 @@ void execution::handlePreSystemCall(state& currState){
   if(systemCall == "fork" || systemCall == "vfork" || systemCall == "clone"){
     int status;
     // This event is known to be either a fork/vfork event or a signal.
-    ptraceEvent e = execution::getNextEvent(traceesPid, traceesPid, status);
+    ptraceEvent e = getNextEvent(traceesPid, traceesPid, status);
     handleFork(e);
   }
   return;
@@ -115,10 +112,7 @@ void execution::runProgram(){
   // Iterate over entire process' and all subprocess' execution.
   while(! exitLoop){
     int status;
-
-    log.writeToLog(Importance::extra, "Waiting for next event...\n");
-    ptraceEvent ret = execution::getNextEvent(nextPid, traceesPid, status);
-    log.writeToLog(Importance::extra, "Got new event!...\n");
+    ptraceEvent ret = getNextEvent(nextPid, traceesPid, status);
     nextPid = traceesPid;
 
     // We have never seen this pid before. Add it to our table of states.
@@ -134,8 +128,20 @@ void execution::runProgram(){
       // DO NOT CONTINUE! Fall down to the correct case.
     }
 
-    // Current process is done.
+    // Current process was ended by signal.
+    if(ret == ptraceEvent::terminatedBySignal){
+      auto msg =
+	logger::makeTextColored(Color::blue, "Process [%d] ended by signal %d.\n");
+      log.writeToLog(Importance::inter, msg, traceesPid, WTERMSIG(status));
+      handleExit();
+      continue;
+    }
+
+    // Current process is ended.
     if(ret == ptraceEvent::exit){
+      log.writeToLog(Importance::inter,
+		     logger::makeTextColored(Color::blue, "Process [%d] has finished.\n"),
+		     traceesPid);
       handleExit();
       continue;
     }
@@ -167,7 +173,8 @@ void execution::runProgram(){
     }
 
     if(ret == ptraceEvent::signal){
-      handleSignal(status);
+      int signalNum = WSTOPSIG(status);
+      handleSignal(signalNum);
       continue;
     }
 
@@ -271,11 +278,13 @@ void execution::handleExecve(){
   return;
 }
 // =======================================================================================
-void execution::handleSignal(int status){
-  // Nothing for now. Kelly's code will go here.
-  log.writeToLog(Importance::inter,
-		 logger::makeTextColored(Color::blue, "[%d] tracer: Received signal: %d\n"),
-		 traceesPid, WSTOPSIG(status));
+void execution::handleSignal(int sigNum){
+  // Remember to deliver this signal to the tracee for next event! Happens in
+  // getNextEvent.
+  states.at(traceesPid).signalToDeliver = sigNum;
+  auto msg = "[%d] Tracer: Received signal: %d. Forwading signal to tracee.\n";
+  auto coloredMsg = logger::makeTextColored(Color::blue, msg);
+  log.writeToLog(Importance::inter, coloredMsg, traceesPid, sigNum);
   return;
 }
 // =======================================================================================
@@ -338,6 +347,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<getrlimitSystemCall>(syscallNumber, syscallName);
     case SYS_getrusage:
       return make_unique<getrusageSystemCall>(syscallNumber, syscallName);
+    case SYS_gettid:
+      return make_unique<gettidSystemCall>(syscallNumber, syscallName);
     case SYS_gettimeofday:
       return make_unique<gettimeofdaySystemCall>(syscallNumber, syscallName);
     case SYS_getuid:
@@ -406,6 +417,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<sysinfoSystemCall>(syscallNumber, syscallName);
     case SYS_time:
       return make_unique<timeSystemCall>(syscallNumber, syscallName);
+    case SYS_tgkill:
+      return make_unique<tgkillSystemCall>(syscallNumber, syscallName);
     case SYS_umask:
       return make_unique<umaskSystemCall>(syscallNumber, syscallName);
     case SYS_uname:
@@ -429,10 +442,19 @@ execution::getSystemCall(int syscallNumber, string syscallName){
   }
 // =======================================================================================
 ptraceEvent execution::getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status){
+  // At every doPtrace we have the choice to deliver a signal. We must deliver a signal
+  // when an actual signal was returned (ptraceEvent::signal), otherwise the signal is
+  // never delivered to the tracee! This field is updated in @handleSignal
+  //
+  // 64 bit value to avoid warning when casting to void* below.
+  int64_t signalToDeliver = states.at(nextPid).signalToDeliver;
+  // Reset signal field after for next event.
+  states.at(nextPid).signalToDeliver = 0;
+
   // Tell the process that we just intercepted an event for to continue, with us tracking
   // it's system calls. If this is the first time this function is called, it will be the
   // starting process. Which we expect to be in a waiting state.
-  ptracer::doPtrace(PTRACE_SYSCALL, currentPid, 0, 0);
+  ptracer::doPtrace(PTRACE_SYSCALL, currentPid, 0, (void*) signalToDeliver);
 
   // Intercept any system call.
   traceesPid = waitpid(-1, &status, 0);
@@ -467,6 +489,14 @@ ptraceEvent execution::getNextEvent(pid_t currentPid, pid_t& traceesPid, int& st
     return ptraceEvent::fork;
   }
 
+  if( ptracer::isPtraceEvent(status, PTRACE_EVENT_STOP) ){
+    throw runtime_error("Ptrace event stop.\n");
+  }
+
+  if( ptracer::isPtraceEvent(status, PTRACE_EVENT_EXIT) ){
+    throw runtime_error("Ptrace event exit.\n");
+  }
+
   // This is a stop caused by a system call exit-pre/exit-post.
   // Check if WIFSTOPPED return true,
   // if yes, compare signal number to SIGTRAP | 0x80 (see ptrace(2)).
@@ -474,8 +504,15 @@ ptraceEvent execution::getNextEvent(pid_t currentPid, pid_t& traceesPid, int& st
     return ptraceEvent::syscall;
   }
 
+  // Check if we intercepted a signal before it was delivered to the child.
   if(WIFSTOPPED(status)){
     return ptraceEvent::signal;
+  }
+
+  // Check if the child was terminated by a signal. This can happen after when we,
+  //the tracer, intercept a signal of the tracee and deliver it.
+  if(WIFSIGNALED(status)){
+    return ptraceEvent::terminatedBySignal;
   }
 
   throw runtime_error("Uknown event on dettrace::getNextEvent()");

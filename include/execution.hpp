@@ -83,7 +83,7 @@ public:
 
   void handleExecve();
 
-  void handleSignal(int status);
+  void handleSignal(int signum);
 
   /**
    * Return the system call we currently caught from the tracer.
@@ -99,7 +99,7 @@ public:
    * @param traceesPid[out]: pid of the process we just intercepted.
    * @param status[out]: status retured by waitpid.
    */
-  static ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
+  ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 };
 
 #endif

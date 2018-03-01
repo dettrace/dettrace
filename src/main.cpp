@@ -21,6 +21,7 @@
 #include <fcntl.h>
 #include <stdarg.h>
 #include <libgen.h>
+#include <sys/mount.h>
 
 #include <iostream>
 #include <tuple>
@@ -44,12 +45,14 @@
 
 using namespace std;
 // =======================================================================================
-
+int doWithCheck(int returnValue, string errorMessage);
 pair<int, int> parseProgramArguments(int argc, char* argv[]);
 void runTracee(int optIndex, int argc, char** argv);
 void runTracer(int debugLevel, pid_t childPid);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
+void mountDir(string source, string target);
+void setUpContainer(string pathToExe);
 // =======================================================================================
 /**
  * Given a program through the command line, spawn a child thread, call PTRACEME and exec
@@ -62,24 +65,14 @@ int main(int argc, char** argv){
 
   // Set up new user namespace. This is needed as we will have root access withing
   // our own user namespace. Other namepspace commands require CAP_SYS_ADMIN to work.
-  int ret = unshare(CLONE_NEWUSER | CLONE_NEWPID | CLONE_NEWNS);
-  if(ret == -1){
-    printf("Unable to create namespaces: %s\n", strerror(errno));
-    return 1;
-  }
+  // Namespaces must must be done before fork. As changes don't apply until after
+  // fork, to all child processes.
+  doWithCheck(unshare(CLONE_NEWUSER| // Our own user namespace.
+		      CLONE_NEWPID | // Our own pid namespace.
+		      CLONE_NEWNS),  // Our own mount namespace
+	      "Unable to create namespaces");
 
-  // Disable ASLR for our child
-  ret = personality(PER_LINUX | ADDR_NO_RANDOMIZE);
-  if(ret == -1){
-    printf("Unable to disable ASLR: %s\n", strerror(errno));
-    return 1;
-  }
-
-  pid_t pid = fork();
-  if(pid == -1){
-    printf("Fork failed. Reason: %s\n", strerror(errno));
-    return 1;
-  }
+  pid_t pid = doWithCheck(fork(), "Failed to fork child");
 
   // Child.
   if(pid == 0){
@@ -87,6 +80,7 @@ int main(int argc, char** argv){
   }else{
     runTracer(debugLevel, pid);
   }
+
   return 0;
 }
 // =======================================================================================
@@ -94,6 +88,14 @@ int main(int argc, char** argv){
  * Child will become the process the user wishes to through call to execve.
  */
 void runTracee(int optIndex, int argc, char** argv){
+  // Find absolute path to our build directory relative to the dettrace binary.
+  char argv0[strlen(argv[0])];
+  strcpy(argv0, argv[0]); // Use a copy since dirname may mutate contents.
+  string pathToExe{ dirname(argv0) };
+
+  setUpContainer(pathToExe);
+
+  // Perform execve based on user command.
   ptrace(PTRACE_TRACEME, 0, NULL, NULL);
 
   // +1 for exectuable's name, +1 for NULL at the end.
@@ -103,15 +105,10 @@ void runTracee(int optIndex, int argc, char** argv){
   memcpy(traceeCommand, & argv[optIndex], newArgc * sizeof(char*));
   traceeCommand[newArgc - 1] = NULL;
 
-  // Find absolute path to our file.
-  char argv0[strlen(argv[0])];
-  // Use a copy since dirname may mutate contents.
-  strcpy(argv0, argv[0]);
-  string pathToExe{ dirname(argv0) };
   // Create minimal environment.
-  // Note: gcc needs to be somewhere along PATH or it gets very confused, see 
+  // Note: gcc needs to be somewhere along PATH or it gets very confused, see
   // https://github.com/upenn-acg/detTrace/issues/23
-  string ldpreload {"LD_PRELOAD=" + pathToExe + "/../lib/libdet.so"};
+  string ldpreload {"LD_PRELOAD=/dettrace/lib/libdet.so"};
   char *const envs[] = {(char* const)ldpreload.c_str(),
                         (char* const)"PATH=/usr/bin/:/bin",
                         NULL};
@@ -121,13 +118,62 @@ void runTracee(int optIndex, int argc, char** argv){
   raise(SIGSTOP);
   // execvpe() duplicates the actions of the shell in searching  for  an executable file
   // if the specified filename does not contain a slash (/) character.
+
   int val = execvpe(traceeCommand[0], traceeCommand, envs);
   if(val == -1){
-    throw runtime_error("Unable to exec your program. Reason\n" +
-			string { strerror(errno) });
+    cerr << "Unable to exec your program. Reason:\n  " << string { strerror(errno) } << endl;
+    cerr << "Ending tracer with SIGABTR signal." << endl;
+
+    // Parent is waiting for us to exec so it can trace traceeCommand, this isn't going
+    // to happen. End parent with signal.
+    pid_t ppid = getppid();
+    syscall(SYS_tgkill, ppid, ppid, SIGABRT);
   }
 
+
   return;
+}
+// =======================================================================================
+/**
+ *
+ * Jail our container under /root/. Notice this relies on a certain directory structure
+ * for our jail:
+ *
+ * DetTrace ) ls root/
+ * bin/  build/  dettrace/  lib/  lib64/  proc/
+ *
+ */
+void setUpContainer(string pathToExe){
+  // (Assumed to be in /bin/dettrace where / is our project root.
+  string buildDir { pathToExe + "/../root/build/" };
+
+  // 1. First we mount cwd in our /root/build/ directory.
+  char* cwdPtr = get_current_dir_name();
+  mountDir(string { cwdPtr }, buildDir);
+  free(cwdPtr);
+
+  // 2. Move over to our build directory! This will make code cleaner as all logic is
+  // relative this dir.
+  doWithCheck(chdir(buildDir.c_str()), "Unable to chdir");
+
+  // Bind mount our directories.
+  mountDir("/bin/", "../bin/");
+  mountDir("/usr/", "../usr/");
+  mountDir("/lib/", "../lib/");
+  mountDir("/lib64/", "../lib64/");
+  // Mount our dettrace/bin and dettrace/lib folders.
+  mountDir("../../bin/", "../dettrace/bin");
+  mountDir("../../lib/", "../dettrace/lib");
+
+  // Proc is special, we mount a new proc dir.
+  doWithCheck(mount("/proc", "../proc/", "proc", MS_MGC_VAL, nullptr),
+	      "Mounting proc failed");
+
+  // Chroot our process!
+  doWithCheck(chroot("../"), "Failed to chroot");
+
+  // Disable ASLR for our child
+  doWithCheck(personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");
 }
 // =======================================================================================
 /**
@@ -137,6 +183,7 @@ void runTracee(int optIndex, int argc, char** argv){
  *
  */
 void runTracer(int debugLevel, pid_t startingPid){
+  // Init tracer and execution context.
   execution exe {debugLevel, startingPid};
   exe.runProgram();
 
@@ -194,5 +241,32 @@ pair<int, int> parseProgramArguments(int argc, char* argv[]){
 
   return make_pair(optind, debugLevel);
 }
+// =======================================================================================
+/**
+ * Call clib function that returns an integer and sets errno with automatic checking
+ * and exiting on -1. Returns returnValue on success.
+ *
+ * Example:
+ * doWithCheck(mount(cwd, pathToBuild.c_str(), nullptr, MS_BIND, nullptr),
+ *             "Unable to bind mount cwd");
+ */
+int doWithCheck(int returnValue, string errorMessage){
+  string reason = strerror(errno);
+  if(returnValue == -1){
+    cerr << errorMessage + ":\n  " + reason << endl;
+    exit(1);
+  }
+
+  return returnValue;
+}
+// =======================================================================================
+/**
+ * Wrapper around mount with strings.
+ */
+void mountDir(string source, string target){
+  doWithCheck(mount(source.c_str(), target.c_str(), nullptr, MS_BIND, nullptr),
+	      "Unable to bind mount: " + source + " to " + target);
+}
+
 // =======================================================================================
 

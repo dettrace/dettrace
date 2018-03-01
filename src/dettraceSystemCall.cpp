@@ -481,6 +481,17 @@ void getrusageSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
+gettidSystemCall::gettidSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+bool gettidSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+void gettidSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
 gettimeofdaySystemCall::gettimeofdaySystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
   return;
@@ -783,14 +794,14 @@ void prlimit64SystemCall::handleDetPost(state &s, ptracer &t){
    * change limits deterministically in many cases, if need be, so long as the
    * starting limits are deterministic.
   */
-  struct rlimit* rp = (struct rlimit*) t.arg4();
-  if (rp != nullptr) {
-    struct rlimit noLimits = {};
-    noLimits.rlim_cur = RLIM_INFINITY;
-    noLimits.rlim_max = RLIM_INFINITY;
-    
-    ptracer::writeToTracee(rp, noLimits, t.getPid());
-  }
+  // struct rlimit* rp = (struct rlimit*) t.arg4();
+  // if (rp != nullptr) {
+    // struct rlimit noLimits = {};
+    // noLimits.rlim_cur = RLIM_INFINITY;
+    // noLimits.rlim_max = RLIM_INFINITY;
+
+    // ptracer::writeToTracee(rp, noLimits, t.getPid());
+  // }
 
   return;
 }
@@ -806,20 +817,20 @@ bool readSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void readSystemCall::handleDetPost(state &s, ptracer &t){
-  // TODO: 
-  if (t.getReturnValue() == (uint64_t) -1) {
-    throw runtime_error("read returned -1 with some error");
-  }
-  ssize_t bytes_read = t.getReturnValue();
-  ssize_t bytes_requested = t.arg3();
-  if (bytes_read != bytes_requested && bytes_read != 0) {
-    t.writeArg2(t.arg2() + bytes_read);
-    t.writeArg3(t.arg3() - bytes_read);
-    t.writeIp(s.preIp);
-    s.preIp = 0;
+  // TODO:
+  // if (t.getReturnValue() == (uint64_t) -1) {
+    // throw runtime_error("read returned -1 with some error");
+  // }
+  // ssize_t bytes_read = t.getReturnValue();
+  // ssize_t bytes_requested = t.arg3();
+  // if (bytes_read != bytes_requested && bytes_read != 0) {
+    // t.writeArg2(t.arg2() + bytes_read);
+    // t.writeArg3(t.arg3() - bytes_read);
+    // t.writeIp(s.preIp);
+    // s.preIp = 0;
     //throw runtime_error("number of bytes read: " + to_string(bytes_read) 
     //		    	+ " \nnumber of bytes requested: " + to_string(bytes_requested));
-  }
+  // }
   return;
 }
 // =======================================================================================
@@ -1064,6 +1075,19 @@ void sysinfoSystemCall::handleDetPost(state &s, ptracer &t){
   info.loads[2] = LONG_MAX;
 
   ptracer::writeToTracee(infoPtr, info, t.getPid());
+  return;
+}
+// =======================================================================================
+tgkillSystemCall::tgkillSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool tgkillSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void tgkillSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================

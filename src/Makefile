@@ -14,7 +14,7 @@ src = $(wildcard *.cpp)
 obj = $(src:.cpp=.o)
 dep = $(obj:.o=.d)
 
-all: dettrace libdet
+all: dettrace libdet.so
 
 dettrace: $(obj) $(libs)
 	$(CXX) $(CXXFLAGS) $(LIBS) $^ -o $@
@@ -27,7 +27,7 @@ dettrace: $(obj) $(libs)
 	@cpp $(CXXFLAGS) $< -MM -MT $(@:.d=.o) >$@
 
 
-libdet: libdet.cpp
+libdet.so: libdet.cpp
 	$(CXX) $(LIBDETFLAGS) -o libdet.so libdet.cpp $(LIBDETLIBS)
 
 .PHONY: clean
