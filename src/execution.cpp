@@ -5,8 +5,11 @@
 #include "dettraceSystemCall.hpp"
 #include "util.hpp"
 #include "state.hpp"
+#include <sys/ptrace.h>
 #include "ptracer.hpp"
 #include "execution.hpp"
+
+
 
 #include <stack>
 // =======================================================================================
@@ -489,9 +492,11 @@ ptraceEvent execution::getNextEvent(pid_t currentPid, pid_t& traceesPid, int& st
     return ptraceEvent::fork;
   }
 
+  #ifdef PTRACE_EVENT_STOP
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_STOP) ){
     throw runtime_error("Ptrace event stop.\n");
   }
+  #endif
 
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_EXIT) ){
     throw runtime_error("Ptrace event exit.\n");
