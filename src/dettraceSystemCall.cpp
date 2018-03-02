@@ -67,6 +67,22 @@ void brkSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
+chdirSystemCall::chdirSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool chdirSystemCall::handleDetPre(state &s, ptracer &t){
+  string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
+  string msg = "chdir-ing to path: " + logger::makeTextColored(Color::green, path) + "\n";
+  s.log.writeToLog(Importance::info, msg);
+  return true;
+}
+
+void chdirSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
 chmodSystemCall::chmodSystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
   return;
@@ -376,6 +392,23 @@ bool getgroupsSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void getgroupsSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+getpeernameSystemCall::getpeernameSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool getpeernameSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void getpeernameSystemCall::handleDetPost(state &s, ptracer &t){
+  int ret = t.getReturnValue();
+  if(ret == 0){
+    throw runtime_error("Call to getpeername with network socket not suported.\n");
+  }
   return;
 }
 // =======================================================================================
@@ -770,6 +803,19 @@ bool pollSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void pollSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+fadvise64SystemCall::fadvise64SystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool fadvise64SystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void fadvise64SystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================

@@ -297,6 +297,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<arch_prctlSystemCall>(syscallNumber, syscallName);
     case SYS_brk:
       return make_unique<brkSystemCall>(syscallNumber, syscallName);
+    case SYS_chdir:
+      return make_unique<chdirSystemCall>(syscallNumber, syscallName);
     case SYS_chmod:
       return make_unique<chmodSystemCall>(syscallNumber, syscallName);
     case SYS_clock_gettime:
@@ -339,6 +341,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<getegidSystemCall>(syscallNumber, syscallName);
     case SYS_getgroups:
       return make_unique<getgroupsSystemCall>(syscallNumber, syscallName);
+    case SYS_getpeername:
+      return make_unique<getpeernameSystemCall>(syscallNumber, syscallName);
     case SYS_getpid:
       return make_unique<getpidSystemCall>(syscallNumber, syscallName);
     case SYS_getppid:
@@ -381,6 +385,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<pselect6SystemCall>(syscallNumber, syscallName);
     case SYS_poll:
       return make_unique<pollSystemCall>(syscallNumber, syscallName);
+    case SYS_fadvise64:
+      return make_unique<fadvise64SystemCall>(syscallNumber, syscallName);
     case SYS_prlimit64:
       return make_unique<prlimit64SystemCall>(syscallNumber, syscallName);
     case SYS_read:

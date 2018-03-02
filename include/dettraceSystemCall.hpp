@@ -74,6 +74,23 @@ public:
 };
 // =======================================================================================
 /**
+ *
+ * int chdir(const char *path);
+ *
+ * chdir() changes the current working directory of the calling process to the directory
+       specified in path.
+ *
+ * This is deterministic and jailed thanks to our jail.
+ *
+ */
+class chdirSystemCall : public systemCall{
+public:
+  chdirSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
  * int chmod(const char *pathname, mode_t mode);
  *
  * The  chmod() and fchmod() system calls change a files mode bits.
@@ -376,6 +393,7 @@ public:
  *
  * getgroups()  returns the supplementary group IDs of the calling process in list.
  *
+ * This is deterministic via our namespaces.
  */
 class getgroupsSystemCall : public systemCall{
 public:
@@ -383,6 +401,25 @@ public:
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
+// =======================================================================================
+/**
+ *
+ * int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
+ *
+ * getpeername()  returns the address of the peer connected to the socket sockfd, in the
+ * buffer pointed to by addr.
+ *
+ * We allow this system call to go through in the case where we it returns a non-zero
+ * this happens on non-interactive bash mode. We might come back later if needed.
+ *
+ */
+class getpeernameSystemCall : public systemCall{
+public:
+  getpeernameSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+
 // =======================================================================================
 /**
  *
@@ -778,15 +815,32 @@ public:
 // =======================================================================================
 /**
  *
+ * int poll(struct pollfd *fds, nfds_t nfds, int timeout);*
  *
- *  int poll(struct pollfd *fds, nfds_t nfds, int timeout);*
- *
- *  wait for one of a set of fds to become ready to perform I/O
+ * Wait for one of a set of fds to become ready to perform I/O
+ * TODO: Super non deterministic!
  *
  */
 class pollSystemCall : public systemCall{
 public:
   pollSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state &s, ptracer &t) override;
+  void handleDetPost(state &s, ptracer &t) override;
+};
+// =======================================================================================
+/**
+ *
+ * int posix_fadvise(int fd, off_t offset, off_t len, int advice);
+ *
+ * Programs  can  use  posix_fadvise() to announce an intention to access file data in a
+ * specific pattern in the future, thus allowing the kernel to perform appropriate opti‐
+ * mizations.
+ *
+ * Seems deterministic enough :)
+ */
+class fadvise64SystemCall : public systemCall{
+public:
+  fadvise64SystemCall(long syscallName, string syscallNumber);
   bool handleDetPre(state &s, ptracer &t) override;
   void handleDetPost(state &s, ptracer &t) override;
 };
@@ -1270,8 +1324,6 @@ public:
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
-
-
 // =======================================================================================
 /**
  *
