@@ -19,7 +19,6 @@ using namespace std;
 // =======================================================================================
 // Prototypes for common functions.
 void zeroOutStatfs(struct statfs& stats);
-void zeroOutStat(struct stat& stats, long clock);
 void handleStatFamily(state& s, ptracer& t, string syscallName);
 bool isPrefix(const string& data, const string& prefix);
 // =======================================================================================
@@ -1367,36 +1366,6 @@ void zeroOutStatfs(struct statfs& stats){
     stats.f_flags = 1;   /* Mount flags of filesystem */
 }
 // =======================================================================================
-void zeroOutStat(struct stat& stats, long clock){
-  stats.st_atim = timespec { .tv_sec =  clock,
-			     .tv_nsec = clock };  /* user CPU time used */
-  stats.st_mtim = timespec { .tv_sec =  clock,
-			     .tv_nsec = clock };
-  stats.st_ctim = timespec { .tv_sec = clock,
-			     .tv_nsec = clock };  /* user CPU time used */
-
-  stats.st_dev = 1;         /* ID of device containing file */
-  stats.st_ino = 1;         // NB: may need proper inode virtualization someday
-
-  // st_mode holds the permissions to the file. If we zero it out libc functions
-  // will think we don't have access to this file. Hence we keep our permissions
-  // as part of the stat.
-  // mode_t    st_mode;        /* File type and mode */
-
-  stats.st_nlink = 1;       /* Number of hard links */
-  stats.st_uid = 65534;         /* User ID of owner */
-  stats.st_gid = 1;         /* Group ID of owner */
-  stats.st_rdev = 1;        /* Device ID (if special file) */
-
-  // Program will stall if we put some arbitrary value here: TODO.
-  // stats.st_size = 512;        /* Total size, in bytes */
-
-  stats.st_blksize = 512;     /* Block size for filesystem I/O */
-  stats.st_blocks = 1;      /* Number of 512B blocks allocated */
-
-  return;
-}
-// =======================================================================================
 void handleStatFamily(state& s, ptracer& t, string syscallName){
   struct stat* statPtr = (struct stat*) t.arg2();
 
@@ -1407,9 +1376,44 @@ void handleStatFamily(state& s, ptracer& t, string syscallName){
 
   if(t.getReturnValue() == 0){
     struct stat myStat = ptracer::readFromTracee(statPtr, s.traceePid);
-    zeroOutStat(myStat, s.getLogicalTime());
-    s.incrementTime();
 
+    myStat.st_atim = timespec { .tv_sec =  s.getLogicalTime(),
+                                .tv_nsec = s.getLogicalTime() };  /* user CPU time used */
+    myStat.st_mtim = timespec { .tv_sec =  s.getLogicalTime(),
+                                .tv_nsec = s.getLogicalTime() };
+    myStat.st_ctim = timespec { .tv_sec = s.getLogicalTime(),
+                                .tv_nsec = s.getLogicalTime() };  /* user CPU time used */
+    
+    myStat.st_dev = 1;         /* ID of device containing file */
+
+    // inode virtualization
+    ino_t realInodeNum = myStat.st_ino;
+    if (1 == t.real2VirtualMap.count(realInodeNum)) {
+      myStat.st_ino = t.real2VirtualMap.at(realInodeNum);
+    } else { // add a new virtual inode
+      ino_t virtInodeNum = t.real2VirtualMap.size();
+      t.real2VirtualMap[realInodeNum] = virtInodeNum;
+      myStat.st_ino = virtInodeNum;
+    }
+    
+    // st_mode holds the permissions to the file. If we zero it out libc functions
+    // will think we don't have access to this file. Hence we keep our permissions
+    // as part of the stat.
+    // mode_t    st_mode;        /* File type and mode */
+    
+    myStat.st_nlink = 1;       /* Number of hard links */
+    myStat.st_uid = 65534;         /* User ID of owner */
+    myStat.st_gid = 1;         /* Group ID of owner */
+    myStat.st_rdev = 1;        /* Device ID (if special file) */
+    
+    // Program will stall if we put some arbitrary value here: TODO.
+    // myStat.st_size = 512;        /* Total size, in bytes */
+    
+    myStat.st_blksize = 512;     /* Block size for filesystem I/O */
+    myStat.st_blocks = 1;      /* Number of 512B blocks allocated */
+    
+    s.incrementTime();
+    
     // Write back result for child.
     ptracer::writeToTracee(statPtr, myStat, s.traceePid);
   }else{

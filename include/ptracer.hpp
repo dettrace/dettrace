@@ -1,9 +1,10 @@
 #ifndef PTRACER_H
 #define PTRACER_H
 
-#include <sys/types.h>
 #include <stdint.h>
+#include <unistd.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/user.h>
 #include <sys/vfs.h>
 #include <sys/ptrace.h>
@@ -17,6 +18,7 @@
 #include <tuple>
 #include <iostream>
 #include <set>
+#include <map>
 #include <experimental/optional>
 #include <memory>
 #include <cstddef>
@@ -57,6 +59,8 @@ public:
    * using TODO.
    */
   struct user_regs_struct regs;
+
+  map<ino_t,ino_t> real2VirtualMap;
 
   /**
    * Create a ptracer. The child must have called PTRACE_TRACEME and then stopped itself like
