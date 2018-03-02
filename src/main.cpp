@@ -149,6 +149,7 @@ void setUpContainer(string pathToExe){
 
   // 1. First we mount cwd in our /root/build/ directory.
   char* cwdPtr = get_current_dir_name();
+  printf("cwd: %s\n", cwdPtr);
   mountDir(string { cwdPtr }, buildDir);
   free(cwdPtr);
 
