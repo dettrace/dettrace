@@ -1376,8 +1376,8 @@ void zeroOutStat(struct stat& stats, long clock){
 			     .tv_nsec = clock };  /* user CPU time used */
 
   stats.st_dev = 1;         /* ID of device containing file */
+  stats.st_ino = 1;         // NB: may need proper inode virtualization someday
 
-  // st_ino = ;         /* TODO: Inode number */
   // st_mode holds the permissions to the file. If we zero it out libc functions
   // will think we don't have access to this file. Hence we keep our permissions
   // as part of the stat.
