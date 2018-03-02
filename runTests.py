@@ -13,8 +13,8 @@ def main():
 
     # Run unit tests.
     print("Running unit tests.")
-    subprocess.check_call(["./bin/dettrace", "./test/unitTests/systemCallTests"])
-    # Catch doesn't return a non-zero error code on failure. We slup up the output
+    subprocess.check_call(["./bin/dettrace", "--debug=0", "./test/unitTests/systemCallTests"])
+    # Catch doesn't return a non-zero error code on failure. We slurp up the output
     # and check for failure ourselves.
     try:
         outputBin = \
