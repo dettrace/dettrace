@@ -111,19 +111,26 @@ TEST_CASE("getuid", "getuid"){
 }
 
 void statFamilyTests(struct stat statbuf){
-  REQUIRE(statbuf.st_uid == 65534);
-  REQUIRE(statbuf.st_dev == 1);
-  REQUIRE(statbuf.st_blocks == 1);
-  REQUIRE(statbuf.st_gid == 1);
+  CHECK(statbuf.st_uid == 65534);
+  CHECK(statbuf.st_dev == 1);
+  CHECK(statbuf.st_ino == 1);
+  CHECK(statbuf.st_blksize == 512);
+  CHECK(statbuf.st_blocks == 1);
+  CHECK(statbuf.st_gid == 1);
+
+  // mtime and ctime should be the same as atime
+  CHECK(statbuf.st_mtim.tv_nsec == statbuf.st_mtim.tv_sec);
+  CHECK(statbuf.st_mtim.tv_nsec == statbuf.st_atim.tv_sec);
+  CHECK(statbuf.st_ctim.tv_nsec == statbuf.st_ctim.tv_sec);
+  CHECK(statbuf.st_ctim.tv_nsec == statbuf.st_atim.tv_sec);
 }
 
 TEST_CASE("stat", "stat"){
   struct stat statbuf;
   int ret = stat("./", &statbuf);
   statFamilyTests(statbuf);
-  REQUIRE(statbuf.st_atim.tv_nsec == statbuf.st_atim.tv_sec);
   REQUIRE(statbuf.st_atim.tv_nsec == 9);
-  REQUIRE(statbuf.st_atim.tv_sec == 9);
+  REQUIRE(statbuf.st_atim.tv_nsec == statbuf.st_atim.tv_sec);
 }
 
 
