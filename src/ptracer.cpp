@@ -43,7 +43,7 @@ uint64_t ptracer::arg3(){
   return regs.rdx;
 }
 uint64_t ptracer::arg4(){
-  return regs.rcx;
+  return regs.r10;
 }
 uint64_t ptracer::arg5(){
   return regs.r8;

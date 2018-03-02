@@ -20,6 +20,7 @@
 #include <sys/sysinfo.h>
 #include <sys/resource.h>
 
+#include <iostream>
 #include <tuple>
 #include <unistd.h>
 #include <sys/types.h>
@@ -30,7 +31,7 @@ using namespace std;
 using namespace experimental;
 
 /*
- * Do not run these tests directly from the executable! Use runTests.sh to run them!
+ * Do not run these tests directly from the executable! Use runTests.py to run them!
  * Warning, please do not add tests "in the middle", only at the end, as the number
  * of ran tests determinies the value of our logical clock. Sorry about that.
  */
@@ -110,19 +111,26 @@ TEST_CASE("getuid", "getuid"){
 }
 
 void statFamilyTests(struct stat statbuf){
-  REQUIRE(statbuf.st_uid == 65534);
-  REQUIRE(statbuf.st_dev == 1);
-  REQUIRE(statbuf.st_blocks == 1);
-  REQUIRE(statbuf.st_gid == 1);
+  CHECK(statbuf.st_uid == 65534);
+  CHECK(statbuf.st_dev == 1);
+  CHECK(statbuf.st_ino == 1);
+  CHECK(statbuf.st_blksize == 512);
+  CHECK(statbuf.st_blocks == 1);
+  CHECK(statbuf.st_gid == 1);
+
+  // mtime and ctime should be the same as atime
+  CHECK(statbuf.st_mtim.tv_nsec == statbuf.st_mtim.tv_sec);
+  CHECK(statbuf.st_mtim.tv_nsec == statbuf.st_atim.tv_sec);
+  CHECK(statbuf.st_ctim.tv_nsec == statbuf.st_ctim.tv_sec);
+  CHECK(statbuf.st_ctim.tv_nsec == statbuf.st_atim.tv_sec);
 }
 
 TEST_CASE("stat", "stat"){
   struct stat statbuf;
   int ret = stat("./", &statbuf);
   statFamilyTests(statbuf);
-  REQUIRE(statbuf.st_atim.tv_nsec == statbuf.st_atim.tv_sec);
   REQUIRE(statbuf.st_atim.tv_nsec == 9);
-  REQUIRE(statbuf.st_atim.tv_sec == 9);
+  REQUIRE(statbuf.st_atim.tv_nsec == statbuf.st_atim.tv_sec);
 }
 
 
@@ -151,7 +159,23 @@ TEST_CASE("lstat", "lstat"){
  }
 
 TEST_CASE("prlimit64", "prlimit64"){
-  // TODO
+  // joe: can't compile a prlimit test on acggrid, I get:
+  // "error: 'SYS_prlimit' was not declared in this scope"
+
+  // list of all resources per https://linux.die.net/man/2/prlimit
+  const int RESOURCE[] = {
+    RLIMIT_AS, RLIMIT_CORE, RLIMIT_CPU, RLIMIT_DATA, 
+    RLIMIT_FSIZE, RLIMIT_LOCKS, RLIMIT_MEMLOCK, RLIMIT_MSGQUEUE, 
+    RLIMIT_NICE, RLIMIT_NOFILE, RLIMIT_NPROC, RLIMIT_RSS, 
+    RLIMIT_RTPRIO, RLIMIT_RTTIME, RLIMIT_SIGPENDING, RLIMIT_STACK
+  };
+  struct rlimit limits;
+  for (unsigned i = 0; i < sizeof(RESOURCE)/sizeof(RESOURCE[0]); i++) {
+    syscall(SYS_prlimit64, 0, RESOURCE[i], nullptr, &limits);
+    INFO("resource=" << RESOURCE[i] << " i=" << i << " &limits=" << &limits);
+    REQUIRE(RLIM_INFINITY == limits.rlim_cur);
+    REQUIRE(RLIM_INFINITY == limits.rlim_max);
+  }
 }
 
 TEST_CASE("sysinfo", "sysinfo"){

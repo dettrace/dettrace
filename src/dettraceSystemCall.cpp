@@ -781,7 +781,7 @@ prlimit64SystemCall::prlimit64SystemCall(long syscallNumber, string syscallName)
 // for reference, here's the prlimit() prototype
 // int prlimit(pid_t pid, int resource, const struct rlimit *new_limit, struct rlimit *old_limit);
 bool prlimit64SystemCall::handleDetPre(state &s, ptracer &t){
-  t.writeArg3(0); // suppress attempts to set new limits
+  t.writeArg3(0/*NULL*/); // suppress attempts to set new limits
 
   // Check if first argument (pid) is non-zero. If so fail.
   // TODO: could also always overwrite first argument with zero
@@ -804,14 +804,15 @@ void prlimit64SystemCall::handleDetPost(state &s, ptracer &t){
    * change limits deterministically in many cases, if need be, so long as the
    * starting limits are deterministic.
   */
-  // struct rlimit* rp = (struct rlimit*) t.arg4();
-  // if (rp != nullptr) {
-    // struct rlimit noLimits = {};
-    // noLimits.rlim_cur = RLIM_INFINITY;
-    // noLimits.rlim_max = RLIM_INFINITY;
+  struct rlimit* rp = (struct rlimit*) t.arg4();
+  if (rp != nullptr) {
+    struct rlimit noLimits = {};
+    noLimits.rlim_cur = RLIM_INFINITY;
+    noLimits.rlim_max = RLIM_INFINITY;
 
-    // ptracer::writeToTracee(rp, noLimits, t.getPid());
-  // }
+    //s.log.writeToLog(Importance::info, "rp=" + to_string(t.arg4()), t.getPid());
+    ptracer::writeToTracee(rp, noLimits, t.getPid());
+  }
 
   return;
 }
