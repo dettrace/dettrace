@@ -17,10 +17,10 @@ docker:
 	docker build -t ${DOCKER_NAME}:${DOCKER_TAG} .
 
 run-docker:
-	docker run -it ${DOCKER_NAME}:${DOCKER_TAG}
+	docker run -it --privileged --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG}
 
 test-docker:
-	docker run ${DOCKER_NAME}:${DOCKER_TAG} python3 /detTrace/runTests.py
+	docker run --privileged --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG} python3 /detTrace/runTests.py
 
 .PHONY: clean docker run-docker
 clean:
