@@ -1025,6 +1025,30 @@ public:
 // =======================================================================================
 /**
  *
+ * int sigreturn(...);
+ *
+ * If  the  Linux  kernel  determines that an unblocked signal is pending for a process,
+ * then, at the next transition back to user mode in that  process  (e.g.,  upon  return
+ * from a system call or when the process is rescheduled onto the CPU), it saves various
+ * pieces of process context (processor status word, registers, signal mask, and  signal
+ * stack settings) into the user-space stack.
+
+ * The  kernel  also  arranges that, during the transition back to user mode, the signal
+ * handler is called, and that, upon return from the handler, control passes to a  piece
+ * of  user-space  code  commonly called the "signal trampoline".  The signal trampoline
+ * code in turn calls sigreturn().
+ *
+ */
+class rt_sigreturnSystemCall : public systemCall{
+public:
+  rt_sigreturnSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+
+// =======================================================================================
+/**
+ *
  * int socket(int domain, int type, int protocol);
  * 
  * socket() creates an endpoint for communication and returns a file

@@ -29,7 +29,10 @@ accessSystemCall::accessSystemCall(long syscallNumber, string syscallName):
 }
 
 bool accessSystemCall::handleDetPre(state &s, ptracer &t){
-  s.log.writeToLog(Importance::info, "access: path=" + t.readTraceeCString((const char*)t.arg1(), t.getPid()));
+  string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
+  string msg = "Access-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
+  s.log.writeToLog(Importance::info, msg);
+
   return true;
 }
 
@@ -187,9 +190,9 @@ execveSystemCall::execveSystemCall(long syscallNumber, string syscallName):
 }
 
 bool execveSystemCall::handleDetPre(state &s, ptracer &t){
-  const char* filenameAddr = (const char*) t.arg1();
-  string filename = ptracer::readTraceeCString(filenameAddr, s.traceePid);
-  s.log.writeToLog(Importance::extra, "Execve on: %s\n", filename.c_str());
+  string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
+  string msg = "execve-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
+  s.log.writeToLog(Importance::info, msg);
 
   return true;
 }
@@ -551,7 +554,10 @@ bool ioctlSystemCall::handleDetPre(state &s, ptracer &t){
 
 void ioctlSystemCall::handleDetPost(state &s, ptracer &t){
   const uint64_t request = t.arg2();
-  if (TCGETS == request || TIOCGWINSZ == request) {
+  if (TCGETS == request ||
+      TIOCGWINSZ == request || // Window size of terminal.
+      TIOCGPGRP == request // group pid of foreground process.
+      ) {
     t.setReturnRegister((uint64_t) -ENOTTY);
   } else {
     throw runtime_error("Unsupported ioctl call: fd="+to_string(t.arg1())+" request=" + to_string(request));
@@ -740,7 +746,12 @@ lstatSystemCall::lstatSystemCall(long syscallNumber, string syscallName):
 }
 
 bool lstatSystemCall::handleDetPre(state &s, ptracer &t){
-  s.log.writeToLog(Importance::info, "lstat: path=" + t.readTraceeCString((const char*)t.arg1(), t.getPid()));
+  const char* filenameAddr = (const char*) t.arg1();
+  string filename = ptracer::readTraceeCString(filenameAddr, s.traceePid);
+  string coloredMsg = "lstat-ing path: " +
+    logger::makeTextColored(Color::green, filename);
+  s.log.writeToLog(Importance::extra, coloredMsg);
+
   return true;
 }
 
@@ -769,7 +780,6 @@ prlimit64SystemCall::prlimit64SystemCall(long syscallNumber, string syscallName)
 
 // for reference, here's the prlimit() prototype
 // int prlimit(pid_t pid, int resource, const struct rlimit *new_limit, struct rlimit *old_limit);
-
 bool prlimit64SystemCall::handleDetPre(state &s, ptracer &t){
   t.writeArg3(0); // suppress attempts to set new limits
 
@@ -828,8 +838,8 @@ void readSystemCall::handleDetPost(state &s, ptracer &t){
     // t.writeArg3(t.arg3() - bytes_read);
     // t.writeIp(s.preIp);
     // s.preIp = 0;
-    //throw runtime_error("number of bytes read: " + to_string(bytes_read) 
-    //		    	+ " \nnumber of bytes requested: " + to_string(bytes_requested));
+    // throw runtime_error("number of bytes read: " + to_string(bytes_read) 
+    		    	// + " \nnumber of bytes requested: " + to_string(bytes_requested));
   // }
   return;
 }
@@ -982,6 +992,19 @@ void sigaltstackSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
+rt_sigreturnSystemCall::rt_sigreturnSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool rt_sigreturnSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void rt_sigreturnSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
 socketSystemCall::socketSystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
   return;
@@ -1001,7 +1024,10 @@ statSystemCall::statSystemCall(long syscallNumber, string syscallName):
 }
 
 bool statSystemCall::handleDetPre(state &s, ptracer &t){
-  s.log.writeToLog(Importance::info, "stat: path=" + t.readTraceeCString((const char*)t.arg1(), t.getPid()));
+  string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
+  string msg = "stat-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
+  s.log.writeToLog(Importance::info, msg);
+
   return true;
 }
 

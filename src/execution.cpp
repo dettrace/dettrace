@@ -5,11 +5,8 @@
 #include "dettraceSystemCall.hpp"
 #include "util.hpp"
 #include "state.hpp"
-#include <sys/ptrace.h>
 #include "ptracer.hpp"
 #include "execution.hpp"
-
-
 
 #include <stack>
 // =======================================================================================
@@ -410,6 +407,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<set_tid_addressSystemCall>(syscallNumber, syscallName);
     case SYS_sigaltstack:
       return make_unique<sigaltstackSystemCall>(syscallNumber, syscallName);
+    case SYS_rt_sigreturn:
+      return make_unique<rt_sigreturnSystemCall>(syscallNumber, syscallName);
     case SYS_socket:
       return make_unique<socketSystemCall>(syscallNumber, syscallName);
     case SYS_statfs:
@@ -492,11 +491,9 @@ ptraceEvent execution::getNextEvent(pid_t currentPid, pid_t& traceesPid, int& st
     return ptraceEvent::fork;
   }
 
-  #ifdef PTRACE_EVENT_STOP
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_STOP) ){
     throw runtime_error("Ptrace event stop.\n");
   }
-  #endif
 
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_EXIT) ){
     throw runtime_error("Ptrace event exit.\n");
