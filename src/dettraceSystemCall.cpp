@@ -1387,15 +1387,12 @@ void handleStatFamily(state& s, ptracer& t, string syscallName){
     myStat.st_dev = 1;         /* ID of device containing file */
 
     // inode virtualization
-    ino_t realInodeNum = myStat.st_ino;
-    if (1 == t.real2VirtualMap.count(realInodeNum)) {
-      myStat.st_ino = t.real2VirtualMap.at(realInodeNum);
-    } else { // add a new virtual inode
-      ino_t virtInodeNum = t.real2VirtualMap.size();
-      t.real2VirtualMap[realInodeNum] = virtInodeNum;
-      myStat.st_ino = virtInodeNum;
+    const ino_t realInodeNum = myStat.st_ino;
+    if (!s.inodeMap.realValueExists(realInodeNum)) {
+      s.inodeMap.addRealValue(realInodeNum);
     }
-    
+    myStat.st_ino = s.inodeMap.getVirtualValue(realInodeNum);
+
     // st_mode holds the permissions to the file. If we zero it out libc functions
     // will think we don't have access to this file. Hence we keep our permissions
     // as part of the stat.
@@ -1416,9 +1413,9 @@ void handleStatFamily(state& s, ptracer& t, string syscallName){
     
     // Write back result for child.
     ptracer::writeToTracee(statPtr, myStat, s.traceePid);
-  }else{
+  } else {
     s.log.writeToLog(Importance::info, "Negative number returned from "
-		     + syscallName + "call\n");
+		     + syscallName + "call: " + to_string(t.getReturnValue()) + "\n");
   }
   return;
 }
