@@ -35,11 +35,11 @@ public:
   }
 
   /**
-   * Given a value, add it to our mapping tables and map it to a fresh new virtual value.
+   * Given a real value, add it to our mapping tables and map it to a fresh new virtual value.
    * @param realValue: realValue to add. Assumed to be unique.
    * @return virtualValue: a fresh new virtual value.
    */
-  T addEntryValue(T realValue) {
+  T addRealValue(T realValue) {
     myLogger.writeToLog(Importance::info, "%s: Added mapping %d -> %d\n",  mappingName.c_str(),
                         realValue, freshValue);
     
@@ -86,21 +86,21 @@ public:
   }
 
   /**
-   * Check if key is already in map for real values.
+   * Check if real value is already in map for real values.
    * @realValue: real value to check for.
-   * @return bool: true if key already exists in @realToVirtualValue.
+   * @return bool: true if real value already exists in @realToVirtualValue.
    */
-  bool realKeyExists(T realValue) {
+  bool realValueExists(T realValue) {
     bool keyExists = realToVirtualValue.find(realValue) != realToVirtualValue.end();
     return keyExists;
   }
   
   /**
-   * Check if key is already in map for virtual values.
+   * Check if virtual value is already in map for virtual values.
    * @realValue: virtual value to check for.
-   * @return bool: true if key already exists in @virtualToRealValue.
+   * @return bool: true if virtual value already exists in @virtualToRealValue.
    */
-  bool virtualKeyExists(T virtualValue) {
+  bool virtualValueExists(T virtualValue) {
     bool keyExists = virtualToRealValue.find(virtualValue) != virtualToRealValue.end();
     return keyExists;
   }
