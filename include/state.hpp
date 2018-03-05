@@ -49,7 +49,7 @@ public:
   /*
    * Isomorphism between inodes and vitual inodes.
    */
-  valueMapper inodeMap;
+  ValueMapper<ino_t> inodeMap;
   logger log;
 
   bool doSystemcall;
