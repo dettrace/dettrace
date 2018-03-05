@@ -2,7 +2,6 @@
 #define EXECUTION_H
 
 #include "logger.hpp"
-#include "valueMapper.hpp"
 #include "systemCallList.hpp"
 #include "systemCall.hpp"
 #include "dettraceSystemCall.hpp"
