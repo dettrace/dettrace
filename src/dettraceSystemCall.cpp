@@ -39,6 +39,20 @@ void accessSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
+alarmSystemCall::alarmSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool alarmSystemCall::handleDetPre(state &s, ptracer &t){
+  throw runtime_error("Unsupported system call: alarm()\n");
+  return true;
+}
+
+void alarmSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
 arch_prctlSystemCall::arch_prctlSystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
   return;
@@ -1407,6 +1421,8 @@ void handleStatFamily(state& s, ptracer& t, string syscallName){
     // myStat.st_size = 512;        /* Total size, in bytes */
     
     myStat.st_blksize = 512;     /* Block size for filesystem I/O */
+
+    // TODO: could return actual value here?
     myStat.st_blocks = 1;      /* Number of 512B blocks allocated */
     
     s.incrementTime();

@@ -34,6 +34,19 @@ public:
 };
 // =======================================================================================
 /**
+ * alarm() arranges for a SIGALRM signal to be delivered to the calling
+ * process in seconds seconds.
+ *
+ * unsigned int alarm(unsigned int seconds);
+ */
+class alarmSystemCall : public systemCall{
+public:
+  alarmSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
  * arch_prctl()
  * set architecture-specific process or thread state. code selects a subfunction and passes
  * argument addr to it; addr is interpreted  as  either an  unsigned  long  for the "set"

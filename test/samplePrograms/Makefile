@@ -7,6 +7,7 @@ test:
 	./nestedFork
 	./simpleFork
 	./vfork
+	./alarm
 
 $(OBJECTS):%:%.c
 	gcc $< -Wall -g -o $@
