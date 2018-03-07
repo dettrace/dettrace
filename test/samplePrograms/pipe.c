@@ -29,7 +29,7 @@ int main(void) {
     return 1;
   }
   
-  if (childpid == 0) { // parent side: write random bytes to pipe
+  if (childpid == 0) { // child: write random bytes to pipe
     // close the read end
     rv = close(fd[0]);
     assert(0 == rv);
@@ -57,7 +57,7 @@ int main(void) {
 
     return 0;
     
-  } else { // child side: read from pipe
+  } else { // parent: read from pipe
     // close the write end
     rv = close(fd[1]);
     assert(0 == rv);
