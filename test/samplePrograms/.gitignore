@@ -1,7 +1,10 @@
+alarm
 clock_gettime
 getpid
 inverseFork
 nestedFork
+pipe
+pipe-multiwrite
 simpleFork
 uname
 vfork
