@@ -1,4 +1,4 @@
-OBJECTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname alarm
+OBJECTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname alarm pipe
 
 all: $(OBJECTS)
 
@@ -8,6 +8,7 @@ test:
 	./simpleFork
 	./vfork
 	./alarm
+	./pipe
 
 $(OBJECTS):%:%.c
 	gcc $< -Wall -g -o $@
