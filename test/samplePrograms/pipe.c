@@ -1,4 +1,3 @@
-#include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -27,7 +26,7 @@ int main(void) {
   
   if ((childpid = fork()) == -1) {
     perror("fork");
-    exit(1);
+    return 1;
   }
   
   if (childpid == 0) { // parent side: write random bytes to pipe
@@ -50,13 +49,13 @@ int main(void) {
       rv = write(fd[1], &lfsr, sizeof(lfsr));
       assert(-1 != rv);
 
-      bytesWritten += 2;
+      bytesWritten += rv;
     } while (bytesWritten < BYTES_TO_SEND);
 
     rv = close(fd[1]);
     assert(0 == rv);
 
-    exit(0);
+    return 0;
     
   } else { // child side: read from pipe
     // close the write end
