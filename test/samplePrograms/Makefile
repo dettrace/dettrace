@@ -1,4 +1,4 @@
-OBJECTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname alarm pipe pipe-multiwrite pipe-multiread
+OBJECTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname alarm pipe pipe-multiwrite
 
 all: $(OBJECTS)
 
@@ -9,7 +9,6 @@ test:
 	./vfork
 	./alarm
 	./pipe
-	./pipe-multiread
 	./pipe-multiwrite
 
 $(OBJECTS):%:%.c
