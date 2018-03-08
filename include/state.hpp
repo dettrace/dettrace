@@ -67,7 +67,7 @@ public:
 /*
  * Insn pointer from predet
  */
-  uint64_t preIp = 0;
+  //uint64_t preIp = 0;
 
   /*
    * We need to know what system call was/is that we are not. This is important in

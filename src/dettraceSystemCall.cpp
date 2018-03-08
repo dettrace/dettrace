@@ -882,7 +882,7 @@ readSystemCall::readSystemCall(long syscallNumber, string syscallName):
 }
 
 bool readSystemCall::handleDetPre(state &s, ptracer &t){
-  s.preIp = t.regs.rip;
+  //s.preIp = t.regs.rip;
   return true;
 }
 
@@ -893,11 +893,15 @@ void readSystemCall::handleDetPost(state &s, ptracer &t){
   }
   ssize_t bytes_read = t.getReturnValue();
   ssize_t bytes_requested = t.arg3();
+ 
+  //t.regs.rax = this.systemcallNumber; 
   if (bytes_read != bytes_requested && bytes_read != 0) {
     t.writeArg2(t.arg2() + bytes_read);
     t.writeArg3(t.arg3() - bytes_read);
-    t.writeIp(s.preIp);
-    s.preIp = 0;
+    t.writeIp(t.regs.rip - 2);
+    t.regs.rax = syscallNumber;
+    //t.writeIp(s.preIp);
+    //s.preIp = 0;
   }
   return;
 }
