@@ -106,7 +106,7 @@ public:
 // =======================================================================================
 /**
 *
-* int clock_gettime(clockid_t clk_id, struct timespec *tp); 
+* int clock_gettime(clockid_t clk_id, struct timespec *tp);
 *
 */
 class clock_gettimeSystemCall : public systemCall{
@@ -153,8 +153,8 @@ public:
  *
  * int connect(int sockfd, const struct sockaddr *addr, socklen_t
  * addrlen);
- *  
- *  The connect() system call connects the socket referred to by the file descriptor sockfd to the address specified by addr. 
+ *
+ *  The connect() system call connects the socket referred to by the file descriptor sockfd to the address specified by addr.
  *  The addrlen argument specifies the size of addr. The format of the address in addr is determined by the address space of the socket sockfd.
  *
  */
@@ -454,9 +454,7 @@ public:
  *
  * Returns the pid of the calling process.
  *
- * Obviously nondeterministic. We instead keep a map of real pids to virtual pid mappings.
- * The running process only gets to observe virtual pids, but all system calls that
- * require pids, use real pids by mapping back.
+ * This is now deterministic thanks to our use of process namespaces! For free.
  */
 class getpidSystemCall : public systemCall{
 public:
@@ -470,16 +468,26 @@ public:
  *
  * Returns the pid of the calling process.
  *
- * Obviously nondeterministic. We instead keep a map of real pids to virtual pid mappings.
- * The running process only gets to observe virtual pids, but all system calls that
- * require pids, use real pids by mapping back.
- * TODO: ppid has interesting semantics where the return value actually depends on whether
- * the parent process has terminated or not. We will probably ignore this and always return
- * the original parent's pid.
+ * This is now deterministic thanks to our use of process namespaces! For free.
  */
 class getppidSystemCall : public systemCall{
 public:
   getppidSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
+ * ssize_t getrandom(void *buf, size_t buflen, unsigned int flags);
+ *
+ *
+ * Nondeterministi. We fill the buffer with n deterministic bytes for the user :)
+ *
+ */
+class getrandomSystemCall : public systemCall{
+public:
+  getrandomSystemCall(long syscallName, string syscallNumber);
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
@@ -492,12 +500,12 @@ public:
  *                      limit, as defined by the rlimit structure.
  *
  *
- *                                 
- *        int getrlimit(int resource, struct rlimit *rlim);                        
- *             
- *	                  
  *
- */ 
+ *        int getrlimit(int resource, struct rlimit *rlim);
+ *
+ *
+ *
+ */
 class getrlimitSystemCall : public systemCall{
 public:
   getrlimitSystemCall(long syscallName, string syscallNumber);
@@ -905,7 +913,7 @@ public:
  * ssize_t readv(int fd, const struct iovec *iov, int iovcnt);
  *
  * read or write data into multiple buffers
- * 
+ *
  *
  */
 class readvSystemCall : public systemCall{
@@ -917,7 +925,7 @@ public:
 // =======================================================================================
 /**
  * ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags);
- * 
+ *
  * recvmsg() call is used to receive messages from a socket and amy be used to receive
  * data on a socket whether or not it is connection-oriented.
  */
@@ -1104,7 +1112,7 @@ public:
 /**
  *
  * int socket(int domain, int type, int protocol);
- * 
+ *
  * socket() creates an endpoint for communication and returns a file
  * descriptor that refers to that endpoint.  The file descriptor
  * returned by a successful call will be the lowest-numbered file

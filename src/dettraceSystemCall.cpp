@@ -11,6 +11,7 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/sysinfo.h>
+#include <sys/uio.h>
 
 #include "dettraceSystemCall.hpp"
 #include "ptracer.hpp"
@@ -447,6 +448,45 @@ bool getppidSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void getppidSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+getrandomSystemCall::getrandomSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool getrandomSystemCall::handleDetPre(state &s, ptracer &t){
+  // TODO Ignore system call we don't actually care to do it!
+  return true;
+}
+
+void getrandomSystemCall::handleDetPost(state &s, ptracer &t){
+  // Fill buffer with our own deterministic values.
+  char* buf = (char*) t.arg1();
+  size_t bufLength = (size_t) t.arg2();
+
+  const int flags = 0;
+  char constValues[bufLength];
+  for(size_t i = 0; i < bufLength; i++){
+    constValues[i] = i;
+  }
+
+  // Ptrace write is way too slow as it works at word granularity. Time to use
+  // process_vm_writev!
+  const iovec local = {constValues, // Starting address
+			bufLength,   // number of bytes to transfer.
+  };
+
+  const iovec traceeMem = {buf, // Starting address
+			   bufLength,   // number of bytes to transfer.
+  };
+
+  int ret = process_vm_writev(t.getPid(), &local, 1, &traceeMem, 1, flags);
+  if(ret == -1){
+    throw runtime_error("Clone system call failed:\n" + string { strerror(errno) });
+  }
+
   return;
 }
 // =======================================================================================

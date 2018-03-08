@@ -346,6 +346,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<getpidSystemCall>(syscallNumber, syscallName);
     case SYS_getppid:
       return make_unique<getppidSystemCall>(syscallNumber, syscallName);
+    case SYS_getrandom:
+	return make_unique<getrandomSystemCall>(syscallNumber, syscallName);
     case SYS_getrlimit:
       return make_unique<getrlimitSystemCall>(syscallNumber, syscallName);
     case SYS_getrusage:
