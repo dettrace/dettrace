@@ -1,4 +1,6 @@
-OBJECTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname alarm pipe pipe-multiwrite pipe-multiread
+OBJECTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname alarm pipe pipe-multiwrite getRandom callSshKeygen
+
+
 
 all: $(OBJECTS)
 
@@ -9,8 +11,9 @@ test:
 	./vfork
 	./alarm
 	./pipe
-	./pipe-multiread
 	./pipe-multiwrite
+	./getRandom
+	./callSshKeygen
 
 $(OBJECTS):%:%.c
 	gcc $< -Wall -g -o $@

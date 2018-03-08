@@ -11,6 +11,7 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/sysinfo.h>
+#include <sys/uio.h>
 
 #include "dettraceSystemCall.hpp"
 #include "ptracer.hpp"
@@ -20,104 +21,32 @@ using namespace std;
 // Prototypes for common functions.
 void zeroOutStatfs(struct statfs& stats);
 void handleStatFamily(state& s, ptracer& t, string syscallName);
-bool isPrefix(const string& data, const string& prefix);
-// =======================================================================================
-accessSystemCall::accessSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
 
+// =======================================================================================
 bool accessSystemCall::handleDetPre(state &s, ptracer &t){
   string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
-  string msg = "Access-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
+  string msg = "access-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
   s.log.writeToLog(Importance::info, msg);
 
-  return true;
-}
-
-void accessSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
+  return false;
 }
 // =======================================================================================
-alarmSystemCall::alarmSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool alarmSystemCall::handleDetPre(state &s, ptracer &t){
-  throw runtime_error("Unsupported system call: alarm()\n");
-  return true;
-}
-
-void alarmSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-arch_prctlSystemCall::arch_prctlSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool arch_prctlSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void arch_prctlSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-
-// =======================================================================================
-brkSystemCall::brkSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool brkSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void brkSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-chdirSystemCall::chdirSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
 bool chdirSystemCall::handleDetPre(state &s, ptracer &t){
   string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
-  string msg = "chdir-ing to path: " + logger::makeTextColored(Color::green, path) + "\n";
+  string msg = "chdir-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
   s.log.writeToLog(Importance::info, msg);
-  return true;
-}
 
-void chdirSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
+  return false;
 }
 // =======================================================================================
-chmodSystemCall::chmodSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
 bool chmodSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
+  string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
+  string msg = "chmod-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
+  s.log.writeToLog(Importance::info, msg);
 
-void chmodSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
+  return false;
 }
 // =======================================================================================
-clock_gettimeSystemCall::clock_gettimeSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool clock_gettimeSystemCall::handleDetPre(state &s, ptracer &t) {
-  return true;
-}
-
 void clock_gettimeSystemCall::handleDetPost(state &s, ptracer &t) {
   struct timespec* tp = (struct timespec*) t.arg2();
 
@@ -132,53 +61,7 @@ void clock_gettimeSystemCall::handleDetPost(state &s, ptracer &t) {
   return;
 }
 // =======================================================================================
-cloneSystemCall::cloneSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool cloneSystemCall::handleDetPre(state &s, ptracer &t){
-  // TODO: Figure out how to ignore threads, vforks, for now.
-  return true;
-}
-
-void cloneSystemCall::handleDetPost(state &s, ptracer &t){
-  // Non deterministic failure due to signal.
-  pid_t returnPid = t.getReturnValue();
-  if(returnPid == -1){
-      throw runtime_error("Clone system call failed:\n" + string { strerror(errno) });
-  }
-
-  // In older versions of ptrace, the tid value was cached to skip getpid calls. This
-  // is no longer done as it creates inconsistencies between process related system calls
-  // done through libc and those done directly. Long story short, nothing for us to do.
-
-  return;
-}
-// =======================================================================================
-closeSystemCall::closeSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool closeSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void closeSystemCall::handleDetPost(state &s, ptracer &t){
-  // Non deterministic failure due to signal.
-  if((int64_t) t.getReturnValue() == -1){
-      throw runtime_error("Close system call failed:\n" + string { strerror(errno) });
-  }
-
-  return;
-}
-// =======================================================================================
-connectSystemCall::connectSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
+// TODO
 bool connectSystemCall::handleDetPre(state &s, ptracer &t){
   return true;
 }
@@ -186,112 +69,29 @@ bool connectSystemCall::handleDetPre(state &s, ptracer &t){
 void connectSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
+
 // =======================================================================================
-dupSystemCall::dupSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool dupSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void dupSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-dup2SystemCall::dup2SystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool dup2SystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void dup2SystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-execveSystemCall::execveSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
 bool execveSystemCall::handleDetPre(state &s, ptracer &t){
   string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
   string msg = "execve-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
   s.log.writeToLog(Importance::info, msg);
 
-  return true;
-}
-
-void execveSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
+  return false;
 }
 // =======================================================================================
-exit_groupSystemCall::exit_groupSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool exit_groupSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void exit_groupSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-faccessatSystemCall::faccessatSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
 bool faccessatSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
+  string path = ptracer::readTraceeCString((const char*)t.arg2(), t.getPid());
+  string msg = "faccessat-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
+  s.log.writeToLog(Importance::info, msg);
 
-void faccessatSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
+  return false;
 }
 // =======================================================================================
-fcntlSystemCall::fcntlSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool fcntlSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void fcntlSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-fstatSystemCall::fstatSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool fstatSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
 void fstatSystemCall::handleDetPost(state &s, ptracer &t){
   handleStatFamily(s, t, "fstat");
   return;
 }
 // =======================================================================================
-fstatfsSystemCall::fstatfsSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool fstatfsSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
 void fstatfsSystemCall::handleDetPost(state &s, ptracer &t){
   struct statfs* statfsPtr = (struct statfs*) t.arg2();
 
@@ -309,18 +109,11 @@ void fstatfsSystemCall::handleDetPost(state &s, ptracer &t){
 
     // Write back result for child.
     ptracer::writeToTracee(statfsPtr, myStatfs, s.traceePid);
-  }else{
-    s.log.writeToLog(Importance::info, "Negative number returned from fstatfs call\n" );
   }
 
   return;
 }
 // =======================================================================================
-futexSystemCall::futexSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
 bool futexSystemCall::handleDetPre(state &s, ptracer &t){
   return true;
 }
@@ -329,25 +122,15 @@ void futexSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-getcwdSystemCall::getcwdSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
 bool getcwdSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
+  string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
+  string msg = "faccessat-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
+  s.log.writeToLog(Importance::info, msg);
 
-void getcwdSystemCall::handleDetPost(state &s, ptracer &t){
-  s.log.writeToLog(Importance::info, "getcwd: cwd=" + t.readTraceeCString((const char*)t.arg1(), t.getPid()));
-  return;
+  return false;
 }
 // =======================================================================================
-getdentsSystemCall::getdentsSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
+// TODO Virtualize inodes!
 bool getdentsSystemCall::handleDetPre(state &s, ptracer &t){
   return true;
 }
@@ -356,67 +139,6 @@ void getdentsSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-geteuidSystemCall::geteuidSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool geteuidSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void geteuidSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-getgidSystemCall::getgidSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool getgidSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void getgidSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-getegidSystemCall::getegidSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool getegidSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void getegidSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-getgroupsSystemCall::getgroupsSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool getgroupsSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void getgroupsSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-getpeernameSystemCall::getpeernameSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool getpeernameSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
 void getpeernameSystemCall::handleDetPost(state &s, ptracer &t){
   int ret = t.getReturnValue();
   if(ret == 0){
@@ -425,76 +147,48 @@ void getpeernameSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-getpgrpSystemCall::getpgrpSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
+void getrandomSystemCall::handleDetPost(state &s, ptracer &t){
+  // Fill buffer with our own deterministic values.
+  char* buf = (char*) t.arg1();
+  size_t bufLength = (size_t) t.arg2();
 
-bool getpgrpSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
+  const int flags = 0;
+  char constValues[bufLength];
+  for(size_t i = 0; i < bufLength; i++){
+    constValues[i] = i;
+  }
 
-void getpgrpSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-getpidSystemCall::getpidSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
+  // Ptrace write is way too slow as it works at word granularity. Time to use
+  // process_vm_writev!
+  const iovec local = {constValues, // Starting address
+			bufLength,   // number of bytes to transfer.
+  };
 
-bool getpidSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
+  const iovec traceeMem = {buf, // Starting address
+			   bufLength,   // number of bytes to transfer.
+  };
 
-void getpidSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-getppidSystemCall::getppidSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
+  int ret = process_vm_writev(t.getPid(), &local, 1, &traceeMem, 1, flags);
+  if(ret == -1){
+    throw runtime_error("process_vm_writev failed:\n" + string { strerror(errno) });
+  }
 
-bool getppidSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void getppidSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-getrlimitSystemCall::getrlimitSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool getrlimitSystemCall::handleDetPre(state& s, ptracer& t){
-  return true;
-}
-
 void getrlimitSystemCall::handleDetPost(state &s, ptracer &t){
   struct rlimit* rp = (struct rlimit*) t.arg2();
   if (rp != nullptr) {
     struct rlimit noLimits = {};
     noLimits.rlim_cur = RLIM_INFINITY;
     noLimits.rlim_max = RLIM_INFINITY;
-    
+
     ptracer::writeToTracee(rp, noLimits, t.getPid());
   }
 
   return;
 }
 // =======================================================================================
-getrusageSystemCall::getrusageSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool getrusageSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
 void getrusageSystemCall::handleDetPost(state &s, ptracer &t){
   struct rusage* usagePtr = (struct rusage*) t.arg2();
 
@@ -530,74 +224,19 @@ void getrusageSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-gettidSystemCall::gettidSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-bool gettidSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-void gettidSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-gettimeofdaySystemCall::gettimeofdaySystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-bool gettimeofdaySystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
 void gettimeofdaySystemCall::handleDetPost(state &s, ptracer &t){
   struct timeval* tp = (struct timeval*) t.arg1();
   if (nullptr != tp) {
     struct timeval myTv = {};
     myTv.tv_sec = s.getLogicalTime();
     myTv.tv_usec = 0;
-    
+
     ptracer::writeToTracee(tp, myTv, t.getPid());
     s.incrementTime();
   }
   return;
 }
 // =======================================================================================
-getuidSystemCall::getuidSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool getuidSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void getuidSystemCall::handleDetPost(state &s, ptracer &t){
-  int nobodyUid = 65534;
-  t.setReturnRegister(nobodyUid);
-  return;
-}
-// =======================================================================================
-getxattrSystemCall::getxattrSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool getxattrSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void getxattrSystemCall::handleDetPost(state& s, ptracer &t){
-  return;
-}
-// =======================================================================================
-ioctlSystemCall::ioctlSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool ioctlSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
 void ioctlSystemCall::handleDetPost(state &s, ptracer &t){
   const uint64_t request = t.arg2();
   if (TCGETS == request ||
@@ -611,191 +250,30 @@ void ioctlSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-lgetxattrSystemCall::lgetxattrSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool lgetxattrSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void lgetxattrSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-munmapSystemCall::munmapSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool munmapSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void munmapSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-openSystemCall::openSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool openSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void openSystemCall::handleDetPost(state &s, ptracer &t){
-  // TODO: In the future I hope to replace these brittle path checks with some filesystem
-  // containerization support.
-  const char* pathnamePtr = (const char*)t.arg1();
-  string pathname = ptracer::readTraceeCString(pathnamePtr, t.getPid());
-
-  s.log.writeToLog(Importance::info, "Openat-ing path: " +
-		   logger::makeTextColored(Color::green, pathname) + "\n");
-
-  char linkArray[PATH_MAX];
-  // Assume symlink.
-  ssize_t ret = readlink(pathname.c_str(), linkArray, PATH_MAX);
-  // Null is not automatically placed.
-  linkArray[ret] = '\0';
-  const string zoneinfo { "/usr/share/zoneinfo/"};
-  string link { linkArray };
-
-  // Write our own string to bottom of stack.
-
-  // This is a symbolic link!
-  if(ret != -1){
-    if(isPrefix(link, zoneinfo)){
-      t.setReturnRegister(-1);
-    }
-  }
-
-  return;
-}
-// =======================================================================================
-pipeSystemCall::pipeSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool pipeSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void pipeSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-pselect6SystemCall::pselect6SystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool pselect6SystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void pselect6SystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-
-// =======================================================================================
-openatSystemCall::openatSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool openatSystemCall::handleDetPre(state &s, ptracer &t){
-  // TODO. The same work done in open should be done here!
-  const char* pathnamePtr = (const char*)t.arg2();
-
-  if(pathnamePtr != nullptr){
-    string pathname = ptracer::readTraceeCString(pathnamePtr, t.getPid());
-
-    s.log.writeToLog(Importance::info, "Openat-ing path: " +
-		     logger::makeTextColored(Color::green, pathname) + "\n");
-
-  }
-
-  return true;
-}
-
-void openatSystemCall::handleDetPost(state &s, ptracer &t){
-  // Deterministic file descriptors?
-  return;
-}
-// =======================================================================================
-mmapSystemCall::mmapSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool mmapSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void mmapSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-mprotectSystemCall::mprotectSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool mprotectSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void mprotectSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-nanosleepSystemCall::nanosleepSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
 
 bool nanosleepSystemCall::handleDetPre(state &s, ptracer &t){
   return true;
 }
 
 void nanosleepSystemCall::handleDetPost(state &s, ptracer &t){
-  // Check return value. We wish we could check for EINTR but we can't as I don't
-  // know a way to get errno from tracee. Instead we merely fail if nanosleep returns
-  // -1.
-  if(t.getReturnValue() == (u_int64_t)-1){
-    throw runtime_error("nanosleep returned with error.");
-  }
+  // TODO: Turn nano sleep into a no op.
 
   return;
 }
 // =======================================================================================
-lseekSystemCall::lseekSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool lseekSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void lseekSystemCall::handleDetPost(state &s, ptracer &t){
+void newfstatatSystemCall::handleDetPost(state &s, ptracer &t){
+  string path = ptracer::readTraceeCString((const char*)t.arg2(), t.getPid());
+  string msg = "newfstatat-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
+  s.log.writeToLog(Importance::info, msg);
+  handleStatFamily(s, t, "newfstatat");
   return;
 }
 // =======================================================================================
-lstatSystemCall::lstatSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
 bool lstatSystemCall::handleDetPre(state &s, ptracer &t){
   const char* filenameAddr = (const char*) t.arg1();
   string filename = ptracer::readTraceeCString(filenameAddr, s.traceePid);
   string coloredMsg = "lstat-ing path: " +
-    logger::makeTextColored(Color::green, filename);
+    logger::makeTextColored(Color::green, filename) + "\n";
   s.log.writeToLog(Importance::extra, coloredMsg);
 
   return true;
@@ -806,11 +284,48 @@ void lstatSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-pollSystemCall::pollSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
+bool openSystemCall::handleDetPre(state &s, ptracer &t){
+  const char* pathnamePtr = (const char*)t.arg1();
+  string pathname = ptracer::readTraceeCString(pathnamePtr, t.getPid());
+
+  s.log.writeToLog(Importance::info, "Openat-ing path: " +
+		   logger::makeTextColored(Color::green, pathname) + "\n");
+
+  return false;
+}
+// =======================================================================================
+bool openatSystemCall::handleDetPre(state &s, ptracer &t){
+  const char* pathnamePtr = (const char*)t.arg2();
+
+  if(pathnamePtr != nullptr){
+    string pathname = ptracer::readTraceeCString(pathnamePtr, t.getPid());
+
+    s.log.writeToLog(Importance::info, "Openat-ing path: " +
+		     logger::makeTextColored(Color::green, pathname) + "\n");
+
+  }
+
+  return false;
+}
+// =======================================================================================
+// TODO
+bool pipeSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
 }
 
+void pipeSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+bool pselect6SystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void pselect6SystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+// TODO
 bool pollSystemCall::handleDetPre(state &s, ptracer &t){
   return true;
 }
@@ -819,24 +334,6 @@ void pollSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-fadvise64SystemCall::fadvise64SystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool fadvise64SystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void fadvise64SystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-prlimit64SystemCall::prlimit64SystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
 // for reference, here's the prlimit() prototype
 // int prlimit(pid_t pid, int resource, const struct rlimit *new_limit, struct rlimit *old_limit);
 bool prlimit64SystemCall::handleDetPre(state &s, ptracer &t){
@@ -876,11 +373,6 @@ void prlimit64SystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-readSystemCall::readSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
 bool readSystemCall::handleDetPre(state &s, ptracer &t){
   //s.preIp = t.regs.rip;
   return true;
@@ -888,43 +380,42 @@ bool readSystemCall::handleDetPre(state &s, ptracer &t){
 
 void readSystemCall::handleDetPost(state &s, ptracer &t){
   // TODO:
-  if (t.getReturnValue() == (uint64_t) -1) {
-    throw runtime_error("read returned -1 with some error");
+  int retVal = t.getReturnValue();
+  if(retVal < 0) {
+    throw runtime_error("Read failed with: " + string{ strerror(- retVal) });
   }
-  ssize_t bytes_read = t.getReturnValue();
+  
+  uint16_t minus2 = t.readFromTracee((uint16_t*) (t.regs.rip - 2), s.traceePid);
+  if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
+    throw runtime_error("Read failed with: non syscall insn");
+  } 
+  ssize_t bytes_read = retVal;
   ssize_t bytes_requested = t.arg3();
- 
-  //t.regs.rax = this.systemcallNumber; 
-  if (bytes_read != bytes_requested && bytes_read != 0) {
+  
+  if (s.firstTryReadWrite) {
+    s.firstTryReadWrite = false;
+    s.preArg1 = t.regs.rdi;
+    s.preArg3 = t.regs.rdx;
+  } 
+
+  //if (bytes_read != bytes_requested && bytes_read != 0) {
+  if (s.totalBytes != s.preArg3) {
+    s.totalBytes = s.totalBytes + bytes_read;
     t.writeArg2(t.arg2() + bytes_read);
     t.writeArg3(t.arg3() - bytes_read);
-    t.writeIp(t.regs.rip - 2);
-    t.regs.rax = syscallNumber;
-    //t.writeIp(s.preIp);
-    //s.preIp = 0;
+    t.regs.rax = t.getSystemCallNumber();
+    t.writeIp(s.preIp);
+    s.preIp = 0;
+  }
+  else {
+    s.firstTryReadWrite = true;
+    s.totalBytes = 0;
+    t.writeArg1(s.preArg1);
+    t.writeArg3(s.preArg3);
   }
   return;
 }
 // =======================================================================================
-readlinkSystemCall::readlinkSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool readlinkSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void readlinkSystemCall::handleDetPost(state &s, ptracer &t){
-  // Nothing for now.
-  return;
-}
-// ========================================================================================
-readvSystemCall::readvSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
 bool readvSystemCall::handleDetPre(state &s, ptracer &t){
   return true;
 }
@@ -932,53 +423,25 @@ bool readvSystemCall::handleDetPre(state &s, ptracer &t){
 void readvSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
-// ========================================================================================
-recvmsgSystemCall::recvmsgSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
+// =======================================================================================
+bool readlinkSystemCall::handleDetPre(state &s, ptracer &t){
+  string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
+  string msg = "readlink-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
+  s.log.writeToLog(Importance::info, msg);
 
+  return false;
+}
+// =======================================================================================
 bool recvmsgSystemCall::handleDetPre(state &s, ptracer &t){
   return true;
 }
 
 void recvmsgSystemCall::handleDetPost(state &s, ptracer &t){
- return;
+  return;
 }
+
 // =======================================================================================
-rt_sigprocmaskSystemCall::rt_sigprocmaskSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool rt_sigprocmaskSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void rt_sigprocmaskSystemCall::handleDetPost(state &s, ptracer &t){
-
-  return;
-}
-// =======================================================================================
-rt_sigactionSystemCall::rt_sigactionSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool rt_sigactionSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void rt_sigactionSystemCall::handleDetPost(state &s, ptracer &t){
-
-  return;
-}
-// =======================================================================================
-sendtoSystemCall::sendtoSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
+// TODO
 bool sendtoSystemCall::handleDetPre(state &s, ptracer &t){
   return true;
 }
@@ -987,11 +450,6 @@ void sendtoSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-selectSystemCall::selectSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
 bool selectSystemCall::handleDetPre(state &s, ptracer &t){
   return true;
 }
@@ -1000,24 +458,7 @@ void selectSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-
-setpgidSystemCall::setpgidSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool setpgidSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void setpgidSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-set_robust_listSystemCall::set_robust_listSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
+// TODO
 
 bool set_robust_listSystemCall::handleDetPre(state &s, ptracer &t){
   return true;
@@ -1026,65 +467,7 @@ bool set_robust_listSystemCall::handleDetPre(state &s, ptracer &t){
 void set_robust_listSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
-
 // =======================================================================================
-set_tid_addressSystemCall::set_tid_addressSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool set_tid_addressSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void set_tid_addressSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-sigaltstackSystemCall::sigaltstackSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool sigaltstackSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void sigaltstackSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-rt_sigreturnSystemCall::rt_sigreturnSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool rt_sigreturnSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void rt_sigreturnSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-socketSystemCall::socketSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool socketSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void socketSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-statSystemCall::statSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
 bool statSystemCall::handleDetPre(state &s, ptracer &t){
   string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
   string msg = "stat-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
@@ -1098,15 +481,6 @@ void statSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-statfsSystemCall::statfsSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool statfsSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
 void statfsSystemCall::handleDetPost(state &s, ptracer &t){
   struct statfs* statfsPtr = (struct statfs*) t.arg2();
   if(statfsPtr == nullptr){
@@ -1129,17 +503,7 @@ void statfsSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-sysinfoSystemCall::sysinfoSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool sysinfoSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
 void sysinfoSystemCall::handleDetPost(state &s, ptracer &t){
-  // TODO. Mask out the stuff we don't want the user to see.
   struct sysinfo* infoPtr = (struct sysinfo *) t.arg1();
   if(infoPtr == nullptr){
     return;
@@ -1166,11 +530,6 @@ void sysinfoSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-tgkillSystemCall::tgkillSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
 bool tgkillSystemCall::handleDetPre(state &s, ptracer &t){
   return true;
 }
@@ -1179,19 +538,11 @@ void tgkillSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-timeSystemCall::timeSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool timeSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
 void timeSystemCall::handleDetPost(state &s, ptracer &t){
-  time_t retval = (time_t) t.getReturnValue();
-  if(retval == -1){
-    s.log.writeToLog(Importance::info, "time: sycall returned -1");
+  int retVal = (int) t.getReturnValue();
+  if(retVal < 0){
+    s.log.writeToLog(Importance::info,
+		     "Time call failed: \n" + string { strerror(- retVal)});
     return;
   }
 
@@ -1207,28 +558,6 @@ void timeSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-umaskSystemCall::umaskSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool umaskSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void umaskSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-unameSystemCall::unameSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool unameSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
 void unameSystemCall::handleDetPost(state &s, ptracer &t){
   // Populate the utsname struct with our own generic data.
   struct utsname* utsnamePtr = (struct utsname*) t.arg1();
@@ -1259,24 +588,22 @@ void unameSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-unlinkSystemCall::unlinkSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
+bool unlinkSystemCall::handleDetPre(state &s, ptracer &t){
+  string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
+  string msg = "unlink-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
+  s.log.writeToLog(Importance::info, msg);
+  return false;
 }
 
-bool unlinkSystemCall::handleDetPre(state &s, ptracer &t){
+// =======================================================================================
+bool unlinkatSystemCall::handleDetPre(state &s, ptracer &t){
+  string path = ptracer::readTraceeCString((const char*)t.arg2(), t.getPid());
+  string msg = "unlinkat-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
+  s.log.writeToLog(Importance::info, msg);
   return true;
 }
 
-void unlinkSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
 // =======================================================================================
-utimensatSystemCall::utimensatSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
 bool utimensatSystemCall::handleDetPre(state &s, ptracer &t){
   // int utimensat(int dirfd, const char *pathname,
   //               const struct timespec times[2], int flags);
@@ -1306,45 +633,9 @@ bool utimensatSystemCall::handleDetPre(state &s, ptracer &t){
   // Point system call to new address.
   t.writeArg3((uint64_t) ourTimespec);
   s.incrementTime();
-  return true;
-}
-
-void utimensatSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
+  return false;
 }
 // =======================================================================================
-vforkSystemCall::vforkSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool vforkSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void vforkSystemCall::handleDetPost(state &s, ptracer &t){
-  // The ptrace option for fork handles most of the logic for forking.
-  return;
-}
-// =======================================================================================
-wait4SystemCall::wait4SystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool wait4SystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void wait4SystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-writeSystemCall::writeSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
 bool writeSystemCall::handleDetPre(state &s, ptracer &t){
   return true;
 }
@@ -1354,16 +645,12 @@ void writeSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-writevSystemCall::writevSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
 bool writevSystemCall::handleDetPre(state &s, ptracer &t){
   return true;
 }
 
 void writevSystemCall::handleDetPost(state &s, ptracer &t){
+  // TODO: Handle bytes written.
   return;
 }
 // =======================================================================================
@@ -1385,23 +672,30 @@ void zeroOutStatfs(struct statfs& stats){
 }
 // =======================================================================================
 void handleStatFamily(state& s, ptracer& t, string syscallName){
-  struct stat* statPtr = (struct stat*) t.arg2();
+  struct stat* statPtr;
+
+  if(syscallName == "newfstatat"){
+    statPtr = (struct stat*) t.arg3();
+  }else{
+    statPtr = (struct stat*) t.arg2();
+  }
 
   if(statPtr == nullptr){
     s.log.writeToLog(Importance::info, syscallName + ": statbuf null.\n");
     return;
   }
 
-  if(t.getReturnValue() == 0){
+  int retVal = t.getReturnValue();
+  if(retVal == 0){
     struct stat myStat = ptracer::readFromTracee(statPtr, s.traceePid);
 
-    myStat.st_atim = timespec { .tv_sec =  s.getLogicalTime(),
-                                .tv_nsec = s.getLogicalTime() };  /* user CPU time used */
-    myStat.st_mtim = timespec { .tv_sec =  s.getLogicalTime(),
-                                .tv_nsec = s.getLogicalTime() };
-    myStat.st_ctim = timespec { .tv_sec = s.getLogicalTime(),
-                                .tv_nsec = s.getLogicalTime() };  /* user CPU time used */
-    
+    myStat.st_atim = timespec { .tv_sec =  0,
+                                .tv_nsec = 0 };  /* user CPU time used */
+    myStat.st_mtim = timespec { .tv_sec =  0,
+				.tv_nsec = 0 };
+    myStat.st_ctim = timespec { .tv_sec = 0,
+                                .tv_nsec = 0 };  /* user CPU time used */
+
     myStat.st_dev = 1;         /* ID of device containing file */
 
     // inode virtualization
@@ -1415,34 +709,27 @@ void handleStatFamily(state& s, ptracer& t, string syscallName){
     // will think we don't have access to this file. Hence we keep our permissions
     // as part of the stat.
     // mode_t    st_mode;        /* File type and mode */
-    
+
     myStat.st_nlink = 1;       /* Number of hard links */
     myStat.st_uid = 65534;         /* User ID of owner */
     myStat.st_gid = 1;         /* Group ID of owner */
     myStat.st_rdev = 1;        /* Device ID (if special file) */
-    
+
     // Program will stall if we put some arbitrary value here: TODO.
     // myStat.st_size = 512;        /* Total size, in bytes */
-    
+
     myStat.st_blksize = 512;     /* Block size for filesystem I/O */
 
     // TODO: could return actual value here?
     myStat.st_blocks = 1;      /* Number of 512B blocks allocated */
-    
-    s.incrementTime();
-    
+
+    // s.incrementTime();
+
     // Write back result for child.
     ptracer::writeToTracee(statPtr, myStat, s.traceePid);
   } else {
-    s.log.writeToLog(Importance::info, "Negative number returned from "
-		     + syscallName + "call: " + to_string(t.getReturnValue()) + "\n");
+    s.log.writeToLog(Importance::info, "Error in "
+		     + syscallName + ":\n" + string { strerror(- retVal)} + "\n");
   }
   return;
 }
-// =======================================================================================
-bool isPrefix(const string& data, const string& prefix){
-    auto mismatch = std::mismatch(data.begin(),   data.end(),
-                                  prefix.begin(), prefix.end()).second;
-    return mismatch == prefix.end();
-}
-// =======================================================================================

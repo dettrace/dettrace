@@ -1,3 +1,4 @@
+#include<linux/version.h>
 #include "logger.hpp"
 #include "systemCallList.hpp"
 #include "systemCall.hpp"
@@ -18,15 +19,14 @@ execution::execution(int debugLevel, pid_t startingPid):
     // Set state for first process.
     states.emplace(startingPid, state {log, startingPid});
 
-    // First process is special and we must set
-    // the options ourselves. Thereafter, ptracer::setOptions will handle this for new
-    // processes.
+    // First process is special and we must set the options ourselves.
+    // This is done everytime a new process is spawned.
     ptracer::setOptions(startingPid);
   }
 // =======================================================================================
 void execution::handleExit(){
   if(processHier.empty()){
-    // We're done. Exit
+    // All processes have finished!
     exitLoop = true;
     return;
   }
@@ -40,14 +40,12 @@ void execution::handleExit(){
   return;
 }
 // =======================================================================================
-void execution::handlePreSystemCall(state& currState){
-  currState.syscallStopState = syscallState::post;
-
+bool execution::handlePreSystemCall(state& currState){
   int syscallNum = tracer.getSystemCallNumber();
   currState.systemcall = getSystemCall(syscallNum, systemCallMappings[syscallNum]);
 
   // No idea what this system call is! error out.
-  if(syscallNum > 0 && syscallNum > SYSTEM_CALL_COUNT){
+  if(syscallNum < 0 || syscallNum > SYSTEM_CALL_COUNT){
     throw runtime_error("Unkown system call number: " + to_string(syscallNum));
   }
 
@@ -57,24 +55,49 @@ void execution::handlePreSystemCall(state& currState){
   log.writeToLog(Importance::inter,"[Time %d][Pid %d] Intercepted %s (#%d)\n",
 		 currState.getLogicalTime(), traceesPid, redColoredSyscall.c_str(),
 		 syscallNum);
-
   log.setPadding();
 
-  currState.doSystemcall = currState.systemcall->handleDetPre(currState, tracer);
+  bool callPostHook = currState.systemcall->handleDetPre(currState, tracer);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
+  // Next event will be a sytem call pre-exit event.
+  currState.isPreExit = true;
+#endif
 
+  // This is the easiest time to tell a fork even happened. It's not trivial
+  // to check the event as we might get a signal first from the child process.
+  // See:
+  // https://stackoverflow.com/questions/29997244/
+  // occasionally-missing-ptrace-event-vfork-when-running-ptrace
   if(systemCall == "fork" || systemCall == "vfork" || systemCall == "clone"){
     int status;
+    ptraceEvent e;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
+    // fork/vfork/clone pre system call.
+    e = getNextEvent(traceesPid, traceesPid, status, true);
+    // That was the pre-exit event, make sure we set isPreExit to false.
+    currState.isPreExit = false;
+#endif
     // This event is known to be either a fork/vfork event or a signal.
-    ptraceEvent e = getNextEvent(traceesPid, traceesPid, status);
+    e = getNextEvent(traceesPid, traceesPid, status, false);
     handleFork(e);
+
+    // This was a fork, vfork, or clone. No need to go into the post-interception hook.
+    return false;
   }
-  return;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
+  // This is the seccomp event where we do the work for the pre-system call hook.
+  // In older versions of seccomp, we must also do the pre-exit ptrace event, as we
+  // have to. This is dictated by this variable.
+  return true;
+#else
+  return callPostHook;
+#endif
 }
 // =======================================================================================
 void execution::handlePostSystemCall(state& currState){
-  currState.syscallStopState = syscallState::pre;
-
-  log.writeToLog(Importance::info,"%s value before post-interception: %d\n",
+  log.writeToLog(Importance::info,"%s value before post-hook: %d\n",
 		 currState.systemcall->syscallName.c_str(),
 		 tracer.getReturnValue());
 
@@ -89,42 +112,44 @@ void execution::handlePostSystemCall(state& currState){
   return;
 }
 // =======================================================================================
-void execution::handleSystemCall(){
-  state& currState = states.at(traceesPid);
-  // Update register information. TODO: Right now we update this information on every
-  // exit and entrance, as an optimization we might not want to...
-
-  // This is necessary for all "pre system calls" to get the correct sys call number.
-  tracer.updateState(traceesPid);
-
-
-  if(currState.syscallStopState == syscallState::pre){
-    handlePreSystemCall(currState);
-  }else{
-    handlePostSystemCall(currState);
-  }
-
-  return;
-}
-// =======================================================================================
 void execution::runProgram(){
+  // When using seccomp, we usually run with PTRACE_CONT. The issue is that seccomp only
+  // reports pre hook events. To get post hook events we must call ptrace with
+  // PTRACE_SYSCALL intead. This happens in @getNextEvent.
+  bool callPostHook = false;
+
   // Iterate over entire process' and all subprocess' execution.
   while(! exitLoop){
     int status;
-    ptraceEvent ret = getNextEvent(nextPid, traceesPid, status);
+    ptraceEvent ret = getNextEvent(nextPid, traceesPid, status, callPostHook);
     nextPid = traceesPid;
 
-    // We have never seen this pid before. Add it to our table of states.
-    // This might happen even before we get a fork event, as we might get a signal
-    // from the child telling us that it has been stopped. These two events are
-    // non deterministic.
-    if(states.count(traceesPid) == 0){
-      log.writeToLog(Importance::info,
-		     logger::makeTextColored(Color::blue, "Setting options for: %d\n"),
-		     nextPid);
-      // First time seeing this process set ptrace options.
-      ptracer::setOptions(traceesPid);
-      // DO NOT CONTINUE! Fall down to the correct case.
+    // Most common event. Basically, only system calls that must be determinized
+    // come here, we run the pre-systemCall hook.
+    if(ret == ptraceEvent::seccomp){
+      callPostHook = handleSeccomp();
+      continue;
+    }
+
+    // We still need this case even though we use seccomp + bpf. Since we do post-hook
+    // interception of system calls through PTRACE_SYSCALL. Only post system call
+    // events come here.
+    if(ret == ptraceEvent::syscall){
+      #if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
+      state& currentState = states.at(traceesPid);
+      // Skip pre exit calls nothing for us to do. We did the work during handleSeccomp()
+      // on the seccomp event.
+      if(currentState.isPreExit){
+	callPostHook = true;
+	currentState.isPreExit = false;
+	continue;
+      }
+      #endif
+      tracer.updateState(traceesPid);
+      handlePostSystemCall( states.at(traceesPid) );
+      // Nope, we're done with the current system call. Wait for next seccomp event.
+      callPostHook = false;
+      continue;
     }
 
     // Current process was ended by signal.
@@ -136,17 +161,12 @@ void execution::runProgram(){
       continue;
     }
 
-    // Current process is ended.
+    // Current process is done.
     if(ret == ptraceEvent::exit){
       log.writeToLog(Importance::inter,
 		     logger::makeTextColored(Color::blue, "Process [%d] has finished.\n"),
 		     traceesPid);
       handleExit();
-      continue;
-    }
-
-    if(ret == ptraceEvent::syscall){
-      handleSystemCall();
       continue;
     }
 
@@ -178,13 +198,14 @@ void execution::runProgram(){
     }
 
     throw runtime_error(to_string(traceesPid) +
-			"Uknown return value for ptracer::getNextEvent()\n");
+			" Uknown return value for ptracer::getNextEvent()\n");
   }
 }
 // =======================================================================================
 void execution::handleFork(ptraceEvent event){
   pid_t newChildPid;
 
+  // Notice in both cases, we catch one of the two events and ignore the other.
   if(event == ptraceEvent::fork || event == ptraceEvent::vfork){
     // Fork event came first.
     newChildPid = handleForkEvent();
@@ -272,9 +293,32 @@ void execution::handleExecve(){
   // Nothing to do for now... New process is already automatically ptraced by
   // our tracer.
   log.writeToLog(Importance::inter,
-		 logger::makeTextColored(Color::blue, "[%d] Caught execve!\n"),
+		 logger::makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
 		 traceesPid);
   return;
+}
+// =======================================================================================
+bool execution::handleSeccomp(){
+  // Fetch system call provided to us via seccomp.
+  uint16_t syscallNum;
+  ptracer::doPtrace(PTRACE_GETEVENTMSG, traceesPid, nullptr, &syscallNum);
+
+  // INT16_MAX is sent by seccomp by convention as for system calls with no
+  // rules.
+  if(syscallNum == INT16_MAX){
+    // Fetch real system call from register.
+    tracer.updateState(traceesPid);
+    syscallNum = tracer.getSystemCallNumber();
+    throw runtime_error("No filter rule for system call: " +
+			systemCallMappings[syscallNum]);
+  }
+
+  // TODO: Right now we update this information on every exit and entrance, as a
+  // small optimization we might not want to...
+
+  // Get registers from tracee.
+  tracer.updateState(traceesPid);
+  return handlePreSystemCall( states.at(traceesPid) );
 }
 // =======================================================================================
 void execution::handleSignal(int sigNum){
@@ -292,12 +336,6 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     switch(syscallNumber){
     case SYS_access:
       return make_unique<accessSystemCall>(syscallNumber, syscallName);
-    case SYS_alarm:
-      return make_unique<alarmSystemCall>(syscallNumber, syscallName);
-    case SYS_arch_prctl:
-      return make_unique<arch_prctlSystemCall>(syscallNumber, syscallName);
-    case SYS_brk:
-      return make_unique<brkSystemCall>(syscallNumber, syscallName);
     case SYS_chdir:
       return make_unique<chdirSystemCall>(syscallNumber, syscallName);
     case SYS_chmod:
@@ -306,24 +344,14 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<clock_gettimeSystemCall>(syscallNumber, syscallName);
     case SYS_clone:
       return make_unique<cloneSystemCall>(syscallNumber, syscallName);
-    case SYS_close:
-      return make_unique<closeSystemCall>(syscallNumber, syscallName);
     case SYS_connect:
       return make_unique<connectSystemCall>(syscallNumber, syscallName);
-    case SYS_dup:
-      return make_unique<dupSystemCall>(syscallNumber, syscallName);
-    case SYS_dup2:
-      return make_unique<dup2SystemCall>(syscallNumber, syscallName);
     case SYS_execve:
       return make_unique<execveSystemCall>(syscallNumber, syscallName);
-    case SYS_exit_group:
-      return make_unique<exit_groupSystemCall>(syscallNumber, syscallName);
-    case SYS_faccessat:
-      return make_unique<faccessatSystemCall>(syscallNumber, syscallName);
-    case SYS_fcntl:
-      return make_unique<fcntlSystemCall>(syscallNumber, syscallName);
     case SYS_fstat:
       return make_unique<fstatSystemCall>(syscallNumber, syscallName);
+    case SYS_newfstatat:
+      return make_unique<newfstatatSystemCall>(syscallNumber, syscallName);
     case SYS_fstatfs:
       return make_unique<fstatfsSystemCall>(syscallNumber, syscallName);
     case SYS_futex:
@@ -332,48 +360,18 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<getcwdSystemCall>(syscallNumber, syscallName);
     case SYS_getdents:
       return make_unique<getdentsSystemCall>(syscallNumber, syscallName);
-    case SYS_geteuid:
-      return make_unique<geteuidSystemCall>(syscallNumber, syscallName);
-    case SYS_getgid:
-      return make_unique<getgidSystemCall>(syscallNumber, syscallName);
-    case SYS_getpgrp:
-      return make_unique<getpgrpSystemCall>(syscallNumber, syscallName);
-    case SYS_getegid:
-      return make_unique<getegidSystemCall>(syscallNumber, syscallName);
-    case SYS_getgroups:
-      return make_unique<getgroupsSystemCall>(syscallNumber, syscallName);
-    case SYS_getpeername:
-      return make_unique<getpeernameSystemCall>(syscallNumber, syscallName);
-    case SYS_getpid:
-      return make_unique<getpidSystemCall>(syscallNumber, syscallName);
-    case SYS_getppid:
-      return make_unique<getppidSystemCall>(syscallNumber, syscallName);
+    case SYS_getrandom:
+	return make_unique<getrandomSystemCall>(syscallNumber, syscallName);
     case SYS_getrlimit:
       return make_unique<getrlimitSystemCall>(syscallNumber, syscallName);
     case SYS_getrusage:
       return make_unique<getrusageSystemCall>(syscallNumber, syscallName);
-    case SYS_gettid:
-      return make_unique<gettidSystemCall>(syscallNumber, syscallName);
     case SYS_gettimeofday:
       return make_unique<gettimeofdaySystemCall>(syscallNumber, syscallName);
-    case SYS_getuid:
-      return make_unique<getuidSystemCall>(syscallNumber, syscallName);
-    case SYS_getxattr:
-      return make_unique<getxattrSystemCall>(syscallNumber, syscallName);
     case SYS_ioctl:
       return make_unique<ioctlSystemCall>(syscallNumber, syscallName);
-    case SYS_lgetxattr:
-      return make_unique<lgetxattrSystemCall>(syscallNumber, syscallName);
-    case SYS_munmap:
-      return make_unique<munmapSystemCall>(syscallNumber, syscallName);
-    case SYS_mmap:
-      return make_unique<mmapSystemCall>(syscallNumber, syscallName);
-    case SYS_mprotect:
-      return make_unique<mprotectSystemCall>(syscallNumber, syscallName);
     case SYS_nanosleep:
       return make_unique<nanosleepSystemCall>(syscallNumber, syscallName);
-    case SYS_lseek:
-      return make_unique<lseekSystemCall>(syscallNumber, syscallName);
     case SYS_lstat:
       return make_unique<lstatSystemCall>(syscallNumber, syscallName);
     case SYS_open:
@@ -386,38 +384,16 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<pselect6SystemCall>(syscallNumber, syscallName);
     case SYS_poll:
       return make_unique<pollSystemCall>(syscallNumber, syscallName);
-    case SYS_fadvise64:
-      return make_unique<fadvise64SystemCall>(syscallNumber, syscallName);
     case SYS_prlimit64:
       return make_unique<prlimit64SystemCall>(syscallNumber, syscallName);
     case SYS_read:
       return make_unique<readSystemCall>(syscallNumber, syscallName);
-    case SYS_readlink:
-      return make_unique<readlinkSystemCall>(syscallNumber, syscallName);
-    case SYS_readv:
-      return make_unique<readvSystemCall>(syscallNumber, syscallName);
-    case SYS_recvmsg:
-      return make_unique<recvmsgSystemCall>(syscallNumber, syscallName);
-    case SYS_rt_sigprocmask:
-      return make_unique<rt_sigprocmaskSystemCall>(syscallNumber, syscallName);
-    case SYS_rt_sigaction:
-      return make_unique<rt_sigactionSystemCall>(syscallNumber, syscallName);
     case SYS_sendto:
       return make_unique<sendtoSystemCall>(syscallNumber, syscallName);
     case SYS_select:
       return make_unique<selectSystemCall>(syscallNumber, syscallName);
-    case SYS_setpgid:
-      return make_unique<setpgidSystemCall>(syscallNumber, syscallName);
     case SYS_set_robust_list:
       return make_unique<set_robust_listSystemCall>(syscallNumber, syscallName);
-    case SYS_set_tid_address:
-      return make_unique<set_tid_addressSystemCall>(syscallNumber, syscallName);
-    case SYS_sigaltstack:
-      return make_unique<sigaltstackSystemCall>(syscallNumber, syscallName);
-    case SYS_rt_sigreturn:
-      return make_unique<rt_sigreturnSystemCall>(syscallNumber, syscallName);
-    case SYS_socket:
-      return make_unique<socketSystemCall>(syscallNumber, syscallName);
     case SYS_statfs:
       return make_unique<statfsSystemCall>(syscallNumber, syscallName);
     case SYS_stat:
@@ -426,44 +402,52 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<sysinfoSystemCall>(syscallNumber, syscallName);
     case SYS_time:
       return make_unique<timeSystemCall>(syscallNumber, syscallName);
-    case SYS_tgkill:
-      return make_unique<tgkillSystemCall>(syscallNumber, syscallName);
-    case SYS_umask:
-      return make_unique<umaskSystemCall>(syscallNumber, syscallName);
     case SYS_uname:
       return make_unique<unameSystemCall>(syscallNumber, syscallName);
     case SYS_unlink:
       return make_unique<unlinkSystemCall>(syscallNumber, syscallName);
+    case SYS_unlinkat:
+      return make_unique<unlinkatSystemCall>(syscallNumber, syscallName);
     case SYS_utimensat:
       return make_unique<utimensatSystemCall>(syscallNumber, syscallName);
     case SYS_vfork:
       return make_unique<vforkSystemCall>(syscallNumber, syscallName);
-    case SYS_wait4:
-      return make_unique<wait4SystemCall>(syscallNumber, syscallName);
     case SYS_write:
       return make_unique<writeSystemCall>(syscallNumber, syscallName);
     case SYS_writev:
-      return make_unique<writevSystemCall>(syscallNumber, syscallName);
+      return make_unique<writeSystemCall>(syscallNumber, syscallName);
     }
 
     // Generic system call. Throws error.
-    return make_unique<systemCall>(syscallNumber, syscallName);
+    throw runtime_error("Missing case for system call: " + syscallName
+			+ " this is a bug!");
   }
 // =======================================================================================
-ptraceEvent execution::getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status){
+ptraceEvent execution::getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status,
+				    bool ptraceSystemcall){
   // At every doPtrace we have the choice to deliver a signal. We must deliver a signal
   // when an actual signal was returned (ptraceEvent::signal), otherwise the signal is
   // never delivered to the tracee! This field is updated in @handleSignal
   //
   // 64 bit value to avoid warning when casting to void* below.
   int64_t signalToDeliver = states.at(nextPid).signalToDeliver;
+  // int64_t signalToDeliver = 0;
   // Reset signal field after for next event.
   states.at(nextPid).signalToDeliver = 0;
 
-  // Tell the process that we just intercepted an event for to continue, with us tracking
-  // it's system calls. If this is the first time this function is called, it will be the
-  // starting process. Which we expect to be in a waiting state.
-  ptracer::doPtrace(PTRACE_SYSCALL, currentPid, 0, (void*) signalToDeliver);
+  // Usually we use PTRACE_CONT below because we are letting seccomp + bpf handle the
+  // events. So unlike standard ptrace, we do not rely on system call events. Instead,
+  // we wait for seccomp events. Note that seccomp + bpf only sends us (the tracer)
+  // a ptrace event on pre-system call events. Sometimes we need the system call to be
+  // called and then we change it's arguments. So we call PTRACE_SYSCALL instead.
+  if(ptraceSystemcall){
+    ptracer::doPtrace(PTRACE_SYSCALL, currentPid, 0, (void*) signalToDeliver);
+  }else{
+    // Tell the process that we just intercepted an event for to continue, with us tracking
+    // it's system calls. If this is the first time this function is called, it will be the
+    // starting process. Which we expect to be in a waiting state.
+    ptracer::doPtrace(PTRACE_CONT, currentPid, 0, (void*) signalToDeliver);
+  }
 
   // Intercept any system call.
   traceesPid = waitpid(-1, &status, 0);
@@ -506,6 +490,10 @@ ptraceEvent execution::getNextEvent(pid_t currentPid, pid_t& traceesPid, int& st
 
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_EXIT) ){
     throw runtime_error("Ptrace event exit.\n");
+  }
+
+  if( ptracer::isPtraceEvent(status, PTRACE_EVENT_SECCOMP) ){
+    return ptraceEvent::seccomp;
   }
 
   // This is a stop caused by a system call exit-pre/exit-post.

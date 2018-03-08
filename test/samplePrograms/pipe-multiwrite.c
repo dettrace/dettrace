@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -7,12 +8,19 @@
 #include <assert.h>
 
 /* 
-Program that uses fork to create two processes that write to
-the same pipe. Should raise an error with dettrace.
+Program that uses fork to create two processes that share a pipe, with different 
+combinations of writers/readers possible.
 */
 
-// the number of bytes to send through the pipe
-const unsigned BYTES_TO_SEND = 100;
+// the number of bytes each writer sends through the pipe
+const unsigned BYTES_TO_SEND = 1000;
+
+// with child-runs-first scheduling, can only support (both-write parent-read)
+// TODO: should add (one-write both-read) and (both-write both-read) variants, generated via CPP macros
+const bool PARENT_WRITE = true;
+const bool CHILD_WRITE = true;
+const bool PARENT_READ = true;
+const bool CHILD_READ = false;
 
 int main(void) {
   int     fd[2], rv;
@@ -27,23 +35,59 @@ int main(void) {
     exit(1);
   }
   
-  // both parent and child write to the pipe
 
+  bool amChild = (0 == childpid);
+  // FIRST, both parent and child write to the pipe
+
+  if ((amChild && CHILD_WRITE) || (!amChild && PARENT_WRITE)) {
+    // PRNG from https://en.wikipedia.org/wiki/Linear-feedback_shift_register#Galois_LFSRs
+    // 16-bit PRNG will generate 128KB unique bytes before repeating.
+    // Can scale this if needed to 32-bit for 2^34 unique bytes.
+    uint16_t start_state = (0 == childpid) ? 0xDEAD : 0xBEEF ;  // Any nonzero start state will work.
+    uint16_t lfsr = start_state;
+    unsigned bytesWritten = 0;
+    
+    do {
+      unsigned lsb = lfsr & 1;   
+      lfsr >>= 1;
+      lfsr ^= (-lsb) & 0xB400u;
+      
+      rv = write(fd[1], &lfsr, sizeof(lfsr));
+      assert(-1 != rv);
+      
+      bytesWritten += rv;
+    } while (bytesWritten < BYTES_TO_SEND);
+    
+  }
+  // close the write end
+  rv = close(fd[1]);
+  assert(0 == rv);  
+  
+
+  // SECOND, read from the pipe
+  if ((amChild && CHILD_READ) || (!amChild && PARENT_READ)) {
+    
+    int bytesRead;
+    char readbuffer[79]; // prime, to encourage partial results from read()
+    
+    do {
+      bytesRead = read(fd[0], readbuffer, sizeof(readbuffer));
+      assert(-1 != bytesRead);
+      // NB: bytesRead is often partial but not EOF
+      //assert(bytesRead == sizeof(readbuffer) || bytesRead == 0);
+      printf("%s: ", 0 == childpid ? "child" : "parent");
+      for (int i = 0; i < bytesRead; i++) {
+        printf("%x", readbuffer[i]);
+      }
+      printf("\n");
+    } while (0 != bytesRead); // EOF
+    
+  }
   // close the read end
   rv = close(fd[0]);
   assert(0 == rv);
 
-  uint32_t bytes = (childpid == 0) ? 0xDEAD : 0xBEEF ;
-  unsigned bytesWritten = 0;
-  do {
-    rv = write(fd[1], &bytes, sizeof(bytes));
-    assert(-1 != rv);
-    bytesWritten += rv;
-  } while (bytesWritten < BYTES_TO_SEND);
-
-  // close write end
-  rv = close(fd[1]);
-  assert(0 == rv);
   
   return 0;
+
 }

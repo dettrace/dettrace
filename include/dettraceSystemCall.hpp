@@ -15,75 +15,12 @@ using namespace std;
 // =======================================================================================
 /**
  * access()  checks  whether the calling process can access the file pathname.  If path‐
- *     name is a symbolic link, it is dereferenced.
- *
- * int access(const char *pathname, int mode);
-
- * TODO: This is filepath dependant. The user could learn information about the path
- * based on this information? In the future I think I want to chroot the process.
- * FILESYSTEM RELATED.
+ * name is a symbolic link, it is dereferenced.
  */
 class accessSystemCall : public systemCall{
 public:
-  accessSystemCall(long syscallName, string syscallNumber);
-  /*
-   * Nothing to do.
-   */
+  using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- * alarm() arranges for a SIGALRM signal to be delivered to the calling
- * process in seconds seconds.
- *
- * unsigned int alarm(unsigned int seconds);
- */
-class alarmSystemCall : public systemCall{
-public:
-  alarmSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- * arch_prctl()
- * set architecture-specific process or thread state. code selects a subfunction and passes
- * argument addr to it; addr is interpreted  as  either an  unsigned  long  for the "set"
- * operations, or as an unsigned long *, for the "get" operations.
- *
- * int arch_prctl(int code, unsigned long addr);
- * int arch_prctl(int code, unsigned long *addr);
- *
- * This should be totally deterministic, but not portable across architectures. Which should
- * not be a problem for us.
- */
-class arch_prctlSystemCall : public systemCall{
-public:
-  arch_prctlSystemCall(long syscallName, string syscallNumber);
-  /*
-   * Nothing to do.
-   */
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-
-// =======================================================================================
-/**
- * brk()  and  sbrk() change the location of the program break, which defines the end of
- * the process's data segment (i.e., the program break is the first location  after  the
- * end  of the uninitialized data segment).  Increasing the program break has the effect
- * of allocating memory to the process; decreasing the break deallocates memory.
- *
- * Seems determinitic enough, specially under ASLR off.
- *
- * int brk(void *addr)
- */
-class brkSystemCall : public systemCall{
-public:
-  brkSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
 /**
@@ -93,39 +30,37 @@ public:
  * chdir() changes the current working directory of the calling process to the directory
        specified in path.
  *
- * This is deterministic and jailed thanks to our jail.
+ * This is deterministic and jailed thanks to our jail. We keep it here to print it's
+ * path for debugging!
  *
  */
 class chdirSystemCall : public systemCall{
 public:
-  chdirSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
 /**
  * int chmod(const char *pathname, mode_t mode);
  *
- * The  chmod() and fchmod() system calls change a files mode bits.
- * FILESYSTEM RELATED.
+ * This is deterministic and jailed thanks to our jail. We keep it here to print it's
+ * path for debugging!
  */
 class chmodSystemCall : public systemCall{
 public:
-  chmodSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
 };
-
 // =======================================================================================
 /**
 *
-* int clock_gettime(clockid_t clk_id, struct timespec *tp); 
+* int clock_gettime(clockid_t clk_id, struct timespec *tp);
 *
 */
 class clock_gettimeSystemCall : public systemCall{
 public:
-  clock_gettimeSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
+  using systemCall::systemCall;
+
   void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
@@ -138,154 +73,59 @@ public:
  *       unsigned long newtls);
  *
  * Underlying implementation for both creating threads and new processes.
- * Modern day fork() does a clone under the hood. Dettrace.
+ * Modern day fork() does a clone under the hood.
+
+ * No need to do anything. We just need the signal from seccomp so tracer knows to
+ * handle a forking event via @handleFork().
  */
 class cloneSystemCall : public systemCall{
 public:
-  cloneSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/*
- * close() closes a file descriptor, so that it no longer refers to any file and may be
- * reused.
- *
- * int close(int fd);
- *
- * Not deterministic due to return error when signal occurs! TODO.
- */
-class closeSystemCall : public systemCall{
-public:
-  closeSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
+  using systemCall::systemCall;
+
 };
 // =======================================================================================
 /**
  *
  * int connect(int sockfd, const struct sockaddr *addr, socklen_t
  * addrlen);
- *  
- *  The connect() system call connects the socket referred to by the file descriptor sockfd to the address specified by addr. 
- *  The addrlen argument specifies the size of addr. The format of the address in addr is determined by the address space of the socket sockfd.
+ *
+ * The connect() system call connects the socket referred to by the file descriptor sockfd
+ * to the address specified by addr. The addrlen argument specifies the size of addr.
+ * The format of the address in addr is determined by the address space of the socket sockfd.
+ * TODO
  *
  */
 class connectSystemCall : public systemCall{
 public:
-  connectSystemCall(long syscallNAme, string syscallNumber);
+  using systemCall::systemCall;
+
   bool handleDetPre(state &s, ptracer &t) override;
   void handleDetPost(state &s, ptracer &t) override;
-};
-// =======================================================================================
-/*
- *
- * int dup(int oldfd);
- *
- * The  dup() system call creates a copy of the file descriptor oldfd, using the lowest-
- * numbered unused file descriptor for the new descriptor.
- *
- * As long as our threads are determinstic, file descriptors should be deterministic too.
- *
- */
-class dupSystemCall : public systemCall{
-public:
-  dupSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/*
- *
- * int dup2(int oldfd, int newfd);
- *
- * The dup2() system call performs the same task as dup(), but instead of using the low‐
- * est-numbered unused file descriptor, it uses the file descriptor number specified  in
- * newfd.
- *
- * As long as our threads are determinstic, file descriptors should be deterministic too.
- *
- */
-class dup2SystemCall : public systemCall{
-public:
-  dup2SystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
 /**
  * execve()  executes  the  program  pointed  to by filename.
  *
- * int execve(const char *filename, char *const argv[], char *const envp[]);
- *
- * TODO
- * FILESYSTEM RELATED.
+ * Deterministic. We print the path for debugging purposes here.
  */
 class execveSystemCall : public systemCall{
-public:
-  execveSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- *
- * void exit_group(int status);
- *
- * This  system  call  is  equivalent to _exit(2) except that it terminates not only the
- * calling thread, but all threads in the calling process's thread group.
- *
- * Deterministic!
- */
-class exit_groupSystemCall : public systemCall{
-public:
-  exit_groupSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- *
- * int faccessat(int dirfd, const char *pathname, int mode, int flags);
- *
- * The faccessat() system call operates in exactly the same way as access(), except  for
- * the differences described here.
+  using systemCall::systemCall;
 
- * If the pathname given in pathname is relative, then it is interpreted relative to the
- * directory referred to by the file descriptor dirfd (rather than relative to the  cur‐
- * rent  working directory of the calling process, as is done by access() for a relative
- * pathname).
- *
- * FILESYSTEM RELATED.
+  bool handleDetPre(state &s, ptracer &t) override;
+};
+// =======================================================================================
+
+/**
+ * int faccessat(int dirfd, const char *pathname, int mode, int flags);
  */
 class faccessatSystemCall : public systemCall{
 public:
-  faccessatSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
 /**
- *
- * int fcntl(int fd, int cmd, ... arg );
- *
- * performs  one  of the operations described below on the open file descriptor
- * fd.  The operation is determined by cmd. Duplicating a file descriptor,
- * File descriptor flags, File status flags, Advisory record locking, ...
- *
- * FILESYSTEM RELATED.
- *
- * Seems nondeterministic based on the per process record locking.
- */
-class fcntlSystemCall : public systemCall{
-public:
-  fcntlSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- * fstat()
+ * int fstat(int fd, struct stat *statbuf);
  *
  * These functions return information about a file, in the buffer pointed to by statbuf.
  * No permissions are required on the file itself, but—in the case of stat(), fstatat(),
@@ -303,8 +143,26 @@ public:
  */
 class fstatSystemCall : public systemCall{
 public:
-  fstatSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
+  using systemCall::systemCall;
+
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ * int fstatat(int dirfd, const char *pathname, struct stat *statbuf, int flags);
+ *
+ * The fstatat() system call operates in exactly the same way as stat(), except for if
+ * the pathname given in pathname is relative, then it is interpreted relative to the
+ * directory referred to by the file descriptor dirfd (rather than relative to the  cur‐
+ * rent  working  directory  of the calling process, as is done by stat() for a relative
+ * pathname).
+ *
+ * Actual name of underlying system call is newfstatat.
+ */
+class newfstatatSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+
   void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
@@ -318,8 +176,8 @@ public:
  */
 class fstatfsSystemCall : public systemCall{
 public:
-  fstatfsSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
+  using systemCall::systemCall;
+
   void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
@@ -332,26 +190,23 @@ public:
  */
 class futexSystemCall : public systemCall{
 public:
-  futexSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
-
 // =======================================================================================
 /**
  *
  * char* getcwd(char *buf, size_t size);
  *
- * FILESYSTEM RELATED.
+ * Deterministic. We print the path for debugging purposes here.
  *
- * Nothing to do. I guess changes based on starting working directory? But this is part
- * the input to our program.
  */
 class getcwdSystemCall : public systemCall{
 public:
-  getcwdSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
+
   bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
 /**
@@ -367,50 +222,7 @@ public:
  */
 class getdentsSystemCall : public systemCall{
 public:
-  getdentsSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- *
- * uid_t geteuid(void);
- *
- * geteuid() returns the effective user ID of the calling process.
- * Deterministic and reproducible thanks to our user namespace!
- */
-class geteuidSystemCall : public systemCall{
-public:
-  geteuidSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- *
- * gid_t getegid(void);
- *
- * getegid() returns the effective group ID of the calling process.
- *
- */
-class getegidSystemCall : public systemCall{
-public:
-  getegidSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- *
- * int getgroups(int size, gid_t list[]);
- *
- * getgroups()  returns the supplementary group IDs of the calling process in list.
- *
- * This is deterministic via our namespaces.
- */
-class getgroupsSystemCall : public systemCall{
-public:
-  getgroupsSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
@@ -428,72 +240,23 @@ public:
  */
 class getpeernameSystemCall : public systemCall{
 public:
-  getpeernameSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
+  using systemCall::systemCall;
 
-// =======================================================================================
-/**
- *
- * pid_t getpgrp(void);
- *
- * getting and setting the process group ID (PGID) of a process.
- *
- */
-class getpgrpSystemCall : public systemCall{
-public:
-  getpgrpSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
 /**
  *
- * gid_t getgid(void);gid_t getgid(void);
+ * ssize_t getrandom(void *buf, size_t buflen, unsigned int flags);
  *
- * getgid() returns the real group ID of the calling process.
- * Deterministic and reproducible thanks to our user namespace!
+ *
+ * Nondeterministic. We fill the buffer with n deterministic bytes for the user :)
+ *
  */
-class getgidSystemCall : public systemCall{
+class getrandomSystemCall : public systemCall{
 public:
-  getgidSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- * pid_t getpid();
- *
- * Returns the pid of the calling process.
- *
- * Obviously nondeterministic. We instead keep a map of real pids to virtual pid mappings.
- * The running process only gets to observe virtual pids, but all system calls that
- * require pids, use real pids by mapping back.
- */
-class getpidSystemCall : public systemCall{
-public:
-  getpidSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- * pid_t getppid();
- *
- * Returns the pid of the calling process.
- *
- * Obviously nondeterministic. We instead keep a map of real pids to virtual pid mappings.
- * The running process only gets to observe virtual pids, but all system calls that
- * require pids, use real pids by mapping back.
- * TODO: ppid has interesting semantics where the return value actually depends on whether
- * the parent process has terminated or not. We will probably ignore this and always return
- * the original parent's pid.
- */
-class getppidSystemCall : public systemCall{
-public:
-  getppidSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
+  using systemCall::systemCall;
+
   void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
@@ -505,16 +268,16 @@ public:
  *                      limit, as defined by the rlimit structure.
  *
  *
- *                                 
- *        int getrlimit(int resource, struct rlimit *rlim);                        
- *             
- *	                  
  *
- */ 
+ *        int getrlimit(int resource, struct rlimit *rlim);
+ *
+ *
+ *
+ */
 class getrlimitSystemCall : public systemCall{
 public:
-  getrlimitSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
+  using systemCall::systemCall;
+
   void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
@@ -527,23 +290,8 @@ public:
  */
 class getrusageSystemCall : public systemCall{
 public:
-  getrusageSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- *
- * pid_t gettid(void);
- *
- *  gettid()  returns  the  caller's  thread ID (TID)
- *
- * Should be deterministic thanks to user namespace?
- */
-class gettidSystemCall : public systemCall{
-public:
-  gettidSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
+  using systemCall::systemCall;
+
   void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
@@ -556,40 +304,8 @@ public:
  */
 class gettimeofdaySystemCall : public systemCall{
 public:
-  gettimeofdaySystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- * uid_t getuid(void);
- *
- * getuid() returns the real user ID of the calling process.
- *
- * We pretend to be 65534 "nobody"
- */
-class getuidSystemCall : public systemCall{
-public:
-  getuidSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- *
- *  ssize_t lgetxattr(const char *path, const char *name,
- *                   void *value, size_t size);
- *
- *
- *
- *  getxattr() retrieves the value of the extended attribute identified by name and associated with the given path in the file system. The length of the attribute value is returned.
- *
- *
- */
-class getxattrSystemCall : public systemCall{
-public:
-  getxattrSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
+  using systemCall::systemCall;
+
   void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
@@ -605,81 +321,8 @@ public:
  */
 class ioctlSystemCall : public systemCall{
 public:
-  ioctlSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- *
- *  ssize_t lgetxattr(const char *path, const char *name,
- *                   void *value, size_t size);
- *
- * lgetxattr() is identical to getxattr(), except in the case of a symbolic link, where the link itself is interrogated, not the file that it refers to.
- *
- */
-class lgetxattrSystemCall : public systemCall{
-public:
-  lgetxattrSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- *
- * int munmap(void *addr, size_t length);
- *
- * The  munmap()  system  call deletes the mappings for the specified address range, and
- * causes further references to addresses within the range to  generate  invalid  memory
- * references.   The  region  is  also automatically unmapped when the process is termi‐
- * nated.  On the other hand, closing the file descriptor does not unmap the region.
- *
- * This should be deterministic.
- *
- */
-class munmapSystemCall : public systemCall{
-public:
-  munmapSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- * mmap()  creates  a  new  mapping in the virtual address space of the calling process.
- *
- * Disabling ASLR appears to make mmap deterministic.
- * So we don't have to do anything. We should be skeptical though. May require further
- * research.
- *
- * void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
- *
- */
-class mmapSystemCall : public systemCall{
-public:
-  mmapSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- * mprotect ()
- *
- * mprotect() changes the access protections for the calling process's memory pages con‐
- * taining any part of the address range in the interval [addr, addr+len-1].  addr  must
- * be aligned to a page boundary.
+  using systemCall::systemCall;
 
- * If  the  calling process tries to access memory in a manner that violates the protec‐
- * tions, then the kernel generates a SIGSEGV signal for the process.
-
- * int mprotect(void *addr, size_t len, int prot);
- *
- * This should be deterministic as long as we have ASLR disabled. This system call works
- * in conjuction with mmap.
- */
-class mprotectSystemCall : public systemCall{
-public:
-  mprotectSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
@@ -695,26 +338,7 @@ public:
  */
 class nanosleepSystemCall : public systemCall{
 public:
-  nanosleepSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- * off_t lseek(int fd, off_t offset, int whence);
- *
- * repositions the file offset of the open file description associated with the file
- * descriptor fd to the argument offset according  to  the  directive whence.
- *
- * Under threads, this could be non deterministic if two threads are using the same
- * file descriptior? But if we assume deterministic thread execution this shouldn't
- * be an issue :)
- * FILESYSTEM RELATED.
- *
- */
-class lseekSystemCall : public systemCall{
-public:
-  lseekSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
@@ -730,31 +354,29 @@ public:
  */
 class lstatSystemCall : public systemCall{
 public:
-  lstatSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
 /**
+ *
+ * int open(const char *pathname, int flags);
+ *
  * Given  a  pathname for a file, open() returns a file descriptor, a small, nonnegative
  * integer for use in subsequent system calls (read(2),  write(2),  lseek(2),  fcntl(2),
- * etc.)
- *
- * The file descriptor returned by a successful call will be the lowest-numbered
+ * etc.).  The file descriptor returned by a successful call will be the lowest-numbered
  * file descriptor not currently open for the process.
  *
- * TODO
- * FILESYSTEM RELATED.
  */
 class openSystemCall : public systemCall{
 public:
-  openSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
+
   bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
 /**
- *
  * int openat(int dirfd, const char *pathname, int flags);
  * int openat(int dirfd, const char *pathname, int flags, mode_t mode);
  *
@@ -771,15 +393,12 @@ public:
  * process (like open()).
  *
  * If pathname is absolute, then dirfd is ignored.
- *
- * TODO
- * FILESYSTEM RELATED.
  */
 class openatSystemCall : public systemCall{
 public:
-  openatSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
+
   bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
 /**
@@ -791,7 +410,7 @@ public:
  */
 class pipeSystemCall : public systemCall{
 public:
-  pipeSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
@@ -821,7 +440,7 @@ public:
  */
 class pselect6SystemCall : public systemCall{
 public:
-  pselect6SystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
@@ -836,24 +455,7 @@ public:
  */
 class pollSystemCall : public systemCall{
 public:
-  pollSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state &s, ptracer &t) override;
-  void handleDetPost(state &s, ptracer &t) override;
-};
-// =======================================================================================
-/**
- *
- * int posix_fadvise(int fd, off_t offset, off_t len, int advice);
- *
- * Programs  can  use  posix_fadvise() to announce an intention to access file data in a
- * specific pattern in the future, thus allowing the kernel to perform appropriate opti‐
- * mizations.
- *
- * Seems deterministic enough :)
- */
-class fadvise64SystemCall : public systemCall{
-public:
-  fadvise64SystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state &s, ptracer &t) override;
   void handleDetPost(state &s, ptracer &t) override;
 };
@@ -876,7 +478,7 @@ public:
  */
 class prlimit64SystemCall : public systemCall{
 public:
-  prlimit64SystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
@@ -887,27 +489,7 @@ public:
  */
 class readSystemCall : public systemCall{
 public:
-  readSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- *
- * ssize_t readlink(const char *pathname, char *buf, size_t bufsiz);
- *
- * readlink() places the contents of the symbolic link pathname in the buffer buf, which
- * has size bufsiz.  readlink() does not append a null byte to buf.  It will  (silently)
- * truncate  the  contents (to a length of bufsiz characters), in case the buffer is too
- * small to hold all of the contents.
- *
- * FILESYSTEM RELATED.
- * TODO: This could be nondeterminism based on the value the symlink points to from
- * call to call.
- */
-class readlinkSystemCall : public systemCall{
-public:
-  readlinkSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
@@ -918,65 +500,42 @@ public:
  * ssize_t readv(int fd, const struct iovec *iov, int iovcnt);
  *
  * read or write data into multiple buffers
- * 
+ * Would be non determinitic based on number of bytes read is less than number of bytes
+ * asked for.
  *
+ * TODO
  */
 class readvSystemCall : public systemCall{
 public:
-  readvSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state &s, ptracer &t) override;
   void handleDetPost(state &s, ptracer &t) override;
 };
 // =======================================================================================
+/*
+ * ssize_t readlink(const char *pathname, char *buf, size_t bufsiz);
+ *
+ * readlink, readlinkat - read value of a symbolic link
+ * Deterministic thanks to our jail. Intercepted merely for debugging purposes.
+ *
+ */
+class readlinkSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(state &s, ptracer &t) override;
+};
+// =======================================================================================
 /**
  * ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags);
- * 
+ *
  * recvmsg() call is used to receive messages from a socket and amy be used to receive
  * data on a socket whether or not it is connection-oriented.
  */
 class recvmsgSystemCall : public systemCall{
 public:
-  recvmsgSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state &s, ptracer &t) override;
   void handleDetPost(state &s, ptracer &t) override;
-};
-// =======================================================================================
-/**
- * rt_sigprocmask()
- * is  used to fetch and/or change the signal mask of the calling thread.
- * The signal mask is the set of signals whose delivery is  currently  blocked  for  the
- * caller (see also signal(7) for more details).
- *
- * int rt_sigprocmask(int how, const kernel_sigset_t *set, kernel_sigset_t *oldset,
- *                    size_t sigsetsize);
- *
- * SIGNAL RELATED.
- */
-class rt_sigprocmaskSystemCall : public systemCall{
-public:
-  rt_sigprocmaskSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- *
- * int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
- *
- * Change the action taken by a process on receipt of a specific signal.
- *
- * This is probably how signal handlers are implemented under the hood.
- * This should be deterministic enough (assuming the signals we receive are deterministic,
- * but we will need to look further at the manpage to be sure TODO).
- *
- * Our unit test framework uses this system call. It's probably setting up handler for all
- * signals in case there is a failure thrown by a unit test.
- */
-class rt_sigactionSystemCall : public systemCall{
-public:
-  rt_sigactionSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
 /**
@@ -995,7 +554,7 @@ public:
  */
 class sendtoSystemCall : public systemCall{
 public:
-  sendtoSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state &s, ptracer &t) override;
   void handleDetPost(state &s, ptracer &t) override;
 };
@@ -1013,7 +572,7 @@ public:
  */
 class selectSystemCall : public systemCall{
 public:
-  selectSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state &s, ptracer &t) override;
   void handleDetPost(state &s, ptracer &t) override;
 };
@@ -1022,124 +581,13 @@ public:
  * int setpgid(pid_t pid, pid_t pgid);
  *
  * Set a process's PGID.
- *
- */
-class setpgidSystemCall : public systemCall{
-public:
-  setpgidSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state &s, ptracer &t) override;
-  void handleDetPost(state &s, ptracer &t) override;
-};
-// =======================================================================================
-/**
- *
- * long get_robust_list(int pid, struct robust_list_head **head_ptr,
-                            size_t *len_ptr);
- * long set_robust_list(struct robust_list_head *head, size_t len);
- *
- * These  system calls deal with per-thread robust futex lists. See futex (2) for
- * more information!
- *
- * Seems to be deterministic.
-
- * TODO: Implement get_robust_list. We do have to make sure we map the vpid the user gives
- * us to a real pid.
+ * TODO
  */
 class set_robust_listSystemCall : public systemCall{
 public:
-  set_robust_listSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-
-// =======================================================================================
-/**
- *
- * long set_tid_address(int *tidptr);
- *
- * Sets the attribute tid_address (Thread specific id) to point to the passed address. This
- * is used by pthreads and clone.
- *
- * Should be deterministic.
- *
- */
-class set_tid_addressSystemCall : public systemCall{
-public:
-  set_tid_addressSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-
-// =======================================================================================
-/**
- *
- * int sigaltstack(const stack_t *ss, stack_t *old_ss);
- *
- * sigaltstack() allows a process to define a new alternate signal stack and/or retrieve
- * the state of an existing alternate signal stack.  An alternate signal stack  is  used
- * during  the  execution  of a signal handler if the establishment of that handler (see
- * sigaction(2)) requested it.
- *
- * TODO.
- * SIGNAL RELATED.
- */
-class sigaltstackSystemCall : public systemCall{
-public:
-  sigaltstackSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- *
- * int sigreturn(...);
- *
- * If  the  Linux  kernel  determines that an unblocked signal is pending for a process,
- * then, at the next transition back to user mode in that  process  (e.g.,  upon  return
- * from a system call or when the process is rescheduled onto the CPU), it saves various
- * pieces of process context (processor status word, registers, signal mask, and  signal
- * stack settings) into the user-space stack.
-
- * The  kernel  also  arranges that, during the transition back to user mode, the signal
- * handler is called, and that, upon return from the handler, control passes to a  piece
- * of  user-space  code  commonly called the "signal trampoline".  The signal trampoline
- * code in turn calls sigreturn().
- *
- */
-class rt_sigreturnSystemCall : public systemCall{
-public:
-  rt_sigreturnSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-
-// =======================================================================================
-/**
- *
- * int socket(int domain, int type, int protocol);
- * 
- * socket() creates an endpoint for communication and returns a file
- * descriptor that refers to that endpoint.  The file descriptor
- * returned by a successful call will be the lowest-numbered file
- * descriptor not currently open for the process.
- *
- */
-class socketSystemCall : public systemCall{
-public:
-  socketSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state &s, ptracer &t) override;
   void handleDetPost(state &s, ptracer &t) override;
-};
-// =======================================================================================
-/**
- * Implement various fields.
- * FILESYSTEM RELATED.
- */
-class statfsSystemCall : public systemCall{
-public:
-  statfsSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
 /**
@@ -1154,8 +602,19 @@ public:
  */
 class statSystemCall : public systemCall{
 public:
-  statSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ * Implement various fields.
+ * FILESYSTEM RELATED.
+ */
+class statfsSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+
   void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
@@ -1169,8 +628,8 @@ public:
  */
 class sysinfoSystemCall : public systemCall{
 public:
-  sysinfoSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
+  using systemCall::systemCall;
+
   void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
@@ -1181,11 +640,17 @@ public:
  * SIGNAL RELATED
  *
  * Should be deterministic in the sense that our pid namespace separates us from other
- * processes. So only processes in our tree can use it. TODO: Deliver signal synchronously?
+ * processes. So only processes in our tree can use it. However, if a process delivers
+ * a signal to another process, how can we make that determinitic? Maybe we don't care
+ * about those programs? If a signal was to be delivered from P1 -> P2, P2 has no
+ * guarantee of when the signal will arrive, unless they do a wait*(), so maybe only
+ * deliver the signal if P2 is waiting? Otherwise never deliver it since the signal
+ * may take arbitrarily long to be delivered.
+ * TODO
  */
 class tgkillSystemCall : public systemCall{
 public:
-  tgkillSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
@@ -1197,30 +662,8 @@ public:
  */
 class timeSystemCall : public systemCall{
 public:
-  timeSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- *
- * mode_t umask(mode_t mask);
- *
- * umask()  sets  the  calling  process's file mode creation mask (umask) to mask & 0777
- * (i.e., only the file permission bits of mask are  used),  and  returns  the  previous
- * value of the mask.
- *
- * As explained in the notes, this is suffers from race conditions with threads. If we
- * have deterministic threading, this shouldn't be an issue.
- *
- * The mask could change from subsequent call to call, but if we consider the file
- * metadata part of our input, it should be fine.
- * FILESYSTEM RELATED
- */
-class umaskSystemCall : public systemCall{
-public:
-  umaskSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
+  using systemCall::systemCall;
+
   void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
@@ -1229,13 +672,14 @@ public:
  * int uname(struct utsname *buf);
  *
  * uname()  returns  system information in the structure pointed to by buf.
+ * Definitely non deterministic.
  *
  *
  */
 class unameSystemCall : public systemCall{
 public:
-  unameSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
+  using systemCall::systemCall;
+
   void handleDetPost(state& s, ptracer& t) override;
 };
 // =======================================================================================
@@ -1249,14 +693,41 @@ public:
  *
  * Similarly to other system calls, under deterministic threads and processes, this
  * should be deterministic.
- * FILESYSTEM RELATED
+ * We keep it here to print it's path.
  */
 class unlinkSystemCall : public systemCall{
 public:
-  unlinkSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
+
 };
+// =======================================================================================
+/**
+ *
+ * int unlinkat(int dirfd, const char *pathname, int flags);
+ *
+ * The unlinkat() system call operates in exactly the same way  as  either  unlink()  or
+ * rmdir(2)  (depending  on  whether or not flags includes the AT_REMOVEDIR flag) except
+ * for the differences described here.
+
+ * If the pathname given in pathname is relative, then it is interpreted relative to the
+ * directory  referred to by the file descriptor dirfd (rather than relative to the cur‐
+ * rent working directory of the calling process, as is done by  unlink()  and  rmdir(2)
+ * for a relative pathname).
+
+ * If  the  pathname  given  in  pathname  is  relative  and  dirfd is the special value
+ * AT_FDCWD, then pathname is interpreted relative to the current working  directory  of
+ * the calling process (like unlink() and rmdir(2)).
+
+ * If the pathname given in pathname is absolute, then dirfd is ignored.
+
+ * Seems deterministic enough :)
+ */
+class unlinkatSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(state& s, ptracer& t) override;
+ };
 // =======================================================================================
 /**
  *
@@ -1271,11 +742,9 @@ public:
  */
 class utimensatSystemCall : public systemCall{
 public:
-  utimensatSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
 };
-
 // =======================================================================================
 /**
  *
@@ -1298,26 +767,8 @@ public:
  */
 class vforkSystemCall : public systemCall{
 public:
-  vforkSystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
-};
-// =======================================================================================
-/**
- *
- * pid_t wait4(pid_t pid, int *wstatus, int options, struct rusage *rusage);
- *
- * Wait for the specified process, usually blocks but depends on `options` parameter.
- * Populates `wstatus` with information on the process `pid` that we `wait4` for.
- *
- * TODO: So far, all I do is translate the vpid to a real pid. There is probably more
- * to be done to make it fully deterministic!
- */
-class wait4SystemCall : public systemCall{
-public:
-  wait4SystemCall(long syscallName, string syscallNumber);
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
+  using systemCall::systemCall;
+
 };
 // =======================================================================================
 /**
@@ -1333,7 +784,7 @@ public:
  */
 class writevSystemCall : public systemCall{
 public:
-  writevSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
@@ -1353,7 +804,7 @@ public:
  */
 class writeSystemCall : public systemCall{
 public:
-  writeSystemCall(long syscallName, string syscallNumber);
+  using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };

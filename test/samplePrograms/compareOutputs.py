@@ -18,21 +18,18 @@ def main():
 
     for cProgram in glob.glob("*.c"):
         prog = cProgram.split(".")[0]
+
         # Call program under dettrace!
         try:
             print("========= Testing \"{}\"=========".format(prog))
-            # Run and get output in this machine.
-            try:
-                outputBin = subprocess.check_output(["../../bin/dettrace", "./" + prog], stderr=subprocess.STDOUT)
-            except subprocess.CalledProcessError as cpe:
-                # sometimes test "failures" are expected, e.g., with system calls we don't handle
-                outputBin = cpe.output
-                pass
-            # From binary to string.
-            output = outputBin.decode(encoding='UTF-8')
+            output = runProgram(prog)
 
             # Read reference version from file.
-            compare = open(exectedOutputDir + prog + ".output", "r").read()
+            if prog == "callSshKeygen" :
+                # Call program twice instead of using file
+                compare = runProgram(prog)
+            else:
+                compare = open(exectedOutputDir + prog + ".output", "r").read()
 
             # Compare
             if(output != compare):
@@ -61,6 +58,16 @@ def main():
     else:
         exit(0)
 
+def runProgram(prog):
+    # Run and get output in this machine.
+    try:
+        outputBin = subprocess.check_output(["../../bin/dettrace", "./" + prog], \
+                                            stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError as cpe:
+        # sometimes test "failures" are expected, e.g., with system calls we don't handle
+        outputBin = cpe.output
+    # From binary to string.
+    return outputBin.decode(encoding='UTF-8')
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,7 @@
 #ifndef STATE_H
 #define STATE_H
 
+#include<linux/version.h>
 #include <sys/ptrace.h>
 #include <sys/reg.h>
 #include <sys/types.h>
@@ -45,29 +46,33 @@ public:
    * The pid of the process represented by this state.
    */
   pid_t traceePid;
-
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
+  /*
+   * Per process bool to know if this is the pre or post hook event as ptrace does
+   * not track this for us. Only needed for older versions of seccomp.
+   */
+  bool isPreExit = true;
+#endif
   /*
    * Isomorphism between inodes and vitual inodes.
    */
   ValueMapper<ino_t> inodeMap;
   logger log;
 
-  bool doSystemcall;
-
-  /*
-   * It's our job to keep track whether we are on a system call pre or post.
-   */
-  syscallState syscallStopState = syscallState::pre;
-
   /**
    * Signal to deliver for next time this process runs. Zero means none. Otherwise
    * this int represents the signal number.
    */
   int signalToDeliver = 0;
-/*
- * Insn pointer from predet
- */
-  //uint64_t preIp = 0;
+
+  /*
+   * Insn pointer from predet
+   */
+  uint64_t preIp = 0;
+  uint64_t preArg1 = 0;
+  uint64_t preArg3 = 0;
+  uint64_t totalBytes = 0;
+  bool firstTryReadWrite = true;
 
   /*
    * We need to know what system call was/is that we are not. This is important in

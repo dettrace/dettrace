@@ -25,7 +25,6 @@
  * Hence we took all those variables and turned them into fields of this class.
  * Each function handles a certain type of event, with many many side effects.
  */
-
 class execution{
 
 private:
@@ -55,27 +54,52 @@ private:
   // On child exit => pop stack, let that process run.
   stack<pid_t> processHier;
 
+  // Pid of the process whose even we have just retrieved with @getNextEvent, this
+  // tracee is currently stopped and we may make arbitrary modifications to it's state
+  // (registers).
   pid_t traceesPid;
-
+  // Once all process' have ended. We exit.
   bool exitLoop = false;
 
 public:
 
   execution(int debugLevel, pid_t startingPid);
+
+  // Processs is done. Remove it from our processHier stack and let parent process run.
   void handleExit();
 
-  void handlePreSystemCall(state& currState);
+  bool handlePreSystemCall(state& currState);
 
   void handlePostSystemCall(state& currState);
 
-  void handleSystemCall();
+  // This function call both handlePostSystemCall and handlePostSystemCall.
+  bool handleSystemCall();
 
+  // Function to launch initial process. A program is defined as a tree of processes.
   void runProgram();
 
+  /**
+   *
+   * Fork is super special. We get two events whenever a fork, vfork, or clone happens.
+   * 1) A signal from the child.
+   * 2) A fork event from the parent.
+   * The problem is that the order of the events is unkown. Therefore we must be able
+   * to receive the events in either order and correctly handle them.
+
+   * This event also sets scheduling for process by setting nextPid to newChildPid.
+   *
+   */
   void handleFork(ptraceEvent event);
 
+  /**
+   * Handle the fork event part of @handleFork. Pushes parent to our process hierarchy
+   * and creates state for child.
+   */
   pid_t handleForkEvent();
 
+  /**
+   * Handle the signal part of @handleFork.
+   */
   void handleForkSignal();
 
   void handleClone();
@@ -83,6 +107,14 @@ public:
   void handleExecve();
 
   void handleSignal(int signum);
+
+  /**
+   * Handle seccomp event. This happens everytime we intercept a system call before the
+   * system call is called.
+   *
+   * Return value dictates whether the postHook should be called as well.
+   */
+  bool handleSeccomp();
 
   /**
    * Return the system call we currently caught from the tracer.
@@ -97,8 +129,11 @@ public:
    * time calling, it is the original process to trace.
    * @param traceesPid[out]: pid of the process we just intercepted.
    * @param status[out]: status retured by waitpid.
+   * @param ptraceSyscall[in]: continue with a PTRACE_SYSCALL as the action, if false,
+   *        if do PTRACE_CONT instead.
    */
-  ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
+  ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status,
+			   bool ptraceSystemCall);
 };
 
 #endif

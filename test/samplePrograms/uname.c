@@ -12,13 +12,10 @@ int main(){
     printf("Uname failed\nReason: %s\n", strerror(errno));
   }
 
-  printf("Operating  name: %s\n", buf.sysname);
+  printf("Operating name: %s\n", buf.sysname);
   printf("Node name: %s\n", buf.nodename);
   printf("Operating system release: %s\n", buf.release);
   printf("Operating system version: %s\n", buf.version);
   printf("Hardware identifier: %s\n", buf.machine);
 
-#ifdef _GNU_SOURCE
-  printf("Domain name: %s\n", buf.domainname);
-#endif
 }

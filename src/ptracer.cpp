@@ -93,13 +93,16 @@ pid_t ptracer::getPid(){
 void ptracer::setOptions(pid_t pid){
   doPtrace(PTRACE_SETOPTIONS, pid, NULL, (void*)
 	   (PTRACE_O_EXITKILL | // If Tracer exits. Send SIGKIll signal to all tracees.
-	    PTRACE_O_TRACECLONE | // Automatically enroll child of tracee.
-	    // clone is called
+	    PTRACE_O_TRACECLONE | // enroll child of tracee when clone is called.
+	    // We don't really need to catch execves, but we get a spurious signal 5
+	    // from ptrace if we don't.
 	    PTRACE_O_TRACEEXEC |
 	    PTRACE_O_TRACEFORK |
 	    PTRACE_O_TRACEVFORK |
 	    // PTRACE_O_TRACEEXIT | // Stop tracee when it exits.
-	    PTRACE_O_TRACESYSGOOD));
+	    PTRACE_O_TRACESYSGOOD |
+	    PTRACE_O_TRACESECCOMP
+	    ));
   return;
 }
 

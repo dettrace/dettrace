@@ -40,6 +40,7 @@ enum class ptraceEvent {
   fork,        /// fork event.
   vfork,        /// fork event.
   terminatedBySignal, // Tracee terminated by signal.
+  seccomp,
 };
 
 /**
