@@ -146,8 +146,8 @@ bool cloneSystemCall::handleDetPre(state &s, ptracer &t){
 void cloneSystemCall::handleDetPost(state &s, ptracer &t){
   // Non deterministic failure due to signal.
   pid_t returnPid = t.getReturnValue();
-  if(returnPid == -1){
-      throw runtime_error("Clone system call failed:\n" + string { strerror(errno) });
+  if(returnPid < 0){
+      throw runtime_error("Clone system call failed:\n" + string { strerror(- returnPid) });
   }
 
   // In older versions of ptrace, the tid value was cached to skip getpid calls. This
@@ -168,8 +168,9 @@ bool closeSystemCall::handleDetPre(state &s, ptracer &t){
 
 void closeSystemCall::handleDetPost(state &s, ptracer &t){
   // Non deterministic failure due to signal.
-  if((int64_t) t.getReturnValue() == -1){
-      throw runtime_error("Close system call failed:\n" + string { strerror(errno) });
+  int returnVal = t.getReturnValue();
+  if(returnVal < 0){
+      throw runtime_error("Close system call failed:\n" + string { strerror(- returnVal) });
   }
 
   return;
@@ -284,6 +285,23 @@ void fstatSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
+newfstatatSystemCall::newfstatatSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool newfstatatSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void newfstatatSystemCall::handleDetPost(state &s, ptracer &t){
+  string path = ptracer::readTraceeCString((const char*)t.arg2(), t.getPid());
+  string msg = "newfstatat-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
+  s.log.writeToLog(Importance::info, msg);
+  handleStatFamily(s, t, "newfstatat");
+  return;
+}
+// =======================================================================================
 fstatfsSystemCall::fstatfsSystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
   return;
@@ -310,8 +328,6 @@ void fstatfsSystemCall::handleDetPost(state &s, ptracer &t){
 
     // Write back result for child.
     ptracer::writeToTracee(statfsPtr, myStatfs, s.traceePid);
-  }else{
-    s.log.writeToLog(Importance::info, "Negative number returned from fstatfs call\n" );
   }
 
   return;
@@ -519,7 +535,7 @@ void getrlimitSystemCall::handleDetPost(state &s, ptracer &t){
     struct rlimit noLimits = {};
     noLimits.rlim_cur = RLIM_INFINITY;
     noLimits.rlim_max = RLIM_INFINITY;
-    
+
     ptracer::writeToTracee(rp, noLimits, t.getPid());
   }
 
@@ -594,7 +610,7 @@ void gettimeofdaySystemCall::handleDetPost(state &s, ptracer &t){
     struct timeval myTv = {};
     myTv.tv_sec = s.getLogicalTime();
     myTv.tv_usec = 0;
-    
+
     ptracer::writeToTracee(tp, myTv, t.getPid());
     s.incrementTime();
   }
@@ -803,12 +819,7 @@ bool nanosleepSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void nanosleepSystemCall::handleDetPost(state &s, ptracer &t){
-  // Check return value. We wish we could check for EINTR but we can't as I don't
-  // know a way to get errno from tracee. Instead we merely fail if nanosleep returns
-  // -1.
-  if(t.getReturnValue() == (u_int64_t)-1){
-    throw runtime_error("nanosleep returned with error.");
-  }
+  // TODO: Turn nano sleep into a no op.
 
   return;
 }
@@ -928,10 +939,11 @@ bool readSystemCall::handleDetPre(state &s, ptracer &t){
 
 void readSystemCall::handleDetPost(state &s, ptracer &t){
   // TODO:
-  if (t.getReturnValue() == (uint64_t) -1) {
-    throw runtime_error("read returned -1 with some error");
+  int retVal = t.getReturnValue();
+  if(retVal < 0) {
+    throw runtime_error("Read failed with: " + string{ strerror(- retVal) });
   }
-  ssize_t bytes_read = t.getReturnValue();
+  ssize_t bytes_read = retVal;
   ssize_t bytes_requested = t.arg3();
   if (bytes_read != bytes_requested && bytes_read != 0) {
     t.writeArg2(t.arg2() + bytes_read);
@@ -1225,9 +1237,10 @@ bool timeSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void timeSystemCall::handleDetPost(state &s, ptracer &t){
-  time_t retval = (time_t) t.getReturnValue();
-  if(retval == -1){
-    s.log.writeToLog(Importance::info, "time: sycall returned -1");
+  int retVal = (int) t.getReturnValue();
+  if(retVal < 0){
+    s.log.writeToLog(Importance::info,
+		     "Time call failed: \n" + string { strerror(- retVal)});
     return;
   }
 
@@ -1301,12 +1314,32 @@ unlinkSystemCall::unlinkSystemCall(long syscallNumber, string syscallName):
 }
 
 bool unlinkSystemCall::handleDetPre(state &s, ptracer &t){
+  string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
+  string msg = "unlink-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
+  s.log.writeToLog(Importance::info, msg);
   return true;
 }
 
 void unlinkSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
+// =======================================================================================
+unlinkatSystemCall::unlinkatSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool unlinkatSystemCall::handleDetPre(state &s, ptracer &t){
+  string path = ptracer::readTraceeCString((const char*)t.arg2(), t.getPid());
+  string msg = "unlinkat-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
+  s.log.writeToLog(Importance::info, msg);
+  return true;
+}
+
+void unlinkatSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+
 // =======================================================================================
 utimensatSystemCall::utimensatSystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
@@ -1421,14 +1454,21 @@ void zeroOutStatfs(struct statfs& stats){
 }
 // =======================================================================================
 void handleStatFamily(state& s, ptracer& t, string syscallName){
-  struct stat* statPtr = (struct stat*) t.arg2();
+  struct stat* statPtr;
+
+  if(syscallName == "newfstatat"){
+    statPtr = (struct stat*) t.arg3();
+  }else{
+    statPtr = (struct stat*) t.arg2();
+  }
 
   if(statPtr == nullptr){
     s.log.writeToLog(Importance::info, syscallName + ": statbuf null.\n");
     return;
   }
 
-  if(t.getReturnValue() == 0){
+  int retVal = t.getReturnValue();
+  if(retVal == 0){
     struct stat myStat = ptracer::readFromTracee(statPtr, s.traceePid);
 
     myStat.st_atim = timespec { .tv_sec =  s.getLogicalTime(),
@@ -1437,7 +1477,7 @@ void handleStatFamily(state& s, ptracer& t, string syscallName){
                                 .tv_nsec = s.getLogicalTime() };
     myStat.st_ctim = timespec { .tv_sec = s.getLogicalTime(),
                                 .tv_nsec = s.getLogicalTime() };  /* user CPU time used */
-    
+
     myStat.st_dev = 1;         /* ID of device containing file */
 
     // inode virtualization
@@ -1451,27 +1491,27 @@ void handleStatFamily(state& s, ptracer& t, string syscallName){
     // will think we don't have access to this file. Hence we keep our permissions
     // as part of the stat.
     // mode_t    st_mode;        /* File type and mode */
-    
+
     myStat.st_nlink = 1;       /* Number of hard links */
     myStat.st_uid = 65534;         /* User ID of owner */
     myStat.st_gid = 1;         /* Group ID of owner */
     myStat.st_rdev = 1;        /* Device ID (if special file) */
-    
+
     // Program will stall if we put some arbitrary value here: TODO.
     // myStat.st_size = 512;        /* Total size, in bytes */
-    
+
     myStat.st_blksize = 512;     /* Block size for filesystem I/O */
 
     // TODO: could return actual value here?
     myStat.st_blocks = 1;      /* Number of 512B blocks allocated */
-    
+
     s.incrementTime();
-    
+
     // Write back result for child.
     ptracer::writeToTracee(statPtr, myStat, s.traceePid);
   } else {
-    s.log.writeToLog(Importance::info, "Negative number returned from "
-		     + syscallName + "call: " + to_string(t.getReturnValue()) + "\n");
+    s.log.writeToLog(Importance::info, "Error in "
+		     + syscallName + ":\n" + string { strerror(- retVal)} + "\n");
   }
   return;
 }

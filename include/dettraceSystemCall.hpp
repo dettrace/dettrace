@@ -285,7 +285,7 @@ public:
 };
 // =======================================================================================
 /**
- * fstat()
+ * int fstat(int fd, struct stat *statbuf);
  *
  * These functions return information about a file, in the buffer pointed to by statbuf.
  * No permissions are required on the file itself, but—in the case of stat(), fstatat(),
@@ -304,6 +304,24 @@ public:
 class fstatSystemCall : public systemCall{
 public:
   fstatSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ * int fstatat(int dirfd, const char *pathname, struct stat *statbuf, int flags);
+ *
+ * The fstatat() system call operates in exactly the same way as stat(), except for if
+ * the pathname given in pathname is relative, then it is interpreted relative to the
+ * directory referred to by the file descriptor dirfd (rather than relative to the  cur‐
+ * rent  working  directory  of the calling process, as is done by stat() for a relative
+ * pathname).
+ *
+ * Actual name of underlying system call is newfstatat.
+ */
+class newfstatatSystemCall : public systemCall{
+public:
+  newfstatatSystemCall(long syscallName, string syscallNumber);
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
@@ -1262,6 +1280,34 @@ public:
 class unlinkSystemCall : public systemCall{
 public:
   unlinkSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
+ * int unlinkat(int dirfd, const char *pathname, int flags);
+ *
+ * The unlinkat() system call operates in exactly the same way  as  either  unlink()  or
+ * rmdir(2)  (depending  on  whether or not flags includes the AT_REMOVEDIR flag) except
+ * for the differences described here.
+
+ * If the pathname given in pathname is relative, then it is interpreted relative to the
+ * directory  referred to by the file descriptor dirfd (rather than relative to the cur‐
+ * rent working directory of the calling process, as is done by  unlink()  and  rmdir(2)
+ * for a relative pathname).
+
+ * If  the  pathname  given  in  pathname  is  relative  and  dirfd is the special value
+ * AT_FDCWD, then pathname is interpreted relative to the current working  directory  of
+ * the calling process (like unlink() and rmdir(2)).
+
+ * If the pathname given in pathname is absolute, then dirfd is ignored.
+
+ * Seems deterministic enough :)
+ */
+class unlinkatSystemCall : public systemCall{
+public:
+  unlinkatSystemCall(long syscallName, string syscallNumber);
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };

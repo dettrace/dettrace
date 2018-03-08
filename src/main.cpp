@@ -62,6 +62,21 @@ int main(int argc, char** argv){
   int optIndex, debugLevel;
   tie(optIndex, debugLevel) = parseProgramArguments(argc, argv);
 
+  char* debugEnvvar = secure_getenv("dettraceDebug");
+  if(debugEnvvar != nullptr){
+    string str { debugEnvvar };
+    try{
+      debugLevel = stoi(str);
+    }catch (...){
+      throw runtime_error("Invalid integer: " + str);
+    }
+
+
+    if(debugLevel < 0 || debugLevel > 5){
+      throw runtime_error("Debug level must be between [0,5].");
+    }
+  }
+
   // Set up new user namespace. This is needed as we will have root access withing
   // our own user namespace. Other namepspace commands require CAP_SYS_ADMIN to work.
   // Namespaces must must be done before fork. As changes don't apply until after
@@ -160,6 +175,8 @@ void setUpContainer(string pathToExe){
   mountDir("/usr/", "../usr/");
   mountDir("/lib/", "../lib/");
   mountDir("/lib64/", "../lib64/");
+  // Mount dev/null
+  mountDir("/dev/null", "../dev/null");
   // Mount our dettrace/bin and dettrace/lib folders.
   mountDir("../../bin/", "../dettrace/bin");
   mountDir("../../lib/", "../dettrace/lib");

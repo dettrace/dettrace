@@ -324,6 +324,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<fcntlSystemCall>(syscallNumber, syscallName);
     case SYS_fstat:
       return make_unique<fstatSystemCall>(syscallNumber, syscallName);
+    case SYS_newfstatat:
+      return make_unique<newfstatatSystemCall>(syscallNumber, syscallName);
     case SYS_fstatfs:
       return make_unique<fstatfsSystemCall>(syscallNumber, syscallName);
     case SYS_futex:
@@ -436,6 +438,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<unameSystemCall>(syscallNumber, syscallName);
     case SYS_unlink:
       return make_unique<unlinkSystemCall>(syscallNumber, syscallName);
+    case SYS_unlinkat:
+      return make_unique<unlinkatSystemCall>(syscallNumber, syscallName);
     case SYS_utimensat:
       return make_unique<utimensatSystemCall>(syscallNumber, syscallName);
     case SYS_vfork:
