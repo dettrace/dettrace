@@ -34,6 +34,6 @@ libdet.so: libdet.cpp
 clean:
 	$(RM) $(obj)
 	$(RM) $(dep)
-	$(RM) dettrace
+	$(RM) dettrace libdet.so
 # Credits to the awesome makefile guide:
 # http://nuclear.mutantstargoat.com/articles/make/

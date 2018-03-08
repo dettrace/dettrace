@@ -2,6 +2,7 @@ import glob
 import os
 import subprocess
 import difflib
+import sys
 
 exectedOutputDir = "ExpectedOutputs/"
 
@@ -21,7 +22,12 @@ def main():
         try:
             print("========= Testing \"{}\"=========".format(prog))
             # Run and get output in this machine.
-            outputBin = subprocess.check_output(["../../bin/dettrace", "./" + prog])
+            try:
+                outputBin = subprocess.check_output(["../../bin/dettrace", "./" + prog], stderr=subprocess.STDOUT)
+            except subprocess.CalledProcessError as cpe:
+                # sometimes test "failures" are expected, e.g., with system calls we don't handle
+                outputBin = cpe.output
+                pass
             # From binary to string.
             output = outputBin.decode(encoding='UTF-8')
 
@@ -33,6 +39,9 @@ def main():
                 print("Failure\n")
                 # Failed diff, find difference.
                 allSame = False
+
+                # print raw output, useful for constructing expected output for failing tests
+                #sys.stdout.write("{"+output+"}")
 
                 print("File diff:")
                 diff = difflib.ndiff(output.splitlines(keepends=True),
