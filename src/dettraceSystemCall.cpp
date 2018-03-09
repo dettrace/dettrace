@@ -680,6 +680,19 @@ void lgetxattrSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
+madviseSystemCall::madviseSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool madviseSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void madviseSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
 munmapSystemCall::munmapSystemCall(long syscallNumber, string syscallName):
   systemCall(syscallNumber, syscallName){
   return;
@@ -690,6 +703,96 @@ bool munmapSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void munmapSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+mmapSystemCall::mmapSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool mmapSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void mmapSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+mprotectSystemCall::mprotectSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool mprotectSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void mprotectSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+mremapSystemCall::mremapSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool mremapSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void mremapSystemCall::handleDetPost(state &s, ptracer &t){
+  // TODO: Turn nano sleep into a no op.
+
+  return;
+}
+
+// =======================================================================================
+nanosleepSystemCall::nanosleepSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool nanosleepSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void nanosleepSystemCall::handleDetPost(state &s, ptracer &t){
+  // TODO: Turn nano sleep into a no op.
+
+  return;
+}
+// =======================================================================================
+lseekSystemCall::lseekSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool lseekSystemCall::handleDetPre(state &s, ptracer &t){
+  return true;
+}
+
+void lseekSystemCall::handleDetPost(state &s, ptracer &t){
+  return;
+}
+// =======================================================================================
+lstatSystemCall::lstatSystemCall(long syscallNumber, string syscallName):
+  systemCall(syscallNumber, syscallName){
+  return;
+}
+
+bool lstatSystemCall::handleDetPre(state &s, ptracer &t){
+  const char* filenameAddr = (const char*) t.arg1();
+  string filename = ptracer::readTraceeCString(filenameAddr, s.traceePid);
+  string coloredMsg = "lstat-ing path: " +
+    logger::makeTextColored(Color::green, filename);
+  s.log.writeToLog(Importance::extra, coloredMsg);
+
+  return true;
+}
+
+void lstatSystemCall::handleDetPost(state &s, ptracer &t){
+  handleStatFamily(s, t, "lstat");
   return;
 }
 // =======================================================================================
@@ -780,80 +883,6 @@ bool openatSystemCall::handleDetPre(state &s, ptracer &t){
 
 void openatSystemCall::handleDetPost(state &s, ptracer &t){
   // Deterministic file descriptors?
-  return;
-}
-// =======================================================================================
-mmapSystemCall::mmapSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool mmapSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void mmapSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-mprotectSystemCall::mprotectSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool mprotectSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void mprotectSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-nanosleepSystemCall::nanosleepSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool nanosleepSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void nanosleepSystemCall::handleDetPost(state &s, ptracer &t){
-  // TODO: Turn nano sleep into a no op.
-
-  return;
-}
-// =======================================================================================
-lseekSystemCall::lseekSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool lseekSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
-}
-
-void lseekSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
-}
-// =======================================================================================
-lstatSystemCall::lstatSystemCall(long syscallNumber, string syscallName):
-  systemCall(syscallNumber, syscallName){
-  return;
-}
-
-bool lstatSystemCall::handleDetPre(state &s, ptracer &t){
-  const char* filenameAddr = (const char*) t.arg1();
-  string filename = ptracer::readTraceeCString(filenameAddr, s.traceePid);
-  string coloredMsg = "lstat-ing path: " +
-    logger::makeTextColored(Color::green, filename);
-  s.log.writeToLog(Importance::extra, coloredMsg);
-
-  return true;
-}
-
-void lstatSystemCall::handleDetPost(state &s, ptracer &t){
-  handleStatFamily(s, t, "lstat");
   return;
 }
 // =======================================================================================
@@ -1473,8 +1502,10 @@ void handleStatFamily(state& s, ptracer& t, string syscallName){
 
     myStat.st_atim = timespec { .tv_sec =  s.getLogicalTime(),
                                 .tv_nsec = s.getLogicalTime() };  /* user CPU time used */
-    myStat.st_mtim = timespec { .tv_sec =  s.getLogicalTime(),
-                                .tv_nsec = s.getLogicalTime() };
+    // myStat.st_mtim = timespec { .tv_sec =  s.getLogicalTime(),
+                                // .tv_nsec = s.getLogicalTime() };
+    myStat.st_mtim = timespec { .tv_sec =  0,
+				.tv_nsec = 0 };
     myStat.st_ctim = timespec { .tv_sec = s.getLogicalTime(),
                                 .tv_nsec = s.getLogicalTime() };  /* user CPU time used */
 
@@ -1505,7 +1536,7 @@ void handleStatFamily(state& s, ptracer& t, string syscallName){
     // TODO: could return actual value here?
     myStat.st_blocks = 1;      /* Number of 512B blocks allocated */
 
-    s.incrementTime();
+    // s.incrementTime();
 
     // Write back result for child.
     ptracer::writeToTracee(statPtr, myStat, s.traceePid);

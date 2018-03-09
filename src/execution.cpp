@@ -366,16 +366,20 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<getxattrSystemCall>(syscallNumber, syscallName);
     case SYS_ioctl:
       return make_unique<ioctlSystemCall>(syscallNumber, syscallName);
-    case SYS_lgetxattr:
-      return make_unique<lgetxattrSystemCall>(syscallNumber, syscallName);
+    case SYS_madvise:
+      return make_unique<madviseSystemCall>(syscallNumber, syscallName);
     case SYS_munmap:
       return make_unique<munmapSystemCall>(syscallNumber, syscallName);
     case SYS_mmap:
       return make_unique<mmapSystemCall>(syscallNumber, syscallName);
     case SYS_mprotect:
       return make_unique<mprotectSystemCall>(syscallNumber, syscallName);
+    case SYS_mremap:
+      return make_unique<mremapSystemCall>(syscallNumber, syscallName);
     case SYS_nanosleep:
       return make_unique<nanosleepSystemCall>(syscallNumber, syscallName);
+    case SYS_lgetxattr:
+      return make_unique<lgetxattrSystemCall>(syscallNumber, syscallName);
     case SYS_lseek:
       return make_unique<lseekSystemCall>(syscallNumber, syscallName);
     case SYS_lstat:

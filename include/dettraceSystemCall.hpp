@@ -653,6 +653,23 @@ public:
 // =======================================================================================
 /**
  *
+ * int madvise(void *addr, size_t length, int advice);
+ *
+ * The  madvise()  system  call is used to give advice or directions to the kernel about
+ * the address range beginning at address addr and with size length bytes In most cases,
+ * the goal of such advice is to improve system or application performance.
+ *
+ * Seem innocent enough. Deterministic.
+ */
+class madviseSystemCall : public systemCall{
+public:
+  madviseSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
  * int munmap(void *addr, size_t length);
  *
  * The  munmap()  system  call deletes the mappings for the specified address range, and
@@ -705,6 +722,25 @@ public:
 class mprotectSystemCall : public systemCall{
 public:
   mprotectSystemCall(long syscallName, string syscallNumber);
+  bool handleDetPre(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
+ * void *mremap(void *old_address, size_t old_size,
+ * size_t new_size, int flags, ... void *new_address );
+ *
+ * mremap()  expands  (or  shrinks) an existing memory mapping, potentially moving it at
+ * the same time (controlled by the flags argument and  the  available  virtual  address
+ * space).
+ *
+ * I belive this should follow the same line of thinking as mmap. If there is no ASLR
+ * this will also be deterministic.
+ */
+class mremapSystemCall : public systemCall{
+public:
+  mremapSystemCall(long syscallName, string syscallNumber);
   bool handleDetPre(state& s, ptracer& t) override;
   void handleDetPost(state& s, ptracer& t) override;
 };
