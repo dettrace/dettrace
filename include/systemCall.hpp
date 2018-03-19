@@ -11,29 +11,32 @@ using namespace std;
 class state;
 
 /**
- * Class to hold handling function per system call.
- * You should derive from this class and implement handleDeterministically() using
- * the override attribute.
- * default implementation throws exeception.
+ * Class to handle system call deterministically. You should derive from this class
+ * and override either hadleDetPre(), handleDetPost(), or both, (sometimes, none :))
+
  */
 class systemCall{
 public:
   systemCall(long syscallNumber, string syscallName);
 
   /**
-   * Function to call before system call is exectuted to handle deterministicallly.
-   * This is different in a per system call basis. This is the default
-   * implementation, notice this means we rely on virtual dispatch to call the correct
-   * function, haters will say it's slow.
-   * @param s: Current state of the program state of tracer.
-   * @return  executeSystemCall: Dictate whether we should execute the system call.
+   * Function called by tracer before the system call is executed by the tracer.
+   * By default, we return true. Override function to set behavior to false.
+   * @return trapOnPost: If true, tracer will also trap on the post hook.
+   *                     If false, tracer will not trap on the post hook. This is
+   *                               slightly faster.
    */
   virtual bool handleDetPre(state& s, ptracer& t);
 
+  /**
+   * Function called in tracer after the system call has executed. This is a good chance
+   * to change arguments or return values before returning to tracee. By default does
+   * not do anything. This function is only called when @handleDetPre returned true.
+   */
   virtual void handleDetPost(state& s, ptracer& t);
 
-  const long syscallNumber;
   const string syscallName;
+  const long syscallNumber;
 };
 
 #endif

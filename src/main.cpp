@@ -35,6 +35,10 @@
 #include "state.hpp"
 #include "ptracer.hpp"
 #include "execution.hpp"
+#include "ptracer.hpp"
+#include "seccomp.hpp"
+
+#include <seccomp.h>
 
 /**
  * Useful link for understanding ptrace as it works with execve.
@@ -46,7 +50,7 @@ using namespace std;
 // =======================================================================================
 int doWithCheck(int returnValue, string errorMessage);
 pair<int, int> parseProgramArguments(int argc, char* argv[]);
-void runTracee(int optIndex, int argc, char** argv);
+void runTracee(int optIndex, int argc, char** argv, int debugLevel);
 void runTracer(int debugLevel, pid_t childPid);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
@@ -90,7 +94,7 @@ int main(int argc, char** argv){
 
   // Child.
   if(pid == 0){
-    runTracee(optIndex, argc, argv);
+    runTracee(optIndex, argc, argv, debugLevel);
   }else{
     runTracer(debugLevel, pid);
   }
@@ -101,7 +105,7 @@ int main(int argc, char** argv){
 /**
  * Child will become the process the user wishes to through call to execve.
  */
-void runTracee(int optIndex, int argc, char** argv){
+void runTracee(int optIndex, int argc, char** argv, int debugLevel){
   // Find absolute path to our build directory relative to the dettrace binary.
   char argv0[strlen(argv[0])];
   strcpy(argv0, argv[0]); // Use a copy since dirname may mutate contents.
@@ -110,7 +114,7 @@ void runTracee(int optIndex, int argc, char** argv){
   setUpContainer(pathToExe);
 
   // Perform execve based on user command.
-  ptrace(PTRACE_TRACEME, 0, NULL, NULL);
+  ptracer::doPtrace(PTRACE_TRACEME, 0, NULL, NULL);
 
   // +1 for exectuable's name, +1 for NULL at the end.
   int newArgc = argc - optIndex + 1 + 1;
@@ -127,12 +131,19 @@ void runTracee(int optIndex, int argc, char** argv){
                         (char* const)"PATH=/usr/bin/:/bin",
                         NULL};
 
+  // Set up seccomp + bpf filters using libseccomp.
+  // Default action to take when no rule applies to system call. We send a PTRACE_SECCOMP
+  // event message to the tracer with a unique data: INT16_MAX
+  seccomp myFilter { debugLevel };
+
   // Stop ourselves until the tracer is ready. This ensures the tracer has time to get set
   //up.
   raise(SIGSTOP);
+
+  myFilter.loadFilterToKernel();
+
   // execvpe() duplicates the actions of the shell in searching  for  an executable file
   // if the specified filename does not contain a slash (/) character.
-
   int val = execvpe(traceeCommand[0], traceeCommand, envs);
   if(val == -1){
     cerr << "Unable to exec your program. Reason:\n  " << string { strerror(errno) } << endl;
@@ -143,7 +154,6 @@ void runTracee(int optIndex, int argc, char** argv){
     pid_t ppid = getppid();
     syscall(SYS_tgkill, ppid, ppid, SIGABRT);
   }
-
 
   return;
 }
@@ -275,14 +285,14 @@ int doWithCheck(int returnValue, string errorMessage){
 
   return returnValue;
 }
+
 // =======================================================================================
 /**
  * Wrapper around mount with strings.
  */
 void mountDir(string source, string target){
-  doWithCheck(mount(source.c_str(), target.c_str(), nullptr, MS_BIND, nullptr),
+  doWithCheck(mount(source.c_str(), target.c_str(), NULL, MS_BIND, NULL),
 	      "Unable to bind mount: " + source + " to " + target);
 }
 
-// =======================================================================================
 

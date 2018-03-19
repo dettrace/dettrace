@@ -8,12 +8,9 @@ systemCall::systemCall(long syscallNumber, string syscallName) :
 
 
 bool systemCall::handleDetPre(state& s, ptracer& t){
-  throw runtime_error("systemCall::handleDetPre: Unimplemented system call: " +
-		      syscallName);
+  return true;
 }
 
 void systemCall::handleDetPost(state& s, ptracer& t){
-  throw runtime_error("systemCall::handleDetPost: Unimplemented system call: " +
-		      syscallName);
   return;
 }

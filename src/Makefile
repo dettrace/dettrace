@@ -2,7 +2,7 @@ CXX = g++
 # Using features from the C++17 Standard: pair and pattern matching with auto.
 DEBUG =  -O0 -g
 CXXFLAGS = $(DEBUG) -std=c++1z -Wall $(INCLUDE)
-LIBS = -pthread
+LIBS = -pthread -lseccomp
 
 # Libdet only.
 LIBDETFLAGS= -g -Wall -Wextra -Wconversion -fPIC -shared -Wl,--no-as-needed -std=c++1z
@@ -17,7 +17,7 @@ dep = $(obj:.o=.d)
 all: dettrace libdet.so
 
 dettrace: $(obj) $(libs)
-	$(CXX) $(CXXFLAGS) $(LIBS) $^ -o $@
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS)
 
 -include $(dep)
 
