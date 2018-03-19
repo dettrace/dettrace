@@ -7,7 +7,9 @@
 Using `ptrace` we are able to run programs deterministically. All system calls are caught
 and determinized by our tracer.
 
-## Making
+## Building
+This project relies on the [libseccomp library](https://github.com/seccomp/libseccomp). Please install. For hassle free, we reccomend installing from your system's standard repository of packages.
+
 Working on any recent Linux system you should be able to `make` from this directory.
 
 We use C++17 features not yet implemented in older compilers. It should work with GCC
@@ -34,5 +36,4 @@ will throw a runtime exception.
 
 ## Testing
 Unit tests are automatically built in the compilation step. You may run these tests from
-the script `./runTests.sh`. This script merely calls `./dettrace` on the unit tests with
-ASLR turned off.
+the script `python3 runTests.py`. This script merely calls `./dettrace` on the unit tests and sample programs.
