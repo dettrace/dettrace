@@ -35,8 +35,8 @@ public:
    */
   virtual void handleDetPost(state& s, ptracer& t);
 
-  const string syscallName;
   const long syscallNumber;
+  const string syscallName;
 };
 
 #endif
