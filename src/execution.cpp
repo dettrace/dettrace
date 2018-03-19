@@ -382,6 +382,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<vforkSystemCall>(syscallNumber, syscallName);
     case SYS_write:
       return make_unique<writeSystemCall>(syscallNumber, syscallName);
+    case SYS_writev:
+      return make_unique<writeSystemCall>(syscallNumber, syscallName);
     }
 
     // Generic system call. Throws error.
