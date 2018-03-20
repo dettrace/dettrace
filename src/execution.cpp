@@ -1,3 +1,4 @@
+#include<linux/version.h>
 #include "logger.hpp"
 #include "systemCallList.hpp"
 #include "systemCall.hpp"
@@ -57,6 +58,10 @@ bool execution::handlePreSystemCall(state& currState){
   log.setPadding();
 
   bool callPostHook = currState.systemcall->handleDetPre(currState, tracer);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
+  // Next event will be a sytem call pre-exit event.
+  currState.isPreExit = true;
+#endif
 
   // This is the easiest time to tell a fork even happened. It's not trivial
   // to check the event as we might get a signal first from the child process.
@@ -65,6 +70,13 @@ bool execution::handlePreSystemCall(state& currState){
   // occasionally-missing-ptrace-event-vfork-when-running-ptrace
   if(systemCall == "fork" || systemCall == "vfork" || systemCall == "clone"){
     int status;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
+    // fork/vfork/clone pre system call.
+    ptraceEvent e = getNextEvent(traceesPid, traceesPid, status, true);
+    // That was the pre-exit event, make sure we set isPreExit to false.
+    currState.isPreExit = false;
+#endif
     // This event is known to be either a fork/vfork event or a signal.
     ptraceEvent e = getNextEvent(traceesPid, traceesPid, status, false);
     handleFork(e);
@@ -73,11 +85,18 @@ bool execution::handlePreSystemCall(state& currState){
     return false;
   }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
+  // This is the seccomp event where we do the work for the pre-system call hook.
+  // In older versions of seccomp, we must also do the pre-exit ptrace event, as we
+  // have to. This is dictated by this variable.
+  return true;
+#else
   return callPostHook;
+#endif
 }
 // =======================================================================================
 void execution::handlePostSystemCall(state& currState){
-  log.writeToLog(Importance::info,"%s value before post-interception: %d\n",
+  log.writeToLog(Importance::info,"%s value before post-hook: %d\n",
 		 currState.systemcall->syscallName.c_str(),
 		 tracer.getReturnValue());
 
@@ -115,6 +134,16 @@ void execution::runProgram(){
     // interception of system calls through PTRACE_SYSCALL. Only post system call
     // events come here.
     if(ret == ptraceEvent::syscall){
+      #if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
+      state& currentState = states.at(traceesPid);
+      // Skip pre exit calls nothing for us to do. We did the work during handleSeccomp()
+      // on the seccomp event.
+      if(currentState.isPreExit){
+	callPostHook = true;
+	currentState.isPreExit = false;
+	continue;
+      }
+      #endif
       tracer.updateState(traceesPid);
       handlePostSystemCall( states.at(traceesPid) );
       // Nope, we're done with the current system call. Wait for next seccomp event.
@@ -283,10 +312,10 @@ bool execution::handleSeccomp(){
 			systemCallMappings[syscallNum]);
   }
 
+  // TODO: Right now we update this information on every exit and entrance, as a
+  // small optimization we might not want to...
+
   // Get registers from tracee.
-  // TODO: Right now we update this information on every
-  // exit and entrance, as an optimization we might not want to...
-  // This would be a small optimization.
   tracer.updateState(traceesPid);
   return handlePreSystemCall( states.at(traceesPid) );
 }
@@ -362,6 +391,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<sendtoSystemCall>(syscallNumber, syscallName);
     case SYS_select:
       return make_unique<selectSystemCall>(syscallNumber, syscallName);
+    case SYS_set_robust_list:
+      return make_unique<set_robust_listSystemCall>(syscallNumber, syscallName);
     case SYS_statfs:
       return make_unique<statfsSystemCall>(syscallNumber, syscallName);
     case SYS_stat:

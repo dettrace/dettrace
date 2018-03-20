@@ -1,6 +1,7 @@
 #ifndef STATE_H
 #define STATE_H
 
+#include<linux/version.h>
 #include <sys/ptrace.h>
 #include <sys/reg.h>
 #include <sys/types.h>
@@ -45,7 +46,13 @@ public:
    * The pid of the process represented by this state.
    */
   pid_t traceePid;
-
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
+  /*
+   * Per process bool to know if this is the pre or post hook event as ptrace does
+   * not track this for us. Only needed for older versions of seccomp.
+   */
+  bool isPreExit = true;
+#endif
   /*
    * Isomorphism between inodes and vitual inodes.
    */

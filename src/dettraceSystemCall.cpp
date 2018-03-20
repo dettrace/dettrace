@@ -76,7 +76,7 @@ bool execveSystemCall::handleDetPre(state &s, ptracer &t){
   string msg = "execve-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
   s.log.writeToLog(Importance::info, msg);
 
-  return true;
+  return false;
 }
 // =======================================================================================
 bool faccessatSystemCall::handleDetPre(state &s, ptracer &t){
