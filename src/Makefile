@@ -2,13 +2,13 @@ CXX = g++
 # Using features from the C++17 Standard: pair and pattern matching with auto.
 DEBUG =  -O0 -g
 CXXFLAGS = $(DEBUG) -std=c++1z -Wall $(INCLUDE)
-LIBS = -pthread -lseccomp
+LIBS = -pthread -lseccomp -L ../lib/lib64
 
 # Libdet only.
 LIBDETFLAGS= -g -Wall -Wextra -Wconversion -fPIC -shared -Wl,--no-as-needed -std=c++1z
 LIBDETLIBS=-ldl -lm
 
-INCLUDE = -I ../include/
+INCLUDE = -I ../include/ -I ../lib/include
 
 src = $(wildcard *.cpp)
 obj = $(src:.cpp=.o)

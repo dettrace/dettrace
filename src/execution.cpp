@@ -73,12 +73,13 @@ bool execution::handlePreSystemCall(state& currState){
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
     // fork/vfork/clone pre system call.
-    ptraceEvent e = getNextEvent(traceesPid, traceesPid, status, true);
+    ptraceEvent e;
+    e = getNextEvent(traceesPid, traceesPid, status, true);
     // That was the pre-exit event, make sure we set isPreExit to false.
     currState.isPreExit = false;
 #endif
     // This event is known to be either a fork/vfork event or a signal.
-    ptraceEvent e = getNextEvent(traceesPid, traceesPid, status, false);
+    e = getNextEvent(traceesPid, traceesPid, status, false);
     handleFork(e);
 
     // This was a fork, vfork, or clone. No need to go into the post-interception hook.
