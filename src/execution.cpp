@@ -70,10 +70,10 @@ bool execution::handlePreSystemCall(state& currState){
   // occasionally-missing-ptrace-event-vfork-when-running-ptrace
   if(systemCall == "fork" || systemCall == "vfork" || systemCall == "clone"){
     int status;
+    ptraceEvent e;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
     // fork/vfork/clone pre system call.
-    ptraceEvent e;
     e = getNextEvent(traceesPid, traceesPid, status, true);
     // That was the pre-exit event, make sure we set isPreExit to false.
     currState.isPreExit = false;
