@@ -15,7 +15,8 @@ execution::execution(int debugLevel, pid_t startingPid):
   nextPid {startingPid},
   // Waits for first process to be ready! Probably not good to have this kind of
   // dependency of a initialization list?
-  tracer{startingPid}{
+  tracer{startingPid},
+  debugLevel(debugLevel){
     // Set state for first process.
     states.emplace(startingPid, state {log, startingPid});
 
@@ -92,7 +93,10 @@ bool execution::handlePreSystemCall(state& currState){
   // have to. This is dictated by this variable.
   return true;
 #else
-  return callPostHook;
+  // If debugging we let system call go to post hook so we can see return values.
+  // Notice we must still return false in the fork case. So we should not move this
+  // expression "higher up" in the call chain.
+  return debugLevel >= 4 ? true : callPostHook;
 #endif
 }
 // =======================================================================================
@@ -336,6 +340,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     switch(syscallNumber){
     case SYS_access:
       return make_unique<accessSystemCall>(syscallNumber, syscallName);
+    case SYS_alarm:
+      return make_unique<alarmSystemCall>(syscallNumber, syscallName);
     case SYS_chdir:
       return make_unique<chdirSystemCall>(syscallNumber, syscallName);
     case SYS_chmod:
@@ -388,6 +394,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<prlimit64SystemCall>(syscallNumber, syscallName);
     case SYS_read:
       return make_unique<readSystemCall>(syscallNumber, syscallName);
+    case SYS_readlink:
+      return make_unique<readlinkSystemCall>(syscallNumber, syscallName);
     case SYS_sendto:
       return make_unique<sendtoSystemCall>(syscallNumber, syscallName);
     case SYS_select:
@@ -400,6 +408,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<statSystemCall>(syscallNumber, syscallName);
     case SYS_sysinfo:
       return make_unique<sysinfoSystemCall>(syscallNumber, syscallName);
+    case SYS_tgkill:
+      return make_unique<tgkillSystemCall>(syscallNumber, syscallName);
     case SYS_time:
       return make_unique<timeSystemCall>(syscallNumber, syscallName);
     case SYS_uname:

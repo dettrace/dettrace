@@ -61,6 +61,9 @@ private:
   // Once all process' have ended. We exit.
   bool exitLoop = false;
 
+  // Debug level
+  int debugLevel;
+
 public:
 
   execution(int debugLevel, pid_t startingPid);

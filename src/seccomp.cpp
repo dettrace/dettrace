@@ -74,6 +74,7 @@ void seccomp::loadRules(bool debug){
 
   // These system calls cause an even that is caught by ptrace and determinized.
   intercept(SYS_access, debug);
+  intercept(SYS_alarm);
   intercept(SYS_chdir, debug);
   intercept(SYS_chmod, debug);
   intercept(SYS_clock_gettime);
@@ -127,6 +128,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_unlinkat, debug);
   intercept(SYS_utimensat);
   intercept(SYS_write);
+  // TODO
   intercept(SYS_writev);
 }
 

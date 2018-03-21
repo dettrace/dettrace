@@ -217,7 +217,7 @@ void getrusageSystemCall::handleDetPost(state &s, ptracer &t){
     usage.ru_nvcsw = LONG_MAX;    		   /* voluntary context switches */
     usage.ru_nivcsw = LONG_MAX;   		   /* involuntary context switches */
 
-    ptracer::writeToTracee(usagePtr, usage, t.getPid());
+    // ptracer::writeToTracee(usagePtr, usage, t.getPid());
   }
 
   s.incrementTime();
@@ -288,7 +288,7 @@ bool openSystemCall::handleDetPre(state &s, ptracer &t){
   const char* pathnamePtr = (const char*)t.arg1();
   string pathname = ptracer::readTraceeCString(pathnamePtr, t.getPid());
 
-  s.log.writeToLog(Importance::info, "Openat-ing path: " +
+  s.log.writeToLog(Importance::info, "Open-ing path: " +
 		   logger::makeTextColored(Color::green, pathname) + "\n");
 
   return false;
@@ -510,6 +510,11 @@ void sysinfoSystemCall::handleDetPost(state &s, ptracer &t){
 }
 // =======================================================================================
 bool tgkillSystemCall::handleDetPre(state &s, ptracer &t){
+  int tgid = (int) t.arg1();
+  int tid = (int) t.arg2();
+  int signal = (int) t.arg3();
+  s.log.writeToLog(Importance::info, "tgkill(tgid = %d, tid = %d, signal = %d)\n",
+		   tgid, tid, signal);
   return true;
 }
 
@@ -706,9 +711,6 @@ void handleStatFamily(state& s, ptracer& t, string syscallName){
 
     // Write back result for child.
     ptracer::writeToTracee(statPtr, myStat, s.traceePid);
-  } else {
-    s.log.writeToLog(Importance::info, "Error in "
-		     + syscallName + ":\n" + string { strerror(- retVal)} + "\n");
   }
   return;
 }

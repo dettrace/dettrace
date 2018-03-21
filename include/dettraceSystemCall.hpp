@@ -14,6 +14,20 @@ using namespace std;
 
 // =======================================================================================
 /**
+ *
+ * unsigned int alarm(unsigned int seconds);
+ *
+ * alarm()  arranges for a SIGALRM signal to be delivered to the calling process in sec‐
+ * onds seconds.
+ *
+ * TODO: We must allow system call. Maybe deliver signal on next sytem call?
+ */
+class alarmSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+};
+// =======================================================================================
+/**
  * access()  checks  whether the calling process can access the file pathname.  If path‐
  * name is a symbolic link, it is dereferenced.
  */

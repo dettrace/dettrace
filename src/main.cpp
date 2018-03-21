@@ -187,6 +187,8 @@ void setUpContainer(string pathToExe){
   mountDir("/lib64/", "../lib64/");
   // Mount dev/null
   mountDir("/dev/null", "../dev/null");
+  // Ld cache
+  mountDir("/etc/ld.so.cache", "../etc/ld.so.cache");
   // Mount our dettrace/bin and dettrace/lib folders.
   mountDir("../../bin/", "../dettrace/bin");
   mountDir("../../lib/", "../dettrace/lib");
