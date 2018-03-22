@@ -81,6 +81,11 @@ public:
   uint64_t arg5();
   uint64_t arg6();
 
+  /**
+   * Change system call by writing to eax register, be careful!
+   */
+  void changeSystemCall(uint64_t val);
+
   void writeArg1(uint64_t val);
   void writeArg2(uint64_t val);
   void writeArg3(uint64_t val);

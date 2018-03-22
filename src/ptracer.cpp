@@ -74,8 +74,8 @@ uint64_t ptracer::getSystemCallNumber(){
 
 void ptracer::setReturnRegister(uint64_t retVal){
   regs.rax = retVal;
-  // Please note how address is passed in data argument here. Which I guess sort of makes
-  // sense? We are passing data to it?
+  // Please note how the memory address is passed in data argument here.
+  // Which I guess sort of makes sense? We are passing data to it?
   doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
 }
 
@@ -155,6 +155,11 @@ long ptracer::doPtrace(enum __ptrace_request request, pid_t pid, void *addr, voi
   return val;
 }
 
+void ptracer::changeSystemCall(uint64_t val){
+  regs.orig_rax = val;
+  doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
+  return;
+}
 
 void ptracer::writeArg1(uint64_t val){
   regs.rdi = val;

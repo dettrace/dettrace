@@ -11,6 +11,7 @@
 
 #include <stack>
 
+
 /**
  * This class handles the event driven loop that is a process execution. Events from
  * a running program are intercepted, and a handler is called for that event.
@@ -44,20 +45,9 @@ private:
   // be a better choice for keys.
   map<pid_t, state> states;
 
-  // Global pidMap shared by entire process trees. This is global to maintain a consistent
-  // view of virtual to real pid mappings accross all processes.
-  // valueMapper pidMap;
 
-  // As we fork, we must let children process run, the child could itself fork. So we
-  // require a stack to know who the parent was.
-  // On fork => push current process, let child run.
-  // On child exit => pop stack, let that process run.
   stack<pid_t> processHier;
 
-  // Pid of the process whose even we have just retrieved with @getNextEvent, this
-  // tracee is currently stopped and we may make arbitrary modifications to it's state
-  // (registers).
-  pid_t traceesPid;
   // Once all process' have ended. We exit.
   bool exitLoop = false;
 
@@ -69,9 +59,9 @@ public:
   execution(int debugLevel, pid_t startingPid);
 
   // Processs is done. Remove it from our processHier stack and let parent process run.
-  void handleExit();
+  void handleExit(const pid_t traceesPid);
 
-  bool handlePreSystemCall(state& currState);
+  bool handlePreSystemCall(state& currState, const pid_t traceesPid);
 
   void handlePostSystemCall(state& currState);
 
@@ -92,24 +82,24 @@ public:
    * This event also sets scheduling for process by setting nextPid to newChildPid.
    *
    */
-  void handleFork(ptraceEvent event);
+  void handleFork(ptraceEvent event, const pid_t traceesPid);
 
   /**
    * Handle the fork event part of @handleFork. Pushes parent to our process hierarchy
    * and creates state for child.
    */
-  pid_t handleForkEvent();
+  pid_t handleForkEvent(const pid_t traceesPid);
 
   /**
    * Handle the signal part of @handleFork.
    */
-  void handleForkSignal();
+  void handleForkSignal(const pid_t traceesPid);
 
-  void handleClone();
+  void handleClone(const pid_t traceesPid);
 
-  void handleExecve();
+  void handleExecve(const pid_t traceesPid);
 
-  void handleSignal(int signum);
+  void handleSignal(int signum, const pid_t traceesPid);
 
   /**
    * Handle seccomp event. This happens everytime we intercept a system call before the
@@ -117,7 +107,7 @@ public:
    *
    * Return value dictates whether the postHook should be called as well.
    */
-  bool handleSeccomp();
+  bool handleSeccomp(const pid_t traceesPid);
 
   /**
    * Return the system call we currently caught from the tracer.
@@ -135,8 +125,9 @@ public:
    * @param ptraceSyscall[in]: continue with a PTRACE_SYSCALL as the action, if false,
    *        if do PTRACE_CONT instead.
    */
-  ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status,
-			   bool ptraceSystemCall);
+  tuple<ptraceEvent, pid_t, int> getNextEvent(pid_t currentPid, bool ptraceSystemCall);
+
+  ptraceEvent getPtraceEvent(const int status);
 };
 
 #endif

@@ -95,6 +95,8 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_gettimeofday);
   // TODO IOCTL with seccomp instead of ptrace
   intercept(SYS_ioctl);
+  noIntercept(SYS_mkdir);
+  noIntercept(SYS_mkdirat);
   // TODO Nano sleep
   intercept(SYS_nanosleep);
   intercept(SYS_newfstatat);
@@ -113,6 +115,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_readlink, debug);
   // TODO
   intercept(SYS_recvmsg);
+  intercept(SYS_rename, debug);
   intercept(SYS_sendto);
   // Defintely not deteministic </3
   intercept(SYS_select);

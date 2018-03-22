@@ -358,6 +358,31 @@ public:
 };
 // =======================================================================================
 /**
+ *
+ * int mkdir(const char *pathname, mode_t mode);
+ *
+ * mkdir() attempts to create a directory named pathname.
+ *
+ * Deterministic thanks to our container.
+ */
+class mkdirSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
+ *
+ *
+ * "at" variat of mkdir. Same things apply.
+ */
+class mkdiratSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(state& s, ptracer& t) override;
+};
+// =======================================================================================
+/**
  * int lstat(const char *pathname, struct stat *statbuf);
  *
  * lstat()  is  identical to stat(), except that if pathname is a symbolic link,
@@ -551,6 +576,19 @@ public:
   bool handleDetPre(state &s, ptracer &t) override;
   void handleDetPost(state &s, ptracer &t) override;
 };
+// =======================================================================================
+/**
+ * int rename(const char *oldpath, const char *newpath);
+ *
+ *
+ * No reason it shouldn't be deterministic.
+ */
+class renameSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(state &s, ptracer &t) override;
+};
+
 // =======================================================================================
 /**
  *

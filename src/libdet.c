@@ -31,10 +31,10 @@
 
  * https://stackoverflow.com/questions/17126400/ \
  * how-are-global-variables-in-shared-libraries-linked
- * Global variables are not shared among different processes.
+ * Global variables are not shared among different processes. Warning: global variables
+ * should have unique names, or they might clash with libc functions!
  */
-uint32_t clock = 0;
-
+time_t libdet_clock = 0;
 
 /**
  * The  functions  clock_gettime() retrieve the time of the specified clock clk_id.
@@ -48,16 +48,15 @@ uint32_t clock = 0;
  * clock  may  be  system-wide and hence visible for all processes, or per-process if it
  * measures time only within a single process.
  */
-extern "C"
 int clock_gettime(clockid_t clk_id, struct timespec *tp){
   (void)clk_id; // ignore unused warning.
-  // fprintf(stderr, "CALLED: %s\n", "clock_gettime");
+  /* fprintf(stderr, "CALLED: %s\n", "clock_gettime"); */
   if(tp == NULL){
     return -1;
   }else{
-    tp->tv_nsec = clock;
-    tp->tv_sec  = clock;
-    clock++;
+    tp->tv_nsec = libdet_clock;
+    tp->tv_sec  = libdet_clock;
+    libdet_clock++;
   }
 
   return 0;
@@ -88,13 +87,13 @@ int clock_gettime(clockid_t clk_id, struct timespec *tp){
  * If  either  tv  or  tz  is  NULL, the corresponding structure is not set or returned.
  * (However, compilation warnings will result if tv is NULL.)
  */
-extern "C"
 int gettimeofday(struct timeval *tv, struct timezone *tz){
+  /* fprintf(stderr, "CALLED: %s\n", "clock_gettime"); */
   if(tv != NULL) {
-    tv->tv_sec = clock;
-    tv->tv_usec = clock;
+    tv->tv_sec = libdet_clock;
+    tv->tv_usec = libdet_clock;
   }
-  clock++;
+  libdet_clock++;
   if(tz != NULL){
     // No minutes west of Greenwich and no daylight correction.
     tz->tz_minuteswest = 0;
@@ -109,11 +108,14 @@ int gettimeofday(struct timeval *tv, struct timezone *tz){
  * time_t is implemented as an arithmetic number. Needed for srand.
  * http://man7.org/linux/man-pages/man2/time.2.html
  */
-extern "C"
-time_t time(time_t *result){
-  (void)result; // ignore unused warning.
-  // fprintf(stderr, "CALLED: %s\n", "time");
-  int retTime = clock;
-  clock++;
+time_t time(time_t* tloc){
+  /* fprintf(stderr, "CALLED: %s\n", "time"); */
+
+  if(tloc != NULL){
+    *tloc = libdet_clock;
+  }
+
+  int retTime = libdet_clock;
+  libdet_clock++;
   return retTime;
 }

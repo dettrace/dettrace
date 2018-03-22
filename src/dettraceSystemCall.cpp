@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <sys/utsname.h>
 #include <sys/ioctl.h>
+#include <fcntl.h>              /* Obtain O_* constant definitions */
 
 #include <climits>
 #include <cstring>
@@ -217,7 +218,7 @@ void getrusageSystemCall::handleDetPost(state &s, ptracer &t){
     usage.ru_nvcsw = LONG_MAX;    		   /* voluntary context switches */
     usage.ru_nivcsw = LONG_MAX;   		   /* involuntary context switches */
 
-    // ptracer::writeToTracee(usagePtr, usage, t.getPid());
+    ptracer::writeToTracee(usagePtr, usage, t.getPid());
   }
 
   s.incrementTime();
@@ -259,6 +260,20 @@ void nanosleepSystemCall::handleDetPost(state &s, ptracer &t){
   // TODO: Turn nano sleep into a no op.
 
   return;
+}
+// =======================================================================================
+bool mkdirSystemCall::handleDetPre(state &s, ptracer &t){
+  string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
+  string msg = "mkdir-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
+  s.log.writeToLog(Importance::info, msg);
+  return false;
+}
+// =======================================================================================
+bool mkdiratSystemCall::handleDetPre(state &s, ptracer &t){
+  string path = ptracer::readTraceeCString((const char*)t.arg2(), t.getPid());
+  string msg = "mkdirat-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
+  s.log.writeToLog(Importance::info, msg);
+  return false;
 }
 // =======================================================================================
 void newfstatatSystemCall::handleDetPost(state &s, ptracer &t){
@@ -310,11 +325,16 @@ bool openatSystemCall::handleDetPre(state &s, ptracer &t){
 // =======================================================================================
 // TODO
 bool pipeSystemCall::handleDetPre(state &s, ptracer &t){
-  return true;
+  s.log.writeToLog(Importance::info, "Making this pipe non-blocking");
+  // Convert pipe call to pipe2 to set O_NONBLOCK.
+  t.changeSystemCall(SYS_pipe2);
+  t.writeArg2(O_NONBLOCK);
+  // TODO Preserve contents of seccond register?
+
+  return false;
 }
 
 void pipeSystemCall::handleDetPost(state &s, ptracer &t){
-  return;
 }
 // =======================================================================================
 bool pselect6SystemCall::handleDetPre(state &s, ptracer &t){
@@ -379,6 +399,12 @@ bool readSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 void readSystemCall::handleDetPost(state &s, ptracer &t){
+  if(- EAGAIN == (int64_t) t.getReturnValue()){
+    auto msg = "Read would have blocked!\nPreempting process!";
+    s.log.writeToLog(Importance::info, msg);
+  }
+  return;
+
   // TODO:
   // int retVal = t.getReturnValue();
   // if(retVal < 0) {
@@ -419,6 +445,17 @@ void recvmsgSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 
+// =======================================================================================
+bool renameSystemCall::handleDetPre(state &s, ptracer &t){
+  string oldpath = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
+  string newpath = ptracer::readTraceeCString((const char*)t.arg2(), t.getPid());
+  string msg1 = "rename-ing path: " + logger::makeTextColored(Color::green, oldpath) + "\n";
+  string msg2 = "to path: " + logger::makeTextColored(Color::green, newpath) + "\n";
+  s.log.writeToLog(Importance::info, msg1 + msg2);
+
+  return false;
+
+}
 // =======================================================================================
 // TODO
 bool sendtoSystemCall::handleDetPre(state &s, ptracer &t){

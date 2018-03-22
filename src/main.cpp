@@ -169,6 +169,9 @@ void runTracee(int optIndex, int argc, char** argv, int debugLevel){
  */
 void setUpContainer(string pathToExe){
   // (Assumed to be in /bin/dettrace where / is our project root.
+
+  // TODO. Only this line needs to be changed to set up choort. I also need to create
+  // a /dettrace/bin, /dettrace/lib, and /build folders if they don't exist.
   string buildDir { pathToExe + "/../root/build/" };
 
   // 1. First we mount cwd in our /root/build/ directory.
