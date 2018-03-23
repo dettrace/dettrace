@@ -390,29 +390,33 @@ void readSystemCall::handleDetPost(state &s, ptracer &t){
     throw runtime_error("Read failed with: non syscall insn");
   } 
   ssize_t bytes_read = retVal;
+  s.totalBytes += bytes_read;
   ssize_t bytes_requested = t.arg3();
+  
   
   if (s.firstTryReadWrite) {
     s.firstTryReadWrite = false;
-    s.preArg1 = t.regs.rdi;
-    s.preArg3 = t.regs.rdx;
+    s.beforeRetry = t.regs;
   } 
 
-  //if (bytes_read != bytes_requested && bytes_read != 0) {
-  if (s.totalBytes != s.preArg3) {
-    s.totalBytes = s.totalBytes + bytes_read;
+  if (bytes_read != 0/*EOF*/ && s.totalBytes != s.beforeRetry.rdx/*original bytes requested*/) {
+    //cerr << "** partial read: " << bytes_read << " / " << bytes_requested << endl;
     t.writeArg2(t.arg2() + bytes_read);
     t.writeArg3(t.arg3() - bytes_read);
     t.regs.rax = t.getSystemCallNumber();
-    t.writeIp(s.preIp);
-    s.preIp = 0;
-  }
-  else {
+    t.writeIp(t.regs.rip - 2);
+  } else { // EOF, or read returned everything we asked for
+    //cerr << "** full read: " << bytes_read << " / " << bytes_requested << endl;
+    // restore user regs so that it appears as if only one syscall occurred
+    t.setReturnRegister(s.totalBytes);
+    t.writeArg1(s.beforeRetry.rdi);
+    t.writeArg2(s.beforeRetry.rsi);
+    t.writeArg3(s.beforeRetry.rdx);
+    // reset for next syscall that we may have to retry
     s.firstTryReadWrite = true;
     s.totalBytes = 0;
-    t.writeArg1(s.preArg1);
-    t.writeArg3(s.preArg3);
   }
+
   return;
 }
 // =======================================================================================

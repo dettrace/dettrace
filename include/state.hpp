@@ -66,11 +66,9 @@ public:
   int signalToDeliver = 0;
 
   /*
-   * Insn pointer from predet
+   * register values from (the post-hook) before any retries
    */
-  uint64_t preIp = 0;
-  uint64_t preArg1 = 0;
-  uint64_t preArg3 = 0;
+  struct user_regs_struct beforeRetry = {0};
   uint64_t totalBytes = 0;
   bool firstTryReadWrite = true;
 
