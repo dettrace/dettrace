@@ -6,26 +6,26 @@
 #include <sys/user.h>
 #include <sys/vfs.h>
 #include <sys/wait.h>
-#include <unistd.h>
-#include <signal.h>
 #include <string.h>
 #include <getopt.h>
 
-
+#include <sched.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <signal.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <errno.h>
 #include <stdint.h>
 #include <cstdlib>
 #include <stdio.h>
-#include <cstdio> // for perror
-#include <cstring> // for strlen
 #include <sys/stat.h>
-#include <fcntl.h>
 #include <stdarg.h>
 #include <libgen.h>
 #include <sys/mount.h>
 
 #include <iostream>
 #include <tuple>
-#include <sched.h>
 
 #include "logger.hpp"
 #include "systemCallList.hpp"
@@ -48,14 +48,24 @@
 
 using namespace std;
 // =======================================================================================
-int doWithCheck(int returnValue, string errorMessage);
 pair<int, int> parseProgramArguments(int argc, char* argv[]);
-void runTracee(int optIndex, int argc, char** argv, int debugLevel);
+int runTracee(void* args);
 void runTracer(int debugLevel, pid_t childPid);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
 void mountDir(string source, string target);
 void setUpContainer(string pathToExe);
+// See user_namespaces(7)
+static void update_map(char *mapping, char *map_file);
+// See user_namespaces(7)
+static void proc_setgroups_write(pid_t child_pid, const char *str);
+// =======================================================================================
+struct childArgs{
+  int optIndex;
+  int argc;
+  char** argv;
+  int debugLevel;
+};
 // =======================================================================================
 /**
  * Given a program through the command line, spawn a child thread, call PTRACEME and exec
@@ -85,27 +95,39 @@ int main(int argc, char** argv){
   // our own user namespace. Other namepspace commands require CAP_SYS_ADMIN to work.
   // Namespaces must must be done before fork. As changes don't apply until after
   // fork, to all child processes.
-  doWithCheck(unshare(CLONE_NEWUSER| // Our own user namespace.
-		      CLONE_NEWPID | // Our own pid namespace.
-		      CLONE_NEWNS),  // Our own mount namespace
-	      "Unable to create namespaces");
+  const int STACK_SIZE (1024 * 1024);
+  static char child_stack[STACK_SIZE];    /* Space for child's stack */
 
-  pid_t pid = doWithCheck(fork(), "Failed to fork child");
+  struct childArgs args;
+  args.optIndex = optIndex;
+  args.argc = argc;
+  args.argv = argv;
+  args.debugLevel = debugLevel;
 
-  // Child.
-  if(pid == 0){
-    runTracee(optIndex, argc, argv, debugLevel);
-  }else{
-    runTracer(debugLevel, pid);
-  }
+  pid_t pid = doWithCheck(clone(runTracee, child_stack + STACK_SIZE,
+				SIGCHLD |      // Alert parent of child signals?
+				CLONE_NEWUSER| // Our own user namespace.
+				CLONE_NEWPID | // Our own pid namespace.
+				CLONE_NEWNS,  // Our own mount namespace
+				(void*) &args),
+			  "clone");
+
+  // Parent falls through.
+  runTracer(debugLevel, pid);
 
   return 0;
 }
 // =======================================================================================
 /**
- * Child will become the process the user wishes to through call to execve.
+ * Child will become the process the user wishes through call to execvpe.
  */
-void runTracee(int optIndex, int argc, char** argv, int debugLevel){
+int runTracee(void* voidArgs){
+  childArgs args = *((childArgs*)voidArgs);
+  int optIndex = args.optIndex;
+  int argc = args.argc;
+  char** argv = args.argv;
+  int debugLevel = args.debugLevel;
+
   // Find absolute path to our build directory relative to the dettrace binary.
   char argv0[strlen(argv[0])];
   strcpy(argv0, argv[0]); // Use a copy since dirname may mutate contents.
@@ -155,7 +177,7 @@ void runTracee(int optIndex, int argc, char** argv, int debugLevel){
     syscall(SYS_tgkill, ppid, ppid, SIGABRT);
   }
 
-  return;
+  return 0;
 }
 // =======================================================================================
 /**
@@ -214,6 +236,31 @@ void setUpContainer(string pathToExe){
  *
  */
 void runTracer(int debugLevel, pid_t startingPid){
+  // This is modified code from user_namespaces(7)
+
+  /* Update the UID and GID maps in the child */
+  char map_path[PATH_MAX];
+  const int MAP_BUF_SIZE = 100;
+  char map_buf[MAP_BUF_SIZE];
+  char* uid_map;
+  char* gid_map;
+  snprintf(map_path, PATH_MAX, "/proc/%ld/uid_map", (long) startingPid);
+
+  snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long) getuid());
+  uid_map = map_buf;
+
+  update_map(uid_map, map_path);
+
+  // Set GID Map
+  string deny = "deny";
+  proc_setgroups_write(startingPid, deny.c_str());
+
+  snprintf(map_path, PATH_MAX, "/proc/%ld/gid_map", (long) startingPid);
+  snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long) getgid());
+  gid_map = map_buf;
+
+  update_map(gid_map, map_path);
+
   // Init tracer and execution context.
   execution exe {debugLevel, startingPid};
   exe.runProgram();
@@ -274,30 +321,68 @@ pair<int, int> parseProgramArguments(int argc, char* argv[]){
 }
 // =======================================================================================
 /**
- * Call clib function that returns an integer and sets errno with automatic checking
- * and exiting on -1. Returns returnValue on success.
- *
- * Example:
- * doWithCheck(mount(cwd, pathToBuild.c_str(), nullptr, MS_BIND, nullptr),
- *             "Unable to bind mount cwd");
- */
-int doWithCheck(int returnValue, string errorMessage){
-  string reason = strerror(errno);
-  if(returnValue == -1){
-    cerr << errorMessage + ":\n  " + reason << endl;
-    exit(1);
-  }
-
-  return returnValue;
-}
-
-// =======================================================================================
-/**
  * Wrapper around mount with strings.
  */
 void mountDir(string source, string target){
   doWithCheck(mount(source.c_str(), target.c_str(), NULL, MS_BIND, NULL),
 	      "Unable to bind mount: " + source + " to " + target);
 }
+// =======================================================================================
+static void update_map(char *mapping, char *map_file){
+  int fd = open(map_file, O_RDWR);
+  if (fd == -1) {
+    fprintf(stderr, "ERROR: open %s: %s\n", map_file,
+	    strerror(errno));
+    exit(EXIT_FAILURE);
+  }
+  ssize_t map_len = strlen(mapping);
+  if (write(fd, mapping, map_len) != map_len) {
+    fprintf(stderr, "ERROR: write %s: %s\n", map_file,
+	    strerror(errno));
+    exit(EXIT_FAILURE);
+  }
 
+  close(fd);
+}
+// =======================================================================================
+/* Linux 3.19 made a change in the handling of setgroups(2) and the
+   'gid_map' file to address a security issue. The issue allowed
+   *unprivileged* users to employ user namespaces in order to drop
+   The upshot of the 3.19 changes is that in order to update the
+   'gid_maps' file, use of the setgroups() system call in this
+   user namespace must first be disabled by writing "deny" to one of
+   the /proc/PID/setgroups files for this namespace.  That is the
+   purpose of the following function. */
+static void proc_setgroups_write(pid_t child_pid, const char *str){
+  char setgroups_path[PATH_MAX];
+  int fd;
 
+  snprintf(setgroups_path, PATH_MAX, "/proc/%ld/setgroups",
+	   (long) child_pid);
+
+  fd = open(setgroups_path, O_RDWR);
+  if (fd == -1) {
+
+    /* We may be on a system that doesn't support
+       /proc/PID/setgroups. In that case, the file won't exist,
+       and the system won't impose the restrictions that Linux 3.19
+       added. That's fine: we don't need to do anything in order
+       to permit 'gid_map' to be updated.
+
+       However, if the error from open() was something other than
+       the ENOENT error that is expected for that case,  let the
+       user know. */
+
+    if (errno != ENOENT)
+      fprintf(stderr, "ERROR: open %s: %s\n", setgroups_path,
+	      strerror(errno));
+    return;
+  }
+
+  if (write(fd, str, strlen(str)) == -1)
+    fprintf(stderr, "ERROR: write %s: %s\n", setgroups_path,
+	    strerror(errno));
+
+  close(fd);
+}
+// =======================================================================================

@@ -64,10 +64,16 @@ public:
    * this int represents the signal number.
    */
   int signalToDeliver = 0;
-/*
- * Insn pointer from predet
- */
+  /*
+   * Insn pointer from predet
+   */
   uint64_t preIp = 0;
+
+  uint64_t originalArg3 = 0;
+  /**
+   * My register 2 argument since we need to restore at the post-hook after modifying.
+   */
+  uint64_t originalArg2 = 0;
 
   /*
    * We need to know what system call was/is that we are not. This is important in

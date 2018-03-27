@@ -1,3 +1,4 @@
+extern "C" {
 #include <sys/types.h>
 #include <stdint.h>
 #include <sys/types.h>
@@ -8,7 +9,7 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <sys/syscall.h>    /* For SYS_write, etc */
-
+}
 #include <algorithm>
 #include <iostream>
 #include <tuple>
@@ -99,7 +100,9 @@ void ptracer::setOptions(pid_t pid){
 	    PTRACE_O_TRACEEXEC |
 	    PTRACE_O_TRACEFORK |
 	    PTRACE_O_TRACEVFORK |
-	    // PTRACE_O_TRACEEXIT | // Stop tracee when it exits.
+	    // Stop tracee right as it is about to exit. This is needed as we cannot
+	    // assume WIFEXITED will work, see man ptrace 2.
+	    PTRACE_O_TRACEEXIT |
 	    PTRACE_O_TRACESYSGOOD |
 	    PTRACE_O_TRACESECCOMP
 	    ));

@@ -4,11 +4,13 @@
 #include <stdexcept>
 #include "state.hpp"
 #include "ptracer.hpp"
+#include "scheduler.hpp"
 
 using namespace std;
 
 // Needed to avoid recursive dependencies between classes.
 class state;
+class scheduler;
 
 /**
  * Class to handle system call deterministically. You should derive from this class
@@ -26,14 +28,14 @@ public:
    *                     If false, tracer will not trap on the post hook. This is
    *                               slightly faster.
    */
-  virtual bool handleDetPre(state& s, ptracer& t);
+  virtual bool handleDetPre(state& s, ptracer& t, scheduler& sched);
 
   /**
    * Function called in tracer after the system call has executed. This is a good chance
    * to change arguments or return values before returning to tracee. By default does
    * not do anything. This function is only called when @handleDetPre returned true.
    */
-  virtual void handleDetPost(state& s, ptracer& t);
+  virtual void handleDetPost(state& s, ptracer& t, scheduler& sched);
 
   const long syscallNumber;
   const string syscallName;

@@ -57,9 +57,16 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_set_tid_address);
   noIntercept(SYS_sigaltstack);
   noIntercept(SYS_rt_sigreturn);
+  noIntercept(SYS_rename);
+  noIntercept(SYS_renameat);
+  noIntercept(SYS_renameat2);
   noIntercept(SYS_socket);
   noIntercept(SYS_umask);
-  noIntercept(SYS_wait4);
+  // TODO We do not allow user to observe metadata so it's fine if they write
+  // it out.
+  noIntercept(SYS_utimensat);
+  noIntercept(SYS_utimes);
+
 
   // These system calls must intercepted as to know when a fork even has happened:
   // We handle forks when see the system call pre exit.
@@ -82,6 +89,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_connect);
   intercept(SYS_execve, debug);
   intercept(SYS_faccessat, debug);
+  intercept(SYS_fchownat);
   intercept(SYS_fstat);
   intercept(SYS_fstatfs);
   // TODO
@@ -95,8 +103,8 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_gettimeofday);
   // TODO IOCTL with seccomp instead of ptrace
   intercept(SYS_ioctl);
-  noIntercept(SYS_mkdir);
-  noIntercept(SYS_mkdirat);
+  intercept(SYS_mkdir, debug);
+  intercept(SYS_mkdirat, debug);
   // TODO Nano sleep
   intercept(SYS_nanosleep);
   intercept(SYS_newfstatat);
@@ -129,7 +137,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_uname);
   intercept(SYS_unlink, debug);
   intercept(SYS_unlinkat, debug);
-  intercept(SYS_utimensat);
+  intercept(SYS_wait4);
   intercept(SYS_write);
   // TODO
   intercept(SYS_writev);

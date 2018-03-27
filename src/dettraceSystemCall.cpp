@@ -23,8 +23,18 @@ using namespace std;
 void zeroOutStatfs(struct statfs& stats);
 void handleStatFamily(state& s, ptracer& t, string syscallName);
 
+/**
+ *
+ * Replays system call if the value of errnoValue is equal to the errno value that the libc
+ * call would have returned. Also logs event in logger. For example for read:
+ *   replaySyscallIfBlocked(s, t, sched, EAGAIN);
+ *
+ * @return: true if call was replayed, else false.
+ */
+bool replaySyscallIfBlocked(state& s, ptracer& t, scheduler& sched, int64_t errnoValue);
+
 // =======================================================================================
-bool accessSystemCall::handleDetPre(state &s, ptracer &t){
+bool accessSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
   string msg = "access-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
   s.log.writeToLog(Importance::info, msg);
@@ -32,7 +42,7 @@ bool accessSystemCall::handleDetPre(state &s, ptracer &t){
   return false;
 }
 // =======================================================================================
-bool chdirSystemCall::handleDetPre(state &s, ptracer &t){
+bool chdirSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
   string msg = "chdir-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
   s.log.writeToLog(Importance::info, msg);
@@ -40,7 +50,7 @@ bool chdirSystemCall::handleDetPre(state &s, ptracer &t){
   return false;
 }
 // =======================================================================================
-bool chmodSystemCall::handleDetPre(state &s, ptracer &t){
+bool chmodSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
   string msg = "chmod-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
   s.log.writeToLog(Importance::info, msg);
@@ -48,7 +58,7 @@ bool chmodSystemCall::handleDetPre(state &s, ptracer &t){
   return false;
 }
 // =======================================================================================
-void clock_gettimeSystemCall::handleDetPost(state &s, ptracer &t) {
+void clock_gettimeSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched) {
   struct timespec* tp = (struct timespec*) t.arg2();
 
   if (tp != nullptr) {
@@ -63,24 +73,58 @@ void clock_gettimeSystemCall::handleDetPost(state &s, ptracer &t) {
 }
 // =======================================================================================
 // TODO
-bool connectSystemCall::handleDetPre(state &s, ptracer &t){
+bool connectSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   return true;
 }
 
-void connectSystemCall::handleDetPost(state &s, ptracer &t){
+void connectSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   return;
 }
 
 // =======================================================================================
-bool execveSystemCall::handleDetPre(state &s, ptracer &t){
+bool execveSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
   string msg = "execve-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
   s.log.writeToLog(Importance::info, msg);
+  char** argv = (char**) t.arg2();
+  string execveArgs {};
+
+  if(argv != nullptr){
+    // Remeber these are addresses in the tracee. We must explicitly read them
+    // ourselves!
+    for(int i = 0; true; i++){
+      // Make sure it's non null before reading to string.
+      char* address = ptracer::readFromTracee<char*>(&(argv[i]), t.getPid());
+      if(address == nullptr){
+	break;
+      }
+
+      execveArgs += " \"" + ptracer::readTraceeCString(address, t.getPid()) + "\" ";
+    }
+
+    msg = "Args: " + logger::makeTextColored(Color::green, execveArgs) + "\n";
+    s.log.writeToLog(Importance::info, msg);
+  }
 
   return false;
 }
 // =======================================================================================
-bool faccessatSystemCall::handleDetPre(state &s, ptracer &t){
+bool fchownatSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
+  string path = ptracer::readTraceeCString((const char*)t.arg2(), t.getPid());
+  string msg = "fchownat-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
+  s.log.writeToLog(Importance::info, msg);
+
+
+  int dirfd = t.arg1();
+  uid_t owner = t.arg3();
+  gid_t group = t.arg4();
+  int flags = t.arg5();
+  string fchowatStr = "fchownat(fd = %d, _, owner = %d, group = %d, flags = %d)\n";
+  s.log.writeToLog(Importance::extra, fchowatStr, dirfd, owner, group, flags);
+  return false;
+}
+// =======================================================================================
+bool faccessatSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   string path = ptracer::readTraceeCString((const char*)t.arg2(), t.getPid());
   string msg = "faccessat-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
   s.log.writeToLog(Importance::info, msg);
@@ -88,12 +132,12 @@ bool faccessatSystemCall::handleDetPre(state &s, ptracer &t){
   return false;
 }
 // =======================================================================================
-void fstatSystemCall::handleDetPost(state &s, ptracer &t){
+void fstatSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   handleStatFamily(s, t, "fstat");
   return;
 }
 // =======================================================================================
-void fstatfsSystemCall::handleDetPost(state &s, ptracer &t){
+void fstatfsSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   struct statfs* statfsPtr = (struct statfs*) t.arg2();
 
   if(statfsPtr == nullptr){
@@ -115,15 +159,15 @@ void fstatfsSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-bool futexSystemCall::handleDetPre(state &s, ptracer &t){
+bool futexSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   return true;
 }
 
-void futexSystemCall::handleDetPost(state &s, ptracer &t){
+void futexSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   return;
 }
 // =======================================================================================
-bool getcwdSystemCall::handleDetPre(state &s, ptracer &t){
+bool getcwdSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
   string msg = "faccessat-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
   s.log.writeToLog(Importance::info, msg);
@@ -132,15 +176,15 @@ bool getcwdSystemCall::handleDetPre(state &s, ptracer &t){
 }
 // =======================================================================================
 // TODO Virtualize inodes!
-bool getdentsSystemCall::handleDetPre(state &s, ptracer &t){
+bool getdentsSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   return true;
 }
 
-void getdentsSystemCall::handleDetPost(state &s, ptracer &t){
+void getdentsSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   return;
 }
 // =======================================================================================
-void getpeernameSystemCall::handleDetPost(state &s, ptracer &t){
+void getpeernameSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   int ret = t.getReturnValue();
   if(ret == 0){
     throw runtime_error("Call to getpeername with network socket not suported.\n");
@@ -148,7 +192,7 @@ void getpeernameSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-void getrandomSystemCall::handleDetPost(state &s, ptracer &t){
+void getrandomSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   // Fill buffer with our own deterministic values.
   char* buf = (char*) t.arg1();
   size_t bufLength = (size_t) t.arg2();
@@ -169,20 +213,19 @@ void getrandomSystemCall::handleDetPost(state &s, ptracer &t){
 			   bufLength,   // number of bytes to transfer.
   };
 
-  int ret = process_vm_writev(t.getPid(), &local, 1, &traceeMem, 1, flags);
-  if(ret == -1){
-    throw runtime_error("process_vm_writev failed:\n" + string { strerror(errno) });
-  }
+  doWithCheck(process_vm_writev(t.getPid(), &local, 1, &traceeMem, 1, flags),
+	      "process_vm_writev");
 
   return;
 }
 // =======================================================================================
-void getrlimitSystemCall::handleDetPost(state &s, ptracer &t){
+void getrlimitSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   struct rlimit* rp = (struct rlimit*) t.arg2();
   if (rp != nullptr) {
     struct rlimit noLimits = {};
-    noLimits.rlim_cur = RLIM_INFINITY;
-    noLimits.rlim_max = RLIM_INFINITY;
+    // TODO See prlimit64SystemCall
+    // noLimits.rlim_cur = RLIM_INFINITY;
+    // noLimits.rlim_max = RLIM_INFINITY;
 
     ptracer::writeToTracee(rp, noLimits, t.getPid());
   }
@@ -190,7 +233,7 @@ void getrlimitSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-void getrusageSystemCall::handleDetPost(state &s, ptracer &t){
+void getrusageSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   struct rusage* usagePtr = (struct rusage*) t.arg2();
 
   if(usagePtr == nullptr){
@@ -225,7 +268,7 @@ void getrusageSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-void gettimeofdaySystemCall::handleDetPost(state &s, ptracer &t){
+void gettimeofdaySystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   struct timeval* tp = (struct timeval*) t.arg1();
   if (nullptr != tp) {
     struct timeval myTv = {};
@@ -238,7 +281,7 @@ void gettimeofdaySystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-void ioctlSystemCall::handleDetPost(state &s, ptracer &t){
+void ioctlSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   const uint64_t request = t.arg2();
   if (TCGETS == request ||
       TIOCGWINSZ == request || // Window size of terminal.
@@ -252,31 +295,31 @@ void ioctlSystemCall::handleDetPost(state &s, ptracer &t){
 }
 // =======================================================================================
 
-bool nanosleepSystemCall::handleDetPre(state &s, ptracer &t){
+bool nanosleepSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   return true;
 }
 
-void nanosleepSystemCall::handleDetPost(state &s, ptracer &t){
+void nanosleepSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   // TODO: Turn nano sleep into a no op.
 
   return;
 }
 // =======================================================================================
-bool mkdirSystemCall::handleDetPre(state &s, ptracer &t){
+bool mkdirSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
   string msg = "mkdir-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
   s.log.writeToLog(Importance::info, msg);
   return false;
 }
 // =======================================================================================
-bool mkdiratSystemCall::handleDetPre(state &s, ptracer &t){
+bool mkdiratSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   string path = ptracer::readTraceeCString((const char*)t.arg2(), t.getPid());
   string msg = "mkdirat-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
   s.log.writeToLog(Importance::info, msg);
   return false;
 }
 // =======================================================================================
-void newfstatatSystemCall::handleDetPost(state &s, ptracer &t){
+void newfstatatSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   string path = ptracer::readTraceeCString((const char*)t.arg2(), t.getPid());
   string msg = "newfstatat-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
   s.log.writeToLog(Importance::info, msg);
@@ -284,7 +327,7 @@ void newfstatatSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-bool lstatSystemCall::handleDetPre(state &s, ptracer &t){
+bool lstatSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   const char* filenameAddr = (const char*) t.arg1();
   string filename = ptracer::readTraceeCString(filenameAddr, s.traceePid);
   string coloredMsg = "lstat-ing path: " +
@@ -294,12 +337,12 @@ bool lstatSystemCall::handleDetPre(state &s, ptracer &t){
   return true;
 }
 
-void lstatSystemCall::handleDetPost(state &s, ptracer &t){
+void lstatSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   handleStatFamily(s, t, "lstat");
   return;
 }
 // =======================================================================================
-bool openSystemCall::handleDetPre(state &s, ptracer &t){
+bool openSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   const char* pathnamePtr = (const char*)t.arg1();
   string pathname = ptracer::readTraceeCString(pathnamePtr, t.getPid());
 
@@ -309,7 +352,7 @@ bool openSystemCall::handleDetPre(state &s, ptracer &t){
   return false;
 }
 // =======================================================================================
-bool openatSystemCall::handleDetPre(state &s, ptracer &t){
+bool openatSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   const char* pathnamePtr = (const char*)t.arg2();
 
   if(pathnamePtr != nullptr){
@@ -324,39 +367,48 @@ bool openatSystemCall::handleDetPre(state &s, ptracer &t){
 }
 // =======================================================================================
 // TODO
-bool pipeSystemCall::handleDetPre(state &s, ptracer &t){
-  s.log.writeToLog(Importance::info, "Making this pipe non-blocking");
+bool pipeSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
+  s.log.writeToLog(Importance::info, "Making this pipe non-blocking\n");
   // Convert pipe call to pipe2 to set O_NONBLOCK.
   t.changeSystemCall(SYS_pipe2);
+  s.originalArg2 = t.arg2();
   t.writeArg2(O_NONBLOCK);
-  // TODO Preserve contents of seccond register?
 
-  return false;
-}
-
-void pipeSystemCall::handleDetPost(state &s, ptracer &t){
-}
-// =======================================================================================
-bool pselect6SystemCall::handleDetPre(state &s, ptracer &t){
   return true;
 }
 
-void pselect6SystemCall::handleDetPost(state &s, ptracer &t){
+void pipeSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+  t.writeArg2(s.originalArg2);
+}
+// =======================================================================================
+bool pselect6SystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+
+void pselect6SystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   return;
 }
 // =======================================================================================
-// TODO
-bool pollSystemCall::handleDetPre(state &s, ptracer &t){
+bool pollSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
+  s.originalArg3 = t.arg3();
+  // Make this call non blocking by setting timeout to zero!
+  t.writeArg3(0);
   return true;
 }
 
-void pollSystemCall::handleDetPost(state &s, ptracer &t){
+void pollSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+  bool replay = replaySyscallIfBlocked(s, t, sched, 0);
+  // Restore state of argument 3.
+  if(replay){
+    t.writeArg3(s.originalArg3);
+  }
   return;
 }
 // =======================================================================================
 // for reference, here's the prlimit() prototype
 // int prlimit(pid_t pid, int resource, const struct rlimit *new_limit, struct rlimit *old_limit);
-bool prlimit64SystemCall::handleDetPre(state &s, ptracer &t){
+bool prlimit64SystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
+  s.originalArg3 = t.arg3();
   t.writeArg3(0/*NULL*/); // suppress attempts to set new limits
 
   // Check if first argument (pid) is non-zero. If so fail.
@@ -370,7 +422,7 @@ bool prlimit64SystemCall::handleDetPre(state &s, ptracer &t){
   return true;
 }
 
-void prlimit64SystemCall::handleDetPost(state &s, ptracer &t){
+void prlimit64SystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   /* To bypass the complexity of this system call (lots of different resources,
    * dynamic limits, ...) we just always say everything is unlimited, and ignore
    * requests from the application to try to increase the soft limit.
@@ -380,29 +432,56 @@ void prlimit64SystemCall::handleDetPost(state &s, ptracer &t){
    * change limits deterministically in many cases, if need be, so long as the
    * starting limits are deterministic.
   */
+  t.writeArg3(s.originalArg3);
   struct rlimit* rp = (struct rlimit*) t.arg4();
   if (rp != nullptr) {
-    struct rlimit noLimits = {};
-    noLimits.rlim_cur = RLIM_INFINITY;
-    noLimits.rlim_max = RLIM_INFINITY;
+    // TODO: For memory: return correct memory used, which should be deterministic.
+    // TODO: Allow actual max memory through, I believe this is outside our deterministic
+    // gurantee.
+
+    // struct rlimit noLimits = {};
+
+    // noLimits.rlim_cur =
+    // noLimits.rlim_max = RLIM_INFINITY;
 
     //s.log.writeToLog(Importance::info, "rp=" + to_string(t.arg4()), t.getPid());
-    ptracer::writeToTracee(rp, noLimits, t.getPid());
+    // ptracer::writeToTracee(rp, noLimits, t.getPid());
   }
 
   return;
 }
 // =======================================================================================
-bool readSystemCall::handleDetPre(state &s, ptracer &t){
-  s.preIp = t.regs.rip;
+bool readSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
+  size_t fd = (size_t) t.arg1();
+  s.log.writeToLog(Importance::info, "File descriptor: %d\n", fd);
+  // s.preIp = t.regs.rip;
   return true;
 }
 
-void readSystemCall::handleDetPost(state &s, ptracer &t){
-  if(- EAGAIN == (int64_t) t.getReturnValue()){
-    auto msg = "Read would have blocked!\nPreempting process!";
-    s.log.writeToLog(Importance::info, msg);
-  }
+void readSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+  bool replay = replaySyscallIfBlocked(s, t, sched, EAGAIN);
+  void* buf = (void*) t.arg2();
+
+  ssize_t bytesRead = t.getReturnValue();
+  char readInfo[bytesRead + 1];
+  readInfo[bytesRead + 1] = '\0';
+
+  // Ptrace read is way too slow as it works at word granularity. Time to use
+  // process_vm_read!
+  const iovec traceeMem = {buf, // Starting address
+		       (size_t) bytesRead,   // number of bytes to transfer.
+  };
+
+  const iovec local = {readInfo, // Starting address
+		       (size_t) bytesRead,   // number of bytes to transfer.
+  };
+
+  // TODO: Done everytime. Should only be done in case of debug flag.
+  doWithCheck(process_vm_readv(t.getPid(), &local, 1, &traceeMem, 1, 0),
+	      "process_readv_writev");
+
+  s.log.writeToLog(Importance::extra, "%s\n", readInfo);
+
   return;
 
   // TODO:
@@ -421,15 +500,15 @@ void readSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-bool readvSystemCall::handleDetPre(state &s, ptracer &t){
+bool readvSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   return true;
 }
 
-void readvSystemCall::handleDetPost(state &s, ptracer &t){
+void readvSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   return;
 }
 // =======================================================================================
-bool readlinkSystemCall::handleDetPre(state &s, ptracer &t){
+bool readlinkSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
   string msg = "readlink-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
   s.log.writeToLog(Importance::info, msg);
@@ -437,16 +516,16 @@ bool readlinkSystemCall::handleDetPre(state &s, ptracer &t){
   return false;
 }
 // =======================================================================================
-bool recvmsgSystemCall::handleDetPre(state &s, ptracer &t){
+bool recvmsgSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   return true;
 }
 
-void recvmsgSystemCall::handleDetPost(state &s, ptracer &t){
+void recvmsgSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   return;
 }
 
 // =======================================================================================
-bool renameSystemCall::handleDetPre(state &s, ptracer &t){
+bool renameSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   string oldpath = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
   string newpath = ptracer::readTraceeCString((const char*)t.arg2(), t.getPid());
   string msg1 = "rename-ing path: " + logger::makeTextColored(Color::green, oldpath) + "\n";
@@ -458,33 +537,33 @@ bool renameSystemCall::handleDetPre(state &s, ptracer &t){
 }
 // =======================================================================================
 // TODO
-bool sendtoSystemCall::handleDetPre(state &s, ptracer &t){
+bool sendtoSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   return true;
 }
 
-void sendtoSystemCall::handleDetPost(state &s, ptracer &t){
+void sendtoSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   return;
 }
 // =======================================================================================
-bool selectSystemCall::handleDetPre(state &s, ptracer &t){
+bool selectSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   return true;
 }
 
-void selectSystemCall::handleDetPost(state &s, ptracer &t){
+void selectSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   return;
 }
 // =======================================================================================
 // TODO
 
-bool set_robust_listSystemCall::handleDetPre(state &s, ptracer &t){
+bool set_robust_listSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   return true;
 }
 
-void set_robust_listSystemCall::handleDetPost(state &s, ptracer &t){
+void set_robust_listSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   return;
 }
 // =======================================================================================
-bool statSystemCall::handleDetPre(state &s, ptracer &t){
+bool statSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
   string msg = "stat-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
   s.log.writeToLog(Importance::info, msg);
@@ -492,12 +571,12 @@ bool statSystemCall::handleDetPre(state &s, ptracer &t){
   return true;
 }
 
-void statSystemCall::handleDetPost(state &s, ptracer &t){
+void statSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   handleStatFamily(s, t, "stat");
   return;
 }
 // =======================================================================================
-void statfsSystemCall::handleDetPost(state &s, ptracer &t){
+void statfsSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   struct statfs* statfsPtr = (struct statfs*) t.arg2();
   if(statfsPtr == nullptr){
     s.log.writeToLog(Importance::info, "statfs: statbuf null.\n");
@@ -519,7 +598,7 @@ void statfsSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-void sysinfoSystemCall::handleDetPost(state &s, ptracer &t){
+void sysinfoSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   struct sysinfo* infoPtr = (struct sysinfo *) t.arg1();
   if(infoPtr == nullptr){
     return;
@@ -546,7 +625,7 @@ void sysinfoSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-bool tgkillSystemCall::handleDetPre(state &s, ptracer &t){
+bool tgkillSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   int tgid = (int) t.arg1();
   int tid = (int) t.arg2();
   int signal = (int) t.arg3();
@@ -555,11 +634,11 @@ bool tgkillSystemCall::handleDetPre(state &s, ptracer &t){
   return true;
 }
 
-void tgkillSystemCall::handleDetPost(state &s, ptracer &t){
+void tgkillSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   return;
 }
 // =======================================================================================
-void timeSystemCall::handleDetPost(state &s, ptracer &t){
+void timeSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   int retVal = (int) t.getReturnValue();
   if(retVal < 0){
     s.log.writeToLog(Importance::info,
@@ -579,7 +658,7 @@ void timeSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-void unameSystemCall::handleDetPost(state &s, ptracer &t){
+void unameSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   // Populate the utsname struct with our own generic data.
   struct utsname* utsnamePtr = (struct utsname*) t.arg1();
 
@@ -609,7 +688,7 @@ void unameSystemCall::handleDetPost(state &s, ptracer &t){
   return;
 }
 // =======================================================================================
-bool unlinkSystemCall::handleDetPre(state &s, ptracer &t){
+bool unlinkSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   string path = ptracer::readTraceeCString((const char*)t.arg1(), t.getPid());
   string msg = "unlink-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
   s.log.writeToLog(Importance::info, msg);
@@ -617,7 +696,7 @@ bool unlinkSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 // =======================================================================================
-bool unlinkatSystemCall::handleDetPre(state &s, ptracer &t){
+bool unlinkatSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   string path = ptracer::readTraceeCString((const char*)t.arg2(), t.getPid());
   string msg = "unlinkat-ing path: " + logger::makeTextColored(Color::green, path) + "\n";
   s.log.writeToLog(Importance::info, msg);
@@ -625,9 +704,12 @@ bool unlinkatSystemCall::handleDetPre(state &s, ptracer &t){
 }
 
 // =======================================================================================
-bool utimensatSystemCall::handleDetPre(state &s, ptracer &t){
-  // int utimensat(int dirfd, const char *pathname,
-  //               const struct timespec times[2], int flags);
+bool utimesSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
+  // TODO? See class declaration.
+  return false;
+}
+// =======================================================================================
+bool utimensatSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   // Set times to our own logical time for deterministic time only if times is null.
   if((const struct timespec*) t.arg3() != nullptr){
     // Nothing to do, user specified his/her own time which should be deterministic.
@@ -656,23 +738,66 @@ bool utimensatSystemCall::handleDetPre(state &s, ptracer &t){
   s.incrementTime();
   return false;
 }
+
+void utimensatSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+  // Restore value of register.
+  t.writeArg3(0);
+}
 // =======================================================================================
-bool writeSystemCall::handleDetPre(state &s, ptracer &t){
+bool writeSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   return true;
 }
 
-void writeSystemCall::handleDetPost(state &s, ptracer &t){
+void writeSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   // TODO: Handle bytes written.
   return;
 }
 // =======================================================================================
-bool writevSystemCall::handleDetPre(state &s, ptracer &t){
+bool wait4SystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
+  s.log.writeToLog(Importance::info, "Making this a non-blocking wait4\n");
+
+  // Make this a non blocking hang!
+  s.originalArg3 = t.arg3();
+  t.writeArg3(s.originalArg3 | WNOHANG);
+  return true;
+}
+void wait4SystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+  bool replayed = replaySyscallIfBlocked(s, t, sched, 0);
+  if(!replayed){
+    t.writeArg3(s.originalArg3);
+  }
+
+  return;
+}
+// =======================================================================================
+bool writevSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   return true;
 }
 
-void writevSystemCall::handleDetPost(state &s, ptracer &t){
+void writevSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   // TODO: Handle bytes written.
   return;
+}
+// =======================================================================================
+bool replaySyscallIfBlocked(state& s, ptracer& t, scheduler& sched, int64_t errornoValue){
+  if(- errornoValue == (int64_t) t.getReturnValue()){
+    auto msg = s.systemcall->syscallName + " would have blocked!\n";
+    s.log.writeToLog(Importance::info, msg);
+
+    sched.preemptAndScheduleNext(s.traceePid);
+
+    uint16_t minus2 = t.readFromTracee((uint16_t*) (t.regs.rip - 2), s.traceePid);
+    if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
+      throw runtime_error("IP does not point to system call instruction!\n");
+    }
+
+    // Replay system call!
+    t.regs.rax = t.getSystemCallNumber();
+    t.writeIp(t.regs.rip - 2);
+    return true;
+  }
+
+  return false;
 }
 // =======================================================================================
 void zeroOutStatfs(struct statfs& stats){
@@ -732,8 +857,13 @@ void handleStatFamily(state& s, ptracer& t, string syscallName){
     // mode_t    st_mode;        /* File type and mode */
 
     myStat.st_nlink = 1;       /* Number of hard links */
-    myStat.st_uid = 65534;         /* User ID of owner */
-    myStat.st_gid = 1;         /* Group ID of owner */
+
+    // These should never be set! The container handles group and user id through
+    // setting these will lead to inconistencies which will manifest themselves as
+    // weird permission denied errors for some system calls.
+    // myStat.st_uid = 65534;         /* User ID of owner */
+    // myStat.st_gid = 1;         /* Group ID of owner */
+
     myStat.st_rdev = 1;        /* Device ID (if special file) */
 
     // Program will stall if we put some arbitrary value here: TODO.
@@ -751,3 +881,4 @@ void handleStatFamily(state& s, ptracer& t, string syscallName){
   }
   return;
 }
+// =======================================================================================

@@ -21,10 +21,14 @@ int main(void){
   }
 
   if(pid == 0){
-    sleep(2);
     printf("Child: My pid: %d\n", getpid());
   }
   else{
+    int status;
+    if(-1 == wait(&status)){
+      fprintf(stderr, "Child: wait failed with %s\n", strerror(errno));
+	exit(1);
+    }
     printf("Parent: My pid: %d\n", getpid());
   }
   return 0;

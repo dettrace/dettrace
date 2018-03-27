@@ -5,6 +5,10 @@
 
 using namespace std;
 
+// TODO: chown
+// TODO: fchown
+// TODO: lchown
+
 /**
  * Hopefully this will server as documentation for all our system calls.
  * Please keep in alphabetical order.
@@ -34,7 +38,7 @@ public:
 class accessSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -51,7 +55,7 @@ public:
 class chdirSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -63,7 +67,7 @@ public:
 class chmodSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -75,7 +79,7 @@ class clock_gettimeSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 
-  void handleDetPost(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -113,8 +117,8 @@ class connectSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 
-  bool handleDetPre(state &s, ptracer &t) override;
-  void handleDetPost(state &s, ptracer &t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -125,17 +129,19 @@ public:
 class execveSystemCall : public systemCall{
   using systemCall::systemCall;
 
-  bool handleDetPre(state &s, ptracer &t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 
 /**
  * int faccessat(int dirfd, const char *pathname, int mode, int flags);
+ *
+ * Variant of access with f and at. See access.
  */
 class faccessatSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -159,25 +165,21 @@ class fstatSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 
-  void handleDetPost(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
- * int fstatat(int dirfd, const char *pathname, struct stat *statbuf, int flags);
+ * int fchownat(int dirfd, const char *pathname, uid_t owner, gid_t group, int flags);
  *
- * The fstatat() system call operates in exactly the same way as stat(), except for if
- * the pathname given in pathname is relative, then it is interpreted relative to the
- * directory referred to by the file descriptor dirfd (rather than relative to the  cur‐
- * rent  working  directory  of the calling process, as is done by stat() for a relative
- * pathname).
+ * change owner of file with f and at variant. Deterministic thanks to light weight
+ * container.
  *
- * Actual name of underlying system call is newfstatat.
  */
-class newfstatatSystemCall : public systemCall{
+class fchownatSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 
-  void handleDetPost(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -192,7 +194,7 @@ class fstatfsSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 
-  void handleDetPost(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -205,8 +207,8 @@ public:
 class futexSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -220,7 +222,7 @@ class getcwdSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 
-  bool handleDetPre(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -237,8 +239,8 @@ public:
 class getdentsSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -256,7 +258,7 @@ class getpeernameSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 
-  void handleDetPost(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -271,7 +273,7 @@ class getrandomSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 
-  void handleDetPost(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -292,7 +294,7 @@ class getrlimitSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 
-  void handleDetPost(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -306,7 +308,7 @@ class getrusageSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 
-  void handleDetPost(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -320,7 +322,7 @@ class gettimeofdaySystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 
-  void handleDetPost(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -337,7 +339,25 @@ class ioctlSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 
-  void handleDetPost(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/**
+ * int fstatat(int dirfd, const char *pathname, struct stat *statbuf, int flags);
+ *
+ * The fstatat() system call operates in exactly the same way as stat(), except for if
+ * the pathname given in pathname is relative, then it is interpreted relative to the
+ * directory referred to by the file descriptor dirfd (rather than relative to the  cur‐
+ * rent  working  directory  of the calling process, as is done by stat() for a relative
+ * pathname).
+ *
+ * Actual name of underlying system call is newfstatat.
+ */
+class newfstatatSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -353,8 +373,8 @@ public:
 class nanosleepSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -368,7 +388,7 @@ public:
 class mkdirSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -379,7 +399,7 @@ public:
 class mkdiratSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -394,8 +414,8 @@ public:
 class lstatSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -412,7 +432,7 @@ class openSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 
-  bool handleDetPre(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -437,7 +457,7 @@ class openatSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 
-  bool handleDetPre(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -450,8 +470,8 @@ public:
 class pipeSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -480,8 +500,8 @@ public:
 class pselect6SystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -489,14 +509,18 @@ public:
  * int poll(struct pollfd *fds, nfds_t nfds, int timeout);*
  *
  * Wait for one of a set of fds to become ready to perform I/O
- * TODO: Super non deterministic!
+ *
+ * We use a general approach for all blocking IO system calls:
+ * Turn it into a non blocking IO. Check if "it would have" blocked. If so, we preempt
+ * the current running process and let another process run in it's place. Later we
+ * come back to this process.
  *
  */
 class pollSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state &s, ptracer &t) override;
-  void handleDetPost(state &s, ptracer &t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -518,8 +542,8 @@ public:
 class prlimit64SystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -529,8 +553,8 @@ public:
 class readSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -547,8 +571,8 @@ public:
 class readvSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state &s, ptracer &t) override;
-  void handleDetPost(state &s, ptracer &t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /*
@@ -561,7 +585,7 @@ public:
 class readlinkSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state &s, ptracer &t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -573,8 +597,8 @@ public:
 class recvmsgSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state &s, ptracer &t) override;
-  void handleDetPost(state &s, ptracer &t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -586,7 +610,7 @@ public:
 class renameSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state &s, ptracer &t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
 };
 
 // =======================================================================================
@@ -607,8 +631,8 @@ public:
 class sendtoSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state &s, ptracer &t) override;
-  void handleDetPost(state &s, ptracer &t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -625,8 +649,8 @@ public:
 class selectSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state &s, ptracer &t) override;
-  void handleDetPost(state &s, ptracer &t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -638,8 +662,8 @@ public:
 class set_robust_listSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state &s, ptracer &t) override;
-  void handleDetPost(state &s, ptracer &t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -655,8 +679,8 @@ public:
 class statSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -667,7 +691,7 @@ class statfsSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 
-  void handleDetPost(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -682,7 +706,7 @@ class sysinfoSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 
-  void handleDetPost(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -703,8 +727,8 @@ public:
 class tgkillSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -716,7 +740,7 @@ class timeSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 
-  void handleDetPost(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -732,7 +756,7 @@ class unameSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 
-  void handleDetPost(state& s, ptracer& t) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -750,7 +774,7 @@ public:
 class unlinkSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
 
 };
 // =======================================================================================
@@ -778,8 +802,28 @@ public:
 class unlinkatSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
  };
+// =======================================================================================
+/**
+ *
+ * int utimes(const char *filename, const struct timeval times[2]);
+ *
+ * The utime() system call changes the access and modification times of the inode speci‐
+ * fied by filename to the actime and modtime fields of times respectively.
+ *
+ * The time the user uses should be determinitic. We only have to watch out for the zero
+ * case when the user sets his own time. TODO: We might just want to allow this call
+ * through as we do not consider meta data to be part of our deteminitic guarantee. This
+ * works since we do not allow a running process to observe it.
+ */
+class utimesSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  // void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
+};
+
 // =======================================================================================
 /**
  *
@@ -795,7 +839,8 @@ public:
 class utimensatSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -823,6 +868,13 @@ public:
 
 };
 // =======================================================================================
+class wait4SystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
 /**
  *
  * ssize_t writev(int fd, const struct iovec *iov, int iovcnt)
@@ -837,8 +889,8 @@ public:
 class writevSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -857,8 +909,8 @@ public:
 class writeSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t) override;
-  void handleDetPost(state& s, ptracer& t) override;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 

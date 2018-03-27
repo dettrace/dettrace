@@ -8,6 +8,7 @@
 #include "util.hpp"
 #include "state.hpp"
 #include "ptracer.hpp"
+#include "scheduler.hpp"
 
 #include <stack>
 
@@ -32,9 +33,6 @@ private:
   // Logger to write all messages to.
   logger log;
 
-  // Tell ptrace which stopped process to continue running.
-  pid_t nextPid;
-
   // Class wrapping ptrace system call in a higher level API.
   ptracer tracer;
 
@@ -45,21 +43,20 @@ private:
   // be a better choice for keys.
   map<pid_t, state> states;
 
+  /**
+   * Tells us which process to run next, keeps track of current processes.
+   */
+  scheduler myScheduler;
 
-  stack<pid_t> processHier;
-
-  // Once all process' have ended. We exit.
-  bool exitLoop = false;
-
-  // Debug level
-  int debugLevel;
+  // Debug level, should be [1, 5]. Used to tell if we should always call the post hook
+  // (to see return value of system call).
+  const int debugLevel;
 
 public:
-
   execution(int debugLevel, pid_t startingPid);
 
   // Processs is done. Remove it from our processHier stack and let parent process run.
-  void handleExit(const pid_t traceesPid);
+  bool handleExit(const pid_t traceesPid);
 
   bool handlePreSystemCall(state& currState, const pid_t traceesPid);
 

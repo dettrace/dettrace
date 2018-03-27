@@ -33,7 +33,8 @@ const size_t wordSize = 8;
  */
 enum class ptraceEvent {
   syscall,     /// Post system call execution event.
-  exit,        /// Process/thread has exited.
+  nonEventExit,        /// Process/thread has exited.
+  eventExit,        /// Process/thread has exited.
   signal,      /// Received signal.
   exec,        /// Execve event.
   clone,       /// Clone event.

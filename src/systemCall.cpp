@@ -7,10 +7,10 @@ systemCall::systemCall(long syscallNumber, string syscallName) :
   }
 
 
-bool systemCall::handleDetPre(state& s, ptracer& t){
+bool systemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   return true;
 }
 
-void systemCall::handleDetPost(state& s, ptracer& t){
+void systemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   return;
 }
