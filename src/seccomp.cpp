@@ -60,6 +60,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_rename);
   noIntercept(SYS_renameat);
   noIntercept(SYS_renameat2);
+  noIntercept(SYS_setgid);
   noIntercept(SYS_socket);
   noIntercept(SYS_umask);
   // TODO We do not allow user to observe metadata so it's fine if they write

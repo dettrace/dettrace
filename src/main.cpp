@@ -48,16 +48,17 @@
 
 using namespace std;
 // =======================================================================================
-pair<int, int> parseProgramArguments(int argc, char* argv[]);
+tuple<int, int, optional<string>> parseProgramArguments(int argc, char* argv[]);
 int runTracee(void* args);
 void runTracer(int debugLevel, pid_t childPid);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
 void mountDir(string source, string target);
-void setUpContainer(string pathToExe);
+void setUpContainer(string pathToExe, string pathToChoort, bool userDefinedChroot);
+void mkdirIfNotExist(string dir);
+
 // See user_namespaces(7)
 static void update_map(char *mapping, char *map_file);
-// See user_namespaces(7)
 static void proc_setgroups_write(pid_t child_pid, const char *str);
 // =======================================================================================
 struct childArgs{
@@ -65,6 +66,7 @@ struct childArgs{
   int argc;
   char** argv;
   int debugLevel;
+  optional<string> maybePath;
 };
 // =======================================================================================
 /**
@@ -74,8 +76,10 @@ struct childArgs{
  */
 int main(int argc, char** argv){
   int optIndex, debugLevel;
-  tie(optIndex, debugLevel) = parseProgramArguments(argc, argv);
+  optional<string> maybePath;
+  tie(optIndex, debugLevel, maybePath) = parseProgramArguments(argc, argv);
 
+  // Check for debug enviornment variable.
   char* debugEnvvar = secure_getenv("dettraceDebug");
   if(debugEnvvar != nullptr){
     string str { debugEnvvar };
@@ -103,6 +107,7 @@ int main(int argc, char** argv){
   args.argc = argc;
   args.argv = argv;
   args.debugLevel = debugLevel;
+  args.maybePath = maybePath;
 
   pid_t pid = doWithCheck(clone(runTracee, child_stack + STACK_SIZE,
 				SIGCHLD |      // Alert parent of child signals?
@@ -127,13 +132,20 @@ int runTracee(void* voidArgs){
   int argc = args.argc;
   char** argv = args.argv;
   int debugLevel = args.debugLevel;
+  optional<string> maybePath = args.maybePath;
 
   // Find absolute path to our build directory relative to the dettrace binary.
   char argv0[strlen(argv[0])];
   strcpy(argv0, argv[0]); // Use a copy since dirname may mutate contents.
   string pathToExe{ dirname(argv0) };
 
-  setUpContainer(pathToExe);
+
+  if(maybePath){
+    setUpContainer(pathToExe, maybePath.value(), true);
+  }else{
+    const string defaultRoot = "/../root/";
+    setUpContainer(pathToExe, pathToExe + defaultRoot, false);
+  }
 
   // Perform execve based on user command.
   ptracer::doPtrace(PTRACE_TRACEME, 0, NULL, NULL);
@@ -168,6 +180,11 @@ int runTracee(void* voidArgs){
   // if the specified filename does not contain a slash (/) character.
   int val = execvpe(traceeCommand[0], traceeCommand, envs);
   if(val == -1){
+    if(errno == ENOENT){
+      cerr << "Unable to exec your program. No such exectuable found\n" << endl;
+      cerr << "This program may not exist inside the choort." << endl;
+      cerr << "Only programs in bin/ or in this directory tree are mounted." << endl;
+    }
     cerr << "Unable to exec your program. Reason:\n  " << string { strerror(errno) } << endl;
     cerr << "Ending tracer with SIGABTR signal." << endl;
 
@@ -182,41 +199,42 @@ int runTracee(void* voidArgs){
 // =======================================================================================
 /**
  *
- * Jail our container under /root/. Notice this relies on a certain directory structure
- * for our jail:
- *
- * DetTrace ) ls root/
- * bin/  build/  dettrace/  lib/  lib64/  proc/
+ * Jail our container under chootPath.
  *
  */
-void setUpContainer(string pathToExe){
-  // (Assumed to be in /bin/dettrace where / is our project root.
+void setUpContainer(string pathToExe, string pathToChoort , bool userDefinedChroot){
+  string buildDir = pathToChoort + "/build/";
+  // cout << "Our build directory: " << buildDir << endl;
+  mkdirIfNotExist(buildDir);
+  mkdirIfNotExist(pathToChoort + "/dettrace/"); // /dettrace directory
+  mkdirIfNotExist(pathToChoort + "/dettrace/lib/"); // /dettrace/lib directory
+  mkdirIfNotExist(pathToChoort + "/dettrace/bin/"); // /dettrace/bin directory
 
-  // TODO. Only this line needs to be changed to set up choort. I also need to create
-  // a /dettrace/bin, /dettrace/lib, and /build folders if they don't exist.
-  string buildDir { pathToExe + "/../root/build/" };
-
-  // 1. First we mount cwd in our /root/build/ directory.
+  // 1. First we mount cwd in our /build/ directory.
   char* cwdPtr = get_current_dir_name();
   mountDir(string { cwdPtr }, buildDir);
   free(cwdPtr);
+
+  // Mount our dettrace/bin and dettrace/lib folders. The destination is relative
+  // as we have already moved into our /bui
+  mountDir(pathToExe + "/../bin/", pathToChoort + "/dettrace/bin/");
+  mountDir(pathToExe + "/../lib/", pathToChoort + "/dettrace/lib/");
 
   // 2. Move over to our build directory! This will make code cleaner as all logic is
   // relative this dir.
   doWithCheck(chdir(buildDir.c_str()), "Unable to chdir");
 
   // Bind mount our directories.
-  mountDir("/bin/", "../bin/");
-  mountDir("/usr/", "../usr/");
-  mountDir("/lib/", "../lib/");
-  mountDir("/lib64/", "../lib64/");
-  // Mount dev/null
-  mountDir("/dev/null", "../dev/null");
-  // Ld cache
-  mountDir("/etc/ld.so.cache", "../etc/ld.so.cache");
-  // Mount our dettrace/bin and dettrace/lib folders.
-  mountDir("../../bin/", "../dettrace/bin");
-  mountDir("../../lib/", "../dettrace/lib");
+  if(!userDefinedChroot){
+    mountDir("/bin/", "../bin/");
+    mountDir("/usr/", "../usr/");
+    mountDir("/lib/", "../lib/");
+    mountDir("/lib64/", "../lib64/");
+    // Mount dev/null
+    mountDir("/dev/null", "../dev/null");
+    // Ld cache
+    mountDir("/etc/ld.so.cache", "../etc/ld.so.cache");
+  }
 
   // Proc is special, we mount a new proc dir.
   doWithCheck(mount("/proc", "../proc/", "proc", MS_MGC_VAL, nullptr),
@@ -270,18 +288,22 @@ void runTracer(int debugLevel, pid_t startingPid){
 // =======================================================================================
 /**
  * index is the first index in the argv array containing a non option.
+ * @param optional<string>: Either a user specified chroot path or none.
  * @return (index, debugLevel)
  */
-pair<int, int> parseProgramArguments(int argc, char* argv[]){
-  string usageMsg = "./detTrace [--debug <debugLevel> | --help] ./exe [exeCmdArgs]";
+tuple<int, int, optional<string>> parseProgramArguments(int argc, char* argv[]){
+  string usageMsg =
+    "./detTrace [--debug <debugLevel> | --help | --chroot <pathToRoot>] ./exe [exeCmdArgs]";
   int debugLevel = 0;
   string exePlusArgs;
+  string pathToChroot = "";
 
   // Command line options for our program.
   static struct option programOptions[] = {
-    {"debug", required_argument, 0, 'd'},
-    {"help",  no_argument,       0, 'h'},
-    {0,       0,                 0, 0}    // Last must be filled with 0's.
+    {"debug" , required_argument,  0, 'd'},
+    {"help"  , no_argument,        0, 'h'},
+    {"chroot", required_argument,  0, 'c'},
+    {0,        0,                  0, 0}    // Last must be filled with 0's.
   };
 
   while(true){
@@ -294,7 +316,10 @@ pair<int, int> parseProgramArguments(int argc, char* argv[]){
     if(returnVal == -1){ break; }
 
     switch(returnVal){
+    case 'c':
+      pathToChroot = string { optarg };
       // Debug flag.
+      break;
     case 'd':
       debugLevel = parseNum(optarg);
       if(debugLevel < 0 || debugLevel > 5){
@@ -317,7 +342,8 @@ pair<int, int> parseProgramArguments(int argc, char* argv[]){
     exit(1);
   }
 
-  return make_pair(optind, debugLevel);
+  auto maybePath = pathToChroot == "" ? nullopt : optional<string>(pathToChroot);
+  return make_tuple(optind, debugLevel, maybePath);
 }
 // =======================================================================================
 /**
@@ -385,4 +411,19 @@ static void proc_setgroups_write(pid_t child_pid, const char *str){
 
   close(fd);
 }
+// =======================================================================================
+void mkdirIfNotExist(string dir){
+  int result = mkdir(dir.c_str(), ACCESSPERMS);
+  if(result == -1){
+    // That's okay :)
+    if(errno == EEXIST){
+      return;
+    }else{
+      string reason { strerror(errno) };
+      throw runtime_error("Unable to make directory: " + dir + "\nReason: " + reason);
+    }
+  }
+  return;
+}
+
 // =======================================================================================
