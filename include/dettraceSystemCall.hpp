@@ -70,6 +70,12 @@ public:
   bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
+class chownSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
 /**
 *
 * int clock_gettime(clockid_t clk_id, struct timespec *tp);
@@ -122,6 +128,20 @@ public:
 };
 // =======================================================================================
 /**
+ *
+ * int creat(const char *pathname, mode_t mode);
+ *
+ * A call to creat() is equivalent to calling open() with flags equal to
+ * O_CREAT|O_WRONLY|O_TRUNC.
+ */
+class creatSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/**
  * execve()  executes  the  program  pointed  to by filename.
  *
  * Deterministic. We print the path for debugging purposes here.
@@ -132,7 +152,6 @@ class execveSystemCall : public systemCall{
   bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
-
 /**
  * int faccessat(int dirfd, const char *pathname, int mode, int flags);
  *
@@ -142,6 +161,29 @@ class faccessatSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/**
+ * ssize_t fgetxattr(int fd, const char *name, void *value, size_t size);
+ *
+ * Get extended attribute for file for value.
+ */
+class fgetxattrSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
+};
+
+// =======================================================================================
+/**
+ * ssize_t flistxattr(int fd, char *list, size_t size);
+ *
+ * List exted attributes for file descriptor.
+ */
+class flistxattrSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -696,6 +738,21 @@ public:
 // =======================================================================================
 /**
  *
+ * int symlink(const char *target, const char *linkpath);
+ *
+ * symlink() creates a symbolic link named linkpath which contains the string target.
+ *
+ * Deterministic thanks to our container :)
+ */
+class symlinkSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/**
+ *
  * int sysinfo(struct sysinfo *info);
  *
  * sysinfo()  returns  certain  statistics on memory and swap usage, as well as the load
@@ -912,6 +969,7 @@ public:
   bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
   void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
+
 // =======================================================================================
 
 #endif

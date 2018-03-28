@@ -19,7 +19,7 @@ execution::execution(int debugLevel, pid_t startingPid):
   myScheduler{startingPid, log},
   debugLevel {debugLevel}{
     // Set state for first process.
-    states.emplace(startingPid, state {log, startingPid});
+    states.emplace(startingPid, state {log, startingPid, debugLevel});
 
     // First process is special and we must set the options ourselves.
     // This is done everytime a new process is spawned.
@@ -288,7 +288,7 @@ pid_t execution::handleForkEvent(const pid_t traceesPid){
   log.writeToLog(Importance::info,
  		 logger::makeTextColored(Color::blue,"Added process [%d] to states map.\n"),
 		 newChildPid);
-  states.emplace(newChildPid, state {log, newChildPid} );
+  states.emplace(newChildPid, state {log, newChildPid, debugLevel} );
 
   return newChildPid;
 }
@@ -369,6 +369,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<alarmSystemCall>(syscallNumber, syscallName);
     case SYS_chdir:
       return make_unique<chdirSystemCall>(syscallNumber, syscallName);
+    case SYS_chown:
+      return make_unique<chownSystemCall>(syscallNumber, syscallName);
     case SYS_chmod:
       return make_unique<chmodSystemCall>(syscallNumber, syscallName);
     case SYS_clock_gettime:
@@ -377,12 +379,18 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<cloneSystemCall>(syscallNumber, syscallName);
     case SYS_connect:
       return make_unique<connectSystemCall>(syscallNumber, syscallName);
+    case SYS_creat:
+      return make_unique<creatSystemCall>(syscallNumber, syscallName);
     case SYS_execve:
       return make_unique<execveSystemCall>(syscallNumber, syscallName);
-    case SYS_fchownat:
-      return make_unique<fchownatSystemCall>(syscallNumber, syscallName);
     case SYS_faccessat:
       return make_unique<faccessatSystemCall>(syscallNumber, syscallName);
+    case SYS_fgetxattr:
+      return make_unique<fgetxattrSystemCall>(syscallNumber, syscallName);
+    case SYS_flistxattr:
+      return make_unique<flistxattrSystemCall>(syscallNumber, syscallName);
+    case SYS_fchownat:
+      return make_unique<fchownatSystemCall>(syscallNumber, syscallName);
     case SYS_fstat:
       return make_unique<fstatSystemCall>(syscallNumber, syscallName);
     case SYS_fstatfs:
@@ -445,6 +453,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<statSystemCall>(syscallNumber, syscallName);
     case SYS_sysinfo:
       return make_unique<sysinfoSystemCall>(syscallNumber, syscallName);
+    case SYS_symlink:
+      return make_unique<symlinkSystemCall>(syscallNumber, syscallName);
     case SYS_tgkill:
       return make_unique<tgkillSystemCall>(syscallNumber, syscallName);
     case SYS_time:
@@ -465,8 +475,6 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<writeSystemCall>(syscallNumber, syscallName);
     case SYS_writev:
       return make_unique<writeSystemCall>(syscallNumber, syscallName);
-    default:
-      return make_unique<systemCall>(syscallNumber, syscallName);
     }
 
     // Generic system call. Throws error.

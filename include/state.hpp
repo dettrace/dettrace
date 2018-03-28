@@ -40,7 +40,7 @@ public:
    * of state.
    * @ppid: Parent pid of this process.
    */
-  state(logger& log, pid_t myPid);
+  state(logger& log, pid_t myPid, int debugLevel);
 
   /**
    * The pid of the process represented by this state.
@@ -74,6 +74,12 @@ public:
    * My register 2 argument since we need to restore at the post-hook after modifying.
    */
   uint64_t originalArg2 = 0;
+
+  /**
+   * Debug level. Mainly used by the dettraceSytemCall classes to avoid doing unnecesary
+   * work when logging data if not needed.
+   */
+  const int debugLevel;
 
   /*
    * We need to know what system call was/is that we are not. This is important in
