@@ -6,23 +6,20 @@
 
 #include <deque>
 #include <optional>
+#include <unordered_map>
 
-enum class processState{ runnable, blocked };
+using namespace std;
 
 /**
- * Information that we need to know per process. Keeps track whether process is
- * runnable or blocked. This way we don't try to run blocked processes. Epoch is
- * a logical timestamp that tells us whether state is valid. Everytime a process is
- * scheduled and runs, the epoch is increase, this ensures
+ *
+ * runnable: We know for a fact ths process is able to make progress.
+ * maybeRunnable: Another process has just finished making progress, we were blocked.
+ *                now we might be able to make progress, maybe not?
+ * blocked: We cannot make progress.
  */
-struct process{
-  process(pid_t pid);
-  pid_t pid;
-  // By default all processes start as runnable.
-  processState state = processState::runnable;
-  // Always starts at zero.
-  int epoch = 0;
-};
+enum class processState{ runnable, maybeRunnable, blocked };
+
+string to_string(processState p);
 
 /**
  * Stateful class to keep track of all currently running processes in our process tree.
@@ -55,8 +52,6 @@ public:
    */
   void preemptAndScheduleNext(pid_t process);
 
-  void updateEpoch();
-
   /**
    * Adds new process to scheduler! This new process will be scheduled to run next.
    */
@@ -68,6 +63,11 @@ public:
    */
   bool removeAndScheduleNext(pid_t terminatedProcess);
 
+  /**
+   * In order to differenitate between the case where a maybeRunnable proces made progress
+   * vs. no progress. We must report progress (change our status to runnable).
+   */
+  void reportProgress(pid_t process);
 private:
   logger& log;
 
@@ -76,19 +76,37 @@ private:
    */
   pid_t nextPid = -1;
 
+  /**
+   * Double ended queue to keep track of which process to schedule next. The ordering
+   * of the queue defines our priority. That is, we try to run processes at the front
+   * first. Notice we also push processes to the front. We believe newer childs are
+   * more likely to finish before older processes.
+   */
+  deque<pid_t> processQueue;
 
   /**
-   * Epoch keeps track of last time a process was verified to be blocked. Once any
-   * process makes progress, we optimistically assume it may no longer be blocked,
-   * we increase the epoch, and the epoch field in the process class is invalidated.
+   * Fast access hastable for updating states. This must be fast as unfortunately we
+   * must update the process state using reportProgress after every blocking system call.
    */
-  int epoch = 0;
+  unordered_map<pid_t, processState> processStateMap;
 
-  /**
-   * Double ended queue to keep track of which process to schedule next.
-   */
-  deque<process> processQueue;
 
+  // Find and delete process.
+  void deleteProcess(pid_t terminatedProcess);
+
+  // Get next process based on which is runnable/maybeRunnable in order of our deque.
+  // @param currentProcess: Process that just got preempted. This is needed to avoid
+  // repicking ourselves.
+  pid_t scheduleNextProcess(pid_t currentProcess);
+
+  // Iterate through all blocked process' and change their status to maybeBlocked.
+  // This is needed as we consider both maybeRunnable processes for running, but never
+  // blocked.
+  void toMaybeProgress();
+
+
+  // Debug function to print all data about processes.
+  void printProcesses();
 };
 
 #endif

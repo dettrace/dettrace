@@ -30,6 +30,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_close);
   noIntercept(SYS_dup);
   noIntercept(SYS_dup2);
+  noIntercept(SYS_exit);
   noIntercept(SYS_exit_group);
   noIntercept(SYS_fadvise64);
   noIntercept(SYS_fchdir);
@@ -40,6 +41,7 @@ void seccomp::loadRules(bool debug){
   // Flock may block! In the future this may lead to deadlock.
   // deal with it then :)
   noIntercept(SYS_flock);
+    noIntercept(SYS_fsync);
   // TODO: Add to intercept with debug for path.
   noIntercept(SYS_fsetxattr);
   noIntercept(SYS_getuid);
@@ -66,11 +68,14 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_setpgid);
   noIntercept(SYS_set_tid_address);
   noIntercept(SYS_sigaltstack);
-  noIntercept(SYS_rt_sigreturn);
+  // TODO move to intercept with debug
+  noIntercept(SYS_readlinkat);
   noIntercept(SYS_rename);
   noIntercept(SYS_renameat);
   noIntercept(SYS_renameat2);
+  noIntercept(SYS_rt_sigreturn);
   noIntercept(SYS_setgid);
+    noIntercept(SYS_setrlimit);
   // This seems to be, surprisingly, deterministic. The affinity is set/get by
   // us so it should always be the same mask. User cannot actually observe differences.
   noIntercept(SYS_sched_getaffinity);

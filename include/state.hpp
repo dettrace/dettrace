@@ -69,11 +69,14 @@ public:
    */
   uint64_t preIp = 0;
 
-  uint64_t originalArg3 = 0;
   /**
-   * My register 2 argument since we need to restore at the post-hook after modifying.
+   * Original register arguments before we modified them. We need to restore them at the
+   * post-hook after modifying. Sometimes.
    */
+  uint64_t originalArg1 = 0;
   uint64_t originalArg2 = 0;
+  uint64_t originalArg3 = 0;
+  uint64_t originalArg4 = 0;
 
   /**
    * Debug level. Mainly used by the dettraceSytemCall classes to avoid doing unnecesary

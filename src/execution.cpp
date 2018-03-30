@@ -27,6 +27,10 @@ execution::execution(int debugLevel, pid_t startingPid):
   }
 // =======================================================================================
 bool execution::handleExit(const pid_t traceesPid){
+  // We could have only gotten to an exit if progress was made report this.
+  // This covers the case where we had zero nonblocking system calls in our path.
+  myScheduler.reportProgress(traceesPid);
+
   // Process done
   bool empty = myScheduler.removeAndScheduleNext(traceesPid);
   if(empty){
@@ -85,6 +89,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
     // This event is known to be either a fork/vfork event or a signal. We check this
     // in handleFork.
     tie(e, newPid, status) = getNextEvent(traceesPid, false);
+    // log.writeToLog(Importance::info, "Event: %s\nnewPid: %d\n", , newPid);
     handleFork(e, newPid);
 
     // This was a fork, vfork, or clone. No need to go into the post-interception hook.
@@ -233,6 +238,7 @@ void execution::runProgram(){
     if(ret == ptraceEvent::signal){
       int signalNum = WSTOPSIG(status);
       handleSignal(signalNum, traceesPid);
+      myScheduler.reportProgress(traceesPid);
       continue;
     }
 
@@ -247,7 +253,8 @@ void execution::runProgram(){
 // =======================================================================================
 void execution::handleFork(ptraceEvent event, const pid_t traceesPid){
   // Notice in both cases, we catch one of the two events and ignore the other.
-  if(event == ptraceEvent::fork || event == ptraceEvent::vfork){
+  if(event == ptraceEvent::fork || event == ptraceEvent::vfork ||
+     event == ptraceEvent::clone){
     // Fork event came first.
     handleForkEvent(traceesPid);
 
@@ -523,21 +530,25 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
 ptraceEvent execution::getPtraceEvent(const int status){
   // Check if tracee has exited.
   if (WIFEXITED(status)){
+    log.writeToLog(Importance::extra, "nonEventExit\n");
     return ptraceEvent::nonEventExit;
   }
 
   // Condition for PTRACE_O_TRACEEXEC
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_EXEC) ){
+    log.writeToLog(Importance::extra, "exec\n");
     return ptraceEvent::exec;
   }
 
   // Condition for PTRACE_O_TRACECLONE
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_CLONE) ){
+    log.writeToLog(Importance::extra, "clone\n");
     return ptraceEvent::clone;
   }
 
   // Condition for PTRACE_O_TRACEVFORK
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_VFORK) ){
+    log.writeToLog(Importance::extra, "vfork\n");
     return ptraceEvent::vfork;
   }
 
@@ -545,20 +556,24 @@ ptraceEvent execution::getPtraceEvent(const int status){
   // SIGCHLD, ptrace calls that event a fork *sigh*.
   // Also requires PTRACE_O_FORK flag.
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_FORK) ){
+    log.writeToLog(Importance::extra, "fork\n");
     return ptraceEvent::fork;
   }
 
 #ifdef PTRACE_EVENT_STOP
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_STOP) ){
+    log.writeToLog(Importance::extra, "event stop\n");
     throw runtime_error("Ptrace event stop.\n");
   }
 #endif
 
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_EXIT) ){
+    log.writeToLog(Importance::extra, "event exit\n");
     return ptraceEvent::eventExit;
   }
 
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_SECCOMP) ){
+    log.writeToLog(Importance::extra, "event seccomp\n");
     return ptraceEvent::seccomp;
   }
 
@@ -566,18 +581,21 @@ ptraceEvent execution::getPtraceEvent(const int status){
   // Check if WIFSTOPPED return true,
   // if yes, compare signal number to SIGTRAP | 0x80 (see ptrace(2)).
   if(WIFSTOPPED(status) && (WSTOPSIG(status) == (SIGTRAP | 0x80)) ){
+    log.writeToLog(Importance::extra, "event syscall\n");
     return ptraceEvent::syscall;
   }
 
   // Check if we intercepted a signal before it was delivered to the child.
   // TODO: Currently this is working as a sink for all signals.
   if(WIFSTOPPED(status)){
+    log.writeToLog(Importance::extra, "event signal\n");
     return ptraceEvent::signal;
   }
 
   // Check if the child was terminated by a signal. This can happen after when we,
   //the tracer, intercept a signal of the tracee and deliver it.
   if(WIFSIGNALED(status)){
+    log.writeToLog(Importance::extra, "terminated by signal\n");
     return ptraceEvent::terminatedBySignal;
   }
 

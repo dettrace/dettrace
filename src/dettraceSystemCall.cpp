@@ -13,6 +13,7 @@
 #include <sys/resource.h>
 #include <sys/sysinfo.h>
 #include <sys/uio.h>
+#include <linux/futex.h>
 #include <linux/fs.h>
 
 #include "dettraceSystemCall.hpp"
@@ -170,10 +171,48 @@ void fstatfsSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
 }
 // =======================================================================================
 bool futexSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
+  // If operation is a FUTEX_WAIT, set timeout to zero. That is, immediately return
+  // instead of blocking.
+  int futexOp = t.arg2();
+  timespec* timeout = (timespec*) t.arg4();
+
+  if(futexOp == FUTEX_WAIT || futexOp == FUTEX_WAIT_PRIVATE){
+    // Overwrite the current value with our value. Restore value in post hook.
+    s.originalArg4 = (uint64_t) timeout;
+    // our timespec value to copy over.
+    timespec ourTimeout = {0};
+
+    if(timeout == nullptr){
+      // We need somewhere to store timespec. We will write this data below the current
+      // stack pointer accounting for the red zone, known to be 128 bytes.
+      s.log.writeToLog(Importance::extra,
+  		       "timeout null, writing our data below the current stack frame...\n");
+
+      uint64_t rsp = t.regs.rsp;
+      // Enough space for timespec struct.
+      timespec* newAddress = (timespec*) (rsp - 128 - sizeof(struct timespec));
+
+      ptracer::writeToTracee(newAddress, ourTimeout, s.traceePid);
+
+      // Point system call to new address.
+      t.writeArg4((uint64_t) newAddress);
+    }else{
+      s.log.writeToLog(Importance::extra, "Writing over original timeout value\n");
+      ptracer::writeToTracee(timeout, ourTimeout, s.traceePid);
+    }
+  }
+
   return true;
 }
 
 void futexSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+  int futexOp = t.arg2();
+  if(futexOp == FUTEX_WAIT || futexOp == FUTEX_WAIT_PRIVATE){
+    // Restore register state.
+    t.writeArg4(s.originalArg4);
+
+    replaySyscallIfBlocked(s, t, sched, ETIMEDOUT);
+  }
   return;
 }
 // =======================================================================================
@@ -235,7 +274,7 @@ void getrlimitSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
     // noLimits.rlim_cur = RLIM_INFINITY;
     // noLimits.rlim_max = RLIM_INFINITY;
 
-    ptracer::writeToTracee(rp, noLimits, t.getPid());
+    // ptracer::writeToTracee(rp, noLimits, t.getPid());
   }
 
   return;
@@ -480,7 +519,7 @@ void readSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
     doWithCheck(process_vm_readv(t.getPid(), &local, 1, &traceeMem, 1, 0),
 		"process_readv_writev");
 
-    s.log.writeToLog(Importance::extra, "%s\n", readInfo);
+    // s.log.writeToLog(Importance::extra, "%s\n", readInfo);
   }
 
   return;
@@ -741,11 +780,12 @@ void utimensatSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
 }
 // =======================================================================================
 bool writeSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
+  s.log.writeToLog(Importance::info, "fd: %d\n", t.arg1());
   return true;
 }
 
 void writeSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
-  // TODO: Handle bytes written.
+  replaySyscallIfBlocked(s, t, sched, EAGAIN);
   return;
 }
 // =======================================================================================
@@ -776,6 +816,7 @@ void writevSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
 }
 // =======================================================================================
 bool replaySyscallIfBlocked(state& s, ptracer& t, scheduler& sched, int64_t errornoValue){
+  s.log.writeToLog(Importance::info, "In replaySyscallIfBlocked.\n");
   if(- errornoValue == (int64_t) t.getReturnValue()){
     auto msg = s.systemcall->syscallName + " would have blocked!\n";
     s.log.writeToLog(Importance::info, msg);
@@ -791,9 +832,14 @@ bool replaySyscallIfBlocked(state& s, ptracer& t, scheduler& sched, int64_t erro
     t.regs.rax = t.getSystemCallNumber();
     t.writeIp(t.regs.rip - 2);
     return true;
+  }else{
+    // Disambiguiate. Otherwise it's impossible to tell the difference between a
+    // maybeRunnable process that made no progress vs the case where we were on
+    // maybeRunnable and we made progress, and eventually we hit another blocking
+    // system call.
+    sched.reportProgress(s.traceePid);
+    return false;
   }
-
-  return false;
 }
 // =======================================================================================
 void zeroOutStatfs(struct statfs& stats){

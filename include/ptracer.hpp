@@ -90,6 +90,7 @@ public:
   void writeArg1(uint64_t val);
   void writeArg2(uint64_t val);
   void writeArg3(uint64_t val);
+  void writeArg4(uint64_t val);
   void writeIp(uint64_t val);
  /**
    * All system call return an argument through their eax register. Set state here.
