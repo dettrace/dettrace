@@ -646,6 +646,38 @@ bool writeSystemCall::handleDetPre(state &s, ptracer &t){
 
 void writeSystemCall::handleDetPost(state &s, ptracer &t){
   // TODO: Handle bytes written.
+  int retVal = t.getReturnValue();
+  if (retVal < 0) {
+    throw runtime_error("Write failed with: " + string{ strerror(- retVal) });
+  }
+
+  uint16_t minus2 = t.readFromTracee((uint16_t*) (t.regs.rip - 2), s.traceePid);
+  if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
+    throw runtime_error("Write failed with: non syscall insn");
+  }
+  ssize_t bytes_written = retVal; 
+  s.totalBytes += bytes_written;
+  ssize_t bytes_requested = t.arg3();
+
+  if (s.firstTryReadWrite) {
+    s.firstTryReadWrite = false;
+    s.beforeRetry = t.regs;
+  }
+
+  // 0 indicates nothing was written.
+  if (bytes_written != 0) {
+    t.writeArg2(t.arg2() + bytes_written);
+    t.writeArg3(t.arg3() - bytes_written);
+    t.regs.rax = t.getSystemCallNumber();
+    t.writeIp(t.regs.rip - 2);
+   } else { // Nothing left to write.
+     t.setReturnRegister(s.totalBytes);
+     t.writeArg1(s.beforeRetry.rdi);
+     t.writeArg2(s.beforeRetry.rsi);
+     t.writeArg3(s.beforeRetry.rdx);
+     s.firstTryReadWrite = true;
+     s.totalBytes = 0;
+   }
   return;
 }
 // =======================================================================================
