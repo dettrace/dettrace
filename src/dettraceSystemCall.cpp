@@ -5,6 +5,7 @@
 #include <sys/utsname.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>              /* Obtain O_* constant definitions */
+#include <inttypes.h>
 
 #include <climits>
 #include <cstring>
@@ -329,7 +330,14 @@ void gettimeofdaySystemCall::handleDetPost(state& s, ptracer& t, scheduler& sche
 }
 // =======================================================================================
 void ioctlSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+  int fd = t.arg1();
   const uint64_t request = t.arg2();
+  s.log.writeToLog(Importance::info, "fd %d\n", fd);
+  s.log.writeToLog(Importance::info, "Request %" PRId64 "\n", request);
+
+  // if(TCGETS == request){
+    // return;
+  // }
 
   // Do not suport querying for these.
   if(TCGETS == request ||
@@ -341,9 +349,12 @@ void ioctlSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   // These are fine, allow them through.
   else if(TIOCGPGRP == request || // group pid of foreground process.
 	  SIOCSIFMAP == request || // efficient reading of files.
-	  0xC020660B /*FS_IOC_FIEMAP*/ == request || // For some reason causes compiler
-	                                             // error if I use the macro?
-	  FICLONE == request){ // clone file
+	  0xC020660B /*FS_IOC_FIEMAP*/ == request // For some reason causes compiler
+	                                          // error if I use the macro?
+	  #ifdef FICLONE
+	  || FICLONE == request // Not avaliable in older kernel versions.
+	  #endif
+	  ){ // clone file
     return;
   }else{
     throw runtime_error("Unsupported ioctl call: fd=" + to_string(t.arg1()) +
@@ -501,43 +512,8 @@ bool readSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
 void readSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   bool replay = replaySyscallIfBlocked(s, t, sched, EAGAIN);
 
-  if(s.debugLevel == 5){
-    void* buf = (void*) t.arg2();
-    ssize_t bytesRead = t.getReturnValue();
-    char readInfo[bytesRead + 1];
-    readInfo[bytesRead + 1] = '\0';
-
-    // Ptrace read is way too slow as it works at word granularity. Time to use
-    // process_vm_read!
-    const iovec traceeMem = {buf, // Starting address
-			     (size_t) bytesRead,   // number of bytes to transfer.
-    };
-    const iovec local = {readInfo, // Starting address
-		       (size_t) bytesRead,   // number of bytes to transfer.
-    };
-
-    doWithCheck(process_vm_readv(t.getPid(), &local, 1, &traceeMem, 1, 0),
-		"process_readv_writev");
-
-    // s.log.writeToLog(Importance::extra, "%s\n", readInfo);
-  }
-
   return;
 
-  // TODO:
-  // int retVal = t.getReturnValue();
-  // if(retVal < 0) {
-    // throw runtime_error("Read failed with: " + string{ strerror(- retVal) });
-  // }
-  // ssize_t bytes_read = retVal;
-  // ssize_t bytes_requested = t.arg3();
-  // if (bytes_read != bytes_requested && bytes_read != 0) {
-    // t.writeArg2(t.arg2() + bytes_read);
-    // t.writeArg3(t.arg3() - bytes_read);
-    // t.writeIp(s.preIp);
-    // s.preIp = 0;
-  // }
-  return;
 }
 // =======================================================================================
 bool readvSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
@@ -816,7 +792,6 @@ void writevSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
 }
 // =======================================================================================
 bool replaySyscallIfBlocked(state& s, ptracer& t, scheduler& sched, int64_t errornoValue){
-  s.log.writeToLog(Importance::info, "In replaySyscallIfBlocked.\n");
   if(- errornoValue == (int64_t) t.getReturnValue()){
     auto msg = s.systemcall->syscallName + " would have blocked!\n";
     s.log.writeToLog(Importance::info, msg);

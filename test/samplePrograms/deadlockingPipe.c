@@ -10,6 +10,9 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+// Both parent and child try to read from the pipe. This should dead lock and be reported
+// by our scheduler.
+
 int doWithCheck(int returnValue, char* errorMessage);
 
 const int bytesToUse = 100;
@@ -19,14 +22,12 @@ int main(){
   doWithCheck(pipe(pipefd), "pipe");
 
   int readEnd = pipefd[0];
-  int writeEnd = pipefd[1];
 
   // Fork!
   pid_t pid = doWithCheck(fork(), "fork");
 
   // Child
   if(pid == 0){
-    /* sleep(3); */
     char buffer[bytesToUse];
     int bytes = doWithCheck(read(readEnd, buffer, bytesToUse), "read");
     if(bytesToUse != bytes){
@@ -41,9 +42,9 @@ int main(){
 
   // Parent
   char buffer[bytesToUse];
-  int bytes = doWithCheck(write(writeEnd, buffer, bytesToUse), "write");
+  int bytes = doWithCheck(read(readEnd, buffer, bytesToUse), "read");
   if(bytesToUse != bytes){
-      fprintf(stderr, "Wrote less bytes than expected...");
+      fprintf(stderr, "Read less bytes than expected...");
       exit(1);
     }
 
