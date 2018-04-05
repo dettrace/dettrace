@@ -385,26 +385,30 @@ void readSystemCall::handleDetPost(state &s, ptracer &t){
     throw runtime_error("Read failed with: " + string{ strerror(- retVal) });
   }
   
-  uint16_t minus2 = t.readFromTracee((uint16_t*) (t.regs.rip - 2), s.traceePid);
+  //uint16_t minus2 = t.readFromTracee((uint16_t*) (t.regs.rip - 2), s.traceePid);
+  uint16_t minus2 = t.readFromTracee((uint16_t*) (t.getRip() - 2), s.traceePid);
   if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
     throw runtime_error("Read failed with: non syscall insn");
   } 
   ssize_t bytes_read = retVal;
   s.totalBytes += bytes_read;
-  ssize_t bytes_requested = t.arg3();
+  //ssize_t bytes_requested = t.arg3();
   
   
   if (s.firstTryReadWrite) {
     s.firstTryReadWrite = false;
-    s.beforeRetry = t.regs;
+    //s.beforeRetry = t.regs;
+    s.beforeRetry = t.getRegs();
   } 
 
   if (bytes_read != 0/*EOF*/ && s.totalBytes != s.beforeRetry.rdx/*original bytes requested*/) {
     //cerr << "** partial read: " << bytes_read << " / " << bytes_requested << endl;
     t.writeArg2(t.arg2() + bytes_read);
     t.writeArg3(t.arg3() - bytes_read);
-    t.regs.rax = t.getSystemCallNumber();
-    t.writeIp(t.regs.rip - 2);
+    //t.regs.rax = t.getSystemCallNumber();
+    t.writeRax(t.getSystemCallNumber());
+    //t.writeIp(t.regs.rip - 2);
+    t.writeIp(t.getRip() - 2);
   } else { // EOF, or read returned everything we asked for
     //cerr << "** full read: " << bytes_read << " / " << bytes_requested << endl;
     // restore user regs so that it appears as if only one syscall occurred
@@ -620,7 +624,8 @@ bool utimensatSystemCall::handleDetPre(state &s, ptracer &t){
   // We need somewhere to store a timespec struct if our struct is null. We will write
   // this data below the current stack pointer accounting for the red zone, known to be
   // 128 bytes.
-  uint64_t rsp = t.regs.rsp;
+  //uint64_t rsp = t.regs.rsp;
+  uint64_t rsp = t.getRsp();
   // Enough space for 2 timespec structs.
   timespec* ourTimespec = (timespec*) (rsp - 128 - 2 * sizeof(timespec));
 
@@ -651,25 +656,29 @@ void writeSystemCall::handleDetPost(state &s, ptracer &t){
     throw runtime_error("Write failed with: " + string{ strerror(- retVal) });
   }
 
-  uint16_t minus2 = t.readFromTracee((uint16_t*) (t.regs.rip - 2), s.traceePid);
+  //uint16_t minus2 = t.readFromTracee((uint16_t*) (t.regs.rip - 2), s.traceePid);
+  uint16_t minus2 = t.readFromTracee((uint16_t*) (t.getRip() - 2), s.traceePid);
   if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
     throw runtime_error("Write failed with: non syscall insn");
   }
   ssize_t bytes_written = retVal; 
   s.totalBytes += bytes_written;
-  ssize_t bytes_requested = t.arg3();
+  //ssize_t bytes_requested = t.arg3();
 
   if (s.firstTryReadWrite) {
     s.firstTryReadWrite = false;
-    s.beforeRetry = t.regs;
+    //s.beforeRetry = t.regs;
+    s.beforeRetry = t.getRegs();
   }
 
   // 0 indicates nothing was written.
   if (bytes_written != 0) {
     t.writeArg2(t.arg2() + bytes_written);
     t.writeArg3(t.arg3() - bytes_written);
-    t.regs.rax = t.getSystemCallNumber();
-    t.writeIp(t.regs.rip - 2);
+    //t.regs.rax = t.getSystemCallNumber();
+    t.writeRax(t.getSystemCallNumber());
+    //t.writeIp(t.regs.rip - 2);
+    t.writeIp(t.getRip() - 2);
    } else { // Nothing left to write.
      t.setReturnRegister(s.totalBytes);
      t.writeArg1(s.beforeRetry.rdi);
