@@ -48,7 +48,7 @@
 
 using namespace std;
 // =======================================================================================
-tuple<int, int, optional<string>> parseProgramArguments(int argc, char* argv[]);
+tuple<int, int, string> parseProgramArguments(int argc, char* argv[]);
 int runTracee(void* args);
 void runTracer(int debugLevel, pid_t childPid);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
@@ -66,7 +66,7 @@ struct childArgs{
   int argc;
   char** argv;
   int debugLevel;
-  optional<string> maybePath;
+  string path;
 };
 // =======================================================================================
 /**
@@ -76,8 +76,8 @@ struct childArgs{
  */
 int main(int argc, char** argv){
   int optIndex, debugLevel;
-  optional<string> maybePath;
-  tie(optIndex, debugLevel, maybePath) = parseProgramArguments(argc, argv);
+  string path;
+  tie(optIndex, debugLevel, path) = parseProgramArguments(argc, argv);
 
   // Check for debug enviornment variable.
   char* debugEnvvar = secure_getenv("dettraceDebug");
@@ -107,7 +107,7 @@ int main(int argc, char** argv){
   args.argc = argc;
   args.argv = argv;
   args.debugLevel = debugLevel;
-  args.maybePath = maybePath;
+  args.path = path;
 
   pid_t pid = doWithCheck(clone(runTracee, child_stack + STACK_SIZE,
 				SIGCHLD |      // Alert parent of child signals?
@@ -132,7 +132,7 @@ int runTracee(void* voidArgs){
   int argc = args.argc;
   char** argv = args.argv;
   int debugLevel = args.debugLevel;
-  optional<string> maybePath = args.maybePath;
+  string path = args.path;
 
   // Find absolute path to our build directory relative to the dettrace binary.
   char argv0[strlen(argv[0])];
@@ -140,8 +140,8 @@ int runTracee(void* voidArgs){
   string pathToExe{ dirname(argv0) };
 
 
-  if(maybePath){
-    setUpContainer(pathToExe, maybePath.value(), true);
+  if(path != ""){
+    setUpContainer(pathToExe, path, true);
   }else{
     const string defaultRoot = "/../root/";
     setUpContainer(pathToExe, pathToExe + defaultRoot, false);
@@ -288,10 +288,10 @@ void runTracer(int debugLevel, pid_t startingPid){
 // =======================================================================================
 /**
  * index is the first index in the argv array containing a non option.
- * @param optional<string>: Either a user specified chroot path or none.
+ * @param string: Either a user specified chroot path or none.
  * @return (index, debugLevel)
  */
-tuple<int, int, optional<string>> parseProgramArguments(int argc, char* argv[]){
+tuple<int, int, string> parseProgramArguments(int argc, char* argv[]){
   string usageMsg =
     "./detTrace [--debug <debugLevel> | --help | --chroot <pathToRoot>] ./exe [exeCmdArgs]";
   int debugLevel = 0;
@@ -342,8 +342,7 @@ tuple<int, int, optional<string>> parseProgramArguments(int argc, char* argv[]){
     exit(1);
   }
 
-  auto maybePath = pathToChroot == "" ? nullopt : optional<string>(pathToChroot);
-  return make_tuple(optind, debugLevel, maybePath);
+  return make_tuple(optind, debugLevel, pathToChroot);
 }
 // =======================================================================================
 /**

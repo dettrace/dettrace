@@ -408,8 +408,11 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<getcwdSystemCall>(syscallNumber, syscallName);
     case SYS_getdents:
       return make_unique<getdentsSystemCall>(syscallNumber, syscallName);
+      // Some older systems do not have this  system call.
+#ifdef SYS_getrandom
     case SYS_getrandom:
 	return make_unique<getrandomSystemCall>(syscallNumber, syscallName);
+#endif
     case SYS_getrlimit:
       return make_unique<getrlimitSystemCall>(syscallNumber, syscallName);
     case SYS_getrusage:

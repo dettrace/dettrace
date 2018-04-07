@@ -8,8 +8,6 @@
 #include "scheduler.hpp"
 
 #include <deque>
-#include <optional>
-
 
 scheduler::scheduler(pid_t startingPid, logger& log):
   log(log),
@@ -123,7 +121,9 @@ pid_t scheduler::scheduleNextProcess(pid_t currentProcess){
 }
 
 void scheduler::toMaybeProgress(){
-  for(auto const& [proc, status] : processStateMap){
+  for(auto curr : processStateMap){
+    auto proc = curr.first;
+    auto status = curr.second;
     if(status == processState::blocked){
       processStateMap[proc] = processState::maybeRunnable;
     }
@@ -132,7 +132,9 @@ void scheduler::toMaybeProgress(){
 }
 
 void scheduler::printProcesses(){
-  for(auto const& [proc, status] : processStateMap){
+  for(auto curr : processStateMap){
+    auto proc = curr.first;
+    auto status = curr.second;
     log.writeToLog(Importance::extra, "Pid %d, Status %s\n", proc,
 		   to_string(status).c_str());
   }

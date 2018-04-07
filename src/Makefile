@@ -2,7 +2,7 @@ CXX = g++
 CC= gcc
 # Using features from the C++17 Standard: pair and pattern matching with auto.
 DEBUG =  -O0 -g
-CXXFLAGS = $(DEBUG) -std=c++1z -Wall $(INCLUDE)
+CXXFLAGS = $(DEBUG) -std=c++14 -Wall $(INCLUDE)
 CFLAGS = $(DEBUG) -Wall -Wshadow $(INCLUDE)
 LIBS = -pthread -lseccomp -L ../lib/lib64
 

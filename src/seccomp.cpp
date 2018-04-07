@@ -121,7 +121,9 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_getcwd);
   intercept(SYS_getdents);
   intercept(SYS_getpeername);
+#ifdef SYS_getrandom
   intercept(SYS_getrandom);
+#endif
   intercept(SYS_getrlimit);
   intercept(SYS_getrusage);
   intercept(SYS_gettimeofday);
@@ -157,6 +159,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_statfs);
   intercept(SYS_sysinfo);
   intercept(SYS_symlink, debug);
+  intercept(SYS_symlinkat, debug);
   intercept(SYS_tgkill);
   intercept(SYS_time);
   intercept(SYS_uname);

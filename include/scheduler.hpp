@@ -5,7 +5,6 @@
 #include "state.hpp"
 
 #include <deque>
-#include <optional>
 #include <unordered_map>
 
 using namespace std;
