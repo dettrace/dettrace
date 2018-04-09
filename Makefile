@@ -6,8 +6,13 @@ build:
 	cp src/dettrace bin/
 	cp src/libdet.so lib/
 
-tests:
-	make -C ./test/unitTests/
+tests: run-tests
+
+build-tests:
+	$(MAKE) -C ./test/unitTests/ all
+
+run-tests: build build-tests
+	$(MAKE) -C ./test/unitTests/ run
 
 DOCKER_NAME=dettrace
 # TODO: store version in one place in a file.
@@ -22,7 +27,7 @@ run-docker:
 test-docker:
 	docker run --privileged --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG} python3 /detTrace/runTests.py
 
-.PHONY: clean docker run-docker
+.PHONY: clean docker run-docker tests build-tests run-tests
 clean:
 	$(RM) src/dettrace
 	make -C ./src/ clean

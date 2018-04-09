@@ -12,8 +12,9 @@ all: systemCallTests
 systemCallTests: $(obj)
 	$(CXX) $^ -o $@
 
-run:
-	../../dettrace/dettrace ./systemCallTests
+run: systemCallTests
+	../../bin/dettrace ./systemCallTests -r console | tee .unit-test-output
+	@grep --quiet "All tests passed" .unit-test-output
 
 -include $(dep)
 
