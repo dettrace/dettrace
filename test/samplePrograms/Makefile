@@ -13,14 +13,19 @@ $(SIMPLE_BUILD_BINARIES): %: %.c
 
 setup:
 	@mkdir -p ActualOutputs
-# tear down FUSE filesystem if one is still running
-#	-killall --quiet partialfs
+	fusermount -q -u $(FUSE_FILE) || true # tear down FUSE filesystem if one is somehow still running
 
 # a "phony" target to run the program, capture its output and compare against expected output
 %.ok: % setup
 	@echo "   Testing $<..."
 	@../../bin/dettrace ./$< > ActualOutputs/$<.output
 	@diff --brief ActualOutputs/$<.output ExpectedOutputs/$<.output
+
+deadlockingPipe.ok: deadlockingPipe
+	@echo "   Testing $<..."
+#	ignore expected error when DetTrace detects the deadlock
+	@(../../bin/dettrace ./$< || true) 2> ActualOutputs/$<.output
+	@diff ActualOutputs/$<.output ExpectedOutputs/$<.output
 
 # FUSE tests for read/write retrying
 
@@ -34,8 +39,8 @@ fuse-%.ok: fuse-% partialfs
 	@truncate --size=0 $(FUSE_FILE)
 	@./partialfs -o direct_io $(FUSE_FILE) # launch FUSE filesystem
 	@../../bin/dettrace --nocontainer ./$< $(FUSE_FILE) > ActualOutputs/$<.output
-	@killall partialfs # tear down FUSE filesystem
-	@diff --brief ActualOutputs/$<.output ExpectedOutputs/$<.output
+	@fusermount -q -u $(FUSE_FILE) # tear down FUSE filesystem
+	@diff ActualOutputs/$<.output ExpectedOutputs/$<.output
 
 .PHONY: build setup run clean
 clean:
