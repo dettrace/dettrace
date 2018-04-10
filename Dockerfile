@@ -6,6 +6,6 @@ RUN apt-get update -y && \
 
 ADD ./ /detTrace/
 
-RUN cd /detTrace/ && make && make build
+RUN cd /detTrace/ && make -j build
 
 WORKDIR /detTrace/
