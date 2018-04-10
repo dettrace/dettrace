@@ -9,10 +9,12 @@ build:
 tests: run-tests
 
 build-tests:
-	$(MAKE) -C ./test/unitTests/ all
+	$(MAKE) -C ./test/unitTests/ build
+	$(MAKE) -C ./test/samplePrograms/ build
 
-run-tests: build build-tests
+run-tests: build
 	$(MAKE) -C ./test/unitTests/ run
+	$(MAKE) --keep-going -C ./test/samplePrograms/ run
 
 DOCKER_NAME=dettrace
 # TODO: store version in one place in a file.

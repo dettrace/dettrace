@@ -7,7 +7,7 @@ src = $(wildcard *.cpp)
 obj = $(src:.cpp=.o)
 dep = $(obj:.o=.d)
 
-all: systemCallTests
+build: systemCallTests
 
 systemCallTests: $(obj)
 	$(CXX) $^ -o $@
@@ -23,7 +23,7 @@ run: systemCallTests
 %.d: %.cpp
 	@cpp $(CXXFLAGS) $< -MM -MT $(@:.d=.o) >$@
 
-.PHONY: clean
+.PHONY: clean build
 clean:
 	$(RM) $(obj)
 	$(RM) $(dep)
