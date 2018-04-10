@@ -25,10 +25,10 @@ DOCKER_TAG=0.0.1
 docker:
 	docker build -t ${DOCKER_NAME}:${DOCKER_TAG} .
 
-run-docker:
+run-docker: docker
 	docker run -it --privileged --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG}
 
-test-docker:
+test-docker: docker
 	docker run --privileged --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG} make tests
 
 .PHONY: clean docker run-docker tests build-tests run-tests
