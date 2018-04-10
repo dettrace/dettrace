@@ -52,6 +52,15 @@ uint64_t ptracer::arg5(){
 uint64_t ptracer::arg6(){
   return regs.r9;
 }
+struct user_regs_struct ptracer::getRegs(){
+  return regs;
+}
+uint64_t ptracer::getRip() {
+  return regs.rip;
+}
+uint64_t ptracer::getRsp() {
+  return regs.rsp;
+}
 
 uint64_t ptracer::getEventMessage(){
   long event;
@@ -185,5 +194,10 @@ void ptracer::writeArg4(uint64_t val){
 
 void ptracer::writeIp(uint64_t val) {
   regs.rip = val;
+  doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
+}
+
+void ptracer::writeRax(uint64_t val) {
+  regs.rax = val;
   doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
 }

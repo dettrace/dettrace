@@ -56,12 +56,6 @@ enum class syscallState { pre, post };
  */
 class ptracer{
 public:
-  /**
-   * Registers for tracee before/after system call. Must be updated manually
-   * using TODO.
-   */
-  struct user_regs_struct regs;
-
   map<ino_t,ino_t> real2VirtualMap;
 
   /**
@@ -81,6 +75,9 @@ public:
   uint64_t arg4();
   uint64_t arg5();
   uint64_t arg6();
+  struct user_regs_struct getRegs();
+  uint64_t getRip();
+  uint64_t getRsp();
 
   /**
    * Change system call by writing to eax register, be careful!
@@ -92,6 +89,7 @@ public:
   void writeArg3(uint64_t val);
   void writeArg4(uint64_t val);
   void writeIp(uint64_t val);
+  void writeRax(uint64_t val);
  /**
    * All system call return an argument through their eax register. Set state here.
    */
@@ -225,7 +223,7 @@ public:
 
 private:
   pid_t traceePid;
-
+  struct user_regs_struct regs;
 };
 
 #endif

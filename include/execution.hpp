@@ -107,6 +107,14 @@ public:
   bool handleSeccomp(const pid_t traceesPid);
 
   /**
+   * Handle seccomp event. This happens everytime we intercept a system call before the
+   * system call is called.
+   *
+   * Return value dictates whether the postHook should be called as well.
+   */
+  bool handleSeccomp();
+
+  /**
    * Return the system call we currently caught from the tracer.
    * Notice we are forced to use a pointer to get virtual dispatch.
    */

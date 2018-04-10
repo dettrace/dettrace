@@ -48,7 +48,7 @@
 
 using namespace std;
 // =======================================================================================
-tuple<int, int, string> parseProgramArguments(int argc, char* argv[]);
+tuple<int, int, string, bool> parseProgramArguments(int argc, char* argv[]);
 int runTracee(void* args);
 void runTracer(int debugLevel, pid_t childPid);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
@@ -67,6 +67,7 @@ struct childArgs{
   char** argv;
   int debugLevel;
   string path;
+  bool useContainer;
 };
 // =======================================================================================
 /**
@@ -76,8 +77,8 @@ struct childArgs{
  */
 int main(int argc, char** argv){
   int optIndex, debugLevel;
-  string path;
-  tie(optIndex, debugLevel, path) = parseProgramArguments(argc, argv);
+  string path; bool useContainer;
+  tie(optIndex, debugLevel, path, useContainer) = parseProgramArguments(argc, argv);
 
   // Check for debug enviornment variable.
   char* debugEnvvar = secure_getenv("dettraceDebug");
@@ -108,6 +109,7 @@ int main(int argc, char** argv){
   args.argv = argv;
   args.debugLevel = debugLevel;
   args.path = path;
+  args.useContainer = useContainer;
 
   pid_t pid = doWithCheck(clone(runTracee, child_stack + STACK_SIZE,
 				SIGCHLD |      // Alert parent of child signals?
@@ -133,18 +135,20 @@ int runTracee(void* voidArgs){
   char** argv = args.argv;
   int debugLevel = args.debugLevel;
   string path = args.path;
+  bool useContainer = args.UseContainer;
 
   // Find absolute path to our build directory relative to the dettrace binary.
   char argv0[strlen(argv[0])];
   strcpy(argv0, argv[0]); // Use a copy since dirname may mutate contents.
   string pathToExe{ dirname(argv0) };
 
-
-  if(path != ""){
-    setUpContainer(pathToExe, path, true);
-  }else{
-    const string defaultRoot = "/../root/";
-    setUpContainer(pathToExe, pathToExe + defaultRoot, false);
+  if(useContainer){
+    if(path != ""){
+      setUpContainer(pathToExe, path, true);
+    }else{
+      const string defaultRoot = "/../root/";
+      setUpContainer(pathToExe, pathToExe + defaultRoot, false);
+    }
   }
 
   // Perform execve based on user command.
@@ -160,7 +164,11 @@ int runTracee(void* voidArgs){
   // Create minimal environment.
   // Note: gcc needs to be somewhere along PATH or it gets very confused, see
   // https://github.com/upenn-acg/detTrace/issues/23
+
   string ldpreload {"LD_PRELOAD=/dettrace/lib/libdet.so"};
+  if(! useContainer){
+    ldpreload = "LD_PRELOAD=" + pathToExe + "/../lib/libdet.so";
+  }
   char *const envs[] = {(char* const)ldpreload.c_str(),
                         (char* const)"PATH=/usr/bin/:/bin",
                         NULL};
@@ -204,7 +212,7 @@ int runTracee(void* voidArgs){
  */
 void setUpContainer(string pathToExe, string pathToChoort , bool userDefinedChroot){
   string buildDir = pathToChoort + "/build/";
-  // cout << "Our build directory: " << buildDir << endl;
+
   mkdirIfNotExist(buildDir);
   mkdirIfNotExist(pathToChoort + "/dettrace/"); // /dettrace directory
   mkdirIfNotExist(pathToChoort + "/dettrace/lib/"); // /dettrace/lib directory
@@ -291,18 +299,20 @@ void runTracer(int debugLevel, pid_t startingPid){
  * @param string: Either a user specified chroot path or none.
  * @return (index, debugLevel)
  */
-tuple<int, int, string> parseProgramArguments(int argc, char* argv[]){
+tuple<int, int, string, bool> parseProgramArguments(int argc, char* argv[]){
   string usageMsg =
     "./detTrace [--debug <debugLevel> | --help | --chroot <pathToRoot>] ./exe [exeCmdArgs]";
   int debugLevel = 0;
   string exePlusArgs;
   string pathToChroot = "";
+  bool useContainer = true;
 
   // Command line options for our program.
   static struct option programOptions[] = {
     {"debug" , required_argument,  0, 'd'},
     {"help"  , no_argument,        0, 'h'},
     {"chroot", required_argument,  0, 'c'},
+    {"nocontainer", no_argument, 0, 'n'},
     {0,        0,                  0, 0}    // Last must be filled with 0's.
   };
 
@@ -330,6 +340,10 @@ tuple<int, int, string> parseProgramArguments(int argc, char* argv[]){
     case 'h':
       fprintf(stderr, "%s\n", usageMsg.c_str());
       exit(1);
+      // no-container flag, used for testing
+    case 'n':
+      useContainer = false;
+      break;
     case '?':
       throw runtime_error("Invalid option passed to detTrace!");
     }
@@ -342,7 +356,7 @@ tuple<int, int, string> parseProgramArguments(int argc, char* argv[]){
     exit(1);
   }
 
-  return make_tuple(optind, debugLevel, pathToChroot);
+  return make_tuple(optind, debugLevel, pathToChroot, useContainer);
 }
 // =======================================================================================
 /**
@@ -393,7 +407,6 @@ static void proc_setgroups_write(pid_t child_pid, const char *str){
        and the system won't impose the restrictions that Linux 3.19
        added. That's fine: we don't need to do anything in order
        to permit 'gid_map' to be updated.
-
        However, if the error from open() was something other than
        the ENOENT error that is expected for that case,  let the
        user know. */

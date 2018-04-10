@@ -13,7 +13,7 @@ def main():
 
     # Run unit tests.
     print("Running unit tests.")
-    unitTestsCommand = ["./bin/dettrace", "./test/unitTests/systemCallTests"]
+    unitTestsCommand = ["./bin/dettrace" ,"--debug=0", "./test/unitTests/systemCallTests"]
     subprocess.check_call(unitTestsCommand)
     # Catch doesn't return a non-zero error code on failure. We slurp up the output
     # and check for failure ourselves.

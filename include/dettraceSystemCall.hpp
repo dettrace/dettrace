@@ -163,6 +163,7 @@ public:
   bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
+
 /**
  * ssize_t fgetxattr(int fd, const char *name, void *value, size_t size);
  *
@@ -623,6 +624,7 @@ public:
  * readlink, readlinkat - read value of a symbolic link
  * Deterministic thanks to our jail. Intercepted merely for debugging purposes.
  *
+ * TODO
  */
 class readlinkSystemCall : public systemCall{
 public:
@@ -880,7 +882,6 @@ public:
   bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
   // void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
-
 // =======================================================================================
 /**
  *

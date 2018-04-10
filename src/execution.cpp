@@ -400,6 +400,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<fchownatSystemCall>(syscallNumber, syscallName);
     case SYS_fstat:
       return make_unique<fstatSystemCall>(syscallNumber, syscallName);
+    case SYS_newfstatat:
+      return make_unique<newfstatatSystemCall>(syscallNumber, syscallName);
     case SYS_fstatfs:
       return make_unique<fstatfsSystemCall>(syscallNumber, syscallName);
     case SYS_futex:
@@ -421,8 +423,6 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<gettimeofdaySystemCall>(syscallNumber, syscallName);
     case SYS_ioctl:
       return make_unique<ioctlSystemCall>(syscallNumber, syscallName);
-    case SYS_newfstatat:
-      return make_unique<newfstatatSystemCall>(syscallNumber, syscallName);
     case SYS_nanosleep:
       return make_unique<nanosleepSystemCall>(syscallNumber, syscallName);
     case SYS_mkdir:
@@ -577,6 +577,10 @@ ptraceEvent execution::getPtraceEvent(const int status){
 
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_SECCOMP) ){
     log.writeToLog(Importance::extra, "event seccomp\n");
+    return ptraceEvent::seccomp;
+  }
+
+  if( ptracer::isPtraceEvent(status, PTRACE_EVENT_SECCOMP) ){
     return ptraceEvent::seccomp;
   }
 

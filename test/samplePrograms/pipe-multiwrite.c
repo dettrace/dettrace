@@ -87,7 +87,6 @@ int main(void) {
   rv = close(fd[0]);
   assert(0 == rv);
 
-
   return 0;
 
 }

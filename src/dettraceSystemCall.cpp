@@ -189,7 +189,7 @@ bool futexSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
       s.log.writeToLog(Importance::extra,
   		       "timeout null, writing our data below the current stack frame...\n");
 
-      uint64_t rsp = t.regs.rsp;
+      uint64_t rsp = t.getRsp();
       // Enough space for timespec struct.
       timespec* newAddress = (timespec*) (rsp - 128 - sizeof(struct timespec));
 
@@ -734,7 +734,8 @@ bool utimensatSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   // We need somewhere to store a timespec struct if our struct is null. We will write
   // this data below the current stack pointer accounting for the red zone, known to be
   // 128 bytes.
-  uint64_t rsp = t.regs.rsp;
+  //uint64_t rsp = t.regs.rsp;
+  uint64_t rsp = t.getRsp();
   // Enough space for 2 timespec structs.
   timespec* ourTimespec = (timespec*) (rsp - 128 - 2 * sizeof(timespec));
 
@@ -794,6 +795,42 @@ bool writevSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
 
 void writevSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   // TODO: Handle bytes written.
+  int retVal = t.getReturnValue();
+  if (retVal < 0) {
+    throw runtime_error("Write failed with: " + string{ strerror(- retVal) });
+  }
+
+  //uint16_t minus2 = t.readFromTracee((uint16_t*) (t.regs.rip - 2), s.traceePid);
+  uint16_t minus2 = t.readFromTracee((uint16_t*) (t.getRip() - 2), s.traceePid);
+  if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
+    throw runtime_error("Write failed with: non syscall insn");
+  }
+  ssize_t bytes_written = retVal;
+  s.totalBytes += bytes_written;
+  //ssize_t bytes_requested = t.arg3();
+
+  if (s.firstTryReadWrite) {
+    s.firstTryReadWrite = false;
+    //s.beforeRetry = t.regs;
+    s.beforeRetry = t.getRegs();
+  }
+
+  // 0 indicates nothing was written.
+  if (bytes_written != 0) {
+    t.writeArg2(t.arg2() + bytes_written);
+    t.writeArg3(t.arg3() - bytes_written);
+    //t.regs.rax = t.getSystemCallNumber();
+    t.writeRax(t.getSystemCallNumber());
+    //t.writeIp(t.regs.rip - 2);
+    t.writeIp(t.getRip() - 2);
+   } else { // Nothing left to write.
+     t.setReturnRegister(s.totalBytes);
+     t.writeArg1(s.beforeRetry.rdi);
+     t.writeArg2(s.beforeRetry.rsi);
+     t.writeArg3(s.beforeRetry.rdx);
+     s.firstTryReadWrite = true;
+     s.totalBytes = 0;
+   }
   return;
 }
 // =======================================================================================
@@ -804,14 +841,15 @@ bool replaySyscallIfBlocked(state& s, ptracer& t, scheduler& sched, int64_t erro
 
     sched.preemptAndScheduleNext(s.traceePid);
 
-    uint16_t minus2 = t.readFromTracee((uint16_t*) (t.regs.rip - 2), s.traceePid);
+    uint16_t minus2 = t.readFromTracee((uint16_t*) (t.getRip() - 2), s.traceePid);
     if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
       throw runtime_error("IP does not point to system call instruction!\n");
     }
 
     // Replay system call!
-    t.regs.rax = t.getSystemCallNumber();
-    t.writeIp(t.regs.rip - 2);
+
+    t.writeRax(t.getSystemCallNumber());
+    t.writeIp(t.getRip() - 2);
     return true;
   }else{
     // Disambiguiate. Otherwise it's impossible to tell the difference between a
