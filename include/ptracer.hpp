@@ -33,7 +33,8 @@ const size_t wordSize = 8;
  */
 enum class ptraceEvent {
   syscall,     /// Post system call execution event.
-  exit,        /// Process/thread has exited.
+  nonEventExit,        /// Process/thread has exited.
+  eventExit,        /// Process/thread has exited.
   signal,      /// Received signal.
   exec,        /// Execve event.
   clone,       /// Clone event.
@@ -81,9 +82,15 @@ public:
   uint64_t arg5();
   uint64_t arg6();
 
+  /**
+   * Change system call by writing to eax register, be careful!
+   */
+  void changeSystemCall(uint64_t val);
+
   void writeArg1(uint64_t val);
   void writeArg2(uint64_t val);
   void writeArg3(uint64_t val);
+  void writeArg4(uint64_t val);
   void writeIp(uint64_t val);
  /**
    * All system call return an argument through their eax register. Set state here.

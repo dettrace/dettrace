@@ -1,10 +1,11 @@
 #include "state.hpp"
 
-state::state(logger& log, pid_t traceePid)
+state::state(logger& log, pid_t traceePid, int debugLevel)
   : clock(0),
     traceePid(traceePid),
     inodeMap(log, "inodeMap"),
-    log(log){
+    log(log),
+    debugLevel(debugLevel){
   return;
 }
 

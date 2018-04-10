@@ -1,3 +1,4 @@
+extern "C" {
 #include <sys/types.h>
 #include <stdint.h>
 #include <sys/types.h>
@@ -8,7 +9,7 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <sys/syscall.h>    /* For SYS_write, etc */
-
+}
 #include <algorithm>
 #include <iostream>
 #include <tuple>
@@ -74,8 +75,8 @@ uint64_t ptracer::getSystemCallNumber(){
 
 void ptracer::setReturnRegister(uint64_t retVal){
   regs.rax = retVal;
-  // Please note how address is passed in data argument here. Which I guess sort of makes
-  // sense? We are passing data to it?
+  // Please note how the memory address is passed in data argument here.
+  // Which I guess sort of makes sense? We are passing data to it?
   doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
 }
 
@@ -99,7 +100,9 @@ void ptracer::setOptions(pid_t pid){
 	    PTRACE_O_TRACEEXEC |
 	    PTRACE_O_TRACEFORK |
 	    PTRACE_O_TRACEVFORK |
-	    // PTRACE_O_TRACEEXIT | // Stop tracee when it exits.
+	    // Stop tracee right as it is about to exit. This is needed as we cannot
+	    // assume WIFEXITED will work, see man ptrace 2.
+	    PTRACE_O_TRACEEXIT |
 	    PTRACE_O_TRACESYSGOOD |
 	    PTRACE_O_TRACESECCOMP
 	    ));
@@ -155,6 +158,11 @@ long ptracer::doPtrace(enum __ptrace_request request, pid_t pid, void *addr, voi
   return val;
 }
 
+void ptracer::changeSystemCall(uint64_t val){
+  regs.orig_rax = val;
+  doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
+  return;
+}
 
 void ptracer::writeArg1(uint64_t val){
   regs.rdi = val;
@@ -167,6 +175,11 @@ void ptracer::writeArg2(uint64_t val){
 }
 void ptracer::writeArg3(uint64_t val){
   regs.rdx = val;
+  doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
+}
+
+void ptracer::writeArg4(uint64_t val){
+  regs.r10 = val;
   doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
 }
 

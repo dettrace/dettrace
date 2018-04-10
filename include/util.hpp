@@ -8,6 +8,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <iostream>
+
+using namespace std;
 /*======================================================================================*/
 /**
  * Get env variable copy to free space and return as a heap-allocated pointer.
@@ -25,39 +29,15 @@ char* getEnvVar(char* var, bool dieIfNotSet);
  @return: parsedNum ;)
  */
 int parseNum(const char* const numToParse);
+// =======================================================================================
+/**
+ * Call clib function that returns an integer and sets errno with automatic checking
+ * and exiting on -1. Returns returnValue on success.
+ *
+ * Example:
+ * doWithCheck(mount(cwd, pathToBuild.c_str(), nullptr, MS_BIND, nullptr),
+ *             "Unable to bind mount cwd");
+ */
+int doWithCheck(int returnValue, string errorMessage);
+// =======================================================================================
 #endif
-/*======================================================================================*/
-/**
- * Linker expects an ELF file to execute. Check if executable is a shell script.
- * TODO: This does not catch scriptse which should automatically be assumed to be bash, but
- * have no shebang patern at the beggining. We are better checking if it's an ELF file.
- */
-bool isThisFileAScript(char* executableFullPath);
-/*======================================================================================*/
-int getRealPid();
-
-/*======================================================================================*/
-int getRealPPid();
-/*======================================================================================*/
-/**
- * Given a string representing a file. Check if the file is a relative path, i.e.
- * ./something, ../something something/something/...
- * If so, we leave it alone, and copy the memory of fileToExpand to returnString.
- * Otherwise, we search through $PATH and find the location
- * of this file in our system returning the complete file,
- * Enough memory must be given to returnString to fill the path. Otherwise failure!
-
- * @param fileToExpand: The executable/file we are trying to find full path for.
- * @param returnString: Pointer to string to copy memory to.
- * @return errorCode: 0 on success, 1 on failure.
- */
-int findFullPath(const char* const fileToExpand, char* returnString);
-/*======================================================================================*/
-/**
- * Linker expects an ELF file to execute. Check if executable is a shell script.
- * TODO: This does not catch scriptse which should automatically be assumed to be bash, but
- * have no shebang patern at the beggining. We are better checking if it's an ELF file.
- */
-bool isThisFileAScript(char* executableFullPath);
-/*======================================================================================*/
-int getLengthArray(char* const arr[]);

@@ -40,7 +40,7 @@ public:
    * of state.
    * @ppid: Parent pid of this process.
    */
-  state(logger& log, pid_t myPid);
+  state(logger& log, pid_t myPid, int debugLevel);
 
   /**
    * The pid of the process represented by this state.
@@ -64,10 +64,25 @@ public:
    * this int represents the signal number.
    */
   int signalToDeliver = 0;
-/*
- * Insn pointer from predet
- */
+  /*
+   * Insn pointer from predet
+   */
   uint64_t preIp = 0;
+
+  /**
+   * Original register arguments before we modified them. We need to restore them at the
+   * post-hook after modifying. Sometimes.
+   */
+  uint64_t originalArg1 = 0;
+  uint64_t originalArg2 = 0;
+  uint64_t originalArg3 = 0;
+  uint64_t originalArg4 = 0;
+
+  /**
+   * Debug level. Mainly used by the dettraceSytemCall classes to avoid doing unnecesary
+   * work when logging data if not needed.
+   */
+  const int debugLevel;
 
   /*
    * We need to know what system call was/is that we are not. This is important in

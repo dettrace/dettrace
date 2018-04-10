@@ -26,13 +26,24 @@ void seccomp::loadRules(bool debug){
   // debug purposes!
   noIntercept(SYS_arch_prctl);
   noIntercept(SYS_brk);
+  noIntercept(SYS_chown);
   noIntercept(SYS_close);
   noIntercept(SYS_dup);
   noIntercept(SYS_dup2);
+  noIntercept(SYS_exit);
   noIntercept(SYS_exit_group);
   noIntercept(SYS_fadvise64);
+  noIntercept(SYS_fchdir);
+  noIntercept(SYS_fchmod);
   noIntercept(SYS_fchmodat);
+  noIntercept(SYS_fchown);
   noIntercept(SYS_fcntl);
+  // Flock may block! In the future this may lead to deadlock.
+  // deal with it then :)
+  noIntercept(SYS_flock);
+    noIntercept(SYS_fsync);
+  // TODO: Add to intercept with debug for path.
+  noIntercept(SYS_fsetxattr);
   noIntercept(SYS_getuid);
   noIntercept(SYS_getgid);
   noIntercept(SYS_getegid);
@@ -51,15 +62,30 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_mprotect);
   noIntercept(SYS_mremap);
   noIntercept(SYS_lseek);
+  noIntercept(SYS_pread64);
   noIntercept(SYS_rt_sigprocmask);
   noIntercept(SYS_rt_sigaction);
   noIntercept(SYS_setpgid);
   noIntercept(SYS_set_tid_address);
   noIntercept(SYS_sigaltstack);
+  // TODO move to intercept with debug
+  noIntercept(SYS_readlinkat);
+  noIntercept(SYS_rename);
+  noIntercept(SYS_renameat);
+  noIntercept(SYS_renameat2);
   noIntercept(SYS_rt_sigreturn);
+  noIntercept(SYS_setgid);
+    noIntercept(SYS_setrlimit);
+  // This seems to be, surprisingly, deterministic. The affinity is set/get by
+  // us so it should always be the same mask. User cannot actually observe differences.
+  noIntercept(SYS_sched_getaffinity);
   noIntercept(SYS_socket);
   noIntercept(SYS_umask);
-  noIntercept(SYS_wait4);
+  // TODO We do not allow user to observe metadata so it's fine if they write
+  // it out.
+  noIntercept(SYS_utimensat);
+  noIntercept(SYS_utimes);
+
 
   // These system calls must intercepted as to know when a fork even has happened:
   // We handle forks when see the system call pre exit.
@@ -77,11 +103,17 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_alarm);
   intercept(SYS_chdir, debug);
   intercept(SYS_chmod, debug);
+  // creat cannot be made blocking. This is fine as it seems it's only for filesystem
+  // file that live in disk. Which should never block.
+  intercept(SYS_creat, debug);
   intercept(SYS_clock_gettime);
   // TODO: This system call
   intercept(SYS_connect);
   intercept(SYS_execve, debug);
   intercept(SYS_faccessat, debug);
+  intercept(SYS_fgetxattr, debug);
+  intercept(SYS_flistxattr, debug);
+  intercept(SYS_fchownat);
   intercept(SYS_fstat);
   intercept(SYS_fstatfs);
   // TODO
@@ -89,12 +121,16 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_getcwd);
   intercept(SYS_getdents);
   intercept(SYS_getpeername);
+#ifdef SYS_getrandom
   intercept(SYS_getrandom);
+#endif
   intercept(SYS_getrlimit);
   intercept(SYS_getrusage);
   intercept(SYS_gettimeofday);
   // TODO IOCTL with seccomp instead of ptrace
   intercept(SYS_ioctl);
+  intercept(SYS_mkdir, debug);
+  intercept(SYS_mkdirat, debug);
   // TODO Nano sleep
   intercept(SYS_nanosleep);
   intercept(SYS_newfstatat);
@@ -113,6 +149,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_readlink, debug);
   // TODO
   intercept(SYS_recvmsg);
+  intercept(SYS_rename, debug);
   intercept(SYS_sendto);
   // Defintely not deteministic </3
   intercept(SYS_select);
@@ -121,12 +158,14 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_stat);
   intercept(SYS_statfs);
   intercept(SYS_sysinfo);
+  intercept(SYS_symlink, debug);
+  intercept(SYS_symlinkat, debug);
   intercept(SYS_tgkill);
   intercept(SYS_time);
   intercept(SYS_uname);
   intercept(SYS_unlink, debug);
   intercept(SYS_unlinkat, debug);
-  intercept(SYS_utimensat);
+  intercept(SYS_wait4);
   intercept(SYS_write);
   // TODO
   intercept(SYS_writev);

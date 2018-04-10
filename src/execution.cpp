@@ -1,4 +1,5 @@
-#include<linux/version.h>
+#include <linux/version.h>
+
 #include "logger.hpp"
 #include "systemCallList.hpp"
 #include "systemCall.hpp"
@@ -7,41 +8,41 @@
 #include "state.hpp"
 #include "ptracer.hpp"
 #include "execution.hpp"
+#include "scheduler.hpp"
 
 #include <stack>
 // =======================================================================================
 execution::execution(int debugLevel, pid_t startingPid):
   log {stderr, debugLevel},
-  nextPid {startingPid},
-  // Waits for first process to be ready! Probably not good to have this kind of
-  // dependency of a initialization list?
+  // Waits for first process to be ready!
   tracer{startingPid},
-  debugLevel(debugLevel){
+  myScheduler{startingPid, log},
+  debugLevel {debugLevel}{
     // Set state for first process.
-    states.emplace(startingPid, state {log, startingPid});
+    states.emplace(startingPid, state {log, startingPid, debugLevel});
 
     // First process is special and we must set the options ourselves.
     // This is done everytime a new process is spawned.
     ptracer::setOptions(startingPid);
   }
 // =======================================================================================
-void execution::handleExit(){
-  if(processHier.empty()){
-    // All processes have finished!
-    exitLoop = true;
-    return;
+bool execution::handleExit(const pid_t traceesPid){
+  // We could have only gotten to an exit if progress was made report this.
+  // This covers the case where we had zero nonblocking system calls in our path.
+  myScheduler.reportProgress(traceesPid);
+
+  // Process done
+  bool empty = myScheduler.removeAndScheduleNext(traceesPid);
+  if(empty){
+    // All processes have finished! We're done
+    return true;
   }
-  // Pop entry from map.
-  states.erase(traceesPid);
-  // Set next pid to our parent.
-  nextPid = processHier.top();
-  processHier.pop();
 
   log.unsetPadding();
-  return;
+  return false;
 }
 // =======================================================================================
-bool execution::handlePreSystemCall(state& currState){
+bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   int syscallNum = tracer.getSystemCallNumber();
   currState.systemcall = getSystemCall(syscallNum, systemCallMappings[syscallNum]);
 
@@ -58,7 +59,7 @@ bool execution::handlePreSystemCall(state& currState){
 		 syscallNum);
   log.setPadding();
 
-  bool callPostHook = currState.systemcall->handleDetPre(currState, tracer);
+  bool callPostHook = currState.systemcall->handleDetPre(currState, tracer, myScheduler);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
   // Next event will be a sytem call pre-exit event.
   currState.isPreExit = true;
@@ -72,16 +73,24 @@ bool execution::handlePreSystemCall(state& currState){
   if(systemCall == "fork" || systemCall == "vfork" || systemCall == "clone"){
     int status;
     ptraceEvent e;
+    pid_t newPid;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
     // fork/vfork/clone pre system call.
-    e = getNextEvent(traceesPid, traceesPid, status, true);
+    // On older version of the kernel, we would need to catch the pre-system call
+    // event to forking system calls. This is needed here to ignore this event.
+    tie(e, newPid, status) = getNextEvent(traceesPid, true);
+    if(e != ptraceEvent::syscall){
+      throw runtime_error("Expected pre system call event after fork.");
+    }
     // That was the pre-exit event, make sure we set isPreExit to false.
     currState.isPreExit = false;
 #endif
-    // This event is known to be either a fork/vfork event or a signal.
-    e = getNextEvent(traceesPid, traceesPid, status, false);
-    handleFork(e);
+    // This event is known to be either a fork/vfork event or a signal. We check this
+    // in handleFork.
+    tie(e, newPid, status) = getNextEvent(traceesPid, false);
+    // log.writeToLog(Importance::info, "Event: %s\nnewPid: %d\n", , newPid);
+    handleFork(e, newPid);
 
     // This was a fork, vfork, or clone. No need to go into the post-interception hook.
     return false;
@@ -105,7 +114,7 @@ void execution::handlePostSystemCall(state& currState){
 		 currState.systemcall->syscallName.c_str(),
 		 tracer.getReturnValue());
 
-  currState.systemcall->handleDetPost(currState, tracer);
+  currState.systemcall->handleDetPost(currState, tracer, myScheduler);
 
   // System call was done in the last iteration.
   log.writeToLog(Importance::info,"%s returned with value: %d\n",
@@ -121,17 +130,20 @@ void execution::runProgram(){
   // reports pre hook events. To get post hook events we must call ptrace with
   // PTRACE_SYSCALL intead. This happens in @getNextEvent.
   bool callPostHook = false;
+  // Once all process' have ended. We exit.
+  bool exitLoop = false;
 
   // Iterate over entire process' and all subprocess' execution.
   while(! exitLoop){
     int status;
-    ptraceEvent ret = getNextEvent(nextPid, traceesPid, status, callPostHook);
-    nextPid = traceesPid;
+    pid_t traceesPid;
+    ptraceEvent ret;
+    tie(ret, traceesPid, status) = getNextEvent(myScheduler.getNext(), callPostHook);
 
     // Most common event. Basically, only system calls that must be determinized
     // come here, we run the pre-systemCall hook.
     if(ret == ptraceEvent::seccomp){
-      callPostHook = handleSeccomp();
+      callPostHook = handleSeccomp(traceesPid);
       continue;
     }
 
@@ -161,21 +173,49 @@ void execution::runProgram(){
       auto msg =
 	logger::makeTextColored(Color::blue, "Process [%d] ended by signal %d.\n");
       log.writeToLog(Importance::inter, msg, traceesPid, WTERMSIG(status));
-      handleExit();
+      exitLoop = handleExit(traceesPid);
+      continue;
+    }
+
+    // When all processes die, they create a PTRACE_EXIT_EVENT. This does not mean the
+    // process is actually done, instead, it is stopped and must be continued, otherwise
+    // it will not exit until the very end, if a parent is waiting on this process this
+    // may cause a deadlock. Therefore we "continue" and use @getNextEvent() to go into
+    // nonEventExit here is where the process acutally dies. This causes some issues
+    // however, as we cannot gurantee that the process will always cause a nonEventExit
+    // exit.
+
+    // One example where this doesn't happen is: parent and child run, parent exits before
+    // child. In this scenario, the parent will produce a eventExit but will not hit a
+    // nonEventExit, I belive this is because the parent is waiting on all it's children
+    // to finish. Currently, we cannot handle this rare case.
+
+    // The reason we continue, instead of say: "when we see eventExit assume process is
+    // done forever", is that we must do a final ptrace continue and waitpid, only when
+    // we have waitpid-ed, will the kernel inform the parent that this child exited. This
+    // is relevant to calls to wait on a child by a parent process.
+    if(ret == ptraceEvent::eventExit){
+      auto msg = logger::makeTextColored(Color::blue, "Process [%d] has finished. "
+					 "With ptrace exit event.\n");
+      log.writeToLog(Importance::inter, msg, traceesPid);
+      callPostHook = false;
+
+      // Process is stopped due to PTRACE_O_TRACEEXIT let it continue to death.
       continue;
     }
 
     // Current process is done.
-    if(ret == ptraceEvent::exit){
-      log.writeToLog(Importance::inter,
-		     logger::makeTextColored(Color::blue, "Process [%d] has finished.\n"),
-		     traceesPid);
-      handleExit();
+    if(ret == ptraceEvent::nonEventExit){
+      // throw runtime_error("Unexpected nonEvenExit! For pid: " + to_string(traceesPid) + "\n");
+      auto msg = logger::makeTextColored(Color::blue, "Process [%d] has finished. "
+					 "With ptrace non event exit.\n");
+      log.writeToLog(Importance::inter, msg, traceesPid);
+      exitLoop = handleExit(traceesPid);
       continue;
     }
 
     // We have encountered a call to fork, vfork, clone.
-    if(ret == ptraceEvent::fork || ret == ptraceEvent::vfork){
+    if(ret == ptraceEvent::fork){
       // Nothing to do, instead we handle it when we see the system call pre exit.
       // Since this is the easiest time to tell a fork even happened. It's not trivial
       // to check the event as we might get a signal first from the child process.
@@ -186,86 +226,81 @@ void execution::runProgram(){
     }
 
     if(ret == ptraceEvent::clone){
-      handleClone();
+      handleClone(traceesPid);
       continue;
     }
 
     if(ret == ptraceEvent::exec){
-      handleExecve();
+      handleExecve(traceesPid);
       continue;
     }
 
     if(ret == ptraceEvent::signal){
       int signalNum = WSTOPSIG(status);
-      handleSignal(signalNum);
+      handleSignal(signalNum, traceesPid);
+      myScheduler.reportProgress(traceesPid);
       continue;
     }
 
     throw runtime_error(to_string(traceesPid) +
 			" Uknown return value for ptracer::getNextEvent()\n");
   }
+
+  auto msg =
+    logger::makeTextColored(Color::blue, "All processes done. Finished successfully!\n");
+  log.writeToLog(Importance::info, msg);
 }
 // =======================================================================================
-void execution::handleFork(ptraceEvent event){
-  pid_t newChildPid;
-
+void execution::handleFork(ptraceEvent event, const pid_t traceesPid){
   // Notice in both cases, we catch one of the two events and ignore the other.
-  if(event == ptraceEvent::fork || event == ptraceEvent::vfork){
+  if(event == ptraceEvent::fork || event == ptraceEvent::vfork ||
+     event == ptraceEvent::clone){
     // Fork event came first.
-    newChildPid = handleForkEvent();
+    handleForkEvent(traceesPid);
 
     // Wait for child to be ready.
-    log.writeToLog(Importance::info,
-		   logger::makeTextColored(Color::blue,
+    log.writeToLog(Importance::info, logger::makeTextColored(Color::blue,
 		     "Waiting for child to be ready for tracing...\n"));
     int status;
-
-    int retPid = waitpid(newChildPid, &status, 0);
-    if(retPid == -1){
-      throw runtime_error("waitpid failed:" + string { strerror(errno) });
-    }
+    int newChildPid = myScheduler.getNext();
+    int retPid = doWithCheck(waitpid(newChildPid, &status, 0), "waitpid");
 
     // This should never happen.
     if(retPid != newChildPid){
       throw runtime_error("wait call return pid does not match new child's pid.");
     }
     log.writeToLog(Importance::info,
-		   logger::makeTextColored(Color::blue, "Child ready: %d\n"),
-		   retPid);
+		   logger::makeTextColored(Color::blue, "Child ready: %d\n"), retPid);
   }else{
     if(event != ptraceEvent::signal){
       throw runtime_error("Expected signal after fork/vfork event!");
     }
     // Signal event came first.
-    handleForkSignal();
-    newChildPid = handleForkEvent();
+    handleForkSignal(traceesPid);
+    handleForkEvent(traceesPid);
   }
 
-  // Set child to run as next event.
-  nextPid = newChildPid;
+  return;
 }
 // =======================================================================================
-pid_t execution::handleForkEvent(){
-  log.writeToLog(Importance::inter,
-		 logger::makeTextColored(Color::blue,
-		   "[%d] Fork event came before signal!\n"),
-		 traceesPid);
-  // Current scheduling policy: Let child run to completion.
+pid_t execution::handleForkEvent(const pid_t traceesPid){
+  log.writeToLog(Importance::inter, logger::makeTextColored(Color::blue,
+		   "[%d] Fork event came before signal!\n"), traceesPid);
+
   pid_t newChildPid = tracer.getEventMessage();
-  pid_t parentsPid = traceesPid;
-  // Push parent id to process stack.
-  processHier.push(parentsPid);
+  // Tracee just had a child! It's a parent!
+  myScheduler.addAndScheduleNext(newChildPid);
 
   // Add this new process to our states.
   log.writeToLog(Importance::info,
  		 logger::makeTextColored(Color::blue,"Added process [%d] to states map.\n"),
 		 newChildPid);
-  states.emplace(newChildPid, state {log, newChildPid} );
+  states.emplace(newChildPid, state {log, newChildPid, debugLevel} );
 
   return newChildPid;
 }
 // =======================================================================================
-void execution::handleForkSignal(){
+void execution::handleForkSignal(const pid_t traceesPid){
   log.writeToLog(Importance::info,
 		 logger::makeTextColored(Color::blue,
                    "[%d] Child fork signal-stop came before fork event.\n"),
@@ -273,10 +308,7 @@ void execution::handleForkSignal(){
   int status;
   // Intercept any system call.
   // This should really be the parents pid. which we don't have readily avaliable.
-  traceesPid = waitpid(-1, &status, 0);
-  if(traceesPid == -1){
-    throw runtime_error("waitpid failed:" + string { strerror(errno) });
-  }
+  doWithCheck(waitpid(-1, &status, 0), "waitpid");
 
   if(! ptracer::isPtraceEvent(status, PTRACE_EVENT_FORK) &&
      ! ptracer::isPtraceEvent(status, PTRACE_EVENT_VFORK)){
@@ -285,7 +317,7 @@ void execution::handleForkSignal(){
   return;
 }
 // =======================================================================================
-void execution::handleClone(){
+void execution::handleClone(const pid_t traceesPid){
   // Nothing to do for now...
   log.writeToLog(Importance::inter,
 		 logger::makeTextColored(Color::blue, "[%d] caught clone event!\n"),
@@ -293,7 +325,7 @@ void execution::handleClone(){
   return;
 }
 // =======================================================================================
-void execution::handleExecve(){
+void execution::handleExecve(const pid_t traceesPid){
   // Nothing to do for now... New process is already automatically ptraced by
   // our tracer.
   log.writeToLog(Importance::inter,
@@ -302,7 +334,7 @@ void execution::handleExecve(){
   return;
 }
 // =======================================================================================
-bool execution::handleSeccomp(){
+bool execution::handleSeccomp(const pid_t traceesPid){
   // Fetch system call provided to us via seccomp.
   uint16_t syscallNum;
   ptracer::doPtrace(PTRACE_GETEVENTMSG, traceesPid, nullptr, &syscallNum);
@@ -322,10 +354,10 @@ bool execution::handleSeccomp(){
 
   // Get registers from tracee.
   tracer.updateState(traceesPid);
-  return handlePreSystemCall( states.at(traceesPid) );
+  return handlePreSystemCall( states.at(traceesPid), traceesPid );
 }
 // =======================================================================================
-void execution::handleSignal(int sigNum){
+void execution::handleSignal(int sigNum, const pid_t traceesPid){
   // Remember to deliver this signal to the tracee for next event! Happens in
   // getNextEvent.
   states.at(traceesPid).signalToDeliver = sigNum;
@@ -344,6 +376,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<alarmSystemCall>(syscallNumber, syscallName);
     case SYS_chdir:
       return make_unique<chdirSystemCall>(syscallNumber, syscallName);
+    case SYS_chown:
+      return make_unique<chownSystemCall>(syscallNumber, syscallName);
     case SYS_chmod:
       return make_unique<chmodSystemCall>(syscallNumber, syscallName);
     case SYS_clock_gettime:
@@ -352,12 +386,20 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<cloneSystemCall>(syscallNumber, syscallName);
     case SYS_connect:
       return make_unique<connectSystemCall>(syscallNumber, syscallName);
+    case SYS_creat:
+      return make_unique<creatSystemCall>(syscallNumber, syscallName);
     case SYS_execve:
       return make_unique<execveSystemCall>(syscallNumber, syscallName);
+    case SYS_faccessat:
+      return make_unique<faccessatSystemCall>(syscallNumber, syscallName);
+    case SYS_fgetxattr:
+      return make_unique<fgetxattrSystemCall>(syscallNumber, syscallName);
+    case SYS_flistxattr:
+      return make_unique<flistxattrSystemCall>(syscallNumber, syscallName);
+    case SYS_fchownat:
+      return make_unique<fchownatSystemCall>(syscallNumber, syscallName);
     case SYS_fstat:
       return make_unique<fstatSystemCall>(syscallNumber, syscallName);
-    case SYS_newfstatat:
-      return make_unique<newfstatatSystemCall>(syscallNumber, syscallName);
     case SYS_fstatfs:
       return make_unique<fstatfsSystemCall>(syscallNumber, syscallName);
     case SYS_futex:
@@ -366,8 +408,11 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<getcwdSystemCall>(syscallNumber, syscallName);
     case SYS_getdents:
       return make_unique<getdentsSystemCall>(syscallNumber, syscallName);
+      // Some older systems do not have this  system call.
+#ifdef SYS_getrandom
     case SYS_getrandom:
 	return make_unique<getrandomSystemCall>(syscallNumber, syscallName);
+#endif
     case SYS_getrlimit:
       return make_unique<getrlimitSystemCall>(syscallNumber, syscallName);
     case SYS_getrusage:
@@ -376,8 +421,14 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<gettimeofdaySystemCall>(syscallNumber, syscallName);
     case SYS_ioctl:
       return make_unique<ioctlSystemCall>(syscallNumber, syscallName);
+    case SYS_newfstatat:
+      return make_unique<newfstatatSystemCall>(syscallNumber, syscallName);
     case SYS_nanosleep:
       return make_unique<nanosleepSystemCall>(syscallNumber, syscallName);
+    case SYS_mkdir:
+      return make_unique<mkdirSystemCall>(syscallNumber, syscallName);
+    case SYS_mkdirat:
+      return make_unique<mkdiratSystemCall>(syscallNumber, syscallName);
     case SYS_lstat:
       return make_unique<lstatSystemCall>(syscallNumber, syscallName);
     case SYS_open:
@@ -396,6 +447,10 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<readSystemCall>(syscallNumber, syscallName);
     case SYS_readlink:
       return make_unique<readlinkSystemCall>(syscallNumber, syscallName);
+    case SYS_recvmsg:
+      return make_unique<recvmsgSystemCall>(syscallNumber, syscallName);
+    case SYS_rename:
+      return make_unique<renameSystemCall>(syscallNumber, syscallName);
     case SYS_sendto:
       return make_unique<sendtoSystemCall>(syscallNumber, syscallName);
     case SYS_select:
@@ -408,6 +463,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<statSystemCall>(syscallNumber, syscallName);
     case SYS_sysinfo:
       return make_unique<sysinfoSystemCall>(syscallNumber, syscallName);
+    case SYS_symlink:
+      return make_unique<symlinkSystemCall>(syscallNumber, syscallName);
     case SYS_tgkill:
       return make_unique<tgkillSystemCall>(syscallNumber, syscallName);
     case SYS_time:
@@ -422,6 +479,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<utimensatSystemCall>(syscallNumber, syscallName);
     case SYS_vfork:
       return make_unique<vforkSystemCall>(syscallNumber, syscallName);
+    case SYS_wait4:
+      return make_unique<wait4SystemCall>(syscallNumber, syscallName);
     case SYS_write:
       return make_unique<writeSystemCall>(syscallNumber, syscallName);
     case SYS_writev:
@@ -433,17 +492,23 @@ execution::getSystemCall(int syscallNumber, string syscallName){
 			+ " this is a bug!");
   }
 // =======================================================================================
-ptraceEvent execution::getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status,
-				    bool ptraceSystemcall){
+tuple<ptraceEvent, pid_t, int>
+execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
+  // fprintf(stderr, "Getting next event for pid %d\n", pidToContinue);
+  // 3rd return value of this function. Holds the status after waitpid call.
+  int status;
+  // Pid of the process whose event we just intercepted through ptrace.
+  pid_t traceesPid;
+
   // At every doPtrace we have the choice to deliver a signal. We must deliver a signal
   // when an actual signal was returned (ptraceEvent::signal), otherwise the signal is
   // never delivered to the tracee! This field is updated in @handleSignal
   //
   // 64 bit value to avoid warning when casting to void* below.
-  int64_t signalToDeliver = states.at(nextPid).signalToDeliver;
+  int64_t signalToDeliver = states.at(pidToContinue).signalToDeliver;
   // int64_t signalToDeliver = 0;
   // Reset signal field after for next event.
-  states.at(nextPid).signalToDeliver = 0;
+  states.at(pidToContinue).signalToDeliver = 0;
 
   // Usually we use PTRACE_CONT below because we are letting seccomp + bpf handle the
   // events. So unlike standard ptrace, we do not rely on system call events. Instead,
@@ -451,37 +516,42 @@ ptraceEvent execution::getNextEvent(pid_t currentPid, pid_t& traceesPid, int& st
   // a ptrace event on pre-system call events. Sometimes we need the system call to be
   // called and then we change it's arguments. So we call PTRACE_SYSCALL instead.
   if(ptraceSystemcall){
-    ptracer::doPtrace(PTRACE_SYSCALL, currentPid, 0, (void*) signalToDeliver);
+    ptracer::doPtrace(PTRACE_SYSCALL, pidToContinue, 0, (void*) signalToDeliver);
   }else{
     // Tell the process that we just intercepted an event for to continue, with us tracking
     // it's system calls. If this is the first time this function is called, it will be the
     // starting process. Which we expect to be in a waiting state.
-    ptracer::doPtrace(PTRACE_CONT, currentPid, 0, (void*) signalToDeliver);
+    ptracer::doPtrace(PTRACE_CONT, pidToContinue, 0, (void*) signalToDeliver);
   }
 
-  // Intercept any system call.
-  traceesPid = waitpid(-1, &status, 0);
-  if(traceesPid == -1){
-    throw runtime_error("waitpid failed:" + string { strerror(errno) });
-  }
-
+  // Wait for next event to intercept.
+  traceesPid = doWithCheck(waitpid(pidToContinue, &status, 0), "waitpid");
+  // printf("Tracees pid: %d\n", traceesPid);
+  return make_tuple(getPtraceEvent(status), traceesPid, status);
+}
+// =======================================================================================
+ptraceEvent execution::getPtraceEvent(const int status){
   // Check if tracee has exited.
   if (WIFEXITED(status)){
-    return ptraceEvent::exit;
+    log.writeToLog(Importance::extra, "nonEventExit\n");
+    return ptraceEvent::nonEventExit;
   }
 
   // Condition for PTRACE_O_TRACEEXEC
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_EXEC) ){
+    log.writeToLog(Importance::extra, "exec\n");
     return ptraceEvent::exec;
   }
 
   // Condition for PTRACE_O_TRACECLONE
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_CLONE) ){
+    log.writeToLog(Importance::extra, "clone\n");
     return ptraceEvent::clone;
   }
 
   // Condition for PTRACE_O_TRACEVFORK
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_VFORK) ){
+    log.writeToLog(Importance::extra, "vfork\n");
     return ptraceEvent::vfork;
   }
 
@@ -489,20 +559,24 @@ ptraceEvent execution::getNextEvent(pid_t currentPid, pid_t& traceesPid, int& st
   // SIGCHLD, ptrace calls that event a fork *sigh*.
   // Also requires PTRACE_O_FORK flag.
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_FORK) ){
+    log.writeToLog(Importance::extra, "fork\n");
     return ptraceEvent::fork;
   }
 
 #ifdef PTRACE_EVENT_STOP
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_STOP) ){
+    log.writeToLog(Importance::extra, "event stop\n");
     throw runtime_error("Ptrace event stop.\n");
   }
 #endif
 
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_EXIT) ){
-    throw runtime_error("Ptrace event exit.\n");
+    log.writeToLog(Importance::extra, "event exit\n");
+    return ptraceEvent::eventExit;
   }
 
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_SECCOMP) ){
+    log.writeToLog(Importance::extra, "event seccomp\n");
     return ptraceEvent::seccomp;
   }
 
@@ -510,20 +584,23 @@ ptraceEvent execution::getNextEvent(pid_t currentPid, pid_t& traceesPid, int& st
   // Check if WIFSTOPPED return true,
   // if yes, compare signal number to SIGTRAP | 0x80 (see ptrace(2)).
   if(WIFSTOPPED(status) && (WSTOPSIG(status) == (SIGTRAP | 0x80)) ){
+    log.writeToLog(Importance::extra, "event syscall\n");
     return ptraceEvent::syscall;
   }
 
   // Check if we intercepted a signal before it was delivered to the child.
+  // TODO: Currently this is working as a sink for all signals.
   if(WIFSTOPPED(status)){
+    log.writeToLog(Importance::extra, "event signal\n");
     return ptraceEvent::signal;
   }
 
   // Check if the child was terminated by a signal. This can happen after when we,
   //the tracer, intercept a signal of the tracee and deliver it.
   if(WIFSIGNALED(status)){
+    log.writeToLog(Importance::extra, "terminated by signal\n");
     return ptraceEvent::terminatedBySignal;
   }
 
   throw runtime_error("Uknown event on dettrace::getNextEvent()");
 }
-// =======================================================================================
