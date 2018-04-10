@@ -1,5 +1,5 @@
 # Top-level Makefile to capture different actions you can take.
-all: build tests
+all: build
 
 build:
 	cd src && ${MAKE}
@@ -29,7 +29,7 @@ run-docker:
 	docker run -it --privileged --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG}
 
 test-docker:
-	docker run --privileged --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG} python3 /detTrace/runTests.py
+	docker run --privileged --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG} make tests
 
 .PHONY: clean docker run-docker tests build-tests run-tests
 clean:
