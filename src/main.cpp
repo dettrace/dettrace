@@ -49,8 +49,8 @@
 using namespace std;
 // =======================================================================================
 int doWithCheck(int returnValue, string errorMessage);
-pair<int, int> parseProgramArguments(int argc, char* argv[]);
-void runTracee(int optIndex, int argc, char** argv, int debugLevel);
+tuple<int, int, bool> parseProgramArguments(int argc, char* argv[]);
+void runTracee(int optIndex, int argc, char** argv, int debugLevel, bool useContainer);
 void runTracer(int debugLevel, pid_t childPid);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
@@ -64,7 +64,8 @@ void setUpContainer(string pathToExe);
  */
 int main(int argc, char** argv){
   int optIndex, debugLevel;
-  tie(optIndex, debugLevel) = parseProgramArguments(argc, argv);
+  bool useContainer;
+  tie(optIndex, debugLevel, useContainer) = parseProgramArguments(argc, argv);
 
   char* debugEnvvar = secure_getenv("dettraceDebug");
   if(debugEnvvar != nullptr){
@@ -94,7 +95,7 @@ int main(int argc, char** argv){
 
   // Child.
   if(pid == 0){
-    runTracee(optIndex, argc, argv, debugLevel);
+    runTracee(optIndex, argc, argv, debugLevel, useContainer);
   }else{
     runTracer(debugLevel, pid);
   }
@@ -105,13 +106,15 @@ int main(int argc, char** argv){
 /**
  * Child will become the process the user wishes to through call to execve.
  */
-void runTracee(int optIndex, int argc, char** argv, int debugLevel){
+void runTracee(int optIndex, int argc, char** argv, int debugLevel, bool useContainer){
   // Find absolute path to our build directory relative to the dettrace binary.
   char argv0[strlen(argv[0])];
   strcpy(argv0, argv[0]); // Use a copy since dirname may mutate contents.
   string pathToExe{ dirname(argv0) };
 
-  setUpContainer(pathToExe);
+  if (useContainer) {
+    setUpContainer(pathToExe);
+  }
 
   // Perform execve based on user command.
   ptracer::doPtrace(PTRACE_TRACEME, 0, NULL, NULL);
@@ -127,6 +130,10 @@ void runTracee(int optIndex, int argc, char** argv, int debugLevel){
   // Note: gcc needs to be somewhere along PATH or it gets very confused, see
   // https://github.com/upenn-acg/detTrace/issues/23
   string ldpreload {"LD_PRELOAD=/dettrace/lib/libdet.so"};
+  if (!useContainer) {
+    ldpreload = "LD_PRELOAD="+pathToExe+"/../lib/libdet.so";
+  }
+  //cerr << ldpreload << endl;
   char *const envs[] = {(char* const)ldpreload.c_str(),
                         (char* const)"PATH=/usr/bin/:/bin",
                         NULL};
@@ -218,16 +225,18 @@ void runTracer(int debugLevel, pid_t startingPid){
 // =======================================================================================
 /**
  * index is the first index in the argv array containing a non option.
- * @return (index, debugLevel)
+ * @return (index, debugLevel, useContainer)
  */
-pair<int, int> parseProgramArguments(int argc, char* argv[]){
+tuple<int, int, bool> parseProgramArguments(int argc, char* argv[]){
   string usageMsg = "./detTrace [--debug <debugLevel> | --help] ./exe [exeCmdArgs]";
   int debugLevel = 0;
+  bool useContainer = true;
   string exePlusArgs;
 
   // Command line options for our program.
   static struct option programOptions[] = {
     {"debug", required_argument, 0, 'd'},
+    {"nocontainer", no_argument, 0, 'n'},
     {"help",  no_argument,       0, 'h'},
     {0,       0,                 0, 0}    // Last must be filled with 0's.
   };
@@ -242,14 +251,18 @@ pair<int, int> parseProgramArguments(int argc, char* argv[]){
     if(returnVal == -1){ break; }
 
     switch(returnVal){
-      // Debug flag.
+    // Debug flag.
     case 'd':
       debugLevel = parseNum(optarg);
       if(debugLevel < 0 || debugLevel > 5){
         throw runtime_error("Debug level must be between [0,5].");
       }
       break;
-      // Help message.
+    // no-container flag, used for testing
+    case 'n':
+      useContainer = false;
+      break;
+    // Help message.
     case 'h':
       fprintf(stderr, "%s\n", usageMsg.c_str());
       exit(1);
@@ -265,7 +278,7 @@ pair<int, int> parseProgramArguments(int argc, char* argv[]){
     exit(1);
   }
 
-  return make_pair(optind, debugLevel);
+  return make_tuple(optind, debugLevel, useContainer);
 }
 // =======================================================================================
 /**
