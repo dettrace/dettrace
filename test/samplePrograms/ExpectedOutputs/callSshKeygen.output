@@ -2,16 +2,16 @@ Generating public/private rsa key pair.
 Your identification has been saved in thisKey.
 Your public key has been saved in thisKey.pub.
 The key fingerprint is:
-SHA256:3JwulFT0YRAqKcWYs04SE4QokjE6eyWEcNv+RdHnSBQ nobody@
+SHA256:F/sn1H7EsZW6Kwkts9M1D25EYTUOInyTLGwWIqrgm7I nobody@
 The key's randomart image is:
 +---[RSA 2048]----+
-|**=. +. .+E+o    |
-|O+oo+... +oo..   |
-|= oo+oo +. +.    |
-| o.+o. = +...    |
-|. .+.   S +      |
-| .  .. o .       |
-|      . . .      |
-|         .       |
-|                 |
+|     . .ooo....o |
+|    . . .*.=.oo o|
+|.  .    o + o .+.|
+|o .        o o..+|
+| o      S + o...o|
+|  o      = + *.. |
+|.o        * B.* .|
+|..       o + =.o |
+|E         . o.   |
 +----[SHA256]-----+
