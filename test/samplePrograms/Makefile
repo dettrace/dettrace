@@ -13,9 +13,10 @@ $(AUTO_BUILD_BINARIES): %: %.c
 
 # a "phony" target to run the program, capture its output and compare against expected output
 %.ok: %
+	@echo Testing $<...
 	@mkdir -p ActualOutputs
-	../../bin/dettrace ./$< > ActualOutputs/$@.output
-	diff ActualOutputs/$<.output ExpectedOutputs/$<.output
+	@../../bin/dettrace ./$< > ActualOutputs/$<.output
+	@diff --brief ActualOutputs/$<.output ExpectedOutputs/$<.output
 
 .PHONY: build run clean
 clean:
