@@ -335,9 +335,11 @@ void ioctlSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   s.log.writeToLog(Importance::info, "fd %d\n", fd);
   s.log.writeToLog(Importance::info, "Request %" PRId64 "\n", request);
 
-  // if(TCGETS == request){
-    // return;
-  // }
+  // Even though we don't particularly like TCGETS, we will let it through as we need
+  // it for some programs to work, like `more`.
+  if(TCGETS == request || TCSETS == request){
+    return;
+  }
 
   // Do not suport querying for these.
   if(TCGETS == request ||
@@ -505,7 +507,9 @@ void prlimit64SystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
 bool readSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   size_t fd = (size_t) t.arg1();
   s.log.writeToLog(Importance::info, "File descriptor: %d\n", fd);
-  // s.preIp = t.regs.rip;
+  size_t count = (size_t) t.arg3();
+  s.log.writeToLog(Importance::info, "Bytes to read %d\n", count);
+  
   return true;
 }
 
@@ -757,6 +761,8 @@ void utimensatSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
 // =======================================================================================
 bool writeSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   s.log.writeToLog(Importance::info, "fd: %d\n", t.arg1());
+  size_t count = (size_t) t.arg3();
+  s.log.writeToLog(Importance::info, "Bytes to write %d\n", count);
   return true;
 }
 
