@@ -337,7 +337,7 @@ void ioctlSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
 
   // Even though we don't particularly like TCGETS, we will let it through as we need
   // it for some programs to work, like `more`.
-  if(TCGETS == request || TCSETS == request){
+  if(TCGETS == request || TCSETS == request || FIOCLEX){
     return;
   }
 
@@ -430,6 +430,20 @@ bool pipeSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
 }
 
 void pipeSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+  // Restore original registers.
+  t.writeArg2(s.originalArg2);
+}
+// =======================================================================================
+bool pipe2SystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
+  s.log.writeToLog(Importance::info, "Making this pipe2 non-blocking\n");
+  // Convert pipe call to pipe2 to set O_NONBLOCK.
+  s.originalArg2 = t.arg2();
+  t.writeArg2(t.arg2() | O_NONBLOCK);
+
+  return true;
+}
+
+void pipe2SystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   // Restore original registers.
   t.writeArg2(s.originalArg2);
 }

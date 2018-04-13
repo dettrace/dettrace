@@ -263,7 +263,7 @@ void execution::handleFork(ptraceEvent event, const pid_t traceesPid){
 		     "Waiting for child to be ready for tracing...\n"));
     int status;
     int newChildPid = myScheduler.getNext();
-    int retPid = doWithCheck(waitpid(newChildPid, &status, 0), "waitpid");
+    int retPid = doWithCheck(waitpid(-1, &status, 0), "waitpid");
 
     // This should never happen.
     if(retPid != newChildPid){
@@ -437,6 +437,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<openatSystemCall>(syscallNumber, syscallName);
     case SYS_pipe:
       return make_unique<pipeSystemCall>(syscallNumber, syscallName);
+    case SYS_pipe2:
+      return make_unique<pipe2SystemCall>(syscallNumber, syscallName);
     case SYS_pselect6:
       return make_unique<pselect6SystemCall>(syscallNumber, syscallName);
     case SYS_poll:

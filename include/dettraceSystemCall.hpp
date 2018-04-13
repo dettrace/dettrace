@@ -508,7 +508,6 @@ public:
  * int pipe(int pipefd[2]);
  *
  * Create a pipe communication channel.
- * TODO
  */
 class pipeSystemCall : public systemCall{
 public:
@@ -516,6 +515,14 @@ public:
   bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
   void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
+// =======================================================================================
+class pipe2SystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
+};
+
 // =======================================================================================
 /**
  *

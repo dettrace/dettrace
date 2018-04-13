@@ -57,6 +57,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_getxattr);
   noIntercept(SYS_lgetxattr);
   noIntercept(SYS_madvise);
+  noIntercept(SYS_mknod);
   noIntercept(SYS_munmap);
   noIntercept(SYS_mmap);
   noIntercept(SYS_mprotect);
@@ -120,6 +121,8 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_futex);
   intercept(SYS_getcwd);
   intercept(SYS_getdents);
+  // TODO
+  noIntercept(SYS_getdents64);
   intercept(SYS_getpeername);
 #ifdef SYS_getrandom
   intercept(SYS_getrandom);
@@ -139,6 +142,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_openat, debug);
   // TODO Pipe
   intercept(SYS_pipe);
+  intercept(SYS_pipe2);
   intercept(SYS_pselect6);
   // TODO not detetministic!
   intercept(SYS_poll);
