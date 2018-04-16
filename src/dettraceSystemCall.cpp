@@ -175,15 +175,24 @@ bool futexSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   // If operation is a FUTEX_WAIT, set timeout to zero. That is, immediately return
   // instead of blocking.
   int futexOp = t.arg2();
-  timespec* timeout = (timespec*) t.arg4();
+  timespec* timeoutPtr = (timespec*) t.arg4();
 
-  if(futexOp == FUTEX_WAIT || futexOp == FUTEX_WAIT_PRIVATE){
+  s.log.writeToLog(Importance::extra, "Futex operation: %d.\n", futexOp);
+
+  // See definitions of variables here.
+  // https://github.com/spotify/linux/blob/master/include/linux/futex.h
+  int futexCmd = futexOp & FUTEX_CMD_MASK;
+  if(futexCmd == FUTEX_WAIT ||
+     futexCmd == FUTEX_WAIT_BITSET ||
+     futexCmd == FUTEX_WAIT_REQUEUE_PI
+     ){
+    s.log.writeToLog(Importance::extra, "Futex wait operation.\n");
     // Overwrite the current value with our value. Restore value in post hook.
-    s.originalArg4 = (uint64_t) timeout;
-    // our timespec value to copy over.
+    s.originalArg4 = (uint64_t) timeoutPtr;
+    // Our timespec value to copy over.
     timespec ourTimeout = {0};
 
-    if(timeout == nullptr){
+    if(timeoutPtr == nullptr){
       // We need somewhere to store timespec. We will write this data below the current
       // stack pointer accounting for the red zone, known to be 128 bytes.
       s.log.writeToLog(Importance::extra,
@@ -198,8 +207,11 @@ bool futexSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
       // Point system call to new address.
       t.writeArg4((uint64_t) newAddress);
     }else{
-      s.log.writeToLog(Importance::extra, "Writing over original timeout value\n");
-      ptracer::writeToTracee(timeout, ourTimeout, s.traceePid);
+      timespec timeout = ptracer::readFromTracee(timeoutPtr, t.getPid());
+      s.log.writeToLog(Importance::extra,
+                       "Writing over original timeout value: (s = %d, ns = %d)\n",
+                       timeout.tv_sec, timeout.tv_nsec);
+      ptracer::writeToTracee(timeoutPtr, ourTimeout, s.traceePid);
     }
   }
 
@@ -208,7 +220,11 @@ bool futexSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
 
 void futexSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   int futexOp = t.arg2();
-  if(futexOp == FUTEX_WAIT || futexOp == FUTEX_WAIT_PRIVATE){
+  int futexCmd = futexOp & FUTEX_CMD_MASK;
+  if(futexCmd == FUTEX_WAIT ||
+     futexCmd == FUTEX_WAIT_BITSET ||
+     futexCmd == FUTEX_WAIT_REQUEUE_PI
+     ){
     // Restore register state.
     t.writeArg4(s.originalArg4);
 
