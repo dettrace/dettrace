@@ -434,7 +434,6 @@ bool openatSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   return false;
 }
 // =======================================================================================
-// TODO
 bool pipeSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   s.log.writeToLog(Importance::info, "Making this pipe non-blocking\n");
   // Convert pipe call to pipe2 to set O_NONBLOCK.
@@ -539,12 +538,52 @@ bool readSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   s.log.writeToLog(Importance::info, "File descriptor: %d\n", fd);
   size_t count = (size_t) t.arg3();
   s.log.writeToLog(Importance::info, "Bytes to read %d\n", count);
-  
+
   return true;
 }
 
 void readSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   bool replay = replaySyscallIfBlocked(s, t, sched, EAGAIN);
+  if(replay){
+    return;
+  }
+
+  uint16_t minus2 = t.readFromTracee((uint16_t*) (t.getRip() - 2), s.traceePid);
+  if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
+    throw runtime_error("Read failed with: non syscall instruction: " + to_string(minus2));
+  }
+
+  // Replay system call if not enought bytes were read.
+  ssize_t bytes_read = t.getReturnValue();
+  s.totalBytes += bytes_read;
+
+  if(s.firstTryReadWrite){
+    s.firstTryReadWrite = false;
+    s.beforeRetry = t.getRegs();
+  }
+
+  if(bytes_read != 0  && // EOF
+     s.totalBytes != s.beforeRetry.rdx  // original bytes requested
+     ) {
+    s.log.writeToLog(Importance::extra, "readSystemCall: Got less bytes than requested.\n");
+    t.writeArg2(t.arg2() + bytes_read);
+    t.writeArg3(t.arg3() - bytes_read);
+
+    t.writeRax(t.getSystemCallNumber());
+    t.writeIp(t.getRip() - 2);
+  } else {
+    s.log.writeToLog(Importance::extra, "readSystemCall: EOF or read all bytes.\n");
+    // EOF, or read returned everything we asked for.
+    // Restore user regs so that it appears as if only one syscall occurred
+    t.setReturnRegister(s.totalBytes);
+    t.writeArg1(s.beforeRetry.rdi);
+    t.writeArg2(s.beforeRetry.rsi);
+    t.writeArg3(s.beforeRetry.rdx);
+
+    // reset for next syscall that we may have to retry
+    s.firstTryReadWrite = true;
+    s.totalBytes = 0;
+  }
 
   return;
 
@@ -798,7 +837,51 @@ bool writeSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
 }
 
 void writeSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
-  replaySyscallIfBlocked(s, t, sched, EAGAIN);
+  auto replay = replaySyscallIfBlocked(s, t, sched, EAGAIN);
+
+  if(replay){
+    return;
+  }
+
+  uint16_t minus2 = t.readFromTracee((uint16_t*) (t.getRip() - 2), s.traceePid);
+  if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
+    throw runtime_error("Write failed with: non syscall insn: " + to_string(minus2));
+  }
+
+  ssize_t bytes_written = t.getReturnValue();
+
+  // Check if we eve need to replay.
+  if(bytes_written == t.arg3()){
+    s.log.writeToLog(Importance::info, "writeSystemCall: All bytes written instantly.");
+    return;
+  }
+
+  s.totalBytes += bytes_written;
+
+  if (s.firstTryReadWrite) {
+    s.firstTryReadWrite = false;
+    s.beforeRetry = t.getRegs();
+  }
+
+  // 0 indicates nothing was written.
+  if(bytes_written != 0){
+    s.log.writeToLog(Importance::info, "writeSystemCall: Not all bytes written.");
+    t.writeArg2(t.arg2() + bytes_written);
+    t.writeArg3(t.arg3() - bytes_written);
+
+    t.writeRax(t.getSystemCallNumber());
+    t.writeIp(t.getRip() - 2);
+  } else {
+    // Nothing left to write.
+    s.log.writeToLog(Importance::info, "writeSystemCall: All bytes written.");
+    t.setReturnRegister(s.totalBytes);
+    t.writeArg1(s.beforeRetry.rdi);
+    t.writeArg2(s.beforeRetry.rsi);
+    t.writeArg3(s.beforeRetry.rdx);
+    s.firstTryReadWrite = true;
+    s.totalBytes = 0;
+  }
+
   return;
 }
 // =======================================================================================
@@ -830,37 +913,37 @@ void writevSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
     throw runtime_error("Write failed with: " + string{ strerror(- retVal) });
   }
 
-  //uint16_t minus2 = t.readFromTracee((uint16_t*) (t.regs.rip - 2), s.traceePid);
-  uint16_t minus2 = t.readFromTracee((uint16_t*) (t.getRip() - 2), s.traceePid);
-  if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
-    throw runtime_error("Write failed with: non syscall insn");
-  }
-  ssize_t bytes_written = retVal;
-  s.totalBytes += bytes_written;
-  //ssize_t bytes_requested = t.arg3();
+  // //uint16_t minus2 = t.readFromTracee((uint16_t*) (t.regs.rip - 2), s.traceePid);
+  // uint16_t minus2 = t.readFromTracee((uint16_t*) (t.getRip() - 2), s.traceePid);
+  // if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
+  //   throw runtime_error("Write failed with: non syscall insn");
+  // }
+  // ssize_t bytes_written = retVal;
+  // s.totalBytes += bytes_written;
+  // //ssize_t bytes_requested = t.arg3();
 
-  if (s.firstTryReadWrite) {
-    s.firstTryReadWrite = false;
-    //s.beforeRetry = t.regs;
-    s.beforeRetry = t.getRegs();
-  }
+  // if (s.firstTryReadWrite) {
+  //   s.firstTryReadWrite = false;
+  //   //s.beforeRetry = t.regs;
+  //   s.beforeRetry = t.getRegs();
+  // }
 
-  // 0 indicates nothing was written.
-  if (bytes_written != 0) {
-    t.writeArg2(t.arg2() + bytes_written);
-    t.writeArg3(t.arg3() - bytes_written);
-    //t.regs.rax = t.getSystemCallNumber();
-    t.writeRax(t.getSystemCallNumber());
-    //t.writeIp(t.regs.rip - 2);
-    t.writeIp(t.getRip() - 2);
-   } else { // Nothing left to write.
-     t.setReturnRegister(s.totalBytes);
-     t.writeArg1(s.beforeRetry.rdi);
-     t.writeArg2(s.beforeRetry.rsi);
-     t.writeArg3(s.beforeRetry.rdx);
-     s.firstTryReadWrite = true;
-     s.totalBytes = 0;
-   }
+  // // 0 indicates nothing was written.
+  // if (bytes_written != 0) {
+  //   t.writeArg2(t.arg2() + bytes_written);
+  //   t.writeArg3(t.arg3() - bytes_written);
+  //   //t.regs.rax = t.getSystemCallNumber();
+  //   t.writeRax(t.getSystemCallNumber());
+  //   //t.writeIp(t.regs.rip - 2);
+  //   t.writeIp(t.getRip() - 2);
+  //  } else { // Nothing left to write.
+  //    t.setReturnRegister(s.totalBytes);
+  //    t.writeArg1(s.beforeRetry.rdi);
+  //    t.writeArg2(s.beforeRetry.rsi);
+  //    t.writeArg3(s.beforeRetry.rdx);
+  //    s.firstTryReadWrite = true;
+  //    s.totalBytes = 0;
+  //  }
   return;
 }
 // =======================================================================================
