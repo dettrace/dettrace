@@ -43,7 +43,11 @@ fuse-%.ok: fuse-% partialfs
 	@fusermount -q -u $(FUSE_FILE) # tear down FUSE filesystem
 	@diff ActualOutputs/$<.output ExpectedOutputs/$<.output
 
-#  parameterized pipe tests
+# Parameterized pipe tests. Each of these tests has a parent and a child process
+# connected via a pipe, and either/both may read/write from the pipe. Syntax:
+# pWcR means parent writes, child reads
+# pcWpR means parent+child both write, parent reads
+# and so on...
 
 pipe-pWcR: pipe-rw.c
 	gcc $^ -Wall -g -DPARENT_WRITE=true -DCHILD_READ=true -o $@
