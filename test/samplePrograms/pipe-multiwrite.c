@@ -17,10 +17,18 @@ const unsigned BYTES_TO_SEND = 1000;
 
 // with child-runs-first scheduling, can only support (both-write parent-read)
 // TODO: should add (one-write both-read) and (both-write both-read) variants, generated via CPP macros
-const bool PARENT_WRITE = true;
-const bool CHILD_WRITE = true;
-const bool PARENT_READ = true;
-const bool CHILD_READ = false;
+#ifndef PARENT_WRITE
+#define PARENT_WRITE false
+#endif
+#ifndef CHILD_WRITE
+#define CHILD_WRITE false
+#endif
+#ifndef PARENT_READ
+#define PARENT_READ false
+#endif
+#ifndef CHILD_READ
+#define CHILD_READ false
+#endif
 
 int main(void) {
   int     fd[2], rv;
@@ -37,7 +45,7 @@ int main(void) {
 
 
   bool amChild = (0 == childpid);
-  // FIRST, both parent and child write to the pipe
+  // FIRST, parent and/or child write to the pipe
 
   if ((amChild && CHILD_WRITE) || (!amChild && PARENT_WRITE)) {
     // PRNG from https://en.wikipedia.org/wiki/Linear-feedback_shift_register#Galois_LFSRs
