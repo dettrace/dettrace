@@ -145,7 +145,7 @@ child was killed by signal N. """
 
         try:
             self.subprocess.wait()
-        except OSError, e:
+        except OSError as e:
             
             # If the child times out, the wait() syscall can get
             # interrupted by the SIGALRM. We should then only need to
@@ -168,7 +168,7 @@ child was killed by signal N. """
 (default: SIGKILL)"""
         try:
             os.killpg( self.pgid, deathsig )
-        except OSError, e:
+        except OSError as e:
             if e.errno == errno.ESRCH:
                 # We end up here if the process group has already exited, so it's safe to
                 # ignore the error
@@ -182,8 +182,7 @@ child was killed by signal N. """
 
 if __name__ == "__main__":
     if len(sys.argv) <= 2:
-        print "Usage:", sys.argv[0], "TIMEOUT COMMAND..."
-        print
+        print("Usage:", sys.argv[0], "TIMEOUT COMMAND...")
 
         descrip = """Runs COMMAND for up to TIMEOUT, sending COMMAND a SIGKILL if it
 attempts to run longer. Exits sooner if COMMAND does so, passing along COMMAND's
@@ -192,7 +191,7 @@ minutes or hours, respectively.
 
 All of COMMAND's children run in a new process group, and the entire group is
 SIGKILL'ed when the timeout expires. """
-        print descrip
+        print(descrip)
 
         sys.exit( 1 )
         pass
@@ -202,14 +201,14 @@ SIGKILL'ed when the timeout expires. """
     timeoutString = sys.argv[1]
     units = timeoutString[-1]
     if units not in ['s','m','h']:
-        print "Invalid timeout units (should be one of s, m, or h): ", timeoutString
+        print("Invalid timeout units (should be one of s, m, or h): ", timeoutString)
         sys.exit( 1 )
         pass
     duration = None
     try:
         duration = int(timeoutString[:-1])
     except ValueError:
-        print "Invalid timeout value (should be a number): ", timeoutString
+        print("Invalid timeout value (should be a number): ", timeoutString)
         sys.exit( 1 )
         pass
 
