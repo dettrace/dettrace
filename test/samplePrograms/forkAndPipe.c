@@ -26,7 +26,6 @@ int main(){
 
   // Child
   if(pid == 0){
-    /* sleep(3); */
     char buffer[bytesToUse];
     int bytes = doWithCheck(read(readEnd, buffer, bytesToUse), "read");
     if(bytesToUse != bytes){
@@ -49,7 +48,6 @@ int main(){
 
   printf("Parent done!\n");
   int status;
-  wait(&status);
   return 0;
 }
 

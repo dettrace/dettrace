@@ -11,12 +11,15 @@ using namespace std;
 
 /**
  *
- * runnable: We know for a fact ths process is able to make progress.
+ * runnable:      We know for a fact ths process is able to make progress.
  * maybeRunnable: Another process has just finished making progress, we were blocked.
  *                now we might be able to make progress, maybe not?
- * blocked: We cannot make progress.
+ * blocked:       We cannot make progress.
+ * finished:      This process has finished. This process will not receive a "nonEventExit"
+ *                from ptrace until all the children are done first. This might take a while
+ *                we keep the process around until it's ready to leave this world.
  */
-enum class processState{ runnable, maybeRunnable, blocked };
+enum class processState{ runnable, maybeRunnable, blocked, finished };
 
 string to_string(processState p);
 
@@ -38,6 +41,25 @@ string to_string(processState p);
 class scheduler{
 public:
   scheduler(pid_t startingPid, logger& log);
+
+  /**
+   * This function should only be used to schedule a finished parent to run once
+   * it's children are done. The scheduler makes assumptions which may be broken
+   * if this function is missused.
+   */
+  void scheduleThisProcess(pid_t process);
+
+  /**
+   * Check if this process has been marked as finished.
+   */
+  bool isFinished(pid_t process);
+
+  /**
+   * Mark this process as exited. Let other's run. We need our children to run
+   * and finish before we get a ptrace nonEventExit. We actually remove the process
+   * when our last child has itself ended.
+   */
+  void markFinishedAndScheduleNext(pid_t process);
 
   /**
    * Get pid of process that ptrace should run next.
@@ -62,6 +84,15 @@ public:
    */
   bool removeAndScheduleNext(pid_t terminatedProcess);
 
+
+  /**
+   * Removes specified process, let our parent run to completion.
+   * Should only be called by the last child of parent, when parent has already
+   * been marked as finished.
+   * @param empty: return true if we're all done!
+   */
+  void removeAndScheduleParent(pid_t terminatedProcess, pid_t parent);
+
   /**
    * In order to differenitate between the case where a maybeRunnable proces made progress
    * vs. no progress. We must report progress (change our status to runnable).
@@ -74,6 +105,11 @@ private:
    * Pid for next process to run.
    */
   pid_t nextPid = -1;
+
+  // We report progess due to several events. It would be expensive to iterate through
+  // all our scheduled process' and mark all as maybeBlocked everytime. So instead, we
+  // check if current process was set to runnable, this marks that we made progress.
+  bool madeProgress;
 
   /**
    * Double ended queue to keep track of which process to schedule next. The ordering
@@ -89,6 +125,9 @@ private:
    */
   unordered_map<pid_t, processState> processStateMap;
 
+  // Remove process from scheduler. Calls @deleteProcess, used to share code between
+  // removeAndScheduleNext and removeAndScheduleParent.
+  void remove(pid_t terminatedProcess);
 
   // Find and delete process.
   void deleteProcess(pid_t terminatedProcess);

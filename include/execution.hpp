@@ -11,6 +11,7 @@
 #include "scheduler.hpp"
 
 #include <stack>
+#include <map>
 
 
 /**
@@ -42,6 +43,16 @@ private:
   // do different threads have the same pid but different tid? I think so, tid might
   // be a better choice for keys.
   map<pid_t, state> states;
+
+  /**
+   * Keep track of our children. We can only ever exit once all our children have exited.
+   * We map the parent's process id to children:
+   * 1 -> 2
+   * 1 -> 3
+   * 2 -> 4
+   * (Process 1 has two children: 2 and 3. Process 2 has one child: 4).
+   */
+  multimap<pid_t, pid_t> processTree;
 
   /**
    * Tells us which process to run next, keeps track of current processes.

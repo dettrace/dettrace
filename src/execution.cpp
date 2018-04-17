@@ -11,6 +11,9 @@
 #include "scheduler.hpp"
 
 #include <stack>
+
+
+pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process);
 // =======================================================================================
 execution::execution(int debugLevel, pid_t startingPid):
   log {stderr, debugLevel},
@@ -26,20 +29,34 @@ execution::execution(int debugLevel, pid_t startingPid):
     ptracer::setOptions(startingPid);
   }
 // =======================================================================================
+// Notice a ptrace::nonEventExit gets us here. We only receive this event once our own
+// children have all finished.
 bool execution::handleExit(const pid_t traceesPid){
-  // We could have only gotten to an exit if progress was made report this.
-  // This covers the case where we had zero nonblocking system calls in our path.
-  myScheduler.reportProgress(traceesPid);
+  auto msg = logger::makeTextColored(Color::blue, "Process [%d] has completely  finished."
+                                     " (ptrace nonEventExit).\n");
+  log.writeToLog(Importance::inter, msg, traceesPid);
 
-  // Process done
-  bool empty = myScheduler.removeAndScheduleNext(traceesPid);
-  if(empty){
-    // All processes have finished! We're done
-    return true;
+  // We are done. Erase ourselves from our parent's list of children.
+  pid_t parent = eraseChildEntry(processTree, traceesPid);
+
+  if(parent != -1                   &&       // We have no parent, we're root.
+     myScheduler.isFinished(parent) &&       // Check if our parent is marked as finished.
+     processTree.count(parent) == 0){        // Parent has no children left.
+
+    myScheduler.removeAndScheduleParent(traceesPid, parent);
+    return false;
   }
-
-  log.unsetPadding();
-  return false;
+  // Generic case, should happen most of the time.
+  else{
+    // Process done, schedule next process to run.
+    bool empty = myScheduler.removeAndScheduleNext(traceesPid);
+    if(empty){
+      // All processes have finished! We're done
+      return true;
+    }
+    log.unsetPadding();
+    return false;
+  }
 }
 // =======================================================================================
 bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
@@ -55,8 +72,8 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   string systemCall = currState.systemcall->syscallName;
   string redColoredSyscall = logger::makeTextColored(Color::red, systemCall);
   log.writeToLog(Importance::inter,"[Time %d][Pid %d] Intercepted %s (#%d)\n",
-		 currState.getLogicalTime(), traceesPid, redColoredSyscall.c_str(),
-		 syscallNum);
+                 currState.getLogicalTime(), traceesPid, redColoredSyscall.c_str(),
+                 syscallNum);
   log.setPadding();
 
   bool callPostHook = currState.systemcall->handleDetPre(currState, tracer, myScheduler);
@@ -111,15 +128,15 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
 // =======================================================================================
 void execution::handlePostSystemCall(state& currState){
   log.writeToLog(Importance::info,"%s value before post-hook: %d\n",
-		 currState.systemcall->syscallName.c_str(),
-		 tracer.getReturnValue());
+                 currState.systemcall->syscallName.c_str(),
+                 tracer.getReturnValue());
 
   currState.systemcall->handleDetPost(currState, tracer, myScheduler);
 
   // System call was done in the last iteration.
   log.writeToLog(Importance::info,"%s returned with value: %d\n",
-		 currState.systemcall->syscallName.c_str(),
-		 tracer.getReturnValue());
+                 currState.systemcall->syscallName.c_str(),
+                 tracer.getReturnValue());
 
   log.unsetPadding();
   return;
@@ -151,16 +168,16 @@ void execution::runProgram(){
     // interception of system calls through PTRACE_SYSCALL. Only post system call
     // events come here.
     if(ret == ptraceEvent::syscall){
-      #if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
       state& currentState = states.at(traceesPid);
       // Skip pre exit calls nothing for us to do. We did the work during handleSeccomp()
       // on the seccomp event.
       if(currentState.isPreExit){
-	callPostHook = true;
-	currentState.isPreExit = false;
-	continue;
+        callPostHook = true;
+        currentState.isPreExit = false;
+        continue;
       }
-      #endif
+#endif
       tracer.updateState(traceesPid);
       handlePostSystemCall( states.at(traceesPid) );
       // Nope, we're done with the current system call. Wait for next seccomp event.
@@ -170,46 +187,48 @@ void execution::runProgram(){
 
     // Current process was ended by signal.
     if(ret == ptraceEvent::terminatedBySignal){
+      // TODO: A Process terminated by signal might break some of the assumptions I make
+      // in handleExit (see function definition above) so we do not support it for now.
+      throw runtime_error("Process terminated by signal. We currently do not support this.");
       auto msg =
-	logger::makeTextColored(Color::blue, "Process [%d] ended by signal %d.\n");
+        logger::makeTextColored(Color::blue, "Process [%d] ended by signal %d.\n");
       log.writeToLog(Importance::inter, msg, traceesPid, WTERMSIG(status));
       exitLoop = handleExit(traceesPid);
       continue;
     }
 
-    // When all processes die, they create a PTRACE_EXIT_EVENT. This does not mean the
-    // process is actually done, instead, it is stopped and must be continued, otherwise
-    // it will not exit until the very end, if a parent is waiting on this process this
-    // may cause a deadlock. Therefore we "continue" and use @getNextEvent() to go into
-    // nonEventExit here is where the process acutally dies. This causes some issues
-    // however, as we cannot gurantee that the process will always cause a nonEventExit
-    // exit.
+    // A process needs to do two things before dying:
+    // 1) eventExit through ptrace. This process is not truly done, it is stopped
+    //    until we let it continue.
+    // 2) A nonEventExit at this point the process is done and can no longer be
+    //    peeked or poked.
+    // If the process has remaining children, we will get an eventExit but the
+    // nonEventExit will never arrive. Therefore we set process as exited.
+    // Only when all children have exited do we get a the nonEvent exit.
 
-    // One example where this doesn't happen is: parent and child run, parent exits before
-    // child. In this scenario, the parent will produce a eventExit but will not hit a
-    // nonEventExit, I belive this is because the parent is waiting on all it's children
-    // to finish. Currently, we cannot handle this rare case.
-
-    // The reason we continue, instead of say: "when we see eventExit assume process is
-    // done forever", is that we must do a final ptrace continue and waitpid, only when
-    // we have waitpid-ed, will the kernel inform the parent that this child exited. This
-    // is relevant to calls to wait on a child by a parent process.
+    // Therefore we keep track of the process hierachy and only wait for the
+    // evenExit when our children have exited.
     if(ret == ptraceEvent::eventExit){
       auto msg = logger::makeTextColored(Color::blue, "Process [%d] has finished. "
-					 "With ptrace exit event.\n");
+                                         "With ptrace exit event.\n");
       log.writeToLog(Importance::inter, msg, traceesPid);
       callPostHook = false;
 
-      // Process is stopped due to PTRACE_O_TRACEEXIT let it continue to death.
+      // We get to an exit if we made progress, report this.
+      // This covers the case where we had no blocking system calls in our execution
+      // path.
+      myScheduler.reportProgress(traceesPid);
+
+      // We have children still, we cannot exit.
+      if(processTree.count(traceesPid) != 0){
+        myScheduler.markFinishedAndScheduleNext(traceesPid);
+      }
       continue;
     }
 
     // Current process is done.
     if(ret == ptraceEvent::nonEventExit){
-      // throw runtime_error("Unexpected nonEvenExit! For pid: " + to_string(traceesPid) + "\n");
-      auto msg = logger::makeTextColored(Color::blue, "Process [%d] has finished. "
-					 "With ptrace non event exit.\n");
-      log.writeToLog(Importance::inter, msg, traceesPid);
+      callPostHook = false;
       exitLoop = handleExit(traceesPid);
       continue;
     }
@@ -243,7 +262,7 @@ void execution::runProgram(){
     }
 
     throw runtime_error(to_string(traceesPid) +
-			" Uknown return value for ptracer::getNextEvent()\n");
+                        " Uknown return value for ptracer::getNextEvent()\n");
   }
 
   auto msg =
@@ -260,7 +279,7 @@ void execution::handleFork(ptraceEvent event, const pid_t traceesPid){
 
     // Wait for child to be ready.
     log.writeToLog(Importance::info, logger::makeTextColored(Color::blue,
-		     "Waiting for child to be ready for tracing...\n"));
+                                                             "Waiting for child to be ready for tracing...\n"));
     int status;
     int newChildPid = myScheduler.getNext();
     int retPid = doWithCheck(waitpid(-1, &status, 0), "waitpid");
@@ -270,7 +289,7 @@ void execution::handleFork(ptraceEvent event, const pid_t traceesPid){
       throw runtime_error("wait call return pid does not match new child's pid.");
     }
     log.writeToLog(Importance::info,
-		   logger::makeTextColored(Color::blue, "Child ready: %d\n"), retPid);
+                   logger::makeTextColored(Color::blue, "Child ready: %d\n"), retPid);
   }else{
     if(event != ptraceEvent::signal){
       throw runtime_error("Expected signal after fork/vfork event!");
@@ -285,7 +304,7 @@ void execution::handleFork(ptraceEvent event, const pid_t traceesPid){
 // =======================================================================================
 pid_t execution::handleForkEvent(const pid_t traceesPid){
   log.writeToLog(Importance::inter, logger::makeTextColored(Color::blue,
-		   "[%d] Fork event came before signal!\n"), traceesPid);
+                                                            "[%d] Fork event came before signal!\n"), traceesPid);
 
   pid_t newChildPid = tracer.getEventMessage();
   // Tracee just had a child! It's a parent!
@@ -293,18 +312,22 @@ pid_t execution::handleForkEvent(const pid_t traceesPid){
 
   // Add this new process to our states.
   log.writeToLog(Importance::info,
- 		 logger::makeTextColored(Color::blue,"Added process [%d] to states map.\n"),
-		 newChildPid);
+                 logger::makeTextColored(Color::blue,"Added process [%d] to states map.\n"),
+                 newChildPid);
   states.emplace(newChildPid, state {log, newChildPid, debugLevel} );
+
+  // This is where we add new children to our process tree.
+  auto pair = make_pair(traceesPid, newChildPid);
+  processTree.insert(pair);
 
   return newChildPid;
 }
 // =======================================================================================
 void execution::handleForkSignal(const pid_t traceesPid){
   log.writeToLog(Importance::info,
-		 logger::makeTextColored(Color::blue,
-                   "[%d] Child fork signal-stop came before fork event.\n"),
-		 traceesPid);
+                 logger::makeTextColored(Color::blue,
+                                         "[%d] Child fork signal-stop came before fork event.\n"),
+                 traceesPid);
   int status;
   // Intercept any system call.
   // This should really be the parents pid. which we don't have readily avaliable.
@@ -320,8 +343,8 @@ void execution::handleForkSignal(const pid_t traceesPid){
 void execution::handleClone(const pid_t traceesPid){
   // Nothing to do for now...
   log.writeToLog(Importance::inter,
-		 logger::makeTextColored(Color::blue, "[%d] caught clone event!\n"),
-		 traceesPid);
+                 logger::makeTextColored(Color::blue, "[%d] caught clone event!\n"),
+                 traceesPid);
   return;
 }
 // =======================================================================================
@@ -329,8 +352,8 @@ void execution::handleExecve(const pid_t traceesPid){
   // Nothing to do for now... New process is already automatically ptraced by
   // our tracer.
   log.writeToLog(Importance::inter,
-		 logger::makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
-		 traceesPid);
+                 logger::makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
+                 traceesPid);
   return;
 }
 // =======================================================================================
@@ -346,7 +369,7 @@ bool execution::handleSeccomp(const pid_t traceesPid){
     tracer.updateState(traceesPid);
     syscallNum = tracer.getSystemCallNumber();
     throw runtime_error("No filter rule for system call: " +
-			systemCallMappings[syscallNum]);
+                        systemCallMappings[syscallNum]);
   }
 
   // TODO: Right now we update this information on every exit and entrance, as a
@@ -369,130 +392,130 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 // =======================================================================================
 unique_ptr<systemCall>
 execution::getSystemCall(int syscallNumber, string syscallName){
-    switch(syscallNumber){
-    case SYS_access:
-      return make_unique<accessSystemCall>(syscallNumber, syscallName);
-    case SYS_alarm:
-      return make_unique<alarmSystemCall>(syscallNumber, syscallName);
-    case SYS_chdir:
-      return make_unique<chdirSystemCall>(syscallNumber, syscallName);
-    case SYS_chown:
-      return make_unique<chownSystemCall>(syscallNumber, syscallName);
-    case SYS_chmod:
-      return make_unique<chmodSystemCall>(syscallNumber, syscallName);
-    case SYS_clock_gettime:
-      return make_unique<clock_gettimeSystemCall>(syscallNumber, syscallName);
-    case SYS_clone:
-      return make_unique<cloneSystemCall>(syscallNumber, syscallName);
-    case SYS_connect:
-      return make_unique<connectSystemCall>(syscallNumber, syscallName);
-    case SYS_creat:
-      return make_unique<creatSystemCall>(syscallNumber, syscallName);
-    case SYS_execve:
-      return make_unique<execveSystemCall>(syscallNumber, syscallName);
-    case SYS_faccessat:
-      return make_unique<faccessatSystemCall>(syscallNumber, syscallName);
-    case SYS_fgetxattr:
-      return make_unique<fgetxattrSystemCall>(syscallNumber, syscallName);
-    case SYS_flistxattr:
-      return make_unique<flistxattrSystemCall>(syscallNumber, syscallName);
-    case SYS_fchownat:
-      return make_unique<fchownatSystemCall>(syscallNumber, syscallName);
-    case SYS_fstat:
-      return make_unique<fstatSystemCall>(syscallNumber, syscallName);
-    case SYS_newfstatat:
-      return make_unique<newfstatatSystemCall>(syscallNumber, syscallName);
-    case SYS_fstatfs:
-      return make_unique<fstatfsSystemCall>(syscallNumber, syscallName);
-    case SYS_futex:
-      return make_unique<futexSystemCall>(syscallNumber, syscallName);
-    case SYS_getcwd:
-      return make_unique<getcwdSystemCall>(syscallNumber, syscallName);
-    case SYS_getdents:
-      return make_unique<getdentsSystemCall>(syscallNumber, syscallName);
-      // Some older systems do not have this  system call.
+  switch(syscallNumber){
+  case SYS_access:
+    return make_unique<accessSystemCall>(syscallNumber, syscallName);
+  case SYS_alarm:
+    return make_unique<alarmSystemCall>(syscallNumber, syscallName);
+  case SYS_chdir:
+    return make_unique<chdirSystemCall>(syscallNumber, syscallName);
+  case SYS_chown:
+    return make_unique<chownSystemCall>(syscallNumber, syscallName);
+  case SYS_chmod:
+    return make_unique<chmodSystemCall>(syscallNumber, syscallName);
+  case SYS_clock_gettime:
+    return make_unique<clock_gettimeSystemCall>(syscallNumber, syscallName);
+  case SYS_clone:
+    return make_unique<cloneSystemCall>(syscallNumber, syscallName);
+  case SYS_connect:
+    return make_unique<connectSystemCall>(syscallNumber, syscallName);
+  case SYS_creat:
+    return make_unique<creatSystemCall>(syscallNumber, syscallName);
+  case SYS_execve:
+    return make_unique<execveSystemCall>(syscallNumber, syscallName);
+  case SYS_faccessat:
+    return make_unique<faccessatSystemCall>(syscallNumber, syscallName);
+  case SYS_fgetxattr:
+    return make_unique<fgetxattrSystemCall>(syscallNumber, syscallName);
+  case SYS_flistxattr:
+    return make_unique<flistxattrSystemCall>(syscallNumber, syscallName);
+  case SYS_fchownat:
+    return make_unique<fchownatSystemCall>(syscallNumber, syscallName);
+  case SYS_fstat:
+    return make_unique<fstatSystemCall>(syscallNumber, syscallName);
+  case SYS_newfstatat:
+    return make_unique<newfstatatSystemCall>(syscallNumber, syscallName);
+  case SYS_fstatfs:
+    return make_unique<fstatfsSystemCall>(syscallNumber, syscallName);
+  case SYS_futex:
+    return make_unique<futexSystemCall>(syscallNumber, syscallName);
+  case SYS_getcwd:
+    return make_unique<getcwdSystemCall>(syscallNumber, syscallName);
+  case SYS_getdents:
+    return make_unique<getdentsSystemCall>(syscallNumber, syscallName);
+    // Some older systems do not have this  system call.
 #ifdef SYS_getrandom
-    case SYS_getrandom:
-	return make_unique<getrandomSystemCall>(syscallNumber, syscallName);
+  case SYS_getrandom:
+    return make_unique<getrandomSystemCall>(syscallNumber, syscallName);
 #endif
-    case SYS_getrlimit:
-      return make_unique<getrlimitSystemCall>(syscallNumber, syscallName);
-    case SYS_getrusage:
-      return make_unique<getrusageSystemCall>(syscallNumber, syscallName);
-    case SYS_gettimeofday:
-      return make_unique<gettimeofdaySystemCall>(syscallNumber, syscallName);
-    case SYS_ioctl:
-      return make_unique<ioctlSystemCall>(syscallNumber, syscallName);
-    case SYS_nanosleep:
-      return make_unique<nanosleepSystemCall>(syscallNumber, syscallName);
-    case SYS_mkdir:
-      return make_unique<mkdirSystemCall>(syscallNumber, syscallName);
-    case SYS_mkdirat:
-      return make_unique<mkdiratSystemCall>(syscallNumber, syscallName);
-    case SYS_lstat:
-      return make_unique<lstatSystemCall>(syscallNumber, syscallName);
-    case SYS_open:
-      return make_unique<openSystemCall>(syscallNumber, syscallName);
-    case SYS_openat:
-      return make_unique<openatSystemCall>(syscallNumber, syscallName);
-    case SYS_pipe:
-      return make_unique<pipeSystemCall>(syscallNumber, syscallName);
-    case SYS_pipe2:
-      return make_unique<pipe2SystemCall>(syscallNumber, syscallName);
-    case SYS_pselect6:
-      return make_unique<pselect6SystemCall>(syscallNumber, syscallName);
-    case SYS_poll:
-      return make_unique<pollSystemCall>(syscallNumber, syscallName);
-    case SYS_prlimit64:
-      return make_unique<prlimit64SystemCall>(syscallNumber, syscallName);
-    case SYS_read:
-      return make_unique<readSystemCall>(syscallNumber, syscallName);
-    case SYS_readlink:
-      return make_unique<readlinkSystemCall>(syscallNumber, syscallName);
-    case SYS_recvmsg:
-      return make_unique<recvmsgSystemCall>(syscallNumber, syscallName);
-    case SYS_rename:
-      return make_unique<renameSystemCall>(syscallNumber, syscallName);
-    case SYS_sendto:
-      return make_unique<sendtoSystemCall>(syscallNumber, syscallName);
-    case SYS_select:
-      return make_unique<selectSystemCall>(syscallNumber, syscallName);
-    case SYS_set_robust_list:
-      return make_unique<set_robust_listSystemCall>(syscallNumber, syscallName);
-    case SYS_statfs:
-      return make_unique<statfsSystemCall>(syscallNumber, syscallName);
-    case SYS_stat:
-      return make_unique<statSystemCall>(syscallNumber, syscallName);
-    case SYS_sysinfo:
-      return make_unique<sysinfoSystemCall>(syscallNumber, syscallName);
-    case SYS_symlink:
-      return make_unique<symlinkSystemCall>(syscallNumber, syscallName);
-    case SYS_tgkill:
-      return make_unique<tgkillSystemCall>(syscallNumber, syscallName);
-    case SYS_time:
-      return make_unique<timeSystemCall>(syscallNumber, syscallName);
-    case SYS_uname:
-      return make_unique<unameSystemCall>(syscallNumber, syscallName);
-    case SYS_unlink:
-      return make_unique<unlinkSystemCall>(syscallNumber, syscallName);
-    case SYS_unlinkat:
-      return make_unique<unlinkatSystemCall>(syscallNumber, syscallName);
-    case SYS_utimensat:
-      return make_unique<utimensatSystemCall>(syscallNumber, syscallName);
-    case SYS_vfork:
-      return make_unique<vforkSystemCall>(syscallNumber, syscallName);
-    case SYS_wait4:
-      return make_unique<wait4SystemCall>(syscallNumber, syscallName);
-    case SYS_write:
-      return make_unique<writeSystemCall>(syscallNumber, syscallName);
-    case SYS_writev:
-      return make_unique<writeSystemCall>(syscallNumber, syscallName);
-    }
-
-    // Generic system call. Throws error.
-    throw runtime_error("Missing case for system call: " + syscallName
-			+ " this is a bug!");
+  case SYS_getrlimit:
+    return make_unique<getrlimitSystemCall>(syscallNumber, syscallName);
+  case SYS_getrusage:
+    return make_unique<getrusageSystemCall>(syscallNumber, syscallName);
+  case SYS_gettimeofday:
+    return make_unique<gettimeofdaySystemCall>(syscallNumber, syscallName);
+  case SYS_ioctl:
+    return make_unique<ioctlSystemCall>(syscallNumber, syscallName);
+  case SYS_nanosleep:
+    return make_unique<nanosleepSystemCall>(syscallNumber, syscallName);
+  case SYS_mkdir:
+    return make_unique<mkdirSystemCall>(syscallNumber, syscallName);
+  case SYS_mkdirat:
+    return make_unique<mkdiratSystemCall>(syscallNumber, syscallName);
+  case SYS_lstat:
+    return make_unique<lstatSystemCall>(syscallNumber, syscallName);
+  case SYS_open:
+    return make_unique<openSystemCall>(syscallNumber, syscallName);
+  case SYS_openat:
+    return make_unique<openatSystemCall>(syscallNumber, syscallName);
+  case SYS_pipe:
+    return make_unique<pipeSystemCall>(syscallNumber, syscallName);
+  case SYS_pipe2:
+    return make_unique<pipe2SystemCall>(syscallNumber, syscallName);
+  case SYS_pselect6:
+    return make_unique<pselect6SystemCall>(syscallNumber, syscallName);
+  case SYS_poll:
+    return make_unique<pollSystemCall>(syscallNumber, syscallName);
+  case SYS_prlimit64:
+    return make_unique<prlimit64SystemCall>(syscallNumber, syscallName);
+  case SYS_read:
+    return make_unique<readSystemCall>(syscallNumber, syscallName);
+  case SYS_readlink:
+    return make_unique<readlinkSystemCall>(syscallNumber, syscallName);
+  case SYS_recvmsg:
+    return make_unique<recvmsgSystemCall>(syscallNumber, syscallName);
+  case SYS_rename:
+    return make_unique<renameSystemCall>(syscallNumber, syscallName);
+  case SYS_sendto:
+    return make_unique<sendtoSystemCall>(syscallNumber, syscallName);
+  case SYS_select:
+    return make_unique<selectSystemCall>(syscallNumber, syscallName);
+  case SYS_set_robust_list:
+    return make_unique<set_robust_listSystemCall>(syscallNumber, syscallName);
+  case SYS_statfs:
+    return make_unique<statfsSystemCall>(syscallNumber, syscallName);
+  case SYS_stat:
+    return make_unique<statSystemCall>(syscallNumber, syscallName);
+  case SYS_sysinfo:
+    return make_unique<sysinfoSystemCall>(syscallNumber, syscallName);
+  case SYS_symlink:
+    return make_unique<symlinkSystemCall>(syscallNumber, syscallName);
+  case SYS_tgkill:
+    return make_unique<tgkillSystemCall>(syscallNumber, syscallName);
+  case SYS_time:
+    return make_unique<timeSystemCall>(syscallNumber, syscallName);
+  case SYS_uname:
+    return make_unique<unameSystemCall>(syscallNumber, syscallName);
+  case SYS_unlink:
+    return make_unique<unlinkSystemCall>(syscallNumber, syscallName);
+  case SYS_unlinkat:
+    return make_unique<unlinkatSystemCall>(syscallNumber, syscallName);
+  case SYS_utimensat:
+    return make_unique<utimensatSystemCall>(syscallNumber, syscallName);
+  case SYS_vfork:
+    return make_unique<vforkSystemCall>(syscallNumber, syscallName);
+  case SYS_wait4:
+    return make_unique<wait4SystemCall>(syscallNumber, syscallName);
+  case SYS_write:
+    return make_unique<writeSystemCall>(syscallNumber, syscallName);
+  case SYS_writev:
+    return make_unique<writeSystemCall>(syscallNumber, syscallName);
   }
+
+  // Generic system call. Throws error.
+  throw runtime_error("Missing case for system call: " + syscallName
+                      + " this is a bug!");
+}
 // =======================================================================================
 tuple<ptraceEvent, pid_t, int>
 execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
@@ -610,3 +633,20 @@ ptraceEvent execution::getPtraceEvent(const int status){
 
   throw runtime_error("Uknown event on dettrace::getNextEvent()");
 }
+// =======================================================================================
+/**
+ * Find and erase process from map. Returns parent (if any). Otherwise, -1.
+ */
+pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process){
+  pid_t parent = -1;
+  for(auto iter = map.begin(); iter != map.end(); iter++){
+    if(iter->second == process){
+      parent = iter->first;
+      map.erase(iter);
+      break;
+    }
+  }
+
+  return parent;
+}
+// =======================================================================================

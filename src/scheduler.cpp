@@ -21,19 +21,50 @@ pid_t scheduler::getNext(){
   return nextPid;
 }
 
+void scheduler::removeAndScheduleParent(pid_t terminatedProcess, pid_t parent){
+  if(! isFinished(parent)){
+    throw runtime_error("scheduleThisProcess: Parent : " + to_string(parent) +
+                        " was not marked as finished!");
+  }
+
+  auto msg = logger::makeTextColored(Color::blue, "Parent %d scheduled for exit.\n");
+  log.writeToLog(Importance::info, msg, parent);
+
+  remove(terminatedProcess);
+  nextPid = parent;
+}
+
+bool scheduler::isFinished(pid_t process){
+  return processStateMap[process] == processState::finished;
+}
+
+
+
+void scheduler::markFinishedAndScheduleNext(pid_t process){
+  auto msg = logger::makeTextColored(Color::blue, "Process %d marked as finished!\n");
+  log.writeToLog(Importance::info, msg , process);
+
+  if(madeProgress){
+    madeProgress = false;
+    toMaybeProgress();
+  }
+
+  processStateMap[process] = processState::finished;
+  nextPid = scheduleNextProcess(process);
+}
+
 void scheduler::reportProgress(pid_t process){
   auto msg = logger::makeTextColored(Color::blue, "Process %d made progress!\n");
-  log.writeToLog(Importance::extra, msg , process);
-  processStateMap[process] = processState::runnable;
+  log.writeToLog(Importance::info, msg , process);
+  madeProgress = true;
 }
 
 void scheduler::preemptAndScheduleNext(pid_t process){
   auto msg = logger::makeTextColored(Color::blue, "Preempting process: %d\n");
   log.writeToLog(Importance::info, msg, process);
 
-  // This process was runnable and eventually preempted due to a blocking system call.
-  // This is progress!
-  if(processStateMap[process] == processState::runnable){
+  if(madeProgress){
+    madeProgress = false;
     toMaybeProgress();
   }
 
@@ -57,23 +88,28 @@ void scheduler::addAndScheduleNext(pid_t newProcess){
   return;
 }
 
-bool scheduler::removeAndScheduleNext(pid_t terminatedProcess){
-  auto msg =
+void scheduler::remove(pid_t terminatedProcess){
+ auto msg =
     logger::makeTextColored(Color::blue,"Removing process from scheduler: %d\n");
   log.writeToLog(Importance::info, msg, terminatedProcess);
 
   deleteProcess(terminatedProcess);
+}
 
-  // Progress was made.
-  // Update all our other process' status from blocked to maybeRunnable.
-  toMaybeProgress();
+bool scheduler::removeAndScheduleNext(pid_t terminatedProcess){
+  if(madeProgress){
+    madeProgress = false;
+    toMaybeProgress();
+  }
+
+  remove(terminatedProcess);
 
   if(processQueue.empty()){
     return true;
   }else{
     nextPid = scheduleNextProcess(terminatedProcess);
 
-    msg = logger::makeTextColored(Color::blue, "Next process scheduled: %d\n");
+    auto msg = logger::makeTextColored(Color::blue, "Next process scheduled: %d\n");
     log.writeToLog(Importance::info, msg, nextPid);
 
     return false;
@@ -110,8 +146,10 @@ pid_t scheduler::scheduleNextProcess(pid_t currentProcess){
   for(auto currProcess : processQueue){
     // Make sure not to include ourselves.
     if(currProcess != currentProcess &&
-       processStateMap[currProcess] != processState::blocked){
-        auto msg = logger::makeTextColored(Color::blue, "%d chosen to run next.\n");
+       // Make sure we don't pick blocked or finished.
+       (processStateMap[currProcess] == processState::runnable ||
+       processStateMap[currProcess] == processState::maybeRunnable)){
+      auto msg = logger::makeTextColored(Color::blue, "%d chosen to run next.\n");
       log.writeToLog(Importance::info, msg, currProcess);
       return currProcess;
     }
@@ -135,7 +173,7 @@ void scheduler::printProcesses(){
   for(auto curr : processStateMap){
     auto proc = curr.first;
     auto status = curr.second;
-    log.writeToLog(Importance::extra, "Pid %d, Status %s\n", proc,
+    log.writeToLog(Importance::info, "Pid %d, Status %s\n", proc,
 		   to_string(status).c_str());
   }
   return;
@@ -152,6 +190,9 @@ string to_string(processState p){
     break;
   case processState::blocked:
     str = "blocked";
+    break;
+  case processState::finished:
+    str = "finished";
     break;
   }
 
