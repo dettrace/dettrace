@@ -19,7 +19,7 @@ setup:
 # a "phony" target to run the program, capture its output and compare against expected output
 %.ok: % setup
 	@echo "   Testing $<..."
-	@python timeout.py 5s ../../bin/dettrace ./$< > ActualOutputs/$<.output
+	@python3 timeout.py 5s ../../bin/dettrace ./$< > ActualOutputs/$<.output
 	@diff --brief ActualOutputs/$<.output ExpectedOutputs/$<.output
 
 deadlockingPipe.ok: deadlockingPipe
