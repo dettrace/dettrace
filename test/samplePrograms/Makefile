@@ -1,7 +1,9 @@
 # binaries that are simple to build (1 source file, same name as binary)
 SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getpid callSshKeygen uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write
-PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR 
-LINUX_UTILITIES= #sshkeygen
+PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
+LINUX_UTILITIES=sshkeygen
+
+DIFF_CMD=diff --brief
 
 build: $(SIMPLE_BUILD_BINARIES) $(PIPE_BINARIES)
 
@@ -17,28 +19,34 @@ setup:
 	fusermount -q -u $(FUSE_FILE) || true # tear down FUSE filesystem if one is somehow still running
 
 # a "phony" target to run the program, capture its output and compare against expected output
+# this is used for programs that don't take any arguments or need fancy setup/teardown
 %.ok: % setup
 	@echo "   Testing $<..."
 	@python3 timeout.py 5s ../../bin/dettrace ./$< > ActualOutputs/$<.output
-	@diff --brief ActualOutputs/$<.output ExpectedOutputs/$<.output
+	@$(DIFF_CMD) ActualOutputs/$<.output ExpectedOutputs/$<.output
+
+# Linux utilities, which in general need to be run with apropriate flags and/or setup/teardown
 
 sshkeygen.ok:
 	@echo "   Testing ssh-keygen..."
 	@rm -f thisKey thisKey.pub
 	@../../bin/dettrace ssh-keygen -f thisKey -N "" > ActualOutputs/sshkeygen.output
-	@diff ActualOutputs/sshkeygen.output ExpectedOutputs/sshkeygen.output
+	@$(DIFF_CMD) ActualOutputs/sshkeygen.output ExpectedOutputs/sshkeygen.output
+
+
+# Other DetTrace tests, with non-trivial invocation or cleanup
 
 deadlockingPipe.ok: deadlockingPipe
 	@echo "   Testing $<..."
 #	ignore expected error when DetTrace detects the deadlock
 	@(../../bin/dettrace ./$< || true) 2> ActualOutputs/$<.output
-	@diff ActualOutputs/$<.output ExpectedOutputs/$<.output
+	@$(DIFF_CMD) ActualOutputs/$<.output ExpectedOutputs/$<.output
 
 # FUSE tests for read/write retrying
 
 # 1-file "filesystem" using FUSE (https://github.com/libfuse/libfuse) that only reads/writes 1 byte at a time
 partialfs: partialfs.c
-	gcc $< -Wall -g -D_FILE_OFFSET_BITS=64 -lfuse -pthread -o $@
+	@gcc $< -Wall -g -D_FILE_OFFSET_BITS=64 -lfuse -pthread -o $@
 
 FUSE_FILE=file.fuse
 fuse-%.ok: fuse-% partialfs
@@ -47,7 +55,7 @@ fuse-%.ok: fuse-% partialfs
 	@./partialfs -o direct_io $(FUSE_FILE) # launch FUSE filesystem
 	@../../bin/dettrace --nocontainer ./$< $(FUSE_FILE) > ActualOutputs/$<.output
 	@fusermount -q -u $(FUSE_FILE) # tear down FUSE filesystem
-	@diff ActualOutputs/$<.output ExpectedOutputs/$<.output
+	@$(DIFF_CMD) ActualOutputs/$<.output ExpectedOutputs/$<.output
 
 # Parameterized pipe tests. Each of these tests has a parent and a child process
 # connected via a pipe, and either/both may read/write from the pipe. Syntax:
