@@ -3,7 +3,7 @@ SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getp
 PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
 LINUX_UTILITIES=sshkeygen
 
-DIFF_CMD=diff --brief
+DIFF_CMD=diff
 
 build: $(SIMPLE_BUILD_BINARIES) $(PIPE_BINARIES)
 
