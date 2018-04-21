@@ -1,12 +1,12 @@
 # binaries that are simple to build (1 source file, same name as binary)
-SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom callSshKeygen waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write
+SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write
 PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR 
-
+LINUX_UTILITIES=sshkeygen
 
 build: $(SIMPLE_BUILD_BINARIES) $(PIPE_BINARIES)
 
 
-run: $(patsubst %, %.ok, $(SIMPLE_BUILD_BINARIES)) $(patsubst %, %.ok, $(PIPE_BINARIES))
+run: $(patsubst %, %.ok, $(SIMPLE_BUILD_BINARIES)) $(patsubst %, %.ok, $(PIPE_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES))
 
 # compile each sample program binary
 $(SIMPLE_BUILD_BINARIES): %: %.c
@@ -21,6 +21,12 @@ setup:
 	@echo "   Testing $<..."
 	@python3 timeout.py 5s ../../bin/dettrace ./$< > ActualOutputs/$<.output
 	@diff --brief ActualOutputs/$<.output ExpectedOutputs/$<.output
+
+sshkeygen.ok:
+	@echo "   Testing ssh-keygen..."
+	@rm -f thisKey thisKey.pub
+	@../../bin/dettrace ssh-keygen -f thisKey -N "" > ActualOutputs/sshkeygen.output
+	@diff ActualOutputs/sshkeygen.output ExpectedOutputs/sshkeygen.output
 
 deadlockingPipe.ok: deadlockingPipe
 	@echo "   Testing $<..."
