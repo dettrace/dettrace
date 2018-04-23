@@ -1,7 +1,7 @@
 # binaries that are simple to build (1 source file, same name as binary)
 SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getpid callSshKeygen uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write
 PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
-LINUX_UTILITIES=sshkeygen
+LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat
 
 DIFF_CMD=diff
 
@@ -33,6 +33,92 @@ sshkeygen.ok:
 	@../../bin/dettrace ssh-keygen -f thisKey -N "" > ActualOutputs/sshkeygen.output
 	@$(DIFF_CMD) ActualOutputs/sshkeygen.output ExpectedOutputs/sshkeygen.output
 
+grep.ok:
+	@echo "   Testing grep..."
+	@rm -rf "greptestfile"
+	@echo "abcd" >> grepTestFile
+	@echo "bcde" >> grepTestFile
+	@echo "helloworld" >> grepTestFile
+	@echo "abcdefghi" >> grepTestFile
+	@echo "acegik" >> grepTestFile
+	@../../bin/dettrace grep "bcd" grepTestFile > ActualOutputs/grep.output
+	@$(DIFF_CMD) ActualOutputs/grep.output ExpectedOutputs/grep.output
+
+sed.ok:
+	@echo "   Testing sed..."
+	@rm -rf ActualOutputs/sed.output
+	@../../bin/dettrace echo "hello" > ActualOutputs/sed.output
+	@../../bin/dettrace echo "world" >> ActualOutputs/sed.output
+	@../../bin/dettrace sed -i "1 a big" ActualOutputs/sed.output
+	@../../bin/dettrace sed -i "s/world/sun/" ActualOutputs/sed.output
+	@../../bin/dettrace sed -i "2 d" ActualOutputs/sed.output
+	@../../bin/dettrace sed -i "2 a moon" ActualOutputs/sed.output
+	@../../bin/dettrace sed -i "/moon/ i hello" ActualOutputs/sed.output
+	@$(DIFF_CMD) ActualOutputs/sed.output ExpectedOutputs/sed.output
+
+more.ok:
+	@echo "   Testing more..."
+	@rm -rf moreTestFile
+	@../../bin/dettrace echo "line 0" >> moreTestFile
+	@../../bin/dettrace echo "line 1" >> moreTestFile
+	@../../bin/dettrace echo "line 2" >> moreTestFile
+	@../../bin/dettrace echo "line 3" >> moreTestFile
+	@../../bin/dettrace echo "line 4" >> moreTestFile
+	@../../bin/dettrace echo "line 5" >> moreTestFile
+	@../../bin/dettrace echo "line 6" >> moreTestFile
+	@../../bin/dettrace echo "line 7" >> moreTestFile
+	@../../bin/dettrace echo "line 8" >> moreTestFile
+	@../../bin/dettrace echo "line 9" >> moreTestFile
+	@../../bin/dettrace more moreTestFile > ActualOutputs/more.output
+	@$(DIFF_CMD) ActualOutputs/more.output ExpectedOutputs/more.output
+
+less.ok:
+	@echo "   Testing less..."
+	@rm -rf lessTestFile
+	@../../bin/dettrace echo "line 0" >> lessTestFile
+	@../../bin/dettrace echo "line 1" >> lessTestFile
+	@../../bin/dettrace echo "line 2" >> lessTestFile
+	@../../bin/dettrace echo "line 3" >> lessTestFile
+	@../../bin/dettrace echo "line 4" >> lessTestFile
+	@../../bin/dettrace echo "line 5" >> lessTestFile
+	@../../bin/dettrace echo "line 6" >> lessTestFile
+	@../../bin/dettrace echo "line 7" >> lessTestFile
+	@../../bin/dettrace echo "line 8" >> lessTestFile
+	@../../bin/dettrace echo "line 9" >> lessTestFile
+	@../../bin/dettrace less lessTestFile > ActualOutputs/less.output
+	@$(DIFF_CMD) ActualOutputs/less.output ExpectedOutputs/less.output
+
+ls.ok:
+	@echo "   Testing ls..."
+	@rm -rf lsTestDirectory
+	@../../bin/dettrace mkdir lsTestDirectory
+	@../../bin/dettrace mkdir lsTestDirectory/foo
+	@../../bin/dettrace touch lsTestDirectory/hello
+	@../../bin/dettrace mkdir lsTestDirectory/foo/bar
+	@../../bin/dettrace touch lsTestDirectory/foo/world
+	@../../bin/dettrace ls -R lsTestDirectory > ActualOutputs/ls.output
+	@$(DIFF_CMD) ActualOutputs/ls.output ExpectedOutputs/ls.output
+
+sh.ok:
+	@echo "   Testing sh..."
+	@rm -rf shTestFile
+	@echo ps \-p '$$$$' \| tail \-1 \| mawk \'\{ print '$$'4 \}\' > shTestFile
+	@../../bin/dettrace sh shTestFile > ActualOutputs/sh.output
+	@$(DIFF_CMD) ActualOutputs/sh.output ExpectedOutputs/sh.output
+
+cat.ok:
+	@echo "   Testing cat..."
+	@rm -rf catTestFile
+	@echo "First" >> catTestFile
+	@echo "" >> catTestFile
+	@echo "Second" >> catTestFile
+	@echo "Third" >> catTestFile
+	@echo "" >> catTestFile
+	@echo "Fourth" >> catTestFile
+	@echo "Fifth" >> catTestFile
+	@echo "Sixth" >> catTestFile
+	@../../bin/dettrace cat -ne catTestFile > ActualOutputs/cat.output
+	@$(DIFF_CMD) ActualOutputs/cat.output ExpectedOutputs/cat.output
 
 # Other DetTrace tests, with non-trivial invocation or cleanup
 
