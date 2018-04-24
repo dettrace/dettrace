@@ -405,6 +405,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<chmodSystemCall>(syscallNumber, syscallName);
   case SYS_clock_gettime:
     return make_unique<clock_gettimeSystemCall>(syscallNumber, syscallName);
+  case SYS_close:
+    return make_unique<closeSystemCall>(syscallNumber, syscallName);
   case SYS_clone:
     return make_unique<cloneSystemCall>(syscallNumber, syscallName);
   case SYS_connect:
@@ -433,6 +435,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<getcwdSystemCall>(syscallNumber, syscallName);
   case SYS_getdents:
     return make_unique<getdentsSystemCall>(syscallNumber, syscallName);
+  case SYS_getpeername:
+    return make_unique<getpeernameSystemCall>(syscallNumber, syscallName);
     // Some older systems do not have this  system call.
 #ifdef SYS_getrandom
   case SYS_getrandom:

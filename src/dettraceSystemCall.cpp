@@ -2,6 +2,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <sys/utsname.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>              /* Obtain O_* constant definitions */
@@ -17,6 +19,8 @@
 #include <linux/futex.h>
 #include <linux/fs.h>
 
+#include<unordered_map>
+
 #include "dettraceSystemCall.hpp"
 #include "ptracer.hpp"
 
@@ -26,7 +30,12 @@ using namespace std;
 void zeroOutStatfs(struct statfs& stats);
 void handleStatFamily(state& s, ptracer& t, string syscallName);
 void printInfoString(uint64_t addressOfCString, state& s, string postFix = " path: ");
-
+void replaySystemcall(ptracer& t);
+void readVmTracee(void* traceeMemory, void* localMemory, size_t numberOfBytes,
+                  pid_t traceePid);
+void writeVmTracee(void* localMemory, void* traceeMemory, size_t numberOfBytes,
+                   pid_t traceePid);
+// =======================================================================================
 /**
  *
  * Replays system call if the value of errnoValue is equal to the errno value that the libc
@@ -71,6 +80,18 @@ void clock_gettimeSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sch
     s.incrementTime();
   }
   return;
+}
+// =======================================================================================
+void closeSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+  int fd = (int) t.arg1();
+  // Remove entry from our direEntries.
+
+  auto result = s.dirEntries.find(fd);
+  // Exists.
+  if(result != s.dirEntries.end()){
+    s.log.writeToLog(Importance::info, "Removing directory entries for fd: %d!\n", fd);
+    s.dirEntries.erase(result);
+  }
 }
 // =======================================================================================
 // TODO
@@ -239,12 +260,64 @@ bool getcwdSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   return false;
 }
 // =======================================================================================
-// TODO Virtualize inodes!
-bool getdentsSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
-  return true;
-}
-
 void getdentsSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+  // Error, return system call to tracee.
+  if((int64_t) t.getReturnValue() < 0){
+    return;
+  }
+
+  // Use file descriptor to fetch correct entry in table.
+  int fd = (int) t.arg1();
+  uint8_t* traceeBuffer = (uint8_t*) t.arg2();
+  size_t traceeBufferSize = t.arg3();
+
+  // We have never seen this entry before! This is a new getdents call, not a
+  // replay by us.
+  if(s.dirEntries.count(fd) == 0){
+    auto msg = "Tracee requested getdents for the first time for fd: %d.\n";
+      s.log.writeToLog(Importance::info, msg, fd);
+
+    s.dirEntries.emplace( fd, directoryEntries{s.dirEntriesBytes} );
+  }
+
+  // We have read zero bytes. We're done!
+  if(t.getReturnValue() == 0){
+    s.log.writeToLog(Importance::info, "All bytes have been read.\n");
+    s.log.writeToLog(Importance::info, "Returning sorted entries to tracee.\n");
+
+    // We want to fill up to traceeBufferSize which is the size the tracee originally
+    // asked for.
+
+    vector<int8_t> filledVector = s.dirEntries.at(fd).getSortedEntries(traceeBufferSize);
+    s.log.writeToLog(Importance::info, "Returning %d bytes!\n", filledVector.size());
+
+    // Write entry back to tracee!
+    writeVmTracee(filledVector.data(), traceeBuffer, filledVector.size(), t.getPid());
+    // Set return register!
+    t.setReturnRegister(filledVector.size());
+  }
+  // We read some bytes but there might be more to read.
+  else{
+    s.log.writeToLog(Importance::info, "Reading directory entries...\n");
+
+    // Read entries from tracee's buffer.
+    // We only copy over the return value, which is how many bytes were actually filled
+    // by the kernel into the tracee's buffer.
+    size_t bytesToCopy = t.getReturnValue();
+    uint8_t localBuffer[bytesToCopy];
+    readVmTracee(traceeBuffer, localBuffer, bytesToCopy, t.getPid());
+    vector<uint8_t> newChunk { localBuffer, localBuffer + bytesToCopy };
+
+    // Copy chunks over to our directory entry for this file descriptor.
+    s.dirEntries.at(fd).addChunk(newChunk);
+
+    s.log.writeToLog(Importance::info, "Replaying system call to read more bytes...\n");
+    replaySystemcall(t);
+  }
+  return;
+}
+// =======================================================================================
+void getdents64SystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   return;
 }
 // =======================================================================================
@@ -848,7 +921,7 @@ void writeSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
     throw runtime_error("Write failed with: non syscall insn: " + to_string(minus2));
   }
 
-  ssize_t bytes_written = t.getReturnValue();
+  size_t bytes_written = t.getReturnValue();
 
   // Check if we eve need to replay.
   if(bytes_written == t.arg3()){
@@ -949,20 +1022,11 @@ void writevSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
 // =======================================================================================
 bool replaySyscallIfBlocked(state& s, ptracer& t, scheduler& sched, int64_t errornoValue){
   if(- errornoValue == (int64_t) t.getReturnValue()){
-    auto msg = s.systemcall->syscallName + " would have blocked!\n";
-    s.log.writeToLog(Importance::info, msg);
+    s.log.writeToLog(Importance::info,
+                     s.systemcall->syscallName + " would have blocked!\n");
 
     sched.preemptAndScheduleNext(s.traceePid);
-
-    uint16_t minus2 = t.readFromTracee((uint16_t*) (t.getRip() - 2), s.traceePid);
-    if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
-      throw runtime_error("IP does not point to system call instruction!\n");
-    }
-
-    // Replay system call!
-
-    t.writeRax(t.getSystemCallNumber());
-    t.writeIp(t.getRip() - 2);
+    replaySystemcall(t);
     return true;
   }else{
     // Disambiguiate. Otherwise it's impossible to tell the difference between a
@@ -972,6 +1036,17 @@ bool replaySyscallIfBlocked(state& s, ptracer& t, scheduler& sched, int64_t erro
     sched.reportProgress(s.traceePid);
     return false;
   }
+}
+// =======================================================================================
+void replaySystemcall(ptracer& t){
+  uint16_t minus2 = t.readFromTracee((uint16_t*) (t.getRip() - 2), t.getPid());
+  if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
+    throw runtime_error("IP does not point to system call instruction!\n");
+  }
+
+  // Replay system call!
+  t.writeRax(t.getSystemCallNumber());
+  t.writeIp(t.getRip() - 2);
 }
 // =======================================================================================
 void zeroOutStatfs(struct statfs& stats){
@@ -1073,6 +1148,33 @@ void printInfoString(uint64_t addressOfCString, state& s, string postFix){
   }else{
     s.log.writeToLog(Importance::info, "Null path given to system call.\n");
   }
+
+  return;
+}
+// =======================================================================================
+// Read bytes from user.
+// Ptrace read is way too slow as it works at word granularity. Time to use
+// process_vm_read!
+void readVmTracee(void* traceeMemory, void* localMemory, size_t numberOfBytes,
+                  pid_t traceePid){
+  iovec remoteIoVec = {traceeMemory, numberOfBytes};
+  iovec localIoVec = {localMemory, numberOfBytes };
+  const unsigned long flags = 0;
+
+  doWithCheck(process_vm_readv(traceePid, &localIoVec, 1, &remoteIoVec, 1, flags),
+              "process_vm_writev");
+
+  return;
+}
+// =======================================================================================
+void writeVmTracee(void* localMemory, void* traceeMemory, size_t numberOfBytes,
+                  pid_t traceePid){
+  iovec remoteIoVec = {traceeMemory, numberOfBytes};
+  iovec localIoVec = {localMemory, numberOfBytes };
+  const unsigned long flags = 0;
+
+  doWithCheck(process_vm_writev(traceePid, &localIoVec, 1, &remoteIoVec, 1, flags),
+              "process_vm_writev");
 
   return;
 }

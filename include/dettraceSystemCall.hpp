@@ -89,6 +89,18 @@ public:
 };
 // =======================================================================================
 /**
+*
+* int close(int fd);
+*
+*/
+class closeSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/**
  * long
  * clone(unsigned long flags,
  *       void *child_stack,
@@ -277,12 +289,18 @@ public:
  * Reads files in directory.
  *
  * TODO: Contains linux_dirent struct with inode that we could virtualize.
- * FILESYSTEM RELATED
  */
 class getdentsSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+class getdents64SystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+
   void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================

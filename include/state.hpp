@@ -7,10 +7,12 @@
 #include <sys/types.h>
 #include <sys/user.h>
 #include <sys/vfs.h>
+#include <unordered_map>
 
 #include "ptracer.hpp"
 #include "ValueMapper.hpp"
 #include "systemCall.hpp"
+#include "directoryEntries.hpp"
 
 using namespace std;
 
@@ -34,6 +36,7 @@ private:
    * information.
    */
   size_t clock = 0;
+
 public:
   /**
    * @pidMap: Notice this is a reference -> same map is shared among all instances of
@@ -41,6 +44,12 @@ public:
    * @ppid: Parent pid of this process.
    */
   state(logger& log, pid_t myPid, int debugLevel);
+
+  /**
+   * Map from file descriptors to directory entries.
+   *
+   */
+  unordered_map<int, directoryEntries> dirEntries;
 
   /**
    * The pid of the process represented by this state.
@@ -86,6 +95,10 @@ public:
    * work when logging data if not needed.
    */
   const int debugLevel;
+
+  // Bytes to allocate for our directory entries.
+  // This is what glibc uses as it's standard size, so do we.
+  const size_t dirEntriesBytes = 32768;
 
   /*
    * We need to know what system call was/is that we are not. This is important in

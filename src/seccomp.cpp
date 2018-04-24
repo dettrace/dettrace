@@ -6,7 +6,7 @@
 
 #include <sys/personality.h>
 #include <sys/ptrace.h>
-#include <sys/reg.h>     /* For constants ORIG_EAX, etc */
+#include <sys/reg.h>     /* For constants ORIgetpeernameG_EAX, etc */
 #include <sys/syscall.h>    /* For SYS_write, etc */
 
 using namespace std;
@@ -27,7 +27,6 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_arch_prctl);
   noIntercept(SYS_brk);
   noIntercept(SYS_chown);
-  noIntercept(SYS_close);
   noIntercept(SYS_dup);
   noIntercept(SYS_dup2);
   noIntercept(SYS_exit);
@@ -108,6 +107,7 @@ void seccomp::loadRules(bool debug){
   // file that live in disk. Which should never block.
   intercept(SYS_creat, debug);
   intercept(SYS_clock_gettime);
+  intercept(SYS_close);
   // TODO: This system call
   intercept(SYS_connect);
   intercept(SYS_execve, debug);
@@ -122,7 +122,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_getcwd);
   intercept(SYS_getdents);
   // TODO
-  noIntercept(SYS_getdents64);
+  intercept(SYS_getdents64);
   intercept(SYS_getpeername);
 #ifdef SYS_getrandom
   intercept(SYS_getrandom);
