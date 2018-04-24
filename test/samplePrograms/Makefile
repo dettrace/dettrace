@@ -48,12 +48,13 @@ sshkeygen.ok:
 
 grep.ok:
 	@echo "   Testing grep..."
-	@rm -rf "greptestfile"
-	@echo "abcd" >> grepTestFile
+# Erases original grepTestFile
+	@echo "abcd" > grepTestFile
 	@echo "bcde" >> grepTestFile
 	@echo "helloworld" >> grepTestFile
 	@echo "abcdefghi" >> grepTestFile
 	@echo "acegik" >> grepTestFile
+	@grep "bcd" grepTestFile > ExpectedOutputs/grep.output
 	@../../bin/dettrace grep "bcd" grepTestFile > ActualOutputs/grep.output
 	@$(DIFF_CMD) ActualOutputs/grep.output ExpectedOutputs/grep.output
 
@@ -83,6 +84,7 @@ more.ok:
 	@../../bin/dettrace echo "line 8" >> moreTestFile
 	@../../bin/dettrace echo "line 9" >> moreTestFile
 	@../../bin/dettrace more moreTestFile > ActualOutputs/more.output
+	@../../bin/dettrace more moreTestFile > ExpectedOutputs/more.output
 	@$(DIFF_CMD) ActualOutputs/more.output ExpectedOutputs/more.output
 
 less.ok:
