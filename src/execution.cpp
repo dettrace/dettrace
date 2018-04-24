@@ -435,6 +435,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<getcwdSystemCall>(syscallNumber, syscallName);
   case SYS_getdents:
     return make_unique<getdentsSystemCall>(syscallNumber, syscallName);
+  case SYS_getdents64:
+    return make_unique<getdents64SystemCall>(syscallNumber, syscallName);
   case SYS_getpeername:
     return make_unique<getpeernameSystemCall>(syscallNumber, syscallName);
     // Some older systems do not have this  system call.

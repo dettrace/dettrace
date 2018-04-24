@@ -30,11 +30,7 @@ using namespace std;
 void zeroOutStatfs(struct statfs& stats);
 void handleStatFamily(state& s, ptracer& t, string syscallName);
 void printInfoString(uint64_t addressOfCString, state& s, string postFix = " path: ");
-void replaySystemcall(ptracer& t);
-void readVmTracee(void* traceeMemory, void* localMemory, size_t numberOfBytes,
-                  pid_t traceePid);
-void writeVmTracee(void* localMemory, void* traceeMemory, size_t numberOfBytes,
-                   pid_t traceePid);
+
 // =======================================================================================
 /**
  *
@@ -261,63 +257,12 @@ bool getcwdSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
 }
 // =======================================================================================
 void getdentsSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
-  // Error, return system call to tracee.
-  if((int64_t) t.getReturnValue() < 0){
-    return;
-  }
-
-  // Use file descriptor to fetch correct entry in table.
-  int fd = (int) t.arg1();
-  uint8_t* traceeBuffer = (uint8_t*) t.arg2();
-  size_t traceeBufferSize = t.arg3();
-
-  // We have never seen this entry before! This is a new getdents call, not a
-  // replay by us.
-  if(s.dirEntries.count(fd) == 0){
-    auto msg = "Tracee requested getdents for the first time for fd: %d.\n";
-      s.log.writeToLog(Importance::info, msg, fd);
-
-    s.dirEntries.emplace( fd, directoryEntries{s.dirEntriesBytes} );
-  }
-
-  // We have read zero bytes. We're done!
-  if(t.getReturnValue() == 0){
-    s.log.writeToLog(Importance::info, "All bytes have been read.\n");
-    s.log.writeToLog(Importance::info, "Returning sorted entries to tracee.\n");
-
-    // We want to fill up to traceeBufferSize which is the size the tracee originally
-    // asked for.
-
-    vector<int8_t> filledVector = s.dirEntries.at(fd).getSortedEntries(traceeBufferSize);
-    s.log.writeToLog(Importance::info, "Returning %d bytes!\n", filledVector.size());
-
-    // Write entry back to tracee!
-    writeVmTracee(filledVector.data(), traceeBuffer, filledVector.size(), t.getPid());
-    // Set return register!
-    t.setReturnRegister(filledVector.size());
-  }
-  // We read some bytes but there might be more to read.
-  else{
-    s.log.writeToLog(Importance::info, "Reading directory entries...\n");
-
-    // Read entries from tracee's buffer.
-    // We only copy over the return value, which is how many bytes were actually filled
-    // by the kernel into the tracee's buffer.
-    size_t bytesToCopy = t.getReturnValue();
-    uint8_t localBuffer[bytesToCopy];
-    readVmTracee(traceeBuffer, localBuffer, bytesToCopy, t.getPid());
-    vector<uint8_t> newChunk { localBuffer, localBuffer + bytesToCopy };
-
-    // Copy chunks over to our directory entry for this file descriptor.
-    s.dirEntries.at(fd).addChunk(newChunk);
-
-    s.log.writeToLog(Importance::info, "Replaying system call to read more bytes...\n");
-    replaySystemcall(t);
-  }
+  handleDents<linux_dirent>(s, t, sched);
   return;
 }
 // =======================================================================================
 void getdents64SystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+  handleDents<linux_dirent64>(s, t, sched);
   return;
 }
 // =======================================================================================

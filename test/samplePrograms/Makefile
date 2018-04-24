@@ -1,6 +1,6 @@
 # binaries that are simple to build (1 source file, same name as binary)
-SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom callSshKeygen waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write
-PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR 
+SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom callSshKeygen waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write getdents getdents64
+PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
 
 
 build: $(SIMPLE_BUILD_BINARIES) $(PIPE_BINARIES)
@@ -27,6 +27,18 @@ deadlockingPipe.ok: deadlockingPipe
 #	ignore expected error when DetTrace detects the deadlock
 	@(../../bin/dettrace ./$< || true) 2> ActualOutputs/$<.output
 	@diff ActualOutputs/$<.output ExpectedOutputs/$<.output
+
+getdents.ok: getdents
+	@echo "   Testing $<..."
+	@../../bin/dettrace ./$< > ActualOutputs/$<.output.1
+	@../../bin/dettrace ./$< > ActualOutputs/$<.output.2
+	@diff ActualOutputs/$<.output.1 ActualOutputs/$<.output.2
+
+getdents64.ok: getdents64
+	@echo "   Testing $<..."
+	@../../bin/dettrace ./$< > ActualOutputs/$<.output.1
+	@../../bin/dettrace ./$< > ActualOutputs/$<.output.2
+	@diff ActualOutputs/$<.output.1 ActualOutputs/$<.output.2
 
 # FUSE tests for read/write retrying
 

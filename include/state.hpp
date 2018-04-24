@@ -49,7 +49,7 @@ public:
    * Map from file descriptors to directory entries.
    *
    */
-  unordered_map<int, directoryEntries> dirEntries;
+  unordered_map<int, directoryEntries<linux_dirent>> dirEntries;
 
   /**
    * The pid of the process represented by this state.
