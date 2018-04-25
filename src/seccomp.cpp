@@ -27,6 +27,8 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_arch_prctl);
   noIntercept(SYS_brk);
   noIntercept(SYS_chown);
+  noIntercept(SYS_lchown);
+  noIntercept(SYS_clock_getres);
   noIntercept(SYS_dup);
   noIntercept(SYS_dup2);
   noIntercept(SYS_exit);
@@ -40,7 +42,8 @@ void seccomp::loadRules(bool debug){
   // Flock may block! In the future this may lead to deadlock.
   // deal with it then :)
   noIntercept(SYS_flock);
-    noIntercept(SYS_fsync);
+  noIntercept(SYS_fsync);
+  noIntercept(SYS_ftruncate);
   // TODO: Add to intercept with debug for path.
   noIntercept(SYS_fsetxattr);
   noIntercept(SYS_getuid);

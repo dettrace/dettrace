@@ -301,7 +301,7 @@ void runTracer(int debugLevel, pid_t startingPid){
  */
 tuple<int, int, string, bool> parseProgramArguments(int argc, char* argv[]){
   string usageMsg =
-    "./detTrace [--debug <debugLevel> | --help | --chroot <pathToRoot>] ./exe [exeCmdArgs]";
+    "./detTrace [--debug <debugLevel> | --help | --chroot <pathToRoot> | --nocontainer] ./exe [exeCmdArgs]";
   int debugLevel = 0;
   string exePlusArgs;
   string pathToChroot = "";

@@ -552,10 +552,8 @@ void prlimit64SystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
 }
 // =======================================================================================
 bool readSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
-  size_t fd = (size_t) t.arg1();
-  s.log.writeToLog(Importance::info, "File descriptor: %d\n", fd);
-  size_t count = (size_t) t.arg3();
-  s.log.writeToLog(Importance::info, "Bytes to read %d\n", count);
+  s.log.writeToLog(Importance::info, "File descriptor: %d\n", t.arg1());
+  s.log.writeToLog(Importance::info, "Bytes to read %d\n", t.arg3());
 
   return true;
 }
@@ -566,45 +564,44 @@ void readSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
     return;
   }
 
-  uint16_t minus2 = t.readFromTracee((uint16_t*) (t.getRip() - 2), s.traceePid);
-  if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
-    throw runtime_error("Read failed with: non syscall instruction: " + to_string(minus2));
+  ssize_t bytes_read = t.getReturnValue();
+  if(bytes_read < 0){
+    s.log.writeToLog(Importance::info, "Returned negative: %d.",
+                     bytes_read);
+    return;
   }
 
   // Replay system call if not enought bytes were read.
-  ssize_t bytes_read = t.getReturnValue();
   s.totalBytes += bytes_read;
 
   if(s.firstTryReadWrite){
+    s.log.writeToLog(Importance::info, "First time seeing this read!\n");
     s.firstTryReadWrite = false;
     s.beforeRetry = t.getRegs();
   }
 
-  if(bytes_read != 0  && // EOF
-     s.totalBytes != s.beforeRetry.rdx  // original bytes requested
+  if(bytes_read == 0  || // EOF
+     s.totalBytes == s.beforeRetry.rdx  // original bytes requested
      ) {
-    s.log.writeToLog(Importance::extra, "readSystemCall: Got less bytes than requested.\n");
-    t.writeArg2(t.arg2() + bytes_read);
-    t.writeArg3(t.arg3() - bytes_read);
-
-    t.writeRax(t.getSystemCallNumber());
-    t.writeIp(t.getRip() - 2);
-  } else {
-    s.log.writeToLog(Importance::extra, "readSystemCall: EOF or read all bytes.\n");
+    s.log.writeToLog(Importance::info, "EOF or read all bytes.\n");
     // EOF, or read returned everything we asked for.
     // Restore user regs so that it appears as if only one syscall occurred
     t.setReturnRegister(s.totalBytes);
-    t.writeArg1(s.beforeRetry.rdi);
     t.writeArg2(s.beforeRetry.rsi);
     t.writeArg3(s.beforeRetry.rdx);
 
     // reset for next syscall that we may have to retry
     s.firstTryReadWrite = true;
     s.totalBytes = 0;
+  } else {
+    s.log.writeToLog(Importance::info, "Got less bytes than requested.\n");
+    t.writeArg2(t.arg2() + bytes_read);
+    t.writeArg3(t.arg3() - bytes_read);
+
+    replaySystemcall(t);
   }
 
   return;
-
 }
 // =======================================================================================
 bool readvSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
@@ -849,55 +846,55 @@ void utimensatSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
 // =======================================================================================
 bool writeSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   s.log.writeToLog(Importance::info, "fd: %d\n", t.arg1());
-  size_t count = (size_t) t.arg3();
-  s.log.writeToLog(Importance::info, "Bytes to write %d\n", count);
+  s.log.writeToLog(Importance::info, "Bytes to write %d\n", t.arg3());
+
   return true;
 }
 
 void writeSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   auto replay = replaySyscallIfBlocked(s, t, sched, EAGAIN);
-
   if(replay){
     return;
   }
 
-  uint16_t minus2 = t.readFromTracee((uint16_t*) (t.getRip() - 2), s.traceePid);
-  if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
-    throw runtime_error("Write failed with: non syscall insn: " + to_string(minus2));
-  }
-
   size_t bytes_written = t.getReturnValue();
+  s.log.writeToLog(Importance::info, "bytesWritten: %d.", bytes_written);
 
-  // Check if we eve need to replay.
-  if(bytes_written == t.arg3()){
-    s.log.writeToLog(Importance::info, "writeSystemCall: All bytes written instantly.");
+  if((int) bytes_written < 0){
+    s.log.writeToLog(Importance::info, "Returned negative: %d.",
+                     bytes_written);
     return;
   }
 
-  s.totalBytes += bytes_written;
 
-  if (s.firstTryReadWrite) {
+
+  s.totalBytes += bytes_written;
+  if(s.firstTryReadWrite){
     s.firstTryReadWrite = false;
     s.beforeRetry = t.getRegs();
   }
 
-  // 0 indicates nothing was written.
-  if(bytes_written != 0){
-    s.log.writeToLog(Importance::info, "writeSystemCall: Not all bytes written.");
-    t.writeArg2(t.arg2() + bytes_written);
-    t.writeArg3(t.arg3() - bytes_written);
+  // Finally wrote all bytes user wanted.
 
-    t.writeRax(t.getSystemCallNumber());
-    t.writeIp(t.getRip() - 2);
-  } else {
+  // The zero case should not really happen. But our fuse tests allow for this
+  // behavior so we catch it here. Otherwise we forever try to read 0 bytes.
+  // https://stackoverflow.com/questions/41904221/can-write2-return-0-bytes-written-and-what-to-do-if-it-does?utm_medium=organic&utm_source=google_rich_qa&utm_campaign=google_rich_qa
+  if(s.totalBytes == s.beforeRetry.rdx ||
+     bytes_written == 0){
     // Nothing left to write.
-    s.log.writeToLog(Importance::info, "writeSystemCall: All bytes written.");
+    s.log.writeToLog(Importance::info, "All bytes written.");
     t.setReturnRegister(s.totalBytes);
-    t.writeArg1(s.beforeRetry.rdi);
+
     t.writeArg2(s.beforeRetry.rsi);
     t.writeArg3(s.beforeRetry.rdx);
+
     s.firstTryReadWrite = true;
     s.totalBytes = 0;
+  }else{
+    s.log.writeToLog(Importance::info, "Not all bytes written: Replaying system call!\n");
+    t.writeArg2(t.arg2() + bytes_written);
+    t.writeArg3(t.arg3() - bytes_written);
+    replaySystemcall(t);
   }
 
   return;

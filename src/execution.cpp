@@ -189,7 +189,7 @@ void execution::runProgram(){
     if(ret == ptraceEvent::terminatedBySignal){
       // TODO: A Process terminated by signal might break some of the assumptions I make
       // in handleExit (see function definition above) so we do not support it for now.
-      throw runtime_error("Process terminated by signal. We currently do not support this.");
+      // throw runtime_error("Process terminated by signal. We currently do not support this.");
       auto msg =
         logger::makeTextColored(Color::blue, "Process [%d] ended by signal %d.\n");
       log.writeToLog(Importance::inter, msg, traceesPid, WTERMSIG(status));
@@ -515,7 +515,7 @@ execution::getSystemCall(int syscallNumber, string syscallName){
   case SYS_write:
     return make_unique<writeSystemCall>(syscallNumber, syscallName);
   case SYS_writev:
-    return make_unique<writeSystemCall>(syscallNumber, syscallName);
+    return make_unique<writevSystemCall>(syscallNumber, syscallName);
   }
 
   // Generic system call. Throws error.
@@ -537,7 +537,7 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
   //
   // 64 bit value to avoid warning when casting to void* below.
   int64_t signalToDeliver = states.at(pidToContinue).signalToDeliver;
-  // int64_t signalToDeliver = 0;
+
   // Reset signal field after for next event.
   states.at(pidToContinue).signalToDeliver = 0;
 
