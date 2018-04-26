@@ -2,6 +2,7 @@
 
 state::state(logger& log, ValueMapper<ino_t>& inodeMap , pid_t traceePid, int debugLevel)
   : clock(0),
+    mtimeMap{ log },
     traceePid(traceePid),
     inodeMap{ inodeMap },
     log(log),

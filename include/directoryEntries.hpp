@@ -97,7 +97,6 @@ private:
   // Have the entries been sorted?
   bool sorted = false;
 
-  // Template magic. No idea why it works.
   void sortOurEntries(){
     if(! entries.empty()){
       throw runtime_error("sortOurEntries was called with non-empty entries.");

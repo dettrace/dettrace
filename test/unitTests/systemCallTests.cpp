@@ -113,45 +113,59 @@ TEST_CASE("getuid", "getuid"){
 void statFamilyTests(struct stat statbuf){
   CHECK(statbuf.st_uid == 0);
   CHECK(statbuf.st_dev == 1);
-  CHECK(statbuf.st_ino == 8/*NB: this may change due to other tests*/);
+  CHECK(statbuf.st_ino == 9/*NB: this may change due to other tests*/);
   CHECK(statbuf.st_blksize == 512);
   CHECK(statbuf.st_blocks == 1);
   CHECK(statbuf.st_gid == 0);
 
-  // mtime and ctime should be the same as atime
-  CHECK(statbuf.st_mtim.tv_nsec == statbuf.st_mtim.tv_sec);
-  CHECK(statbuf.st_mtim.tv_nsec == statbuf.st_atim.tv_sec);
-  CHECK(statbuf.st_ctim.tv_nsec == statbuf.st_ctim.tv_sec);
-  CHECK(statbuf.st_ctim.tv_nsec == statbuf.st_atim.tv_sec);
+  // We always zero out nano seconds.
+  CHECK(6917529027641081855 == statbuf.st_mtim.tv_nsec);
+  CHECK(6917529027641081855 == statbuf.st_mtim.tv_nsec);
+  CHECK(6917529027641081855 == statbuf.st_ctim.tv_nsec);
+  CHECK(6917529027641081855 == statbuf.st_ctim.tv_nsec);
+
+  CHECK(6917529027641081855 == statbuf.st_mtim.tv_sec);
+  CHECK(6917529027641081855 == statbuf.st_atim.tv_sec);
+  CHECK(6917529027641081855 == statbuf.st_ctim.tv_sec);
+  CHECK(6917529027641081855 == statbuf.st_atim.tv_sec);
 }
 
 TEST_CASE("stat", "stat"){
   struct stat statbuf;
-  int ret = stat("./", &statbuf);
+  // Create new file to verify it has the newest filestamp possible.
+  system("touch test_temp.txt");
+
+  int ret = stat("test_temp.txt", &statbuf);
   statFamilyTests(statbuf);
-  REQUIRE(statbuf.st_atim.tv_nsec == 0);
-  REQUIRE(statbuf.st_atim.tv_nsec == statbuf.st_atim.tv_sec);
+  REQUIRE(6917529027641081855 == statbuf.st_atim.tv_nsec);
+  REQUIRE(6917529027641081855 == statbuf.st_atim.tv_sec);
+
 }
 
 
 TEST_CASE("fstat", "fstat"){
   struct stat statbuf;
-  int fd = open("./", O_RDONLY);
+
+  int fd = open("test_temp.txt", O_RDONLY);
   int ret = fstat(fd, &statbuf);
+  if(ret == -1){
+    REQUIRE(false);
+  }
   statFamilyTests(statbuf);
-  REQUIRE(statbuf.st_atim.tv_nsec == statbuf.st_atim.tv_sec);
-  REQUIRE(statbuf.st_atim.tv_nsec == 0);
-  REQUIRE(statbuf.st_atim.tv_sec == 0);
+  REQUIRE(6917529027641081855 == statbuf.st_atim.tv_nsec);
+  REQUIRE(6917529027641081855 == statbuf.st_atim.tv_sec);
+
 }
 
 
 TEST_CASE("lstat", "lstat"){
   struct stat statbuf;
-  int ret = lstat("./", &statbuf);
+
+  int ret = lstat("./test_temp.txt", &statbuf);
   statFamilyTests(statbuf);
-  REQUIRE(statbuf.st_atim.tv_nsec == statbuf.st_atim.tv_sec);
-  REQUIRE(statbuf.st_atim.tv_nsec == 0);
-  REQUIRE(statbuf.st_atim.tv_sec == 0);
+  REQUIRE(6917529027641081855 == statbuf.st_atim.tv_nsec);
+  REQUIRE(6917529027641081855 == statbuf.st_atim.tv_nsec);
+  REQUIRE(statbuf.st_atim.tv_sec == 6917529027641081855);
 }
 
  TEST_CASE("open", "/dev/urandom"){

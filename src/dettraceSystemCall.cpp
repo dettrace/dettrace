@@ -1026,18 +1026,32 @@ void handleStatFamily(state& s, ptracer& t, string syscallName){
   if(retVal == 0){
     struct stat myStat = ptracer::readFromTracee(statPtr, s.traceePid);
 
-    myStat.st_atim = timespec { .tv_sec =  0,
-                                .tv_nsec = 0 };  /* user CPU time used */
-    myStat.st_mtim = timespec { .tv_sec =  0,
-				.tv_nsec = 0 };
-    myStat.st_ctim = timespec { .tv_sec = 0,
-                                .tv_nsec = 0 };  /* user CPU time used */
+    // Map modified time to a deterministic relative time.
+    // We only care about second precision. Mask our nano seconds.
+    auto realTime = make_pair(myStat.st_mtim.tv_sec, myStat.st_mtim.tv_nsec);
 
+    if( ! s.mtimeMap.realValueExists(realTime) ){
+      s.mtimeMap.addRealValue(realTime);
+    }
+    auto virtualMTime = s.mtimeMap.getVirtualValue(realTime);
+
+    /* Time of last access */
+    myStat.st_atim = timespec { .tv_sec =  virtualMTime.first,
+                                .tv_nsec = virtualMTime.second };
+    /* Time of last modification */
+    myStat.st_mtim = timespec { .tv_sec =  virtualMTime.first,
+                                .tv_nsec = virtualMTime.second };
+    /* Time of last status change */
+    myStat.st_ctim = timespec { .tv_sec = virtualMTime.first,
+                                .tv_nsec = virtualMTime.second };
+
+    // TODO: I'm surprised this doesn't break things. I guess nobody uses this
+    // result?
     myStat.st_dev = 1;         /* ID of device containing file */
 
     // inode virtualization
     const ino_t realInodeNum = myStat.st_ino;
-    if (!s.inodeMap.realValueExists(realInodeNum)) {
+    if( ! s.inodeMap.realValueExists(realInodeNum) ){
       s.inodeMap.addRealValue(realInodeNum);
     }
     myStat.st_ino = s.inodeMap.getVirtualValue(realInodeNum);

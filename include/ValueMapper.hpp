@@ -5,12 +5,12 @@
 #include "logger.hpp"
 
 /**
- * Simple wrapper around std::map for virtualizing values like inodes. 
+ * Simple wrapper around std::map for virtualizing values like inodes.
  * Template parameter T must be an integral type.
  */
 template <class T>
 class ValueMapper {
-private:
+protected:
   // I would ideally like to type alias real values to virtual values from int and have
   // the compiler enforce them through type errors. But it seems like C++ doesn't support
   // that unless I use phantom types and wrapper classes...
@@ -39,10 +39,13 @@ public:
    * @param realValue: realValue to add. Assumed to be unique.
    * @return virtualValue: a fresh new virtual value.
    */
-  T addRealValue(T realValue) {
-    myLogger.writeToLog(Importance::info, "%s: Added mapping %d -> %d\n",  mappingName.c_str(),
-                        realValue, freshValue);
-    
+  virtual T addRealValue(T realValue) {
+    if(realToVirtualValue.find(realValue) != realToVirtualValue.end()){
+      throw runtime_error("Attempting to add already existing key: " + to_string(realValue));
+    }
+    myLogger.writeToLog(Importance::info, "%s: Added mapping %ld -> %ld\n",
+                        mappingName.c_str(), realValue, freshValue);
+
     T vValue = freshValue;
     realToVirtualValue[realValue] = vValue;
     virtualToRealValue[vValue] = realValue;
@@ -60,10 +63,10 @@ public:
     // does element exist?
     if (virtualToRealValue.find(virtualValue) != virtualToRealValue.end()) {
       T realValue = virtualToRealValue[virtualValue];
-      myLogger.writeToLog(Importance::info, "%s: getRealValue(%d) = %d\n", mappingName.c_str(),
+      myLogger.writeToLog(Importance::info, "%s: getRealValue(%ld) = %ld\n", mappingName.c_str(),
                           virtualValue, realValue);
       return realValue;
-    }    
+    }
     throw runtime_error(mappingName + ": getRealValue(" +
                         to_string(virtualValue) + ") does not exist\n");
   }
@@ -77,7 +80,7 @@ public:
   T getVirtualValue(T realValue) {
     if (realToVirtualValue.find(realValue) != realToVirtualValue.end()) {
       T virtValue = realToVirtualValue[realValue];
-      myLogger.writeToLog(Importance::info, "%s: getVirtualValue(%d) = %d\n", mappingName.c_str(),
+      myLogger.writeToLog(Importance::info, "%s: getVirtualValue(%ld) = %ld\n", mappingName.c_str(),
                           realValue, virtValue);
       return virtValue;
     }
@@ -105,5 +108,6 @@ public:
     return keyExists;
   }
 };
+
 
 #endif

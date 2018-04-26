@@ -1,7 +1,7 @@
 # binaries that are simple to build (1 source file, same name as binary)
 SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getpid callSshKeygen uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write
 PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
-LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat getdents getdents64
+LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat getdents getdents64 relativeTimeStamps1 relativeTimeStamps2
 
 
 DIFF_CMD=diff
@@ -27,6 +27,18 @@ setup:
 	@$(DIFF_CMD) ActualOutputs/$<.output ExpectedOutputs/$<.output
 
 # Linux utilities, which in general need to be run with apropriate flags and/or setup/teardown
+
+
+# Verify relative timestamps are the same under dettrace and not.
+relativeTimeStamps1.ok:
+	@echo "   Testing $@..."
+	@bash -c "diff <(ls -t .) <(../../bin/dettrace ls -t .)"
+
+
+# Verify creating a new file puts that file first in the list.
+relativeTimeStamps2.ok:
+	@echo "   Testing $@..."
+	@bash -c 'diff <(../../bin/dettrace bash -c "touch temp.txt && ls -t . | head -n 1") <(touch temp.txt && ls -t . | head -n 1)'
 
 getdents.ok: getdents
 	@echo "   Testing $<..."

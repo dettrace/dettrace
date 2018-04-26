@@ -13,6 +13,7 @@
 #include "ValueMapper.hpp"
 #include "systemCall.hpp"
 #include "directoryEntries.hpp"
+#include "mtimeMapper.hpp"
 
 using namespace std;
 
@@ -50,6 +51,10 @@ public:
    *
    */
   unordered_map<int, directoryEntries<linux_dirent>> dirEntries;
+
+  // Map modified time to a deterministic relative time. See mtimeMapper.hpp
+  // for more information.
+  mtimeMapper mtimeMap;
 
   /**
    * The pid of the process represented by this state.
