@@ -39,8 +39,10 @@ public:
     virtualToRealValue[make_pair(0, 0)] = make_pair(0, 0);
     realToVirtualValue[make_pair(0, 0)] = make_pair(0, 0);
 
-    virtualToRealValue[make_pair(LONG_MAX, LONG_MAX)] = make_pair(LONG_MAX, LONG_MAX);
-    realToVirtualValue[make_pair(LONG_MAX, LONG_MAX)] = make_pair(LONG_MAX, LONG_MAX);
+    const long maxTime = INT_MAX;
+
+    virtualToRealValue[make_pair(maxTime, maxTime)] = make_pair(maxTime, maxTime);
+    realToVirtualValue[make_pair(maxTime, maxTime)] = make_pair(maxTime, maxTime);
   }
 
   string to_string(pair<time_t, time_t> p){
@@ -68,7 +70,7 @@ public:
 
       // We have found the correct place to squeeze our value.
       if(realValue < realTimes){
-        auto msg = "Squeezig((%ld, %ld), (%ld, %d))\n";
+        auto msg = "Squeezig((%ld, %ld), (%ld, %ld))\n";
         myLogger.writeToLog(Importance::info, msg, prevVirt.first, prevVirt.second,
                             virtualSeconds,  virtualNano);
         time_t newVirtSeconds = getSqueezedValue(prevVirt.first, virtualSeconds);
@@ -83,8 +85,9 @@ public:
 
         realToVirtualValue[realValue] = newVirt;
         virtualToRealValue[newVirt] = realValue;
-        myLogger.writeToLog(Importance::info, "%s: Added mapping %ld -> %ld\n",
-                            "mtimeMapper", realValue, newVirt);
+        myLogger.writeToLog(Importance::info, "%s: Added mapping %s -> %s\n",
+                            "mtimeMapper", to_string(realValue).c_str(),
+                            to_string(newVirt).c_str());
         return newVirt;
       }
 
@@ -105,8 +108,9 @@ public:
     // does element exist?
     if (virtualToRealValue.find(virtualValue) != virtualToRealValue.end()) {
       pair<time_t, time_t>realValue = virtualToRealValue[virtualValue];
-      myLogger.writeToLog(Importance::info, "mtimeMapper: getRealValue(%ld) = %ld\n",
-                          virtualValue, realValue);
+      myLogger.writeToLog(Importance::info, "mtimeMapper: getRealValue(%s) = %s\n",
+                          to_string(virtualValue).c_str(),
+                          to_string(realValue).c_str());
       return realValue;
     }
     throw runtime_error("mtimeMapper: getRealValue(" +
@@ -154,8 +158,9 @@ public:
   pair<time_t, time_t>getVirtualValue(pair<time_t, time_t>realValue) {
     if (realToVirtualValue.find(realValue) != realToVirtualValue.end()) {
       pair<time_t, time_t>virtValue = realToVirtualValue[realValue];
-      myLogger.writeToLog(Importance::info, "mtimeMapper: getVirtualValue(%ld) = %ld\n",
-                          realValue, virtValue);
+      myLogger.writeToLog(Importance::info, "mtimeMapper: getVirtualValue(%s) = %s\n",
+                          to_string(realValue).c_str(),
+                          to_string(virtValue).c_str());
       return virtValue;
     }
     throw runtime_error("mtimeMapper: getVirtualValue(" +

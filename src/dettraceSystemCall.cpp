@@ -858,10 +858,10 @@ void writeSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   }
 
   size_t bytes_written = t.getReturnValue();
-  s.log.writeToLog(Importance::info, "bytesWritten: %d.", bytes_written);
+  s.log.writeToLog(Importance::info, "bytesWritten: %d.\n", bytes_written);
 
   if((int) bytes_written < 0){
-    s.log.writeToLog(Importance::info, "Returned negative: %d.",
+    s.log.writeToLog(Importance::info, "Returned negative: %d.\n",
                      bytes_written);
     return;
   }
@@ -882,7 +882,7 @@ void writeSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   if(s.totalBytes == s.beforeRetry.rdx ||
      bytes_written == 0){
     // Nothing left to write.
-    s.log.writeToLog(Importance::info, "All bytes written.");
+    s.log.writeToLog(Importance::info, "All bytes written.\n");
     t.setReturnRegister(s.totalBytes);
 
     t.writeArg2(s.beforeRetry.rsi);

@@ -87,11 +87,6 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_sched_getaffinity);
   noIntercept(SYS_socket);
   noIntercept(SYS_umask);
-  // TODO We do not allow user to observe metadata so it's fine if they write
-  // it out.
-  noIntercept(SYS_utimensat);
-  noIntercept(SYS_utimes);
-
 
   // These system calls must intercepted as to know when a fork even has happened:
   // We handle forks when see the system call pre exit.
@@ -173,6 +168,9 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_symlinkat, debug);
   intercept(SYS_tgkill);
   intercept(SYS_time);
+  // intercept(SYS_utime);
+  // intercept(SYS_utimes);
+  noIntercept(SYS_utimensat);
   intercept(SYS_uname);
   intercept(SYS_unlink, debug);
   intercept(SYS_unlinkat, debug);
