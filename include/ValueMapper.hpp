@@ -94,7 +94,7 @@ public:
     bool keyExists = realToVirtualValue.find(realValue) != realToVirtualValue.end();
     return keyExists;
   }
-  
+
   /**
    * Check if virtual value is already in map for virtual values.
    * @realValue: virtual value to check for.

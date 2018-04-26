@@ -19,10 +19,11 @@ execution::execution(int debugLevel, pid_t startingPid):
   log {stderr, debugLevel},
   // Waits for first process to be ready!
   tracer{startingPid},
+  inodeMap{log, "inode map"},
   myScheduler{startingPid, log},
   debugLevel {debugLevel}{
     // Set state for first process.
-    states.emplace(startingPid, state {log, startingPid, debugLevel});
+    states.emplace(startingPid, state {log, inodeMap, startingPid, debugLevel});
 
     // First process is special and we must set the options ourselves.
     // This is done everytime a new process is spawned.
@@ -314,7 +315,7 @@ pid_t execution::handleForkEvent(const pid_t traceesPid){
   log.writeToLog(Importance::info,
                  logger::makeTextColored(Color::blue,"Added process [%d] to states map.\n"),
                  newChildPid);
-  states.emplace(newChildPid, state {log, newChildPid, debugLevel} );
+  states.emplace(newChildPid, state {log, inodeMap,newChildPid, debugLevel} );
 
   // This is where we add new children to our process tree.
   auto pair = make_pair(traceesPid, newChildPid);
@@ -381,6 +382,9 @@ bool execution::handleSeccomp(const pid_t traceesPid){
 }
 // =======================================================================================
 void execution::handleSignal(int sigNum, const pid_t traceesPid){
+  if(sigNum == SIGALRM){
+    throw runtime_error("SIGALRM found, currently not supported.");
+  }
   // Remember to deliver this signal to the tracee for next event! Happens in
   // getNextEvent.
   states.at(traceesPid).signalToDeliver = sigNum;

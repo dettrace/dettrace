@@ -1,9 +1,9 @@
 #include "state.hpp"
 
-state::state(logger& log, pid_t traceePid, int debugLevel)
+state::state(logger& log, ValueMapper<ino_t>& inodeMap , pid_t traceePid, int debugLevel)
   : clock(0),
     traceePid(traceePid),
-    inodeMap(log, "inodeMap"),
+    inodeMap{ inodeMap },
     log(log),
     debugLevel(debugLevel){
   return;

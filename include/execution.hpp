@@ -9,6 +9,7 @@
 #include "state.hpp"
 #include "ptracer.hpp"
 #include "scheduler.hpp"
+#include "ValueMapper.hpp"
 
 #include <stack>
 #include <map>
@@ -43,6 +44,9 @@ private:
   // do different threads have the same pid but different tid? I think so, tid might
   // be a better choice for keys.
   map<pid_t, state> states;
+
+  // Global inode mapper to ensure consistent state among all nodes.
+  ValueMapper<ino_t> inodeMap;
 
   /**
    * Keep track of our children. We can only ever exit once all our children have exited.

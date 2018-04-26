@@ -57,7 +57,6 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_gettid);
   noIntercept(SYS_getuid);
   noIntercept(SYS_getxattr);
-  noIntercept(SYS_lgetxattr);
   noIntercept(SYS_madvise);
   noIntercept(SYS_mknod);
   noIntercept(SYS_munmap);
@@ -65,6 +64,8 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_mprotect);
   noIntercept(SYS_mremap);
   noIntercept(SYS_lseek);
+  noIntercept(SYS_linkat);
+  noIntercept(SYS_lgetxattr);
   noIntercept(SYS_pread64);
   noIntercept(SYS_rt_sigprocmask);
   noIntercept(SYS_rt_sigaction);
@@ -76,6 +77,8 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_rename);
   noIntercept(SYS_renameat);
   noIntercept(SYS_renameat2);
+  noIntercept(SYS_rmdir);
+  noIntercept(SYS_rmdir);
   noIntercept(SYS_rt_sigreturn);
   noIntercept(SYS_setgid);
     noIntercept(SYS_setrlimit);
@@ -103,7 +106,8 @@ void seccomp::loadRules(bool debug){
 
   // These system calls cause an even that is caught by ptrace and determinized.
   intercept(SYS_access, debug);
-  intercept(SYS_alarm);
+  // Not used, let's figure out who does one!
+  // intercept(SYS_alarm);
   intercept(SYS_chdir, debug);
   intercept(SYS_chmod, debug);
   // creat cannot be made blocking. This is fine as it seems it's only for filesystem

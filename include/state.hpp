@@ -43,7 +43,7 @@ public:
    * of state.
    * @ppid: Parent pid of this process.
    */
-  state(logger& log, pid_t myPid, int debugLevel);
+  state(logger& log, ValueMapper<ino_t>& inodeMap, pid_t myPid, int debugLevel);
 
   /**
    * Map from file descriptors to directory entries.
@@ -65,7 +65,7 @@ public:
   /*
    * Isomorphism between inodes and vitual inodes.
    */
-  ValueMapper<ino_t> inodeMap;
+  ValueMapper<ino_t>& inodeMap;
   logger log;
 
   /**
