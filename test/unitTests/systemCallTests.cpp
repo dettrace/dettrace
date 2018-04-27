@@ -119,10 +119,10 @@ void statFamilyTests(struct stat statbuf){
   CHECK(statbuf.st_gid == 0);
 
   // We always zero out nano seconds.
-  CHECK(6917529027641081855 == statbuf.st_mtim.tv_nsec);
-  CHECK(6917529027641081855 == statbuf.st_mtim.tv_nsec);
-  CHECK(6917529027641081855 == statbuf.st_ctim.tv_nsec);
-  CHECK(6917529027641081855 == statbuf.st_ctim.tv_nsec);
+  CHECK(749999999 == statbuf.st_mtim.tv_nsec);
+  CHECK(749999999 == statbuf.st_mtim.tv_nsec);
+  CHECK(749999999 == statbuf.st_ctim.tv_nsec);
+  CHECK(749999999 == statbuf.st_ctim.tv_nsec);
 
   CHECK(6917529027641081855 == statbuf.st_mtim.tv_sec);
   CHECK(6917529027641081855 == statbuf.st_atim.tv_sec);
@@ -137,7 +137,6 @@ TEST_CASE("stat", "stat"){
 
   int ret = stat("test_temp.txt", &statbuf);
   statFamilyTests(statbuf);
-  REQUIRE(6917529027641081855 == statbuf.st_atim.tv_nsec);
   REQUIRE(6917529027641081855 == statbuf.st_atim.tv_sec);
 
 }
@@ -152,7 +151,6 @@ TEST_CASE("fstat", "fstat"){
     REQUIRE(false);
   }
   statFamilyTests(statbuf);
-  REQUIRE(6917529027641081855 == statbuf.st_atim.tv_nsec);
   REQUIRE(6917529027641081855 == statbuf.st_atim.tv_sec);
 
 }
@@ -163,8 +161,6 @@ TEST_CASE("lstat", "lstat"){
 
   int ret = lstat("./test_temp.txt", &statbuf);
   statFamilyTests(statbuf);
-  REQUIRE(6917529027641081855 == statbuf.st_atim.tv_nsec);
-  REQUIRE(6917529027641081855 == statbuf.st_atim.tv_nsec);
   REQUIRE(statbuf.st_atim.tv_sec == 6917529027641081855);
 }
 

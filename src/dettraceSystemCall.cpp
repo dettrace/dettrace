@@ -811,14 +811,13 @@ bool utimesSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
 bool utimensatSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   // Set times to our own logical time for deterministic time only if times is null.
   if((const struct timespec*) t.arg3() != nullptr){
-    // Nothing to do, user specified his/her own time which should be deterministic.
+    // user specified his/her own time which should be deterministic.
     return true;
   }
 
   // We need somewhere to store a timespec struct if our struct is null. We will write
   // this data below the current stack pointer accounting for the red zone, known to be
   // 128 bytes.
-  //uint64_t rsp = t.regs.rsp;
   uint64_t rsp = t.getRsp();
   // Enough space for 2 timespec structs.
   timespec* ourTimespec = (timespec*) (rsp - 128 - 2 * sizeof(timespec));

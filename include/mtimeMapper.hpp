@@ -39,10 +39,11 @@ public:
     virtualToRealValue[make_pair(0, 0)] = make_pair(0, 0);
     realToVirtualValue[make_pair(0, 0)] = make_pair(0, 0);
 
-    const long maxTime = INT_MAX;
+    const long maxTime = LONG_MAX;
+    const long maxNanoTime = 999999999;
 
-    virtualToRealValue[make_pair(maxTime, maxTime)] = make_pair(maxTime, maxTime);
-    realToVirtualValue[make_pair(maxTime, maxTime)] = make_pair(maxTime, maxTime);
+    virtualToRealValue[make_pair(maxTime, maxNanoTime)] = make_pair(maxTime, maxNanoTime);
+    realToVirtualValue[make_pair(maxTime, maxNanoTime)] = make_pair(maxTime, maxNanoTime);
   }
 
   string to_string(pair<time_t, time_t> p){
