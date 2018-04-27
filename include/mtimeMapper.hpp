@@ -45,8 +45,8 @@ public:
     // Current time.
     time_t currentTime = time(nullptr);
 
-    auto currentTimeP = make_pair(currentTime, currentTime);
-    auto virtualTimeP = make_pair(virtualNowTime, virtualNowTime);
+    auto currentTimeP = make_pair(currentTime, maxNanoTime / 2);
+    auto virtualTimeP = make_pair(virtualNowTime, maxNanoTime / 2);
     virtualToRealValue[virtualTimeP] = currentTimeP;
     realToVirtualValue[currentTimeP] = virtualTimeP;
 
