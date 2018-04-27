@@ -810,22 +810,23 @@ bool utimesSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
 // =======================================================================================
 bool utimensatSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   // Set times to our own logical time for deterministic time only if times is null.
-  if((const struct timespec*) t.arg3() != nullptr){
+  // if((const struct timespec*) t.arg3() != nullptr){
     // user specified his/her own time which should be deterministic.
-    return true;
-  }
+    // return true;
+  // }
 
   // We need somewhere to store a timespec struct if our struct is null. We will write
   // this data below the current stack pointer accounting for the red zone, known to be
   // 128 bytes.
+  s.originalArg3 = t.arg3();
   uint64_t rsp = t.getRsp();
   // Enough space for 2 timespec structs.
   timespec* ourTimespec = (timespec*) (rsp - 128 - 2 * sizeof(timespec));
 
   // Create our own struct with our time.
   timespec clockTime = {
-    .tv_sec = (time_t) s.getLogicalTime(),
-    .tv_nsec = (time_t) s.getLogicalTime()
+    .tv_sec = 0,// (time_t) s.getLogicalTime(),
+    .tv_nsec = 0, //(time_t) s.getLogicalTime()
   };
 
   // Write our struct to the tracee's memory.
@@ -840,7 +841,7 @@ bool utimensatSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
 
 void utimensatSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   // Restore value of register.
-  t.writeArg3(0);
+  t.writeArg3(s.originalArg3);
 }
 // =======================================================================================
 bool writeSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
