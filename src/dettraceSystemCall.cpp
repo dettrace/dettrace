@@ -69,7 +69,7 @@ void clock_gettimeSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sch
 
   if (tp != nullptr) {
     struct timespec myTp = {};
-    myTp.tv_sec = s.getLogicalTime();
+    myTp.tv_sec = virtualNowTime;
     myTp.tv_nsec = 0;
 
     ptracer::writeToTracee(tp, myTp, t.getPid());
@@ -354,7 +354,7 @@ void gettimeofdaySystemCall::handleDetPost(state& s, ptracer& t, scheduler& sche
   struct timeval* tp = (struct timeval*) t.arg1();
   if (nullptr != tp) {
     struct timeval myTv = {};
-    myTv.tv_sec = s.getLogicalTime();
+    myTv.tv_sec = virtualNowTime;
     myTv.tv_usec = 0;
 
     ptracer::writeToTracee(tp, myTv, t.getPid());

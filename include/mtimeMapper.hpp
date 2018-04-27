@@ -12,9 +12,12 @@
 #include <algorithm>
 #include <memory>
 #include <vector>
+#include <time.h>
 
 #include <map>
 #include "logger.hpp"
+#include "util.hpp"
+
 
 using namespace std;
 
@@ -32,15 +35,20 @@ private:
   std::map<pair<time_t,time_t>, pair<time_t,time_t>> realToVirtualValue;
   logger& myLogger;
 
+
+
 public:
   mtimeMapper(logger& log):
     myLogger(log){
     // Add ranges for us to squeeze between.
     virtualToRealValue[make_pair(0, 0)] = make_pair(0, 0);
-    realToVirtualValue[make_pair(0, 0)] = make_pair(0, 0);
+    // Current time.
+    time_t currentTime = time(nullptr);
 
-    const long maxTime = LONG_MAX;
-    const long maxNanoTime = 999999999;
+    auto currentTimeP = make_pair(currentTime, currentTime);
+    auto virtualTimeP = make_pair(virtualNowTime, virtualNowTime);
+    virtualToRealValue[virtualTimeP] = currentTimeP;
+    realToVirtualValue[currentTimeP] = virtualTimeP;
 
     virtualToRealValue[make_pair(maxTime, maxNanoTime)] = make_pair(maxTime, maxNanoTime);
     realToVirtualValue[make_pair(maxTime, maxNanoTime)] = make_pair(maxTime, maxNanoTime);
@@ -105,7 +113,7 @@ public:
    * @param virtualValue: virtual value of process.
    * @return realValue: real value. Throws if it doesn't exist.
    */
-  pair<time_t, time_t>getRealValue(pair<time_t, time_t>virtualValue) {
+  pair<time_t, time_t>getRealValue(pair<time_t, time_t> virtualValue) {
     // does element exist?
     if (virtualToRealValue.find(virtualValue) != virtualToRealValue.end()) {
       pair<time_t, time_t>realValue = virtualToRealValue[virtualValue];
@@ -156,7 +164,7 @@ public:
    * @param realValue: real value of process.
    * @return virtualValue: real value. Throws if it doesn't exist.
    */
-  pair<time_t, time_t>getVirtualValue(pair<time_t, time_t>realValue) {
+  pair<time_t, time_t>getVirtualValue(pair<time_t, time_t> realValue) {
     if (realToVirtualValue.find(realValue) != realToVirtualValue.end()) {
       pair<time_t, time_t>virtValue = realToVirtualValue[realValue];
       myLogger.writeToLog(Importance::info, "mtimeMapper: getVirtualValue(%s) = %s\n",

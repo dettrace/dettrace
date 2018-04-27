@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <math.h> // ceil.
 #include <dirent.h>
+#include <limits.h>
 
 #include <stdint.h>
 
@@ -34,7 +35,8 @@
  * Global variables are not shared among different processes. Warning: global variables
  * should have unique names, or they might clash with libc functions!
  */
-time_t libdet_clock = 0;
+
+time_t libdet_clock = LONG_MAX / 2;
 
 /**
  * The  functions  clock_gettime() retrieve the time of the specified clock clk_id.
@@ -88,7 +90,6 @@ int clock_gettime(clockid_t clk_id, struct timespec *tp){
  * (However, compilation warnings will result if tv is NULL.)
  */
 int gettimeofday(struct timeval *tv, struct timezone *tz){
-  /* fprintf(stderr, "CALLED: %s\n", "clock_gettime"); */
   if(tv != NULL) {
     tv->tv_sec = libdet_clock;
     tv->tv_usec = libdet_clock;
