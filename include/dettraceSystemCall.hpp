@@ -895,21 +895,37 @@ public:
 // =======================================================================================
 /**
  *
- * int utimes(const char *filename, const struct timeval times[2]);
+ * int utime(const char *filename, const struct utimbuf *times);
  *
  * The utime() system call changes the access and modification times of the inode speci‐
  * fied by filename to the actime and modtime fields of times respectively.
  *
  * The time the user uses should be determinitic. We only have to watch out for the zero
- * case when the user sets his own time. TODO: We might just want to allow this call
- * through as we do not consider meta data to be part of our deteminitic guarantee. This
- * works since we do not allow a running process to observe it.
+ * case when the user sets his own time.
+ */
+class utimeSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
+};
+
+// =======================================================================================
+/**
+ *
+ * int utimes(const char *filename, const struct timeval times[2]);
+ *
+ * The utimes() system call changes the access and modification times of the inode speci‐
+ * fied by filename to the actime and modtime fields of times respectively.
+ *
+ * The time the user uses should be determinitic. We only have to watch out for the zero
+ * case when the user sets his own time.
  */
 class utimesSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
   bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
-  // void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**

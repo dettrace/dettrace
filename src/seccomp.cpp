@@ -168,8 +168,8 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_symlinkat, debug);
   intercept(SYS_tgkill);
   intercept(SYS_time);
-  // intercept(SYS_utime);
-  // intercept(SYS_utimes);
+  intercept(SYS_utime);
+  intercept(SYS_utimes);
   noIntercept(SYS_utimensat);
   intercept(SYS_uname);
   intercept(SYS_unlink, debug);

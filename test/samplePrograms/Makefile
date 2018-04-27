@@ -1,7 +1,7 @@
 # binaries that are simple to build (1 source file, same name as binary)
 SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getpid callSshKeygen uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write
 PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
-LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat getdents getdents64 relativeTimeStamps1 relativeTimeStamps2
+LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat getdents getdents64 relativeTimeStamps1 relativeTimeStamps2 #tars to fix one day.
 
 
 DIFF_CMD=diff
@@ -28,6 +28,14 @@ setup:
 
 # Linux utilities, which in general need to be run with apropriate flags and/or setup/teardown
 
+# Verify calling tar twice after updating the timestamps returns the same results.
+#tars.ok:
+#	@echo "   Testing $@..."
+#Compile one directory up to having "tar2" tar "tar1".
+# @../../bin/dettrace bash -c "make clean && make && tar -cf ../myTar.tar ."
+# @../../bin/dettrace bash -c "make clean && make && tar -cf ../myTar2.tar ."
+# @diff ../myTar.tar ../myTar2.tar
+# @rm ../myTar.tar ../myTar2.tar
 
 # Verify relative timestamps are the same under dettrace and not.
 relativeTimeStamps1.ok:

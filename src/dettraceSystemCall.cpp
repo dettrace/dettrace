@@ -18,6 +18,8 @@
 #include <sys/uio.h>
 #include <linux/futex.h>
 #include <linux/fs.h>
+#include <sys/types.h>
+#include <utime.h>
 
 #include<unordered_map>
 
@@ -69,7 +71,8 @@ void clock_gettimeSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sch
 
   if (tp != nullptr) {
     struct timespec myTp = {};
-    myTp.tv_sec = virtualNowTime;
+    // TODO: One day, unify time.
+    myTp.tv_sec = 0;
     myTp.tv_nsec = 0;
 
     ptracer::writeToTracee(tp, myTp, t.getPid());
@@ -354,7 +357,7 @@ void gettimeofdaySystemCall::handleDetPost(state& s, ptracer& t, scheduler& sche
   struct timeval* tp = (struct timeval*) t.arg1();
   if (nullptr != tp) {
     struct timeval myTv = {};
-    myTv.tv_sec = virtualNowTime;
+    myTv.tv_sec = 0;//mtimeMapper::virtualNowTime;
     myTv.tv_usec = 0;
 
     ptracer::writeToTracee(tp, myTv, t.getPid());
@@ -803,17 +806,85 @@ bool unlinkatSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
 }
 
 // =======================================================================================
+bool utimeSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
+  // Set times to our own logical time for deterministic time only if times is null.
+  if((const struct utimbuf*) t.arg2() != nullptr){
+    // user specified his/her own time which should be deterministic.
+    return false;
+  }
+  s.originalArg2 = t.arg2();
+
+  // Enough space for 2 timespec structs.
+  utimbuf* ourUtimbuf = (utimbuf*) (t.getRsp() - 128 - sizeof(utimbuf));
+
+  // Create our own struct with our time.
+  // TODO: In the future we might want to unify this with our mtimeMapper.
+  utimbuf clockTime = {
+    .actime = 0,
+    .modtime = 0,
+  };
+
+  // Write our struct to the tracee's memory.
+  ptracer::writeToTracee(ourUtimbuf, clockTime, s.traceePid);
+
+  // Point system call to new address.
+  t.writeArg2((uint64_t) ourUtimbuf);
+  s.incrementTime();
+
+  // Needed to restore the original value in register.
+  return true;
+}
+
+void utimeSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+  // Restore value of register.
+  t.writeArg2(s.originalArg2);
+}
+// =======================================================================================
 bool utimesSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
-  // TODO? See class declaration.
-  return false;
+  // Set times to our own logical time for deterministic time only if times is null.
+  if((const struct timeval*) t.arg2() != nullptr){
+    // user specified his/her own time which should be deterministic.
+    return false;
+  }
+
+  // We need somewhere to store a timespec struct if our struct is null. We will write
+  // this data below the current stack pointer accounting for the red zone, known to be
+  // 128 bytes.
+  s.originalArg2 = t.arg2();
+  uint64_t rsp = t.getRsp();
+  // Enough space for 2 timeval structs.
+  timeval* ourTimeval = (timeval*) (rsp - 128 - 2 * sizeof(timeval));
+
+  // Create our own struct with our time.
+  // TODO: In the future we might want to unify this with our mtimeMapper.
+  timeval clockTime = {
+    .tv_sec = 0,
+    .tv_usec = 0,
+  };
+
+  // Write our struct to the tracee's memory.
+  ptracer::writeToTracee(& (ourTimeval[0]), clockTime, s.traceePid);
+  ptracer::writeToTracee(& (ourTimeval[1]), clockTime, s.traceePid);
+
+  // Point system call to new address.
+  t.writeArg2((uint64_t) ourTimeval);
+  s.incrementTime();
+
+  // Needed to restore the original value in register.
+  return true;
+}
+
+void utimesSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+  // Restore value of register.
+  t.writeArg2(s.originalArg2);
 }
 // =======================================================================================
 bool utimensatSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   // Set times to our own logical time for deterministic time only if times is null.
-  // if((const struct timespec*) t.arg3() != nullptr){
+  if((const struct timespec*) t.arg3() != nullptr){
     // user specified his/her own time which should be deterministic.
-    // return true;
-  // }
+    return false;
+  }
 
   // We need somewhere to store a timespec struct if our struct is null. We will write
   // this data below the current stack pointer accounting for the red zone, known to be
@@ -824,6 +895,7 @@ bool utimensatSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   timespec* ourTimespec = (timespec*) (rsp - 128 - 2 * sizeof(timespec));
 
   // Create our own struct with our time.
+  // TODO: In the future we might want to unify this with our mtimeMapper.
   timespec clockTime = {
     .tv_sec = 0,// (time_t) s.getLogicalTime(),
     .tv_nsec = 0, //(time_t) s.getLogicalTime()
@@ -836,7 +908,9 @@ bool utimensatSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   // Point system call to new address.
   t.writeArg3((uint64_t) ourTimespec);
   s.incrementTime();
-  return false;
+
+  // Needed to restore the original value in register.
+  return true;
 }
 
 void utimensatSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){

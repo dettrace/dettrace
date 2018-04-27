@@ -510,6 +510,10 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<unlinkSystemCall>(syscallNumber, syscallName);
   case SYS_unlinkat:
     return make_unique<unlinkatSystemCall>(syscallNumber, syscallName);
+  case SYS_utime:
+      return make_unique<utimeSystemCall>(syscallNumber, syscallName);
+  case SYS_utimes:
+    return make_unique<utimesSystemCall>(syscallNumber, syscallName);
   case SYS_utimensat:
     return make_unique<utimensatSystemCall>(syscallNumber, syscallName);
   case SYS_vfork:

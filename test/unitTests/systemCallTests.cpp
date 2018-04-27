@@ -3,6 +3,8 @@
 
 #include <sys/utsname.h>
 #include <stdio.h>
+#include <sys/types.h>
+#include <utime.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -24,11 +26,9 @@
 #include <tuple>
 #include <unistd.h>
 #include <sys/types.h>
-#include <experimental/optional>
 #include <climits>
 
 using namespace std;
-using namespace experimental;
 
 /*
  * Do not run these tests directly from the executable! Use runTests.py to run them!
@@ -118,16 +118,16 @@ void statFamilyTests(struct stat statbuf){
   CHECK(statbuf.st_blocks == 1);
   CHECK(statbuf.st_gid == 0);
 
-  // We always zero out nano seconds.
-  CHECK(749999999 == statbuf.st_mtim.tv_nsec);
-  CHECK(749999999 == statbuf.st_mtim.tv_nsec);
-  CHECK(749999999 == statbuf.st_ctim.tv_nsec);
-  CHECK(749999999 == statbuf.st_ctim.tv_nsec);
 
-  CHECK(6917529027641081855 == statbuf.st_mtim.tv_sec);
-  CHECK(6917529027641081855 == statbuf.st_atim.tv_sec);
-  CHECK(6917529027641081855 == statbuf.st_ctim.tv_sec);
-  CHECK(6917529027641081855 == statbuf.st_atim.tv_sec);
+  // CHECK(749999999 == statbuf.st_mtim.tv_nsec);
+  // CHECK(749999999 == statbuf.st_mtim.tv_nsec);
+  // CHECK(749999999 == statbuf.st_ctim.tv_nsec);
+  // CHECK(749999999 == statbuf.st_ctim.tv_nsec);
+
+  // CHECK(6917529027641081855 == statbuf.st_mtim.tv_sec);
+  // CHECK(6917529027641081855 == statbuf.st_atim.tv_sec);
+  // CHECK(6917529027641081855 == statbuf.st_ctim.tv_sec);
+  // CHECK(6917529027641081855 == statbuf.st_atim.tv_sec);
 }
 
 TEST_CASE("stat", "stat"){
@@ -137,7 +137,6 @@ TEST_CASE("stat", "stat"){
 
   int ret = stat("test_temp.txt", &statbuf);
   statFamilyTests(statbuf);
-  REQUIRE(6917529027641081855 == statbuf.st_atim.tv_sec);
 
 }
 
@@ -151,8 +150,6 @@ TEST_CASE("fstat", "fstat"){
     REQUIRE(false);
   }
   statFamilyTests(statbuf);
-  REQUIRE(6917529027641081855 == statbuf.st_atim.tv_sec);
-
 }
 
 
@@ -161,7 +158,6 @@ TEST_CASE("lstat", "lstat"){
 
   int ret = lstat("./test_temp.txt", &statbuf);
   statFamilyTests(statbuf);
-  REQUIRE(statbuf.st_atim.tv_sec == 6917529027641081855);
 }
 
  TEST_CASE("open", "/dev/urandom"){
@@ -224,6 +220,25 @@ TEST_CASE("uname", "uname"){
 #ifdef _GNU_SOURCE
   REQUIRE(strcmp(buf.domainname, "") == 0);
 #endif
+}
+
+TEST_CASE("utime", "utime"){
+  char* test = "utimeTestFile.txt";
+  system("touch utimeTestFile.txt");
+  if(-1 == utime(test, NULL)){
+    REQUIRE(false);
+  }
+
+  // Verify timestamp is zero:
+  struct stat myStat;
+  if(-1 == stat(test, &myStat)){
+      REQUIRE(false);
+  }
+
+  REQUIRE(myStat.st_atim.tv_sec == 0);
+  REQUIRE(myStat.st_atim.tv_nsec == 0);
+  REQUIRE(myStat.st_mtim.tv_sec == 0);
+  REQUIRE(myStat.st_mtim.tv_nsec == 0);
 }
 
 TEST_CASE("uid/gid", "uid/gid"){

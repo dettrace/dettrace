@@ -21,7 +21,6 @@
 
 using namespace std;
 
-
 // This class implements deterministic, relative times. That is, given some real
 // modified times: t1 < t2 < t3, we map these real modified times to deterministic
 // times where we maintain the "less than" relation.
@@ -35,23 +34,35 @@ private:
   std::map<pair<time_t,time_t>, pair<time_t,time_t>> realToVirtualValue;
   logger& myLogger;
 
-
-
 public:
   mtimeMapper(logger& log):
     myLogger(log){
-    // Add ranges for us to squeeze between.
-    virtualToRealValue[make_pair(0, 0)] = make_pair(0, 0);
-    // Current time.
     time_t currentTime = time(nullptr);
 
+    // Add ranges for us to squeeze real values between:
+    // Bottom bound.
+    auto zeroPair = make_pair(0, 0);
+    virtualToRealValue[zeroPair] = zeroPair;
+    realToVirtualValue[zeroPair] = zeroPair;
+
+    const long maxTime = LONG_MAX;
+    // The biggest a nanosecond can be before reaching seconds.
+    const long maxNanoTime = 999999999;
+
+    // We want to avoid errros where existing files look newer than the time.
+    // So we set the current time be our middile point.
     auto currentTimeP = make_pair(currentTime, maxNanoTime / 2);
-    auto virtualTimeP = make_pair(virtualNowTime, maxNanoTime / 2);
+    auto virtualTimeP = make_pair(maxTime / 2, maxNanoTime / 2);
+    auto maxTimeP = make_pair(maxTime, maxNanoTime);
+
+    // Seed middle time. All real times that already existed will go to the left
+    // of maxTime / 2, else to the right.
     virtualToRealValue[virtualTimeP] = currentTimeP;
     realToVirtualValue[currentTimeP] = virtualTimeP;
 
-    virtualToRealValue[make_pair(maxTime, maxNanoTime)] = make_pair(maxTime, maxNanoTime);
-    realToVirtualValue[make_pair(maxTime, maxNanoTime)] = make_pair(maxTime, maxNanoTime);
+    // Max ranges. In case we ever reach the end of time.
+    virtualToRealValue[maxTimeP] = maxTimeP;
+    realToVirtualValue[maxTimeP] = maxTimeP;
   }
 
   string to_string(pair<time_t, time_t> p){
@@ -59,7 +70,6 @@ public:
   }
 
   pair<time_t, time_t> addRealValue(pair<time_t, time_t> realValue){
-    myLogger.writeToLog(Importance::info, "In addRealValue!\n");
     if(realToVirtualValue.find(realValue) != realToVirtualValue.end()){
       throw runtime_error("Attempting to add already existing key: " +
                           to_string(realValue));

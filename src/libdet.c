@@ -36,7 +36,8 @@
  * should have unique names, or they might clash with libc functions!
  */
 
-time_t libdet_clock = LONG_MAX / 2;
+// TODO: One day, we should unify time.
+time_t libdet_clock = 0;
 
 /**
  * The  functions  clock_gettime() retrieve the time of the specified clock clk_id.

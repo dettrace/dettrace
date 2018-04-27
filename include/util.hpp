@@ -12,10 +12,6 @@
 #include <iostream>
 #include <limits.h>
 
-const long maxTime = LONG_MAX;
-const long maxNanoTime = 999999999;
-const long virtualNowTime = LONG_MAX / 2;
-
 using namespace std;
 /*======================================================================================*/
 /**
