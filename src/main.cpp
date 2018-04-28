@@ -245,7 +245,8 @@ void setUpContainer(string pathToExe, string pathToChoort , bool userDefinedChro
   }
 
   // Proc is special, we mount a new proc dir.
-  doWithCheck(mount("/proc", "../proc/", "proc", MS_MGC_VAL, nullptr),
+  char* none = "none"; // Hack so valgrind doesn't complain.
+  doWithCheck(mount("/proc", "../proc/", "proc", MS_MGC_VAL, none),
 	      "Mounting proc failed");
 
   // Chroot our process!
@@ -363,7 +364,8 @@ tuple<int, int, string, bool> parseProgramArguments(int argc, char* argv[]){
  * Wrapper around mount with strings.
  */
 void mountDir(string source, string target){
-  doWithCheck(mount(source.c_str(), target.c_str(), NULL, MS_BIND, NULL),
+  const char* none = "none"; // Hack so valgrind doesn't complain.
+  doWithCheck(mount(source.c_str(), target.c_str(), none, MS_BIND, none),
 	      "Unable to bind mount: " + source + " to " + target);
 }
 // =======================================================================================

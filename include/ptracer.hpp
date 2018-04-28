@@ -179,7 +179,6 @@ public:
    * @retval str: A Cpp string version of readAddress.
    */
   static string readTraceeCString(const char* source, pid_t traceePid);
-  
   /**
    * Write a value
    */

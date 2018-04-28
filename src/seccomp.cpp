@@ -80,6 +80,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_rmdir);
   noIntercept(SYS_rmdir);
   noIntercept(SYS_rt_sigreturn);
+  noIntercept(SYS_rt_sigtimedwait);
   noIntercept(SYS_setgid);
     noIntercept(SYS_setrlimit);
   // This seems to be, surprisingly, deterministic. The affinity is set/get by

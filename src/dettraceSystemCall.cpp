@@ -702,7 +702,7 @@ void sysinfoSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
     return;
   }
 
-  struct sysinfo info;
+  struct sysinfo info = {0};
   info.uptime = LONG_MAX;
   info.totalram = LONG_MAX;
   info.freeram = LONG_MAX;
