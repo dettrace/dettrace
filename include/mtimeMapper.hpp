@@ -70,14 +70,14 @@ public:
    * @realValue: real value to check for.
    * @return bool: true if real value already exists in @realToVirtualValue.
    */
-  bool realValueExists(pair<time_t, time_t>realValue);
+  bool realValueExists(pair<time_t, time_t> realValue);
 
   /**
    * Check if virtual value is already in map for virtual values.
    * @realValue: virtual value to check for.
    * @return bool: true if virtual value already exists in @virtualToRealValue.
    */
-  bool virtualValueExists(pair<time_t, time_t>virtualValue);
+  bool virtualValueExists(pair<time_t, time_t> virtualValue);
 
 };
 
