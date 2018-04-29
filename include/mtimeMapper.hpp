@@ -59,7 +59,7 @@ public:
 
   /**
    * Get the virtual value from the real value. This assumes the value has already been added
-   * through @addEntryValue.
+   * through @addRealValue.
    * @param realValue: real value of process.
    * @return virtualValue: real value. Throws if it doesn't exist.
    */
