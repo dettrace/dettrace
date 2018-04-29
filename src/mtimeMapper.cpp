@@ -32,7 +32,7 @@ mtimeMapper::mtimeMapper(logger& log):
   // We want to avoid errros where existing files look newer than the time.
   // So we set the current time be our middile point.
   auto realTimeP = make_pair(currentTime, 0);
-  auto virtualTimeP = make_pair(maxTime / 2, maxNanoTime / 2);
+  auto virtualTimeP = make_pair(maxTime / 2, 0);
 
   // Seed middle time. All real times that already existed will go to the left
   // of maxTime / 2, else to the right.
@@ -40,7 +40,7 @@ mtimeMapper::mtimeMapper(logger& log):
   realToVirtualValue[realTimeP] = virtualTimeP;
 
   // Max ranges. In case we ever reach the end of time.
-  auto maxTimeP = make_pair(maxTime, maxNanoTime);
+  auto maxTimeP = make_pair(maxTime, 0);
   virtualToRealValue[maxTimeP] = maxTimeP;
   realToVirtualValue[maxTimeP] = maxTimeP;
 }
@@ -73,13 +73,15 @@ pair<time_t, time_t> mtimeMapper::addRealValue(pair<time_t, time_t> realValue){
       myLogger.writeToLog(Importance::info, msg, prevVirt.first, prevVirt.second,
                           virtualSeconds,  virtualNano);
       time_t newVirtSeconds = getSqueezedValue(prevVirt.first, virtualSeconds);
-      time_t newVirtNano = getSqueezedValue(prevVirt.second, virtualNano);
-      auto newVirt = make_pair(newVirtSeconds, newVirtNano);
+      auto newVirt = make_pair(newVirtSeconds, 0);
 
       // We have ran out of numbers to squeeze. The integer division returns our bottom
       // number.
-      if(newVirt == prevVirt){
-        throw runtime_error("dettrace failure: we have ran out of mtimes to squeeze!");
+      if(newVirtSeconds == prevVirt.first){
+        int size = realToVirtualValue.size();
+        auto msg = "dettrace failure: we have ran out of mtimes to squeeze!"
+          "We were able to fit:" + ::to_string(size) + " values!";
+        throw runtime_error(msg);
       }
 
       realToVirtualValue[realValue] = newVirt;
