@@ -8,6 +8,7 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>              /* Obtain O_* constant definitions */
 #include <inttypes.h>
+#include <sys/times.h>
 
 #include <climits>
 #include <cstring>
@@ -402,6 +403,16 @@ void ioctlSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   return;
 }
 // =======================================================================================
+// TODO
+void llistxattrSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+
+}
+// =======================================================================================
+// TODO
+void lgetxattrSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+
+}
+// =======================================================================================
 
 bool nanosleepSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   return true;
@@ -752,6 +763,7 @@ void timeSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
 
   time_t* timePtr = (time_t*) t.arg1();
   s.log.writeToLog(Importance::info, "time: tloc is null.");
+  t.writeRax(s.getLogicalTime());
   if(timePtr == nullptr){
     return;
   }
@@ -760,6 +772,28 @@ void timeSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   // Tick up time.
   s.incrementTime();
   return;
+}
+// =======================================================================================
+void timesSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+  // Failure nothing for us to do.
+  if((int) t.getReturnValue() == -1){
+    return;
+  }
+
+  tms* bufPtr = (tms*) t.arg1();
+  s.log.writeToLog(Importance::info, "times: buf is null.");
+  if(bufPtr != nullptr){
+    tms myTms = {
+      .tms_utime = 0,
+      .tms_stime = 0,
+      .tms_cutime = 0,
+      .tms_cstime = 0,
+    };
+
+    ptracer::writeToTracee(bufPtr, myTms, s.traceePid);
+  }
+
+  t.writeRax(0);
 }
 // =======================================================================================
 void unameSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){

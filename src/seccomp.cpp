@@ -64,13 +64,15 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_mprotect);
   noIntercept(SYS_mremap);
   noIntercept(SYS_lseek);
+  noIntercept(SYS_link);
   noIntercept(SYS_linkat);
-  noIntercept(SYS_lgetxattr);
   noIntercept(SYS_pread64);
   noIntercept(SYS_rt_sigprocmask);
   noIntercept(SYS_rt_sigaction);
+  noIntercept(SYS_rt_sigsuspend);
   noIntercept(SYS_setpgid);
   noIntercept(SYS_set_tid_address);
+  noIntercept(SYS_setxattr);
   noIntercept(SYS_sigaltstack);
   // TODO move to intercept with debug
   noIntercept(SYS_readlinkat);
@@ -82,7 +84,8 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_rt_sigreturn);
   noIntercept(SYS_rt_sigtimedwait);
   noIntercept(SYS_setgid);
-    noIntercept(SYS_setrlimit);
+  noIntercept(SYS_setrlimit);
+  noIntercept(SYS_setrlimit);
   // This seems to be, surprisingly, deterministic. The affinity is set/get by
   // us so it should always be the same mask. User cannot actually observe differences.
   noIntercept(SYS_sched_getaffinity);
@@ -135,6 +138,10 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_gettimeofday);
   // TODO IOCTL with seccomp instead of ptrace
   intercept(SYS_ioctl);
+  // TODO
+  intercept(SYS_llistxattr);
+  // TODO
+  intercept(SYS_lgetxattr);
   intercept(SYS_mkdir, debug);
   intercept(SYS_mkdirat, debug);
   // TODO Nano sleep
@@ -169,6 +176,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_symlinkat, debug);
   intercept(SYS_tgkill);
   intercept(SYS_time);
+  intercept(SYS_times);
   intercept(SYS_utime);
   intercept(SYS_utimes);
   noIntercept(SYS_utimensat);

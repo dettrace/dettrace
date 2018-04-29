@@ -21,6 +21,7 @@ using namespace std;
 mtimeMapper::mtimeMapper(logger& log):
   myLogger(log){
   time_t currentTime = time(nullptr);
+  // printf("current time: %ld\n", currentTime);
 
   // Add ranges for us to squeeze real values between:
   // Bottom bound.
@@ -30,16 +31,16 @@ mtimeMapper::mtimeMapper(logger& log):
 
   // We want to avoid errros where existing files look newer than the time.
   // So we set the current time be our middile point.
-  auto currentTimeP = make_pair(currentTime, maxNanoTime / 2);
+  auto realTimeP = make_pair(currentTime, 0);
   auto virtualTimeP = make_pair(maxTime / 2, maxNanoTime / 2);
-  auto maxTimeP = make_pair(maxTime, maxNanoTime);
 
   // Seed middle time. All real times that already existed will go to the left
   // of maxTime / 2, else to the right.
-  virtualToRealValue[virtualTimeP] = currentTimeP;
-  realToVirtualValue[currentTimeP] = virtualTimeP;
+  virtualToRealValue[virtualTimeP] = realTimeP;
+  realToVirtualValue[realTimeP] = virtualTimeP;
 
   // Max ranges. In case we ever reach the end of time.
+  auto maxTimeP = make_pair(maxTime, maxNanoTime);
   virtualToRealValue[maxTimeP] = maxTimeP;
   realToVirtualValue[maxTimeP] = maxTimeP;
 }

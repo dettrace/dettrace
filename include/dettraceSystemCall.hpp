@@ -407,6 +407,37 @@ public:
   void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
+/*
+ * ssize_t llistxattr(const char *path, char *list, size_t size);
+ *
+ * Extended attributes are name:value pairs associated with inodes (files, directories,
+ * symbolic links, etc.). They are extensions to the normal attributes which are
+ * associated with all inodes in the system.
+ * TODO
+ */
+class llistxattrSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/*
+ * ssize_t lgetxattr(const char *path, const char *name, void *value, size_t size);
+ *
+ * Extended attributes are name:value pairs associated with inodes (files, directories,
+ * symbolic links, etc.). They are extensions to the normal attributes which are
+ * associated with all inodes in the system.
+ * TODO
+ */
+class lgetxattrSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
+};
+
+// =======================================================================================
 /**
  * int fstatat(int dirfd, const char *pathname, struct stat *statbuf, int flags);
  *
@@ -825,6 +856,29 @@ public:
  * Return results from our logical clock.
  */
 class timeSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/**
+ *
+ * clock_t times(struct tms *buf);
+ *
+ * times()  stores the current process times in the struct tms that buf points to.  The
+ * struct tms is as defined in <sys/times.h>:
+
+ *        struct tms {
+ *             clock_t tms_utime;  // user time
+ *             clock_t tms_stime;  // system time
+ *             clock_t tms_cutime; // user time of children
+ *             clock_t tms_cstime; // system time of children
+ *         };
+
+ * We simply zero out everything for now :3
+ */
+class timesSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 

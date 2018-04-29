@@ -2,6 +2,7 @@
 #include <sched.h>
 
 #include <sys/utsname.h>
+#include <sys/times.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <utime.h>
@@ -247,4 +248,15 @@ TEST_CASE("uid/gid", "uid/gid"){
   REQUIRE(getgid() == 0);
   REQUIRE(geteuid() == 0);
   REQUIRE(getpgrp() == 0);
+}
+
+TEST_CASE("times", "times"){
+  struct tms buf;
+  clock_t time = times(&buf);
+  // Nobody.
+  REQUIRE(time == 0);
+  REQUIRE(buf.tms_utime == 0);
+  REQUIRE(buf.tms_stime == 0);
+  REQUIRE(buf.tms_cutime == 0);
+  REQUIRE(buf.tms_cstime == 0);
 }

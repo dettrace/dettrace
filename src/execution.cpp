@@ -456,6 +456,10 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<gettimeofdaySystemCall>(syscallNumber, syscallName);
   case SYS_ioctl:
     return make_unique<ioctlSystemCall>(syscallNumber, syscallName);
+  case SYS_llistxattr:
+    return make_unique<llistxattrSystemCall>(syscallNumber, syscallName);
+  case SYS_lgetxattr:
+    return make_unique<lgetxattrSystemCall>(syscallNumber, syscallName);
   case SYS_nanosleep:
     return make_unique<nanosleepSystemCall>(syscallNumber, syscallName);
   case SYS_mkdir:
@@ -504,6 +508,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<tgkillSystemCall>(syscallNumber, syscallName);
   case SYS_time:
     return make_unique<timeSystemCall>(syscallNumber, syscallName);
+  case SYS_times:
+    return make_unique<timesSystemCall>(syscallNumber, syscallName);
   case SYS_uname:
     return make_unique<unameSystemCall>(syscallNumber, syscallName);
   case SYS_unlink:
