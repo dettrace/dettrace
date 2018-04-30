@@ -12,6 +12,8 @@
 #include <memory>
 #include <vector>
 
+#include "logger.hpp"
+
 using namespace std;
 
 // As per getdents(2)
@@ -40,8 +42,11 @@ struct linux_dirent64 {
 template <typename T>
 class directoryEntries{
 public:
+  logger& log;
+
   // Dynamically allocate enough memory to hold all directory entries by the user.
-  directoryEntries(size_t bytes){
+  directoryEntries(size_t bytes, logger& log)
+    :log(log){
     rawEntries.reserve(bytes);
   }
 
@@ -78,6 +83,8 @@ public:
       if(entrySize + toFill.size() > bytesNeeded){
         break;
       }
+
+      log.writeToLog(Importance::extra, "Returning entry: " + get<0>(tupleEntry) + "\n");
 
       // We know we have enough room, it is now okay to get rid of this entry.
       entries.pop_front();
@@ -119,6 +126,8 @@ private:
     sort(entries.begin(), entries.end(), [](auto& p1, auto& p2) {
         return get<0>(p1) > get<0>(p2);
       });
+
+    
   }
 
   // Turn our entries into a vector of (name, address, byteSize) for easy sorting. Were

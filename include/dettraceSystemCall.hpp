@@ -1092,7 +1092,7 @@ void handleDents(state& s, ptracer& t, scheduler& sched){
     auto msg = "Tracee requested getdents for the first time for fd: %d.\n";
       s.log.writeToLog(Importance::info, msg, fd);
 
-      s.dirEntries.emplace( fd, directoryEntries<linux_dirent>{s.dirEntriesBytes} );
+      s.dirEntries.emplace( fd, directoryEntries<linux_dirent>{s.dirEntriesBytes, s.log} );
   }
 
   // We have read zero bytes. We're done!

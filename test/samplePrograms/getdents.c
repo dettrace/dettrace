@@ -41,7 +41,7 @@ main(int argc, char *argv[])
       break;
 
     printf("--------------- nread=%d ---------------\n", nread);
-    printf("i-node#  file type  d_reclen  d_off   d_name\n");
+    printf("inode#    file type  d_reclen  d_off   d_name\n");
     for (bpos = 0; bpos < nread;) {
       d = (struct linux_dirent *) (buf + bpos);
       printf("%8ld  ", d->d_ino);
