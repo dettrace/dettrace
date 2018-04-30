@@ -54,7 +54,7 @@ void runTracer(int debugLevel, pid_t childPid);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
 void mountDir(string source, string target);
-void setUpContainer(string pathToExe, string pathToChoort, bool userDefinedChroot);
+void setUpContainer(string pathToExe, string pathToChroot, bool userDefinedChroot);
 void mkdirIfNotExist(string dir);
 
 // See user_namespaces(7)
@@ -154,7 +154,7 @@ int runTracee(void* voidArgs){
   // Perform execve based on user command.
   ptracer::doPtrace(PTRACE_TRACEME, 0, NULL, NULL);
 
-  // +1 for exectuable's name, +1 for NULL at the end.
+  // +1 for executable's name, +1 for NULL at the end.
   int newArgc = argc - optIndex + 1 + 1;
   char* traceeCommand[newArgc];
 
@@ -189,8 +189,8 @@ int runTracee(void* voidArgs){
   int val = execvpe(traceeCommand[0], traceeCommand, envs);
   if(val == -1){
     if(errno == ENOENT){
-      cerr << "Unable to exec your program. No such exectuable found\n" << endl;
-      cerr << "This program may not exist inside the choort." << endl;
+      cerr << "Unable to exec your program. No such executable found\n" << endl;
+      cerr << "This program may not exist inside the chroot." << endl;
       cerr << "Only programs in bin/ or in this directory tree are mounted." << endl;
     }
     cerr << "Unable to exec your program. Reason:\n  " << string { strerror(errno) } << endl;
@@ -210,13 +210,13 @@ int runTracee(void* voidArgs){
  * Jail our container under chootPath.
  *
  */
-void setUpContainer(string pathToExe, string pathToChoort , bool userDefinedChroot){
-  string buildDir = pathToChoort + "/build/";
+void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChroot){
+  string buildDir = pathToChroot + "/build/";
 
   mkdirIfNotExist(buildDir);
-  mkdirIfNotExist(pathToChoort + "/dettrace/"); // /dettrace directory
-  mkdirIfNotExist(pathToChoort + "/dettrace/lib/"); // /dettrace/lib directory
-  mkdirIfNotExist(pathToChoort + "/dettrace/bin/"); // /dettrace/bin directory
+  mkdirIfNotExist(pathToChroot + "/dettrace/"); // /dettrace directory
+  mkdirIfNotExist(pathToChroot + "/dettrace/lib/"); // /dettrace/lib directory
+  mkdirIfNotExist(pathToChroot + "/dettrace/bin/"); // /dettrace/bin directory
 
   // 1. First we mount cwd in our /build/ directory.
   char* cwdPtr = get_current_dir_name();
@@ -225,8 +225,8 @@ void setUpContainer(string pathToExe, string pathToChoort , bool userDefinedChro
 
   // Mount our dettrace/bin and dettrace/lib folders. The destination is relative
   // as we have already moved into our /bui
-  mountDir(pathToExe + "/../bin/", pathToChoort + "/dettrace/bin/");
-  mountDir(pathToExe + "/../lib/", pathToChoort + "/dettrace/lib/");
+  mountDir(pathToExe + "/../bin/", pathToChroot + "/dettrace/bin/");
+  mountDir(pathToExe + "/../lib/", pathToChroot + "/dettrace/lib/");
 
   // 2. Move over to our build directory! This will make code cleaner as all logic is
   // relative this dir.
