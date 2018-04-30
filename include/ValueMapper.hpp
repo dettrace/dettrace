@@ -8,7 +8,7 @@
  * Simple wrapper around std::map for virtualizing values like inodes.
  * Template parameter T must be an integral type.
  */
-template <class T>
+template <typename Real, typename Virtual>
 class ValueMapper {
 protected:
   // I would ideally like to type alias real values to virtual values from int and have
@@ -16,9 +16,9 @@ protected:
   // that unless I use phantom types and wrapper classes...
 
   // Tables to keep track of mappings.
-  std::map<T, T> virtualToRealValue;
-  std::map<T, T> realToVirtualValue;
-  T freshValue;
+  std::map<Virtual, Real> virtualToRealValue;
+  std::map<Real, Virtual> realToVirtualValue;
+  Virtual freshValue;
   logger& myLogger;
   const std::string mappingName;
 
@@ -39,14 +39,14 @@ public:
    * @param realValue: realValue to add. Assumed to be unique.
    * @return virtualValue: a fresh new virtual value.
    */
-  virtual T addRealValue(T realValue) {
+  virtual Virtual addRealValue(Real realValue) {
     if(realToVirtualValue.find(realValue) != realToVirtualValue.end()){
       throw runtime_error("Attempting to add already existing key: " + to_string(realValue));
     }
     myLogger.writeToLog(Importance::info, "%s: Added mapping %ld -> %ld\n",
                         mappingName.c_str(), realValue, freshValue);
 
-    T vValue = freshValue;
+    Virtual vValue = freshValue;
     realToVirtualValue[realValue] = vValue;
     virtualToRealValue[vValue] = realValue;
     freshValue++;
@@ -59,10 +59,10 @@ public:
    * @param virtualValue: virtual value of process.
    * @return realValue: real value. Throws if it doesn't exist.
    */
-  T getRealValue(T virtualValue) {
+  Real getRealValue(Virtual virtualValue) {
     // does element exist?
     if (virtualToRealValue.find(virtualValue) != virtualToRealValue.end()) {
-      T realValue = virtualToRealValue[virtualValue];
+      Real realValue = virtualToRealValue[virtualValue];
       myLogger.writeToLog(Importance::info, "%s: getRealValue(%ld) = %ld\n", mappingName.c_str(),
                           virtualValue, realValue);
       return realValue;
@@ -77,9 +77,9 @@ public:
    * @param realValue: real value of process.
    * @return virtualValue: real value. Throws if it doesn't exist.
    */
-  T getVirtualValue(T realValue) {
+  Virtual getVirtualValue(Real realValue) {
     if (realToVirtualValue.find(realValue) != realToVirtualValue.end()) {
-      T virtValue = realToVirtualValue[realValue];
+      Virtual virtValue = realToVirtualValue[realValue];
       myLogger.writeToLog(Importance::info, "%s: getVirtualValue(%ld) = %ld\n", mappingName.c_str(),
                           realValue, virtValue);
       return virtValue;
@@ -93,7 +93,7 @@ public:
    * @realValue: real value to check for.
    * @return bool: true if real value already exists in @realToVirtualValue.
    */
-  bool realValueExists(T realValue) {
+  bool realValueExists(Real realValue) {
     bool keyExists = realToVirtualValue.find(realValue) != realToVirtualValue.end();
     return keyExists;
   }
@@ -103,7 +103,7 @@ public:
    * @realValue: virtual value to check for.
    * @return bool: true if virtual value already exists in @virtualToRealValue.
    */
-  bool virtualValueExists(T virtualValue) {
+  bool virtualValueExists(Virtual virtualValue) {
     bool keyExists = virtualToRealValue.find(virtualValue) != virtualToRealValue.end();
     return keyExists;
   }

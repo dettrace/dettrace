@@ -13,7 +13,6 @@
 #include "ValueMapper.hpp"
 #include "systemCall.hpp"
 #include "directoryEntries.hpp"
-#include "mtimeMapper.hpp"
 
 using namespace std;
 
@@ -44,17 +43,14 @@ public:
    * of state.
    * @ppid: Parent pid of this process.
    */
-  state(logger& log, ValueMapper<ino_t>& inodeMap, pid_t myPid, int debugLevel);
+  state(logger& log, ValueMapper<ino_t, ino_t>& inodeMap,
+        ValueMapper<ino_t, time_t>& mtimeMap, pid_t myPid, int debugLevel);
 
   /**
    * Map from file descriptors to directory entries.
    *
    */
   unordered_map<int, directoryEntries<linux_dirent>> dirEntries;
-
-  // Map modified time to a deterministic relative time. See mtimeMapper.hpp
-  // for more information.
-  mtimeMapper mtimeMap;
 
   /**
    * The pid of the process represented by this state.
@@ -70,7 +66,14 @@ public:
   /*
    * Isomorphism between inodes and vitual inodes.
    */
-  ValueMapper<ino_t>& inodeMap;
+  ValueMapper<ino_t, ino_t>& inodeMap;
+
+  /*
+   * Tracker of mtimes.
+   */
+  ValueMapper<ino_t, time_t>& mtimeMap;
+
+
   logger log;
 
   /**
@@ -85,6 +88,13 @@ public:
   struct user_regs_struct beforeRetry = {0};
   uint64_t totalBytes = 0;
   bool firstTryReadWrite = true;
+
+  // For deterministic modified times we inject fstat system calls, this variable lets
+  // fstat know if it is in this event.
+  bool fstatMtimeInjection = false;
+
+  // Our old values before post hook, for simple restoring of the user's register state.
+  struct user_regs_struct prevRegisterState = {0};
 
   /**
    * Original register arguments before we modified them. We need to restore them at the

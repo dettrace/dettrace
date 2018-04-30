@@ -20,10 +20,11 @@ execution::execution(int debugLevel, pid_t startingPid):
   // Waits for first process to be ready!
   tracer{startingPid},
   inodeMap{log, "inode map"},
+  mtimeMap{log, "mtime map"},
   myScheduler{startingPid, log},
   debugLevel {debugLevel}{
     // Set state for first process.
-    states.emplace(startingPid, state {log, inodeMap, startingPid, debugLevel});
+    states.emplace(startingPid, state {log, inodeMap, mtimeMap, startingPid, debugLevel});
 
     // First process is special and we must set the options ourselves.
     // This is done everytime a new process is spawned.
@@ -315,7 +316,7 @@ pid_t execution::handleForkEvent(const pid_t traceesPid){
   log.writeToLog(Importance::info,
                  logger::makeTextColored(Color::blue,"Added process [%d] to states map.\n"),
                  newChildPid);
-  states.emplace(newChildPid, state {log, inodeMap,newChildPid, debugLevel} );
+  states.emplace(newChildPid, state {log, inodeMap, mtimeMap, newChildPid, debugLevel} );
 
   // This is where we add new children to our process tree.
   auto pair = make_pair(traceesPid, newChildPid);

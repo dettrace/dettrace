@@ -33,7 +33,7 @@ using namespace std;
 void zeroOutStatfs(struct statfs& stats);
 void handleStatFamily(state& s, ptracer& t, string syscallName);
 void printInfoString(uint64_t addressOfCString, state& s, string postFix = " path: ");
-
+void injectFstat(state& s, ptracer& t, int fd);
 // =======================================================================================
 /**
  *
@@ -105,7 +105,19 @@ void connectSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
 // =======================================================================================
 bool creatSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), s);
-  return false;
+  return true;
+}
+
+void creatSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+  // Nothing for us to do skip the post hook!
+  if((int) t.getReturnValue() < 0){
+    return;
+  }
+
+  // Inject fstat, creat always make a new file with write permissions.
+  s.prevRegisterState = t.getRegs();
+  injectFstat(s, t, t.getReturnValue());
+  return;
 }
 // =======================================================================================
 bool execveSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
@@ -166,7 +178,29 @@ void flistxattrSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched)
 }
 // =======================================================================================
 void fstatSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
-  handleStatFamily(s, t, "fstat");
+
+  // This isn't a natural call fstat from the tracee we injected this call ourselves!
+  if(s.fstatMtimeInjection){
+    s.log.writeToLog(Importance::info, "This fstat was inject for mtime puposes.\n");
+    if((int) t.getReturnValue() < 0){
+      throw runtime_error("Unable to properly inject fstat call to tracee!"
+                          "fstat call returned: " + to_string(t.getReturnValue()) + "\n");
+    }
+    s.fstatMtimeInjection = false;
+    struct stat myStat = ptracer::readFromTracee((struct stat*) t.arg2(), s.traceePid);
+
+    // Add an entry for this new file to our inode with a newer modified date.
+    if( ! s.mtimeMap.realValueExists(myStat.st_ino) ){
+      s.mtimeMap.addRealValue(myStat.st_ino);
+    }
+
+    // Previous state that should have been set by system call that created this fstat
+    // injection.
+    t.setRegs(s.prevRegisterState);
+  }else{
+    handleStatFamily(s, t, "fstat");
+  }
+
   return;
 }
 // =======================================================================================
@@ -457,13 +491,43 @@ void lstatSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
 bool openSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), s);
 
-  return false;
+  return true;
+}
+
+void openSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+  // Nothing for us to do skip the post hook!
+  if((int) t.getReturnValue() < 0){
+    return;
+  }
+
+  s.prevRegisterState = t.getRegs();
+  int flags = t.arg2();
+
+  // Check if this file is modifiable by tracee.
+  if(flags & (O_WRONLY | O_RDWR | O_APPEND | O_TRUNC | O_CREAT)){
+    injectFstat(s, t, t.getReturnValue());
+  }
 }
 // =======================================================================================
 bool openatSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg2(), s);
 
-  return false;
+  return true;
+}
+
+void openatSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+   // Nothing for us to do skip the post hook!
+  if((int) t.getReturnValue() < 0){
+    return;
+  }
+
+  s.prevRegisterState = t.getRegs();
+  int flags = t.arg3();
+
+  // Check if this file is modifiable by tracee.
+  if(flags & (O_WRONLY | O_RDWR | O_APPEND | O_TRUNC | O_CREAT)){
+    injectFstat(s, t, t.getReturnValue());
+  }
 }
 // =======================================================================================
 bool pipeSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
@@ -776,7 +840,7 @@ void timeSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
 // =======================================================================================
 void timesSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   // Failure nothing for us to do.
-  if((int) t.getReturnValue() == -1){
+  if((int) t.getReturnValue() < 0){
     return;
   }
 
@@ -1133,36 +1197,31 @@ void handleStatFamily(state& s, ptracer& t, string syscallName){
   int retVal = t.getReturnValue();
   if(retVal == 0){
     struct stat myStat = ptracer::readFromTracee(statPtr, s.traceePid);
-
-    // Map modified time to a deterministic relative time.
-    // We only care about second precision. Mask our nano seconds.
-    auto realTime = make_pair(myStat.st_mtim.tv_sec, myStat.st_mtim.tv_nsec);
-
-    if( ! s.mtimeMap.realValueExists(realTime) ){
-      s.mtimeMap.addRealValue(realTime);
-    }
-    auto virtualMTime = s.mtimeMap.getVirtualValue(realTime);
+    ino_t inode = myStat.st_ino;
+    // Use inode to check if we created this file during our run.
+    time_t virtualMtime = s.mtimeMap.realValueExists(inode) ?
+      s.mtimeMap.getVirtualValue(inode) :
+      0; // This was an old file that has not been opened for modification.
 
     /* Time of last access */
-    myStat.st_atim = timespec { .tv_sec =  virtualMTime.first,
-                                .tv_nsec = virtualMTime.second };
+    myStat.st_atim = timespec { .tv_sec =  0,
+                                .tv_nsec = 0 };
     /* Time of last modification */
-    myStat.st_mtim = timespec { .tv_sec =  virtualMTime.first,
-                                .tv_nsec = virtualMTime.second };
+    myStat.st_mtim = timespec { .tv_sec =  virtualMtime,
+                                .tv_nsec = 0 };
     /* Time of last status change */
-    myStat.st_ctim = timespec { .tv_sec = virtualMTime.first,
-                                .tv_nsec = virtualMTime.second };
+    myStat.st_ctim = timespec { .tv_sec = 0,
+                                .tv_nsec = 0 };
 
     // TODO: I'm surprised this doesn't break things. I guess nobody uses this
     // result?
     myStat.st_dev = 1;         /* ID of device containing file */
 
     // inode virtualization
-    const ino_t realInodeNum = myStat.st_ino;
-    if( ! s.inodeMap.realValueExists(realInodeNum) ){
-      s.inodeMap.addRealValue(realInodeNum);
+    if( ! s.inodeMap.realValueExists(inode) ){
+      s.inodeMap.addRealValue(inode);
     }
-    myStat.st_ino = s.inodeMap.getVirtualValue(realInodeNum);
+    myStat.st_ino = s.inodeMap.getVirtualValue(inode);
 
     // st_mode holds the permissions to the file. If we zero it out libc functions
     // will think we don't have access to this file. Hence we keep our permissions
@@ -1241,5 +1300,29 @@ void writeVmTracee(void* localMemory, void* traceeMemory, size_t numberOfBytes,
               "process_vm_writev");
 
   return;
+}
+// =======================================================================================
+// Inject fstat system call. struct stat is written belows the stack and can be fetched
+// by ptrace read.
+void injectFstat(state& s, ptracer& t, int fd){
+  s.log.writeToLog(Importance::info, "Injecting fstat call to tracee!\n");
+  // Save current register state to restore in fstat.
+  s.prevRegisterState = t.getRegs();
+
+  // Inject fstat system call to perform!
+  s.fstatMtimeInjection = true;
+
+  uint64_t rsp = t.getRsp();
+  struct stat* traceesMem = (struct stat*) (rsp - 128 - sizeof(struct stat));
+
+  // This does most of the work, but it will try to replay open! Change it to fstat.
+  replaySystemcall(t);
+
+  // This should NOT be moved before "replaySystemCall"!
+  t.writeRax(SYS_fstat);
+  t.writeArg1(fd); // file descriptor.
+  t.writeArg2((uint64_t )traceesMem);
+
+  s.log.writeToLog(Importance::info, "fstat(%d, %p)!\n", fd, traceesMem);
 }
 // =======================================================================================

@@ -55,6 +55,15 @@ uint64_t ptracer::arg6(){
 struct user_regs_struct ptracer::getRegs(){
   return regs;
 }
+
+void ptracer::setRegs(struct user_regs_struct newValues){
+  regs = newValues;
+  // Please note how the memory address is passed in data argument here.
+  // Which I guess sort of makes sense? We are passing data to it?
+  doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
+  return;
+}
+
 uint64_t ptracer::getRip() {
   return regs.rip;
 }

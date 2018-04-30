@@ -26,6 +26,11 @@ void seccomp::loadRules(bool debug){
   // debug purposes!
   noIntercept(SYS_arch_prctl);
   noIntercept(SYS_brk);
+  // Bind seems safe enough to let though, specially since user is stuck in chroot.
+  // There might be some slight issues with permission denied if we set up our
+  // bind mounts wrong and might need to allow for recursive mounting. But it will
+  // be obvious.
+  noIntercept(SYS_bind);
   noIntercept(SYS_chown);
   noIntercept(SYS_lchown);
   noIntercept(SYS_clock_getres);
@@ -109,9 +114,7 @@ void seccomp::loadRules(bool debug){
   // intercept(SYS_alarm);
   intercept(SYS_chdir, debug);
   intercept(SYS_chmod, debug);
-  // creat cannot be made blocking. This is fine as it seems it's only for filesystem
-  // file that live in disk. Which should never block.
-  intercept(SYS_creat, debug);
+  intercept(SYS_creat);
   intercept(SYS_clock_gettime);
   intercept(SYS_close);
   // TODO: This system call
@@ -148,8 +151,8 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_nanosleep);
   intercept(SYS_newfstatat);
   intercept(SYS_lstat);
-  intercept(SYS_open, debug);
-  intercept(SYS_openat, debug);
+  intercept(SYS_open);
+  intercept(SYS_openat);
   // TODO Pipe
   intercept(SYS_pipe);
   intercept(SYS_pipe2);

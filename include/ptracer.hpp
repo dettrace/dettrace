@@ -76,6 +76,9 @@ public:
   uint64_t arg5();
   uint64_t arg6();
   struct user_regs_struct getRegs();
+
+  // Set regs to the values given by passed struct.
+  void setRegs(struct user_regs_struct newValues);
   uint64_t getRip();
   uint64_t getRsp();
 

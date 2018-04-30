@@ -46,7 +46,9 @@ private:
   map<pid_t, state> states;
 
   // Global inode mapper to ensure consistent state among all nodes.
-  ValueMapper<ino_t> inodeMap;
+  ValueMapper<ino_t, ino_t> inodeMap;
+
+  ValueMapper<ino_t, time_t> mtimeMap;
 
   /**
    * Keep track of our children. We can only ever exit once all our children have exited.

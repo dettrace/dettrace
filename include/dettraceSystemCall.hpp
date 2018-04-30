@@ -155,6 +155,7 @@ public:
   using systemCall::systemCall;
 
   bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -529,6 +530,7 @@ public:
   using systemCall::systemCall;
 
   bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -554,6 +556,7 @@ public:
   using systemCall::systemCall;
 
   bool handleDetPre(state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**

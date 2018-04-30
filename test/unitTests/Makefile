@@ -1,7 +1,6 @@
 CXX = g++
-# Using features from the C++17 Standard: pair and pattern matching with auto.
 DEBUG =  -O0 -g
-CXXFLAGS = $(DEBUG) -std=c++1z -Wall $(INCLUDE)
+CXXFLAGS = $(DEBUG) -std=c++14 -Wall $(INCLUDE)
 
 src = $(wildcard *.cpp)
 obj = $(src:.cpp=.o)
