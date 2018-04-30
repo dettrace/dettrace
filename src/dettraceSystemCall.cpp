@@ -288,10 +288,10 @@ void futexSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   return;
 }
 // =======================================================================================
-bool getcwdSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
+void getcwdSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), s);
 
-  return false;
+  return;
 }
 // =======================================================================================
 void getdentsSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
