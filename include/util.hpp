@@ -11,6 +11,7 @@
 
 #include <iostream>
 #include <limits.h>
+#include <sys/uio.h>
 
 using namespace std;
 /*======================================================================================*/
@@ -40,5 +41,14 @@ int parseNum(const char* const numToParse);
  *             "Unable to bind mount cwd");
  */
 int doWithCheck(int returnValue, string errorMessage);
+// =======================================================================================
+// Read bytes from user.
+// Ptrace read is way too slow as it works at word granularity. Time to use
+// process_vm_read!
+void readVmTracee(void* traceeMemory, void* localMemory, size_t numberOfBytes,
+                  pid_t traceePid);
+// =======================================================================================
+void writeVmTracee(void* localMemory, void* traceeMemory, size_t numberOfBytes,
+                   pid_t traceePid);
 // =======================================================================================
 #endif

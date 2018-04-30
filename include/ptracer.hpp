@@ -12,6 +12,7 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <sys/syscall.h>    /* For SYS_write, etc */
+#include <sys/uio.h>
 
 #include <algorithm>
 #include <iostream>
@@ -22,6 +23,8 @@
 #include <experimental/optional>
 #include <memory>
 #include <cstddef>
+
+#include "util.hpp"
 
 using namespace std;
 
@@ -146,33 +149,9 @@ public:
    */
   template<typename T>
   static T readFromTracee(T* sourceAddress, pid_t traceePid){
-    // Value to return.
-    T peekedVal;
-    // 8 byte value to increment as we move up.
-    uint64_t* source = (uint64_t*) sourceAddress;
-    uint64_t* dest = (uint64_t*) &peekedVal;
-    uint32_t bytesTransferred = 0;
-
-    // This will potentially read > bytesToCopy bytes from tracee, but writes only
-    // bytesToCopy bytes to dst.
-    //TODO OSNL: Could this lead to a segfault?
-
-    // Continue reading until we have >= size of T read.
-    while (bytesTransferred < sizeof(T)) {
-
-      long result = ptracer::doPtrace(PTRACE_PEEKDATA, traceePid, source, nullptr);
-
-      // Move over either a word, or the bytes left to complete the struct, whichever
-      // is smaller.
-      memcpy(dest, &result, min(sizeof(T) - bytesTransferred, wordSize));
-      bytesTransferred += wordSize;
-
-      // Pointer arithmetic, move pointers up 8 bytes in memory.
-      dest++;
-      source++;
-    }
-
-    return peekedVal;
+    T myData;
+    readVmTracee(sourceAddress, &myData, sizeof(T), traceePid);
+    return myData;
   }
 
 
@@ -182,43 +161,14 @@ public:
    * @retval str: A Cpp string version of readAddress.
    */
   static string readTraceeCString(const char* source, pid_t traceePid);
+
   /**
    * Write a value
    */
   template<typename T>
   static void writeToTracee(T* writeAddress, T valueToCopy, pid_t traceePid){
-    uint32_t bytesTransferred = 0;
-    // Pointers to increment as we write data. We use these variables as we need to guarantee,
-    // that we move up 8 bytes in memory with each increment.
-    uint64_t* writeAddressP = (uint64_t*) writeAddress;
-    uint64_t* valueToCopyP = (uint64_t*) & valueToCopy;
-
-    // Continue writing until we have transfered >= size of datatype bytes.
-    while (bytesTransferred < sizeof(T)){
-      // Number of bytes left to transfer is greater than or equal to a word.
-      if(sizeof(T) - bytesTransferred >= wordSize){
-	// Ptrace doesn't want a pointer to memory holding the value, it wants thea
-	// value passed as a void pointer! Yuck...
-	ptracer::doPtrace(PTRACE_POKEDATA, traceePid, writeAddressP, (void*)*valueToCopyP);
-	bytesTransferred += wordSize;
-      }
-      // handle final transfer of < wordSize bytes.
-      else {
-	uint32_t bytesLeft = sizeof(T) - bytesTransferred;
-	// read existing memory from tracee
-	long origTraceeMem =
-	  ptracer::doPtrace(PTRACE_PEEKDATA, traceePid, writeAddressP, nullptr);
-	// overwrite the bytes we need to change
-	memcpy(& origTraceeMem, valueToCopyP, bytesLeft);
-	// copy merged result back to tracee
-	ptracer::doPtrace(PTRACE_POKEDATA, traceePid, writeAddressP, (void*) origTraceeMem);
-	bytesTransferred += bytesLeft;
-      }
-
-      writeAddressP++;
-      valueToCopyP++;
-    }
-
+    writeVmTracee(&valueToCopy, writeAddress, sizeof(T), traceePid);
+    
     return;
   }
 

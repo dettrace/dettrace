@@ -1275,33 +1275,6 @@ void printInfoString(uint64_t addressOfCString, state& s, string postFix){
   return;
 }
 // =======================================================================================
-// Read bytes from user.
-// Ptrace read is way too slow as it works at word granularity. Time to use
-// process_vm_read!
-void readVmTracee(void* traceeMemory, void* localMemory, size_t numberOfBytes,
-                  pid_t traceePid){
-  iovec remoteIoVec = {traceeMemory, numberOfBytes};
-  iovec localIoVec = {localMemory, numberOfBytes };
-  const unsigned long flags = 0;
-
-  doWithCheck(process_vm_readv(traceePid, &localIoVec, 1, &remoteIoVec, 1, flags),
-              "process_vm_writev");
-
-  return;
-}
-// =======================================================================================
-void writeVmTracee(void* localMemory, void* traceeMemory, size_t numberOfBytes,
-                  pid_t traceePid){
-  iovec remoteIoVec = {traceeMemory, numberOfBytes};
-  iovec localIoVec = {localMemory, numberOfBytes };
-  const unsigned long flags = 0;
-
-  doWithCheck(process_vm_writev(traceePid, &localIoVec, 1, &remoteIoVec, 1, flags),
-              "process_vm_writev");
-
-  return;
-}
-// =======================================================================================
 // Inject fstat system call. struct stat is written belows the stack and can be fetched
 // by ptrace read.
 void injectFstat(state& s, ptracer& t, int fd){
