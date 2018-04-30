@@ -19,8 +19,8 @@ execution::execution(int debugLevel, pid_t startingPid):
   log {stderr, debugLevel},
   // Waits for first process to be ready!
   tracer{startingPid},
-  inodeMap{log, "inode map"},
-  mtimeMap{log, "mtime map"},
+  inodeMap{log, "inode map", 1},
+  mtimeMap{log, "mtime map", 1},
   myScheduler{startingPid, log},
   debugLevel {debugLevel}{
     // Set state for first process.

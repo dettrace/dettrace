@@ -37,7 +37,9 @@
  */
 
 // TODO: One day, we should unify time.
-time_t libdet_clock = 0;
+// Start at this number to avoid seeing files "in the future", if we were to start at
+// zero.
+time_t libdet_clock = 744847200;
 
 /**
  * The  functions  clock_gettime() retrieve the time of the specified clock clk_id.

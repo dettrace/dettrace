@@ -34,8 +34,10 @@ private:
    * time since we want to present progress.
    * See [[https://github.com/upenn-acg/detTrace/issues/24][Github issue]] for more
    * information.
+   * Start at this number to avoid seeing files "in the future", if we were to start at
+   * zero.
    */
-  size_t clock = 0;
+  size_t clock = 744847200;
 
 public:
   /**

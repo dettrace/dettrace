@@ -28,10 +28,10 @@ public:
    * @myLogger: initialized logger to write data to.
    * @name: name of this mapping for debugging.
    */
-  ValueMapper(logger& logr, std::string name) :
+  ValueMapper(logger& logr, std::string name, Virtual startingValue) :
     myLogger(logr),
     mappingName(name) {
-    freshValue = 1;
+    freshValue = startingValue;
   }
 
   /**
