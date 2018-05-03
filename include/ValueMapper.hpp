@@ -55,7 +55,6 @@ public:
 
   /**
    * Get the real value of a process from our @valueMappingTable based on the virtual value.
-   * OSNL: TODO The virtual value is assumed to exist?
    * @param virtualValue: virtual value of process.
    * @return realValue: real value. Throws if it doesn't exist.
    */
