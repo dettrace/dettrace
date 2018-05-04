@@ -41,10 +41,11 @@ public:
    */
   virtual Virtual addRealValue(Real realValue) {
     if(realToVirtualValue.find(realValue) != realToVirtualValue.end()){
-      throw runtime_error("Attempting to add already existing key: " + to_string(realValue));
+      throw runtime_error("Attempting to add already existing key: " +
+                          to_string(realValue) + "\n");
     }
     myLogger.writeToLog(Importance::info, mappingName + ": Added mapping: " +
-                        to_string(realValue) + " -> " + to_string(freshValue));
+                        to_string(realValue) + " -> " + to_string(freshValue) + "\n");
 
     Virtual vValue = freshValue;
     realToVirtualValue[realValue] = vValue;
