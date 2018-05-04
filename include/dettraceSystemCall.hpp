@@ -1074,6 +1074,32 @@ public:
 };
 
 // =======================================================================================
+template<typename DirEntry>
+void virtualizeEntries(vector<uint8_t>& entries, ValueMapper<ino_t, ino_t>& inodeMap){
+  // Variable size data, we cannot "iterate" over the entries in the array.
+  uint8_t* position = entries.data();
+
+  // Variable size data, we cannot "iterate" over the entries in the array.
+  while(position < entries.data() + entries.size()){
+    DirEntry* currentEntry = (DirEntry*) position;
+    size_t entrySize = currentEntry->d_reclen;
+
+    // Offset values are only meaninful to the filesystem, programs should not be using it.
+    currentEntry->d_off = 0;
+
+    // Virtualize our inode.
+    ino64_t inode = currentEntry->d_ino;
+    if( ! inodeMap.realValueExists(inode) ){
+      inodeMap.addRealValue(inode);
+    }
+    currentEntry->d_ino = inodeMap.getVirtualValue(inode);
+
+    // Next entry...
+    position += entrySize;
+  }
+}
+
+// =======================================================================================
 template <typename T>
 void handleDents(state& s, ptracer& t, scheduler& sched){
   // Error, return system call to tracee.
@@ -1103,7 +1129,9 @@ void handleDents(state& s, ptracer& t, scheduler& sched){
     // We want to fill up to traceeBufferSize which is the size the tracee originally
     // asked for.
 
-    vector<int8_t> filledVector = s.dirEntries.at(fd).getSortedEntries(traceeBufferSize);
+    vector<uint8_t> filledVector = s.dirEntries.at(fd).getSortedEntries(traceeBufferSize);
+    virtualizeEntries<T>(filledVector, s.inodeMap);
+
     s.log.writeToLog(Importance::info, "Returning %d bytes!\n", filledVector.size());
 
     // Write entry back to tracee!

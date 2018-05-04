@@ -61,8 +61,8 @@ public:
   // entries as possible.
   // This operation consumes the previous entries so subsequent calls with same
   // argument will return new entries.
-  vector<int8_t> getSortedEntries(size_t bytesNeeded){
-    vector<int8_t> toFill {};
+  vector<uint8_t> getSortedEntries(size_t bytesNeeded){
+    vector<uint8_t> toFill {};
 
     if(!sorted){
       sorted = true;
@@ -126,8 +126,6 @@ private:
     sort(entries.begin(), entries.end(), [](auto& p1, auto& p2) {
         return get<0>(p1) > get<0>(p2);
       });
-
-    
   }
 
   // Turn our entries into a vector of (name, address, byteSize) for easy sorting. Were
