@@ -201,6 +201,11 @@ void ptracer::writeArg4(uint64_t val){
   doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
 }
 
+void ptracer::writeArg5(uint64_t val){
+  regs.r8 = val;
+  doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
+}
+
 void ptracer::writeIp(uint64_t val) {
   regs.rip = val;
   doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);

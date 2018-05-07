@@ -94,6 +94,7 @@ public:
   void writeArg2(uint64_t val);
   void writeArg3(uint64_t val);
   void writeArg4(uint64_t val);
+  void writeArg5(uint64_t val);
   void writeIp(uint64_t val);
   void writeRax(uint64_t val);
  /**

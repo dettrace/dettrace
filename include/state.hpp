@@ -106,6 +106,7 @@ public:
   uint64_t originalArg2 = 0;
   uint64_t originalArg3 = 0;
   uint64_t originalArg4 = 0;
+  uint64_t originalArg5 = 0;
 
   /**
    * Debug level. Mainly used by the dettraceSytemCall classes to avoid doing unnecesary

@@ -723,11 +723,33 @@ void sendtoSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
 }
 // =======================================================================================
 bool selectSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
+  // Set the timeout to zero.
+  timespec* timeoutPtr = (timespec*) t.arg4();
+  s.originalArg5 = (uint64_t) timeoutPtr;
+  timespec ourTimeout = {0};
+
+  if(timeoutPtr == nullptr){
+    // Has to be created in memory.
+    uint64_t rsp = t.getRsp();
+    timespec* newAddr = (timespec*) (rsp - 128 - sizeof(struct timespec));
+    ptracer::writeToTracee(newAddr, ourTimeout, s.traceePid);
+    t.writeArg5((uint64_t) newAddr);
+  }else{
+    // Already exists in memory.
+    timespec timeout = ptracer::readFromTracee(timeoutPtr, t.getPid());
+    ptracer::writeToTracee(timeoutPtr, ourTimeout, s.traceePid);
+  }
+
   return true;
 }
 
 void selectSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
-  return;
+  uint64_t retVal = t.getReturnValue();
+  if (retVal == 0){
+    replaySyscallIfBlocked(s, t, sched, 0);
+  }else{
+    return;
+  } 
 }
 // =======================================================================================
 // TODO
