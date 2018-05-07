@@ -1088,12 +1088,11 @@ void virtualizeEntries(vector<uint8_t>& entries, ValueMapper<ino_t, ino_t>& inod
     currentEntry->d_off = 0;
 
     // Virtualize our inode.
-    // ino64_t inode = currentEntry->d_ino;
-    currentEntry->d_ino = 0;
-    // if( ! inodeMap.realValueExists(inode) ){
-      // inodeMap.addRealValue(inode);
-    // }
-    // currentEntry->d_ino = inodeMap.getVirtualValue(inode);
+    ino64_t inode = currentEntry->d_ino;
+    if( ! inodeMap.realValueExists(inode) ){
+      inodeMap.addRealValue(inode);
+    }
+    currentEntry->d_ino = inodeMap.getVirtualValue(inode);
 
     // Next entry...
     position += entrySize;
