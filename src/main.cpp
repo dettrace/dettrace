@@ -48,9 +48,9 @@
 
 using namespace std;
 // =======================================================================================
-tuple<int, int, string, bool> parseProgramArguments(int argc, char* argv[]);
+tuple<int, int, string, bool, bool> parseProgramArguments(int argc, char* argv[]);
 int runTracee(void* args);
-void runTracer(int debugLevel, pid_t childPid);
+void runTracer(int debugLevel, pid_t childPid, bool useUserNamespace);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
 void mountDir(string source, string target);
@@ -58,8 +58,8 @@ void setUpContainer(string pathToExe, string pathToChroot, bool userDefinedChroo
 void mkdirIfNotExist(string dir);
 
 // See user_namespaces(7)
-static void update_map(char *mapping, char *map_file);
-static void proc_setgroups_write(pid_t child_pid, const char *str);
+static void update_map(char* mapping, char* map_file);
+static void proc_setgroups_write(pid_t child_pid, const char* str);
 // =======================================================================================
 struct childArgs{
   int optIndex;
@@ -78,7 +78,10 @@ struct childArgs{
 int main(int argc, char** argv){
   int optIndex, debugLevel;
   string path; bool useContainer;
-  tie(optIndex, debugLevel, path, useContainer) = parseProgramArguments(argc, argv);
+  bool useUserNamespace;
+  tie(optIndex, debugLevel, path, useContainer, useUserNamespace) =
+    parseProgramArguments(argc, argv);
+
 
   // Check for debug enviornment variable.
   char* debugEnvvar = secure_getenv("dettraceDebug");
@@ -89,7 +92,6 @@ int main(int argc, char** argv){
     }catch (...){
       throw runtime_error("Invalid integer: " + str);
     }
-
 
     if(debugLevel < 0 || debugLevel > 5){
       throw runtime_error("Debug level must be between [0,5].");
@@ -111,16 +113,27 @@ int main(int argc, char** argv){
   args.path = path;
   args.useContainer = useContainer;
 
-  pid_t pid = doWithCheck(clone(runTracee, child_stack + STACK_SIZE,
-				SIGCHLD |      // Alert parent of child signals?
-				CLONE_NEWUSER| // Our own user namespace.
-				CLONE_NEWPID | // Our own pid namespace.
-				CLONE_NEWNS,  // Our own mount namespace
-				(void*) &args),
-			  "clone");
+  int cloneFlags =
+    SIGCHLD |      // Alert parent of child signals?
+    CLONE_NEWUSER | // Our own user namespace.
+    CLONE_NEWPID | // Our own pid namespace.
+    CLONE_NEWNS;  // Our own mount namespace
+  if(!useUserNamespace){
+    cloneFlags &= ~CLONE_NEWUSER;
+  }
+
+  pid_t pid = clone(runTracee, child_stack + STACK_SIZE, cloneFlags, (void*) &args);
+  if(pid == -1){
+    string reason = strerror(errno);
+    cerr << "clone failed:\n  " + reason << endl;
+    if(! useUserNamespace){
+      cerr << "You must have CAP_SYS_ADMIN if you do not want a user namespace." << endl;
+      return 1;
+    }
+  }
 
   // Parent falls through.
-  runTracer(debugLevel, pid);
+  runTracer(debugLevel, pid, useUserNamespace);
 
   return 0;
 }
@@ -245,8 +258,7 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
   }
 
   // Proc is special, we mount a new proc dir.
-  char* none = "none"; // Hack so valgrind doesn't complain.
-  doWithCheck(mount("/proc", "../proc/", "proc", MS_MGC_VAL, none),
+  doWithCheck(mount("/proc", "../proc/", "proc", MS_MGC_VAL, nullptr),
 	      "Mounting proc failed");
 
   // Chroot our process!
@@ -262,31 +274,32 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
  * sequentially.
  *
  */
-void runTracer(int debugLevel, pid_t startingPid){
-  // This is modified code from user_namespaces(7)
+void runTracer(int debugLevel, pid_t startingPid, bool useUserNamespace){
+  if(useUserNamespace){
+    // This is modified code from user_namespaces(7)
+    /* Update the UID and GID maps in the child */
+    char map_path[PATH_MAX];
+    const int MAP_BUF_SIZE = 100;
+    char map_buf[MAP_BUF_SIZE];
+    char* uid_map;
+    char* gid_map;
+    snprintf(map_path, PATH_MAX, "/proc/%ld/uid_map", (long) startingPid);
 
-  /* Update the UID and GID maps in the child */
-  char map_path[PATH_MAX];
-  const int MAP_BUF_SIZE = 100;
-  char map_buf[MAP_BUF_SIZE];
-  char* uid_map;
-  char* gid_map;
-  snprintf(map_path, PATH_MAX, "/proc/%ld/uid_map", (long) startingPid);
+    snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long) getuid());
+    uid_map = map_buf;
 
-  snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long) getuid());
-  uid_map = map_buf;
+    update_map(uid_map, map_path);
 
-  update_map(uid_map, map_path);
+    // Set GID Map
+    string deny = "deny";
+    proc_setgroups_write(startingPid, deny.c_str());
 
-  // Set GID Map
-  string deny = "deny";
-  proc_setgroups_write(startingPid, deny.c_str());
+    snprintf(map_path, PATH_MAX, "/proc/%ld/gid_map", (long) startingPid);
+    snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long) getgid());
+    gid_map = map_buf;
 
-  snprintf(map_path, PATH_MAX, "/proc/%ld/gid_map", (long) startingPid);
-  snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long) getgid());
-  gid_map = map_buf;
-
-  update_map(gid_map, map_path);
+    update_map(gid_map, map_path);
+  }
 
   // Init tracer and execution context.
   execution exe {debugLevel, startingPid};
@@ -300,20 +313,22 @@ void runTracer(int debugLevel, pid_t startingPid){
  * @param string: Either a user specified chroot path or none.
  * @return (index, debugLevel)
  */
-tuple<int, int, string, bool> parseProgramArguments(int argc, char* argv[]){
-  string usageMsg =
-    "./detTrace [--debug <debugLevel> | --help | --chroot <pathToRoot> | --nocontainer] ./exe [exeCmdArgs]";
+tuple<int, int, string, bool, bool> parseProgramArguments(int argc, char* argv[]){
+  string usageMsg = "./detTrace [--debug <debugLevel> | --help | --chroot <pathToRoot> |"
+    " --no-container | --no-user-namespace (implies no-container)] ./exe [exeCmdArgs]";
   int debugLevel = 0;
   string exePlusArgs;
   string pathToChroot = "";
   bool useContainer = true;
+  bool useUserNamespace = true;
 
   // Command line options for our program.
   static struct option programOptions[] = {
     {"debug" , required_argument,  0, 'd'},
     {"help"  , no_argument,        0, 'h'},
     {"chroot", required_argument,  0, 'c'},
-    {"nocontainer", no_argument, 0, 'n'},
+    {"no-container", no_argument, 0, 'n'},
+    {"no-user-namespace", no_argument, 0, 'u'},
     {0,        0,                  0, 0}    // Last must be filled with 0's.
   };
 
@@ -345,11 +360,15 @@ tuple<int, int, string, bool> parseProgramArguments(int argc, char* argv[]){
     case 'n':
       useContainer = false;
       break;
+    case 'u':
+      useUserNamespace = false;
+      useContainer = false;
+      break;
     case '?':
       throw runtime_error("Invalid option passed to detTrace!");
     }
-
   }
+
   // User did not pass exe arguments:
   if(argv[optind] == NULL){
     fprintf(stderr, "Missing arguments to dettrace!\n");
@@ -357,7 +376,7 @@ tuple<int, int, string, bool> parseProgramArguments(int argc, char* argv[]){
     exit(1);
   }
 
-  return make_tuple(optind, debugLevel, pathToChroot, useContainer);
+  return make_tuple(optind, debugLevel, pathToChroot, useContainer, useUserNamespace);
 }
 // =======================================================================================
 /**
