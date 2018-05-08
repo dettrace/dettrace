@@ -174,7 +174,7 @@ fuse-%.ok: fuse-% partialfs
 	@echo "   Testing $<..."
 	@truncate --size=0 $(FUSE_FILE)
 	@./partialfs -o direct_io $(FUSE_FILE) # launch FUSE filesystem
-	@../../bin/dettrace --nocontainer ./$< $(FUSE_FILE) > ActualOutputs/$<.output
+	@../../bin/dettrace --no-container ./$< $(FUSE_FILE) > ActualOutputs/$<.output
 	@fusermount -q -u $(FUSE_FILE) # tear down FUSE filesystem
 	@$(DIFF_CMD) ActualOutputs/$<.output ExpectedOutputs/$<.output
 
