@@ -244,11 +244,9 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
     mountDir("/etc/ld.so.cache", "../etc/ld.so.cache");
   }
 
-  // Proc is special, we mount a new proc dir.
-  char* none = "none"; // Hack so valgrind doesn't complain.
-  doWithCheck(mount("/proc", "../proc/", "proc", MS_MGC_VAL, none),
-	      "Mounting proc failed");
-
+  doWithCheck(mount("/proc", "../proc/", "proc", MS_MGC_VAL, nullptr),
+               "Mounting proc failed");
+  
   // Chroot our process!
   doWithCheck(chroot("../"), "Failed to chroot");
 
