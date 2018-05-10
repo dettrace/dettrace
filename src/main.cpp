@@ -50,7 +50,7 @@ using namespace std;
 // =======================================================================================
 tuple<int, int, string, bool, bool> parseProgramArguments(int argc, char* argv[]);
 int runTracee(void* args);
-void runTracer(int debugLevel, pid_t childPid, bool useUserNamespace);
+void runTracer(int debugLevel, pid_t childPid, bool inSchroot);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
 void mountDir(string source, string target);
@@ -78,8 +78,8 @@ struct childArgs{
 int main(int argc, char** argv){
   int optIndex, debugLevel;
   string path; bool useContainer;
-  bool useUserNamespace;
-  tie(optIndex, debugLevel, path, useContainer, useUserNamespace) =
+  bool inSchroot;
+  tie(optIndex, debugLevel, path, useContainer, inSchroot) =
     parseProgramArguments(argc, argv);
 
 
@@ -118,7 +118,8 @@ int main(int argc, char** argv){
     CLONE_NEWUSER | // Our own user namespace.
     CLONE_NEWPID | // Our own pid namespace.
     CLONE_NEWNS;  // Our own mount namespace
-  if(!useUserNamespace){
+  // user namespaces do not work inside chroot!
+  if(inSchroot){
     cloneFlags &= ~CLONE_NEWUSER;
   }
 
@@ -126,14 +127,14 @@ int main(int argc, char** argv){
   if(pid == -1){
     string reason = strerror(errno);
     cerr << "clone failed:\n  " + reason << endl;
-    if(! useUserNamespace){
-      cerr << "You must have CAP_SYS_ADMIN if you do not want a user namespace." << endl;
+    if(inSchroot){
+      cerr << "You must have CAP_SYS_ADMIN to work inside schroot." << endl;
       return 1;
     }
   }
 
   // Parent falls through.
-  runTracer(debugLevel, pid, useUserNamespace);
+  runTracer(debugLevel, pid, inSchroot);
 
   return 0;
 }
@@ -156,6 +157,7 @@ int runTracee(void* voidArgs){
   string pathToExe{ dirname(argv0) };
 
   if(useContainer){
+    // "" is our poor man's option type since we're using C++14.
     if(path != ""){
       setUpContainer(pathToExe, path, true);
     }else{
@@ -274,8 +276,8 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
  * sequentially.
  *
  */
-void runTracer(int debugLevel, pid_t startingPid, bool useUserNamespace){
-  if(useUserNamespace){
+void runTracer(int debugLevel, pid_t startingPid, bool inSchroot){
+  if(!inSchroot){
     // This is modified code from user_namespaces(7)
     /* Update the UID and GID maps in the child */
     char map_path[PATH_MAX];
@@ -315,12 +317,12 @@ void runTracer(int debugLevel, pid_t startingPid, bool useUserNamespace){
  */
 tuple<int, int, string, bool, bool> parseProgramArguments(int argc, char* argv[]){
   string usageMsg = "./detTrace [--debug <debugLevel> | --help | --chroot <pathToRoot> |"
-    " --no-container | --no-user-namespace (implies no-container)] ./exe [exeCmdArgs]";
+    " --no-container | --in-schroot] ./exe [exeCmdArgs]";
   int debugLevel = 0;
   string exePlusArgs;
   string pathToChroot = "";
   bool useContainer = true;
-  bool useUserNamespace = true;
+  bool inSchroot = false;
 
   // Command line options for our program.
   static struct option programOptions[] = {
@@ -328,7 +330,7 @@ tuple<int, int, string, bool, bool> parseProgramArguments(int argc, char* argv[]
     {"help"  , no_argument,        0, 'h'},
     {"chroot", required_argument,  0, 'c'},
     {"no-container", no_argument, 0, 'n'},
-    {"no-user-namespace", no_argument, 0, 'u'},
+    {"in-schroot", no_argument, 0, 'i'},
     {0,        0,                  0, 0}    // Last must be filled with 0's.
   };
 
@@ -360,9 +362,8 @@ tuple<int, int, string, bool, bool> parseProgramArguments(int argc, char* argv[]
     case 'n':
       useContainer = false;
       break;
-    case 'u':
-      useUserNamespace = false;
-      useContainer = false;
+    case 'i':
+      inSchroot = true;
       break;
     case '?':
       throw runtime_error("Invalid option passed to detTrace!");
@@ -376,7 +377,7 @@ tuple<int, int, string, bool, bool> parseProgramArguments(int argc, char* argv[]
     exit(1);
   }
 
-  return make_tuple(optind, debugLevel, pathToChroot, useContainer, useUserNamespace);
+  return make_tuple(optind, debugLevel, pathToChroot, useContainer, inSchroot);
 }
 // =======================================================================================
 /**

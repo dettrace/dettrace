@@ -723,7 +723,9 @@ void sendtoSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
 }
 // =======================================================================================
 bool selectSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
-  
+  // Nothing to do for now. (Until fixed)
+  return false;
+
 	static bool first = true;
 	// Set the timeout to zero.
   timespec* timeoutPtr = (timespec*) t.arg5();
