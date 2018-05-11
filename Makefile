@@ -6,6 +6,11 @@ build:
 	cp src/dettrace bin/
 	cp src/libdet.so lib/
 
+static:
+	cd src && ${MAKE} all-static
+	cp src/dettrace-static bin/dettrace
+	cp src/libdet.so lib/
+
 tests: run-tests
 
 build-tests:

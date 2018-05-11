@@ -1,7 +1,7 @@
 CXX = g++
 CC= gcc
 
-DEBUG =  -O0 -g
+DEBUG =  -O3 -g
 CXXFLAGS = $(DEBUG) -std=c++14 -Wall $(INCLUDE)
 CFLAGS = $(DEBUG) -Wall -Wshadow $(INCLUDE)
 LIBS = -pthread -lseccomp -L ../lib/lib64
@@ -17,9 +17,13 @@ obj = $(src:.cpp=.o)
 dep = $(obj:.o=.d)
 
 all: dettrace libdet.so
+all-static: dettrace-static libdet.so
 
 dettrace: $(obj) $(libs)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS)
+
+dettrace-static: $(obj) $(libs)
+	$(CXX) $(CXXFLAGS) -static $^ -o $@ $(LIBS)
 
 -include $(dep)
 
