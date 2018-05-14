@@ -15,8 +15,9 @@
 
 pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process);
 // =======================================================================================
-execution::execution(int debugLevel, pid_t startingPid):
-  log {stderr, debugLevel},
+execution::execution(int debugLevel, pid_t startingPid, bool useColor):
+  log {stderr, debugLevel, useColor},
+  silentLogger {stderr, 0},
   // Waits for first process to be ready!
   tracer{startingPid},
   // Create our global state once, share across class.
@@ -25,10 +26,11 @@ execution::execution(int debugLevel, pid_t startingPid):
     ValueMapper<ino_t, ino_t> {log, "inode map", 1},
     ValueMapper<ino_t, time_t> {log, "mtime map", 1}
   },
-
-  myScheduler{startingPid, log},
+  pidMap {silentLogger, "pid map", 1},
+  myScheduler {startingPid, log, pidMap},
   debugLevel {debugLevel}{
     // Set state for first process.
+    pidMap.addRealValue(startingPid);
     states.emplace(startingPid, state {startingPid, debugLevel});
 
     // First process is special and we must set the options ourselves.
@@ -39,9 +41,9 @@ execution::execution(int debugLevel, pid_t startingPid):
 // Notice a ptrace::nonEventExit gets us here. We only receive this event once our own
 // children have all finished.
 bool execution::handleExit(const pid_t traceesPid){
-  auto msg = logger::makeTextColored(Color::blue, "Process [%d] has completely  finished."
+  auto msg = log.makeTextColored(Color::blue, "Process [%d] has completely  finished."
                                      " (ptrace nonEventExit).\n");
-  log.writeToLog(Importance::inter, msg, traceesPid);
+  log.writeToLog(Importance::inter, msg, pidMap.getVirtualValue(traceesPid));
 
   // We are done. Erase ourselves from our parent's list of children.
   pid_t parent = eraseChildEntry(processTree, traceesPid);
@@ -77,10 +79,10 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
 
   // Print!
   string systemCall = currState.systemcall->syscallName;
-  string redColoredSyscall = logger::makeTextColored(Color::red, systemCall);
-  log.writeToLog(Importance::inter,"[Time %d][Pid %d] Intercepted %s (#%d)\n",
-                 currState.getLogicalTime(), traceesPid, redColoredSyscall.c_str(),
-                 syscallNum);
+  string redColoredSyscall = log.makeTextColored(Color::red, systemCall);
+  auto virtualPid = pidMap.getVirtualValue(traceesPid);
+  log.writeToLog(Importance::inter,"[Pid %d] Intercepted %s\n", virtualPid,
+                 redColoredSyscall.c_str());
   log.setPadding();
 
   bool callPostHook =
@@ -114,7 +116,6 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
     // This event is known to be either a fork/vfork event or a signal. We check this
     // in handleFork.
     tie(e, newPid, status) = getNextEvent(traceesPid, false);
-    // log.writeToLog(Importance::info, "Event: %s\nnewPid: %d\n", , newPid);
     handleFork(e, newPid);
 
     // This was a fork, vfork, or clone. No need to go into the post-interception hook.
@@ -165,6 +166,7 @@ void execution::runProgram(){
     pid_t traceesPid;
     ptraceEvent ret;
     tie(ret, traceesPid, status) = getNextEvent(myScheduler.getNext(), callPostHook);
+    auto virtualPid = pidMap.getVirtualValue(traceesPid);
 
     // Most common event. Basically, only system calls that must be determinized
     // come here, we run the pre-systemCall hook.
@@ -200,8 +202,8 @@ void execution::runProgram(){
       // in handleExit (see function definition above) so we do not support it for now.
       // throw runtime_error("Process terminated by signal. We currently do not support this.");
       auto msg =
-        logger::makeTextColored(Color::blue, "Process [%d] ended by signal %d.\n");
-      log.writeToLog(Importance::inter, msg, traceesPid, WTERMSIG(status));
+        log.makeTextColored(Color::blue, "Process [%d] ended by signal %d.\n");
+      log.writeToLog(Importance::inter, msg, virtualPid, WTERMSIG(status));
       exitLoop = handleExit(traceesPid);
       continue;
     }
@@ -218,9 +220,9 @@ void execution::runProgram(){
     // Therefore we keep track of the process hierachy and only wait for the
     // evenExit when our children have exited.
     if(ret == ptraceEvent::eventExit){
-      auto msg = logger::makeTextColored(Color::blue, "Process [%d] has finished. "
+      auto msg = log.makeTextColored(Color::blue, "Process [%d] has finished. "
                                          "With ptrace exit event.\n");
-      log.writeToLog(Importance::inter, msg, traceesPid);
+      log.writeToLog(Importance::inter, msg, virtualPid);
       callPostHook = false;
 
       // We get to an exit if we made progress, report this.
@@ -275,7 +277,7 @@ void execution::runProgram(){
   }
 
   auto msg =
-    logger::makeTextColored(Color::blue, "All processes done. Finished successfully!\n");
+    log.makeTextColored(Color::blue, "All processes done. Finished successfully!\n");
   log.writeToLog(Importance::info, msg);
 }
 // =======================================================================================
@@ -287,8 +289,8 @@ void execution::handleFork(ptraceEvent event, const pid_t traceesPid){
     handleForkEvent(traceesPid);
 
     // Wait for child to be ready.
-    log.writeToLog(Importance::info, logger::makeTextColored(Color::blue,
-                                                             "Waiting for child to be ready for tracing...\n"));
+    log.writeToLog(Importance::info, log.makeTextColored(Color::blue,
+                   "Waiting for child to be ready for tracing...\n"));
     int status;
     int newChildPid = myScheduler.getNext();
     int retPid = doWithCheck(waitpid(-1, &status, 0), "waitpid");
@@ -298,7 +300,7 @@ void execution::handleFork(ptraceEvent event, const pid_t traceesPid){
       throw runtime_error("wait call return pid does not match new child's pid.");
     }
     log.writeToLog(Importance::info,
-                   logger::makeTextColored(Color::blue, "Child ready: %d\n"), retPid);
+                   log.makeTextColored(Color::blue, "Child ready!\n"));
   }else{
     if(event != ptraceEvent::signal){
       throw runtime_error("Expected signal after fork/vfork event!");
@@ -312,18 +314,20 @@ void execution::handleFork(ptraceEvent event, const pid_t traceesPid){
 }
 // =======================================================================================
 pid_t execution::handleForkEvent(const pid_t traceesPid){
-  log.writeToLog(Importance::inter, logger::makeTextColored(Color::blue,
-                                                            "[%d] Fork event came before signal!\n"), traceesPid);
+  log.writeToLog(Importance::inter, log.makeTextColored(Color::blue,
+                 "Fork event came before signal!\n"));
 
   pid_t newChildPid = tracer.getEventMessage();
-  // Tracee just had a child! It's a parent!
-  myScheduler.addAndScheduleNext(newChildPid);
 
   // Add this new process to our states.
-  log.writeToLog(Importance::info,
-                 logger::makeTextColored(Color::blue,"Added process [%d] to states map.\n"),
-                 newChildPid);
+  auto virtualPid = pidMap.addRealValue(newChildPid);
   states.emplace(newChildPid, state {newChildPid, debugLevel} );
+  log.writeToLog(Importance::info,
+                 log.makeTextColored(Color::blue,"Added process [%d] to states map.\n"),
+                 virtualPid);
+
+  // Tracee just had a child! It's a parent!
+  myScheduler.addAndScheduleNext(newChildPid);
 
   // This is where we add new children to our process tree.
   auto pair = make_pair(traceesPid, newChildPid);
@@ -333,10 +337,9 @@ pid_t execution::handleForkEvent(const pid_t traceesPid){
 }
 // =======================================================================================
 void execution::handleForkSignal(const pid_t traceesPid){
-  log.writeToLog(Importance::info,
-                 logger::makeTextColored(Color::blue,
-                                         "[%d] Child fork signal-stop came before fork event.\n"),
-                 traceesPid);
+  log.writeToLog(Importance::info, log.makeTextColored(Color::blue,
+                 "Child fork signal-stop came before fork event.\n"));
+
   int status;
   // Intercept any system call.
   // This should really be the parents pid. which we don't have readily avaliable.
@@ -352,8 +355,8 @@ void execution::handleForkSignal(const pid_t traceesPid){
 void execution::handleClone(const pid_t traceesPid){
   // Nothing to do for now...
   log.writeToLog(Importance::inter,
-                 logger::makeTextColored(Color::blue, "[%d] caught clone event!\n"),
-                 traceesPid);
+                 log.makeTextColored(Color::blue, "[%d] caught clone event!\n"),
+                 pidMap.getVirtualValue(traceesPid));
   return;
 }
 // =======================================================================================
@@ -361,8 +364,8 @@ void execution::handleExecve(const pid_t traceesPid){
   // Nothing to do for now... New process is already automatically ptraced by
   // our tracer.
   log.writeToLog(Importance::inter,
-                 logger::makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
-                 traceesPid);
+                 log.makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
+                 pidMap.getVirtualValue(traceesPid));
   return;
 }
 // =======================================================================================
@@ -383,7 +386,6 @@ bool execution::handleSeccomp(const pid_t traceesPid){
 
   // TODO: Right now we update this information on every exit and entrance, as a
   // small optimization we might not want to...
-
   // Get registers from tracee.
   tracer.updateState(traceesPid);
   return handlePreSystemCall( states.at(traceesPid), traceesPid );
@@ -397,8 +399,9 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
   // getNextEvent.
   states.at(traceesPid).signalToDeliver = sigNum;
   auto msg = "[%d] Tracer: Received signal: %d. Forwading signal to tracee.\n";
-  auto coloredMsg = logger::makeTextColored(Color::blue, msg);
-  log.writeToLog(Importance::inter, coloredMsg, traceesPid, sigNum);
+  auto coloredMsg = log.makeTextColored(Color::blue, msg);
+  auto virtualPid = pidMap.getVirtualValue(traceesPid);
+  log.writeToLog(Importance::inter, coloredMsg, virtualPid, sigNum);
   return;
 }
 // =======================================================================================
@@ -586,25 +589,25 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
 ptraceEvent execution::getPtraceEvent(const int status){
   // Check if tracee has exited.
   if (WIFEXITED(status)){
-    log.writeToLog(Importance::extra, "nonEventExit\n");
+    // log.writeToLog(Importance::extra, "nonEventExit\n");
     return ptraceEvent::nonEventExit;
   }
 
   // Condition for PTRACE_O_TRACEEXEC
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_EXEC) ){
-    log.writeToLog(Importance::extra, "exec\n");
+    // log.writeToLog(Importance::extra, "exec\n");
     return ptraceEvent::exec;
   }
 
   // Condition for PTRACE_O_TRACECLONE
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_CLONE) ){
-    log.writeToLog(Importance::extra, "clone\n");
+    // log.writeToLog(Importance::extra, "clone\n");
     return ptraceEvent::clone;
   }
 
   // Condition for PTRACE_O_TRACEVFORK
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_VFORK) ){
-    log.writeToLog(Importance::extra, "vfork\n");
+    // log.writeToLog(Importance::extra, "vfork\n");
     return ptraceEvent::vfork;
   }
 
@@ -612,24 +615,24 @@ ptraceEvent execution::getPtraceEvent(const int status){
   // SIGCHLD, ptrace calls that event a fork *sigh*.
   // Also requires PTRACE_O_FORK flag.
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_FORK) ){
-    log.writeToLog(Importance::extra, "fork\n");
+    // log.writeToLog(Importance::extra, "fork\n");
     return ptraceEvent::fork;
   }
 
 #ifdef PTRACE_EVENT_STOP
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_STOP) ){
-    log.writeToLog(Importance::extra, "event stop\n");
+    // log.writeToLog(Importance::extra, "event stop\n");
     throw runtime_error("Ptrace event stop.\n");
   }
 #endif
 
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_EXIT) ){
-    log.writeToLog(Importance::extra, "event exit\n");
+    // log.writeToLog(Importance::extra, "event exit\n");
     return ptraceEvent::eventExit;
   }
 
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_SECCOMP) ){
-    log.writeToLog(Importance::extra, "event seccomp\n");
+    // log.writeToLog(Importance::extra, "event seccomp\n");
     return ptraceEvent::seccomp;
   }
 
@@ -641,21 +644,21 @@ ptraceEvent execution::getPtraceEvent(const int status){
   // Check if WIFSTOPPED return true,
   // if yes, compare signal number to SIGTRAP | 0x80 (see ptrace(2)).
   if(WIFSTOPPED(status) && (WSTOPSIG(status) == (SIGTRAP | 0x80)) ){
-    log.writeToLog(Importance::extra, "event syscall\n");
+    // log.writeToLog(Importance::extra, "event syscall\n");
     return ptraceEvent::syscall;
   }
 
   // Check if we intercepted a signal before it was delivered to the child.
   // TODO: Currently this is working as a sink for all signals.
   if(WIFSTOPPED(status)){
-    log.writeToLog(Importance::extra, "event signal\n");
+    // log.writeToLog(Importance::extra, "event signal\n");
     return ptraceEvent::signal;
   }
 
   // Check if the child was terminated by a signal. This can happen after when we,
   //the tracer, intercept a signal of the tracee and deliver it.
   if(WIFSIGNALED(status)){
-    log.writeToLog(Importance::extra, "terminated by signal\n");
+    // log.writeToLog(Importance::extra, "terminated by signal\n");
     return ptraceEvent::terminatedBySignal;
   }
 

@@ -35,6 +35,8 @@ class execution{
 private:
   // Logger to write all messages to.
   logger log;
+  // Silent logger used for pidMapper since it expects a log to write to.
+  logger silentLogger;
 
   // Class wrapping ptrace system call in a higher level API.
   ptracer tracer;
@@ -48,6 +50,12 @@ private:
 
   // Global inode mapper to ensure consistent state among all processes.
   globalState myGlobalState;
+
+  // This pid map is purely for debugging puposes. Ptrace does not really know the
+  // virtual pids of the tracee since that's all handled by the kernel, so we keep our
+  // own mapping to be able to deterministically output logging information related
+  // to processes.
+  ValueMapper<pid_t, pid_t> pidMap;
 
   /**
    * Keep track of our children. We can only ever exit once all our children have exited.
@@ -69,7 +77,7 @@ private:
   const int debugLevel;
 
 public:
-  execution(int debugLevel, pid_t startingPid);
+  execution(int debugLevel, pid_t startingPid, bool useColor);
 
   // Processs is done. Remove it from our processHier stack and let parent process run.
   bool handleExit(const pid_t traceesPid);

@@ -142,7 +142,7 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
       execveArgs += " \"" + ptracer::readTraceeCString(address, t.getPid()) + "\" ";
     }
 
-    auto msg = "Args: " + logger::makeTextColored(Color::green, execveArgs) + "\n";
+    auto msg = "Args: " + gs.log.makeTextColored(Color::green, execveArgs) + "\n";
     gs.log.writeToLog(Importance::extra, msg);
   }
 
@@ -1306,7 +1306,7 @@ void printInfoString(uint64_t addressOfCString, globalState& gs, state& s, strin
   if((char*) addressOfCString != nullptr){
     string path = ptracer::readTraceeCString((char*) addressOfCString, s.traceePid);
     string msg = s.systemcall->syscallName + postFix +
-      logger::makeTextColored(Color::green, path) + "\n";
+      gs.log.makeTextColored(Color::green, path) + "\n";
     gs.log.writeToLog(Importance::info, msg);
   }else{
     gs.log.writeToLog(Importance::info, "Null path given to system call.\n");

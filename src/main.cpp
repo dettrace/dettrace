@@ -48,9 +48,9 @@
 
 using namespace std;
 // =======================================================================================
-tuple<int, int, string, bool, bool> parseProgramArguments(int argc, char* argv[]);
+tuple<int, int, string, bool, bool, bool> parseProgramArguments(int argc, char* argv[]);
 int runTracee(void* args);
-void runTracer(int debugLevel, pid_t childPid, bool inSchroot);
+void runTracer(int debugLevel, pid_t childPid, bool inSchroot, bool useColor);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
 void mountDir(string source, string target);
@@ -70,6 +70,29 @@ struct childArgs{
   bool useContainer;
 };
 // =======================================================================================
+
+const string usageMsg =
+  "  Dettrace\n"
+  "\n"
+  "  A container for dynamic determinism enforcement. Arbitrary programs ran inside\n"
+  "  will run deterministically."
+  "\n"
+  "  ./detTrace [optionalArguments] ./exe [exeCmdArgs]\n"
+  "  ./detTrace --help\n"
+  "\n"
+  "  Optional Arguments:\n"
+  "  -d (--debug) <debugLevel>\n"
+  "    Prints log information based on verbosity, useful to debug dettrace errors.\n"
+  "  -c (--chroot) <pathToRoot>\n"
+  "    Specify root to use for chroot (such as one created by debootstrap).\n"
+  "  -n (--no-container)\n"
+  "    Do not use any sort of containerization (May not be deterministic!).\n"
+  "  -i (--in-schroot)\n"
+  "    Use this flag if you're running dettrace inside a schroot. Needed as we're not\n"
+  "    allowed to use user namespaces inside a chroot, which is what schroot uses.\n"
+  "  -r (--no-color)\n"
+  "    Do not use colored output for log. Useful when piping log to a file.\n";
+
 /**
  * Given a program through the command line, spawn a child thread, call PTRACEME and exec
  * the given program. The parent will use ptrace to intercept and determinize the through
@@ -78,10 +101,9 @@ struct childArgs{
 int main(int argc, char** argv){
   int optIndex, debugLevel;
   string path; bool useContainer;
-  bool inSchroot;
-  tie(optIndex, debugLevel, path, useContainer, inSchroot) =
+  bool inSchroot, useColor;
+  tie(optIndex, debugLevel, path, useContainer, inSchroot, useColor) =
     parseProgramArguments(argc, argv);
-
 
   // Check for debug enviornment variable.
   char* debugEnvvar = secure_getenv("dettraceDebug");
@@ -134,7 +156,7 @@ int main(int argc, char** argv){
   }
 
   // Parent falls through.
-  runTracer(debugLevel, pid, inSchroot);
+  runTracer(debugLevel, pid, inSchroot, useColor);
 
   return 0;
 }
@@ -276,7 +298,7 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
  * sequentially.
  *
  */
-void runTracer(int debugLevel, pid_t startingPid, bool inSchroot){
+void runTracer(int debugLevel, pid_t startingPid, bool inSchroot, bool useColor){
   if(!inSchroot){
     // This is modified code from user_namespaces(7)
     /* Update the UID and GID maps in the child */
@@ -304,7 +326,7 @@ void runTracer(int debugLevel, pid_t startingPid, bool inSchroot){
   }
 
   // Init tracer and execution context.
-  execution exe {debugLevel, startingPid};
+  execution exe {debugLevel, startingPid, useColor};
   exe.runProgram();
 
   return;
@@ -313,16 +335,15 @@ void runTracer(int debugLevel, pid_t startingPid, bool inSchroot){
 /**
  * index is the first index in the argv array containing a non option.
  * @param string: Either a user specified chroot path or none.
- * @return (index, debugLevel)
+ * @return (optind, debugLevel, pathToChroot, useContainer, inSchroot, useColor)
  */
-tuple<int, int, string, bool, bool> parseProgramArguments(int argc, char* argv[]){
-  string usageMsg = "./detTrace [--debug <debugLevel> | --help | --chroot <pathToRoot> |"
-    " --no-container | --in-schroot] ./exe [exeCmdArgs]";
+tuple<int, int, string, bool, bool, bool> parseProgramArguments(int argc, char* argv[]){
   int debugLevel = 0;
   string exePlusArgs;
   string pathToChroot = "";
   bool useContainer = true;
   bool inSchroot = false;
+  bool useColor = true;
 
   // Command line options for our program.
   static struct option programOptions[] = {
@@ -331,6 +352,7 @@ tuple<int, int, string, bool, bool> parseProgramArguments(int argc, char* argv[]
     {"chroot", required_argument,  0, 'c'},
     {"no-container", no_argument, 0, 'n'},
     {"in-schroot", no_argument, 0, 'i'},
+    {"no-color", no_argument, 0, 'r'},
     {0,        0,                  0, 0}    // Last must be filled with 0's.
   };
 
@@ -365,6 +387,9 @@ tuple<int, int, string, bool, bool> parseProgramArguments(int argc, char* argv[]
     case 'i':
       inSchroot = true;
       break;
+    case 'r':
+      useColor = false;
+      break;
     case '?':
       throw runtime_error("Invalid option passed to detTrace!");
     }
@@ -373,11 +398,11 @@ tuple<int, int, string, bool, bool> parseProgramArguments(int argc, char* argv[]
   // User did not pass exe arguments:
   if(argv[optind] == NULL){
     fprintf(stderr, "Missing arguments to dettrace!\n");
-    fprintf(stderr, "%s\n", usageMsg.c_str());
+    fprintf(stderr, "Use --help\n");
     exit(1);
   }
 
-  return make_tuple(optind, debugLevel, pathToChroot, useContainer, inSchroot);
+  return make_tuple(optind, debugLevel, pathToChroot, useContainer, inSchroot, useColor);
 }
 // =======================================================================================
 /**
