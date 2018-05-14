@@ -82,13 +82,15 @@ public:
   /**
    * Return new string meant to be printed in color to terminal.
    */
-  static string makeTextColored(Color color, string text);
+  string makeTextColored(Color color, string text);
 
 private:
   /**
    * C++ makes it a pain to initialize this if it's const...
    */
   const int debugLevel;
+
+
   /**
    * File pointer to write to.
    */

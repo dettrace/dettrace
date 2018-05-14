@@ -9,7 +9,8 @@
 
 #include <deque>
 
-scheduler::scheduler(pid_t startingPid, logger& log):
+scheduler::scheduler(pid_t startingPid, logger& log, ValueMapper<pid_t, pid_t>& pidMap):
+  pidMap(pidMap),
   log(log),
   nextPid(startingPid){
   processQueue.push_front(startingPid);
@@ -27,8 +28,9 @@ void scheduler::removeAndScheduleParent(pid_t terminatedProcess, pid_t parent){
                         " was not marked as finished!");
   }
 
-  auto msg = logger::makeTextColored(Color::blue, "Parent %d scheduled for exit.\n");
-  log.writeToLog(Importance::info, msg, parent);
+  auto msg = logger::makeTextColored(Color::blue, "Parent [%d] scheduled for exit.\n");
+  auto virtualPid = pidMap.getVirtualValue(parent);
+  log.writeToLog(Importance::info, msg, virtualPid);
 
   remove(terminatedProcess);
   nextPid = parent;
@@ -41,8 +43,9 @@ bool scheduler::isFinished(pid_t process){
 
 
 void scheduler::markFinishedAndScheduleNext(pid_t process){
-  auto msg = logger::makeTextColored(Color::blue, "Process %d marked as finished!\n");
-  log.writeToLog(Importance::info, msg , process);
+  auto msg = logger::makeTextColored(Color::blue, "Process [%d] marked as finished!\n");
+  auto virtualPid = pidMap.getVirtualValue(process);
+  log.writeToLog(Importance::info, msg , virtualPid);
 
   if(madeProgress){
     madeProgress = false;
@@ -54,14 +57,16 @@ void scheduler::markFinishedAndScheduleNext(pid_t process){
 }
 
 void scheduler::reportProgress(pid_t process){
-  auto msg = logger::makeTextColored(Color::blue, "Process %d made progress!\n");
-  log.writeToLog(Importance::info, msg , process);
+  auto msg = logger::makeTextColored(Color::blue, "Process [%d] made progress!\n");
+  auto virtualPid = pidMap.getVirtualValue(process);
+  log.writeToLog(Importance::info, msg , virtualPid);
   madeProgress = true;
 }
 
 void scheduler::preemptAndScheduleNext(pid_t process){
-  auto msg = logger::makeTextColored(Color::blue, "Preempting process: %d\n");
-  log.writeToLog(Importance::info, msg, process);
+  auto msg = logger::makeTextColored(Color::blue, "Preempting process: [%d]\n");
+   auto virtualPid = pidMap.getVirtualValue(process);
+  log.writeToLog(Importance::info, msg , virtualPid);
 
   if(madeProgress){
     madeProgress = false;
@@ -76,10 +81,12 @@ void scheduler::preemptAndScheduleNext(pid_t process){
 
 void scheduler::addAndScheduleNext(pid_t newProcess){
   // logging :O
-  auto msg = logger::makeTextColored(Color::blue, "New process added to scheduler: %d\n");
-  log.writeToLog(Importance::info, msg, newProcess);
-  msg = logger::makeTextColored(Color::blue, "%d scheduled as next.\n");
-  log.writeToLog(Importance::info, msg, newProcess);
+  auto msg = logger::makeTextColored(Color::blue, "New process added to scheduler: [%d]\n");
+   auto virtualPid = pidMap.getVirtualValue(newProcess);
+  log.writeToLog(Importance::info, msg , virtualPid);
+
+  msg = logger::makeTextColored(Color::blue, "[%d] scheduled as next.\n");
+  log.writeToLog(Importance::info, msg , virtualPid);
 
   // New process always capable of running, and should!
   processQueue.push_front(newProcess);
@@ -89,9 +96,10 @@ void scheduler::addAndScheduleNext(pid_t newProcess){
 }
 
 void scheduler::remove(pid_t terminatedProcess){
- auto msg =
-    logger::makeTextColored(Color::blue,"Removing process from scheduler: %d\n");
-  log.writeToLog(Importance::info, msg, terminatedProcess);
+  auto msg =
+    logger::makeTextColored(Color::blue,"Removing process from scheduler: [%d]\n");
+  auto virtualPid = pidMap.getVirtualValue(terminatedProcess);
+  log.writeToLog(Importance::info, msg, virtualPid);
 
   deleteProcess(terminatedProcess);
 }
@@ -109,8 +117,9 @@ bool scheduler::removeAndScheduleNext(pid_t terminatedProcess){
   }else{
     nextPid = scheduleNextProcess(terminatedProcess);
 
-    auto msg = logger::makeTextColored(Color::blue, "Next process scheduled: %d\n");
-    log.writeToLog(Importance::info, msg, nextPid);
+    auto msg = logger::makeTextColored(Color::blue, "Next process scheduled: [%d]\n");
+    auto virtualPid = pidMap.getVirtualValue(nextPid);
+    log.writeToLog(Importance::info, msg, virtualPid);
 
     return false;
   }
@@ -134,7 +143,7 @@ void scheduler::deleteProcess(pid_t terminatedProcess){
     throw runtime_error(err);
   }
 
-  auto msg = logger::makeTextColored(Color::blue, "Process found at index %d. Deleting...\n");
+  auto msg = logger::makeTextColored(Color::blue, "Process found at index [%d]. Deleting...\n");
   log.writeToLog(Importance::info, msg, indexOfProc);
 
   processQueue.erase(processQueue.begin() + indexOfProc);
@@ -149,8 +158,10 @@ pid_t scheduler::scheduleNextProcess(pid_t currentProcess){
        // Make sure we don't pick blocked or finished.
        (processStateMap[currProcess] == processState::runnable ||
        processStateMap[currProcess] == processState::maybeRunnable)){
-      auto msg = logger::makeTextColored(Color::blue, "%d chosen to run next.\n");
-      log.writeToLog(Importance::info, msg, currProcess);
+      auto msg = logger::makeTextColored(Color::blue, "[%d] chosen to run next.\n");
+      auto virtualPid = pidMap.getVirtualValue(currProcess);
+
+      log.writeToLog(Importance::info, msg, virtualPid);
       return currProcess;
     }
   }
@@ -173,7 +184,7 @@ void scheduler::printProcesses(){
   for(auto curr : processStateMap){
     auto proc = curr.first;
     auto status = curr.second;
-    log.writeToLog(Importance::info, "Pid %d, Status %s\n", proc,
+    log.writeToLog(Importance::info, "Pid [%d], Status %s\n", proc,
 		   to_string(status).c_str());
   }
   return;

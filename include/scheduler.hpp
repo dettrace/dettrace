@@ -40,7 +40,13 @@ string to_string(processState p);
  */
 class scheduler{
 public:
-  scheduler(pid_t startingPid, logger& log);
+  scheduler(pid_t startingPid, logger& log, ValueMapper<pid_t, pid_t>& pidMap);
+
+  /*
+   * Virtual pid mapper useful for logging deterministic pids even though we use
+   * real pids for scheduling.
+   */
+  ValueMapper<pid_t, pid_t>& pidMap;
 
   /**
    * This function should only be used to schedule a finished parent to run once

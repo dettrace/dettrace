@@ -91,6 +91,7 @@ int logger::getDebugLevel(){
 }
 
 string logger::makeTextColored(Color color, string text){
+
   string colorCode;
   const string reset { "\033[0m" };
 
