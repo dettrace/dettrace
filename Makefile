@@ -12,6 +12,7 @@ static:
 	cp src/libdet.so lib/
 
 tests: run-tests
+test: tests
 
 build-tests:
 	$(MAKE) -C ./test/unitTests/ build
