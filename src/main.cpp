@@ -81,16 +81,16 @@ const string usageMsg =
   "  ./detTrace --help\n"
   "\n"
   "  Optional Arguments:\n"
-  "  -d (--debug) <debugLevel>\n"
+  "  --debug <debugLevel>\n"
   "    Prints log information based on verbosity, useful to debug dettrace errors.\n"
-  "  -c (--chroot) <pathToRoot>\n"
+  "  --chroot <pathToRoot>\n"
   "    Specify root to use for chroot (such as one created by debootstrap).\n"
-  "  -n (--no-container)\n"
+  "  --no-container\n"
   "    Do not use any sort of containerization (May not be deterministic!).\n"
-  "  -i (--in-schroot)\n"
+  "  --in-schroot\n"
   "    Use this flag if you're running dettrace inside a schroot. Needed as we're not\n"
   "    allowed to use user namespaces inside a chroot, which is what schroot uses.\n"
-  "  -r (--no-color)\n"
+  "  --no-color\n"
   "    Do not use colored output for log. Useful when piping log to a file.\n";
 
 /**
