@@ -19,12 +19,17 @@ execution::execution(int debugLevel, pid_t startingPid):
   log {stderr, debugLevel},
   // Waits for first process to be ready!
   tracer{startingPid},
-  inodeMap{log, "inode map", 1},
-  mtimeMap{log, "mtime map", 1},
+  // Create our global state once, share across class.
+  myGlobalState{
+    log,
+    ValueMapper<ino_t, ino_t> {log, "inode map", 1},
+    ValueMapper<ino_t, time_t> {log, "mtime map", 1}
+  },
+
   myScheduler{startingPid, log},
   debugLevel {debugLevel}{
     // Set state for first process.
-    states.emplace(startingPid, state {log, inodeMap, mtimeMap, startingPid, debugLevel});
+    states.emplace(startingPid, state {startingPid, debugLevel});
 
     // First process is special and we must set the options ourselves.
     // This is done everytime a new process is spawned.
@@ -78,7 +83,8 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
                  syscallNum);
   log.setPadding();
 
-  bool callPostHook = currState.systemcall->handleDetPre(currState, tracer, myScheduler);
+  bool callPostHook =
+    currState.systemcall->handleDetPre(myGlobalState, currState, tracer, myScheduler);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
   // Next event will be a sytem call pre-exit event.
   currState.isPreExit = true;
@@ -133,7 +139,8 @@ void execution::handlePostSystemCall(state& currState){
                  currState.systemcall->syscallName.c_str(),
                  tracer.getReturnValue());
 
-  currState.systemcall->handleDetPost(currState, tracer, myScheduler);
+  currState.systemcall->
+    handleDetPost(myGlobalState, currState, tracer, myScheduler);
 
   // System call was done in the last iteration.
   log.writeToLog(Importance::info,"%s returned with value: %d\n",
@@ -316,7 +323,7 @@ pid_t execution::handleForkEvent(const pid_t traceesPid){
   log.writeToLog(Importance::info,
                  logger::makeTextColored(Color::blue,"Added process [%d] to states map.\n"),
                  newChildPid);
-  states.emplace(newChildPid, state {log, inodeMap, mtimeMap, newChildPid, debugLevel} );
+  states.emplace(newChildPid, state {newChildPid, debugLevel} );
 
   // This is where we add new children to our process tree.
   auto pair = make_pair(traceesPid, newChildPid);

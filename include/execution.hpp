@@ -10,6 +10,7 @@
 #include "ptracer.hpp"
 #include "scheduler.hpp"
 #include "ValueMapper.hpp"
+#include "globalState.hpp"
 
 #include <stack>
 #include <map>
@@ -45,10 +46,8 @@ private:
   // be a better choice for keys.
   map<pid_t, state> states;
 
-  // Global inode mapper to ensure consistent state among all nodes.
-  ValueMapper<ino_t, ino_t> inodeMap;
-
-  ValueMapper<ino_t, time_t> mtimeMap;
+  // Global inode mapper to ensure consistent state among all processes.
+  globalState myGlobalState;
 
   /**
    * Keep track of our children. We can only ever exit once all our children have exited.

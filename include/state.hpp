@@ -22,10 +22,9 @@ class systemCall;
 /**
  * Class to hold all state that we will need to update in between system calls inside the
  * tracer so far this includes:
- * Inodes Mappings.
- * PID Mappings.
+
  * Logical Clocks.
- * Logger.
+
  */
 class state{
 private:
@@ -45,8 +44,7 @@ public:
    * of state.
    * @ppid: Parent pid of this process.
    */
-  state(logger& log, ValueMapper<ino_t, ino_t>& inodeMap,
-        ValueMapper<ino_t, time_t>& mtimeMap, pid_t myPid, int debugLevel);
+  state(pid_t myPid, int debugLevel);
 
   /**
    * Map from file descriptors to directory entries.
@@ -65,18 +63,6 @@ public:
    */
   bool isPreExit = true;
 #endif
-  /*
-   * Isomorphism between inodes and vitual inodes.
-   */
-  ValueMapper<ino_t, ino_t>& inodeMap;
-
-  /*
-   * Tracker of mtimes.
-   */
-  ValueMapper<ino_t, time_t>& mtimeMap;
-
-
-  logger log;
 
   /**
    * Signal to deliver for next time this process runs. Zero means none. Otherwise
