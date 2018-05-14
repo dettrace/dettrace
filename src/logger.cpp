@@ -14,8 +14,9 @@
 using namespace std;
 
 /*======================================================================================*/
-logger::logger(FILE* myFile, int debugLevel):
-debugLevel(debugLevel){
+logger::logger(FILE* myFile, int debugLevel, bool useColor):
+  debugLevel(debugLevel),
+  useColor(useColor){
   // Check value of debugLevel.
   if(debugLevel > 5 || debugLevel < 0){
     fprintf(stderr, "The debug level must be between [0, 5].\n");
@@ -91,7 +92,9 @@ int logger::getDebugLevel(){
 }
 
 string logger::makeTextColored(Color color, string text){
-
+  if(! useColor){
+    return text;
+  }
   string colorCode;
   const string reset { "\033[0m" };
 

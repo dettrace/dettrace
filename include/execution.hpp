@@ -77,7 +77,7 @@ private:
   const int debugLevel;
 
 public:
-  execution(int debugLevel, pid_t startingPid);
+  execution(int debugLevel, pid_t startingPid, bool useColor);
 
   // Processs is done. Remove it from our processHier stack and let parent process run.
   bool handleExit(const pid_t traceesPid);

@@ -15,8 +15,8 @@
 
 pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process);
 // =======================================================================================
-execution::execution(int debugLevel, pid_t startingPid):
-  log {stderr, debugLevel},
+execution::execution(int debugLevel, pid_t startingPid, bool useColor):
+  log {stderr, debugLevel, useColor},
   silentLogger {stderr, 0},
   // Waits for first process to be ready!
   tracer{startingPid},
@@ -41,7 +41,7 @@ execution::execution(int debugLevel, pid_t startingPid):
 // Notice a ptrace::nonEventExit gets us here. We only receive this event once our own
 // children have all finished.
 bool execution::handleExit(const pid_t traceesPid){
-  auto msg = logger::makeTextColored(Color::blue, "Process [%d] has completely  finished."
+  auto msg = log.makeTextColored(Color::blue, "Process [%d] has completely  finished."
                                      " (ptrace nonEventExit).\n");
   log.writeToLog(Importance::inter, msg, pidMap.getVirtualValue(traceesPid));
 
@@ -79,7 +79,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
 
   // Print!
   string systemCall = currState.systemcall->syscallName;
-  string redColoredSyscall = logger::makeTextColored(Color::red, systemCall);
+  string redColoredSyscall = log.makeTextColored(Color::red, systemCall);
   auto virtualPid = pidMap.getVirtualValue(traceesPid);
   log.writeToLog(Importance::inter,"[Pid %d] Intercepted %s\n", virtualPid,
                  redColoredSyscall.c_str());
@@ -202,7 +202,7 @@ void execution::runProgram(){
       // in handleExit (see function definition above) so we do not support it for now.
       // throw runtime_error("Process terminated by signal. We currently do not support this.");
       auto msg =
-        logger::makeTextColored(Color::blue, "Process [%d] ended by signal %d.\n");
+        log.makeTextColored(Color::blue, "Process [%d] ended by signal %d.\n");
       log.writeToLog(Importance::inter, msg, virtualPid, WTERMSIG(status));
       exitLoop = handleExit(traceesPid);
       continue;
@@ -220,7 +220,7 @@ void execution::runProgram(){
     // Therefore we keep track of the process hierachy and only wait for the
     // evenExit when our children have exited.
     if(ret == ptraceEvent::eventExit){
-      auto msg = logger::makeTextColored(Color::blue, "Process [%d] has finished. "
+      auto msg = log.makeTextColored(Color::blue, "Process [%d] has finished. "
                                          "With ptrace exit event.\n");
       log.writeToLog(Importance::inter, msg, virtualPid);
       callPostHook = false;
@@ -277,7 +277,7 @@ void execution::runProgram(){
   }
 
   auto msg =
-    logger::makeTextColored(Color::blue, "All processes done. Finished successfully!\n");
+    log.makeTextColored(Color::blue, "All processes done. Finished successfully!\n");
   log.writeToLog(Importance::info, msg);
 }
 // =======================================================================================
@@ -289,7 +289,7 @@ void execution::handleFork(ptraceEvent event, const pid_t traceesPid){
     handleForkEvent(traceesPid);
 
     // Wait for child to be ready.
-    log.writeToLog(Importance::info, logger::makeTextColored(Color::blue,
+    log.writeToLog(Importance::info, log.makeTextColored(Color::blue,
                    "Waiting for child to be ready for tracing...\n"));
     int status;
     int newChildPid = myScheduler.getNext();
@@ -300,7 +300,7 @@ void execution::handleFork(ptraceEvent event, const pid_t traceesPid){
       throw runtime_error("wait call return pid does not match new child's pid.");
     }
     log.writeToLog(Importance::info,
-                   logger::makeTextColored(Color::blue, "Child ready!\n"));
+                   log.makeTextColored(Color::blue, "Child ready!\n"));
   }else{
     if(event != ptraceEvent::signal){
       throw runtime_error("Expected signal after fork/vfork event!");
@@ -314,7 +314,7 @@ void execution::handleFork(ptraceEvent event, const pid_t traceesPid){
 }
 // =======================================================================================
 pid_t execution::handleForkEvent(const pid_t traceesPid){
-  log.writeToLog(Importance::inter, logger::makeTextColored(Color::blue,
+  log.writeToLog(Importance::inter, log.makeTextColored(Color::blue,
                  "Fork event came before signal!\n"));
 
   pid_t newChildPid = tracer.getEventMessage();
@@ -323,7 +323,7 @@ pid_t execution::handleForkEvent(const pid_t traceesPid){
   auto virtualPid = pidMap.addRealValue(newChildPid);
   states.emplace(newChildPid, state {newChildPid, debugLevel} );
   log.writeToLog(Importance::info,
-                 logger::makeTextColored(Color::blue,"Added process [%d] to states map.\n"),
+                 log.makeTextColored(Color::blue,"Added process [%d] to states map.\n"),
                  virtualPid);
 
   // Tracee just had a child! It's a parent!
@@ -337,7 +337,7 @@ pid_t execution::handleForkEvent(const pid_t traceesPid){
 }
 // =======================================================================================
 void execution::handleForkSignal(const pid_t traceesPid){
-  log.writeToLog(Importance::info, logger::makeTextColored(Color::blue,
+  log.writeToLog(Importance::info, log.makeTextColored(Color::blue,
                  "Child fork signal-stop came before fork event.\n"));
 
   int status;
@@ -355,7 +355,7 @@ void execution::handleForkSignal(const pid_t traceesPid){
 void execution::handleClone(const pid_t traceesPid){
   // Nothing to do for now...
   log.writeToLog(Importance::inter,
-                 logger::makeTextColored(Color::blue, "[%d] caught clone event!\n"),
+                 log.makeTextColored(Color::blue, "[%d] caught clone event!\n"),
                  pidMap.getVirtualValue(traceesPid));
   return;
 }
@@ -364,7 +364,7 @@ void execution::handleExecve(const pid_t traceesPid){
   // Nothing to do for now... New process is already automatically ptraced by
   // our tracer.
   log.writeToLog(Importance::inter,
-                 logger::makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
+                 log.makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
                  pidMap.getVirtualValue(traceesPid));
   return;
 }
@@ -399,7 +399,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
   // getNextEvent.
   states.at(traceesPid).signalToDeliver = sigNum;
   auto msg = "[%d] Tracer: Received signal: %d. Forwading signal to tracee.\n";
-  auto coloredMsg = logger::makeTextColored(Color::blue, msg);
+  auto coloredMsg = log.makeTextColored(Color::blue, msg);
   auto virtualPid = pidMap.getVirtualValue(traceesPid);
   log.writeToLog(Importance::inter, coloredMsg, virtualPid, sigNum);
   return;

@@ -32,14 +32,14 @@ enum class Color{
   red,
   blue,
 };
-
 /*======================================================================================*/
 class logger {
 public:
   /**
    * Constructor. Requires file to write to and debug level to use.
    */
-  logger(FILE* myFile, int debugLevel);
+  logger(FILE* myFile, int debugLevel, bool useColor = true);
+
   /**
    * Wrapper for printf. Decides wether to print based on debug level.
    * @param imp: The importance of the message.
@@ -90,6 +90,9 @@ private:
    */
   const int debugLevel;
 
+  // Flag to tell us to use colors or not! Useful for writing output to files
+  // without annoying color sequences in file.
+  const bool useColor;
 
   /**
    * File pointer to write to.
