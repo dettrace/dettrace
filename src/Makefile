@@ -1,7 +1,7 @@
 CXX = g++
 CC= gcc
 
-DEBUG =  -O3 -g
+DEBUG =  -O0 -g
 CXXFLAGS = $(DEBUG) -std=c++14 -Wall $(INCLUDE)
 CFLAGS = $(DEBUG) -Wall -Wshadow $(INCLUDE)
 LIBS = -pthread -lseccomp -L ../lib/lib64
