@@ -658,6 +658,16 @@ void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     return;
   }
 
+  if(bytes_read > 0){
+    char buffer[bytes_read];
+    readVmTracee((void*) t.arg2(), buffer, bytes_read, s.traceePid);
+    gs.log.writeToLog(Importance::extra, "Read output: \"\n");
+    for(int i = 0; i < bytes_read; i++){
+      gs.log.writeToLog(Importance::extra, "%d", (int) buffer[i]);
+    }
+    gs.log.writeToLog(Importance::extra, "\"\n");
+  }
+
   // Replay system call if not enought bytes were read.
   s.totalBytes += bytes_read;
 

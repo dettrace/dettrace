@@ -250,22 +250,22 @@ int runTracee(void* voidArgs){
 void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChroot){
   string buildDir = pathToChroot + "/build/";
 
+  // Create our build directories as top level folders in our schroot.
   mkdirIfNotExist(buildDir);
   mkdirIfNotExist(pathToChroot + "/dettrace/"); // /dettrace directory
   mkdirIfNotExist(pathToChroot + "/dettrace/lib/"); // /dettrace/lib directory
   mkdirIfNotExist(pathToChroot + "/dettrace/bin/"); // /dettrace/bin directory
 
-  // 1. First we mount cwd in our /build/ directory.
+  // First we mount cwd in our /build/ directory.
   char* cwdPtr = get_current_dir_name();
   mountDir(string { cwdPtr }, buildDir);
   free(cwdPtr);
 
-  // Mount our dettrace/bin and dettrace/lib folders. The destination is relative
-  // as we have already moved into our /bui
+  // Mount our dettrace/bin and dettrace/lib folders.
   mountDir(pathToExe + "/../bin/", pathToChroot + "/dettrace/bin/");
   mountDir(pathToExe + "/../lib/", pathToChroot + "/dettrace/lib/");
 
-  // 2. Move over to our build directory! This will make code cleaner as all logic is
+  // Move over to our build directory! This will make code cleaner as all logic is
   // relative this dir.
   doWithCheck(chdir(buildDir.c_str()), "Unable to chdir");
 
@@ -275,11 +275,14 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
     mountDir("/usr/", "../usr/");
     mountDir("/lib/", "../lib/");
     mountDir("/lib64/", "../lib64/");
-    // Mount dev/null
-    mountDir("/dev/null", "../dev/null");
     // Ld cache
     mountDir("/etc/ld.so.cache", "../etc/ld.so.cache");
   }
+
+  // Still wanna bind mount some folders:
+  mountDir(pathToExe + "/../root/dev/null", "../dev/null");
+  mountDir(pathToExe + "/../root/dev/random", "../dev/random");
+  mountDir(pathToExe + "/../root/dev/urandom", "../dev/urandom");
 
   // Proc is special, we mount a new proc dir.
   doWithCheck(mount("/proc", "../proc/", "proc", MS_MGC_VAL, nullptr),
