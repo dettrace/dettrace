@@ -226,7 +226,9 @@ int runTracee(void* voidArgs){
   int val = execvpe(traceeCommand[0], traceeCommand, envs);
   if(val == -1){
     if(errno == ENOENT){
-      cerr << "Unable to exec your program. No such executable found\n" << endl;
+      cerr << "Unable to exec your program ("
+           << traceeCommand[0]
+           << "). No such executable found\n" << endl;
       cerr << "This program may not exist inside the chroot." << endl;
       cerr << "Only programs in bin/ or in this directory tree are mounted." << endl;
     }
