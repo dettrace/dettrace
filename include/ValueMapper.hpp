@@ -44,8 +44,12 @@ public:
       throw runtime_error("Attempting to add already existing key: " +
                           to_string(realValue) + "\n");
     }
-    myLogger.writeToLog(Importance::extra, mappingName + ": Added mapping: " +
-                        to_string(realValue) + " -> " + to_string(freshValue) + "\n");
+
+
+    myLogger.writeToLog(Importance::info, mappingName + ": New virtual value added: " +
+                        to_string(freshValue) + "\n");
+    myLogger.writeToLog(Importance::extra,
+                        "  (Real value was: " + to_string(realValue) + ")\n");
 
     Virtual vValue = freshValue;
     realToVirtualValue[realValue] = vValue;
@@ -81,9 +85,11 @@ public:
   Virtual getVirtualValue(Real realValue) {
     if (realToVirtualValue.find(realValue) != realToVirtualValue.end()) {
       Virtual virtValue = realToVirtualValue[realValue];
-      myLogger.writeToLog(Importance::extra, mappingName + "getVirtualValue(" +
-                          to_string(realValue) + ") = " + to_string(virtValue) +
-                          "\n");
+      myLogger.writeToLog(Importance::info, mappingName + " fetched virtual value: " +
+                          to_string(virtValue) + "\n");
+      myLogger.writeToLog(Importance::extra, "  (Real value was: " +
+                          to_string(realValue) +  ")\n");
+
       return virtValue;
     }
     throw runtime_error(mappingName + ": getVirtualValue(" +

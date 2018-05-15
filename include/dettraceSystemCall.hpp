@@ -1074,6 +1074,8 @@ public:
 };
 
 // =======================================================================================
+// Iterate through our vector of entries, which represent the binary memory for linux_dirents
+// or linux_dirent64. We virtualize the inodes and add entries to our inodeMap.
 template<typename DirEntry>
 void virtualizeEntries(vector<uint8_t>& entries, ValueMapper<ino_t, ino_t>& inodeMap){
   // Variable size data, we cannot "iterate" over the entries in the array.
@@ -1089,10 +1091,9 @@ void virtualizeEntries(vector<uint8_t>& entries, ValueMapper<ino_t, ino_t>& inod
 
     // Virtualize our inode.
     ino64_t inode = currentEntry->d_ino;
-    if( ! inodeMap.realValueExists(inode) ){
-      inodeMap.addRealValue(inode);
-    }
-    currentEntry->d_ino = inodeMap.getVirtualValue(inode);
+    currentEntry->d_ino = ! inodeMap.realValueExists(inode) ?
+      inodeMap.addRealValue(inode) :
+      inodeMap.getVirtualValue(inode);
 
     // Next entry...
     position += entrySize;
