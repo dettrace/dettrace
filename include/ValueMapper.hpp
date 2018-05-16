@@ -103,6 +103,8 @@ public:
    */
   bool realValueExists(Real realValue) {
     bool keyExists = realToVirtualValue.find(realValue) != realToVirtualValue.end();
+    myLogger.writeToLog(Importance::extra, "realValueExists(" + to_string(realValue) +
+                        ") = " + to_string(keyExists) + "\n");
     return keyExists;
   }
 
@@ -113,6 +115,8 @@ public:
    */
   bool virtualValueExists(Virtual virtualValue) {
     bool keyExists = virtualToRealValue.find(virtualValue) != virtualToRealValue.end();
+    myLogger.writeToLog(Importance::extra, "realValueExists(" + to_string(virtualValue) +
+                        ") = " + to_string(keyExists) + "\n");
     return keyExists;
   }
 };
