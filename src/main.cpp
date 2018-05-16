@@ -414,8 +414,7 @@ tuple<int, int, string, bool, bool, bool> parseProgramArguments(int argc, char* 
  * Wrapper around mount with strings.
  */
 void mountDir(string source, string target){
-  const char* none = "none"; // Hack so valgrind doesn't complain.
-  doWithCheck(mount(source.c_str(), target.c_str(), none, MS_BIND, none),
+  doWithCheck(mount(source.c_str(), target.c_str(), nullptr, MS_BIND, nullptr),
 	      "Unable to bind mount: " + source + " to " + target);
 }
 // =======================================================================================

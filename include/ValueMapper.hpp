@@ -66,7 +66,7 @@ public:
   Real getRealValue(Virtual virtualValue) {
     // does element exist?
     if (virtualToRealValue.find(virtualValue) != virtualToRealValue.end()) {
-      Real realValue = virtualToRealValue[virtualValue];
+      Real realValue = virtualToRealValue.at(virtualValue);
       myLogger.writeToLog(Importance::extra, mappingName + "getRealValue(" +
                           to_string(virtualValue) + ") = " + to_string(realValue) +
                           "\n");
@@ -84,7 +84,7 @@ public:
    */
   Virtual getVirtualValue(Real realValue) {
     if (realToVirtualValue.find(realValue) != realToVirtualValue.end()) {
-      Virtual virtValue = realToVirtualValue[realValue];
+      Virtual virtValue = realToVirtualValue.at(realValue);
       myLogger.writeToLog(Importance::info, mappingName + " fetched virtual value: " +
                           to_string(virtValue) + "\n");
       myLogger.writeToLog(Importance::extra, "  (Real value was: " +
