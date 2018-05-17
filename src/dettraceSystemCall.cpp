@@ -490,18 +490,16 @@ void newfstatatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
   // through: unlink, unlinkat, or rmdir.
   if(s.syscallInjected){
     gs.log.writeToLog(Importance::info, "This newfstatat was injected.\n");
-
-    if((int) t.getReturnValue() < 0){
-      gs.log.writeToLog(Importance::info, "No such file, that's okay.\n");
-      s.inodeToDelete = -1;
-      return;
-    }
-
     s.syscallInjected = false;
 
-    struct stat* statbufPtr = (struct stat*) t.arg3();
-    struct stat statbuf = ptracer::readFromTracee(statbufPtr, s.traceePid);
-    s.inodeToDelete = statbuf.st_ino;
+    if((int) t.getReturnValue() >= 0){
+      struct stat* statbufPtr = (struct stat*) t.arg3();
+      struct stat statbuf = ptracer::readFromTracee(statbufPtr, s.traceePid);
+      s.inodeToDelete = statbuf.st_ino;
+    }else{
+      gs.log.writeToLog(Importance::info, "No such file, that's okay.\n");
+      s.inodeToDelete = -1;
+    }
 
     // We got what we wanted. The inode that matches the file called from either
     // unlink, unlinkat, or rmdir. Now replay that system call as we did not let

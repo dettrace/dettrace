@@ -501,6 +501,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<recvmsgSystemCall>(syscallNumber, syscallName);
   case SYS_rename:
     return make_unique<renameSystemCall>(syscallNumber, syscallName);
+  case SYS_rmdir
+    return make_unique<rmdirSystemCall>(syscallNumber, syscallName);
   case SYS_sendto:
     return make_unique<sendtoSystemCall>(syscallNumber, syscallName);
   case SYS_select:
