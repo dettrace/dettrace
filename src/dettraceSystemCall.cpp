@@ -139,7 +139,7 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
       // Make sure it's non null before reading to string.
       char* address = ptracer::readFromTracee<char*>(&(argv[i]), t.getPid());
       if(address == nullptr){
-	break;
+        break;
       }
 
       execveArgs += " \"" + ptracer::readTraceeCString(address, t.getPid()) + "\" ";
@@ -260,7 +260,7 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
       // We need somewhere to store timespec. We will write this data below the current
       // stack pointer accounting for the red zone, known to be 128 bytes.
       gs.log.writeToLog(Importance::extra,
-  		       "timeout null, writing our data below the current stack frame...\n");
+                        "timeout null, writing our data below the current stack frame...\n");
 
       uint64_t rsp = t.getRsp();
       // Enough space for timespec struct.
@@ -273,8 +273,8 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
     }else{
       timespec timeout = ptracer::readFromTracee(timeoutPtr, t.getPid());
       gs.log.writeToLog(Importance::extra,
-                       "Writing over original timeout value: (s = %d, ns = %d)\n",
-                       timeout.tv_sec, timeout.tv_nsec);
+                        "Writing over original timeout value: (s = %d, ns = %d)\n",
+                        timeout.tv_sec, timeout.tv_nsec);
       ptracer::writeToTracee(timeoutPtr, ourTimeout, s.traceePid);
     }
   }
@@ -336,15 +336,15 @@ void getrandomSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
   // Ptrace write is way too slow as it works at word granularity. Time to use
   // process_vm_writev!
   const iovec local = {constValues, // Starting address
-			bufLength,   // number of bytes to transfer.
+                       bufLength,   // number of bytes to transfer.
   };
 
   const iovec traceeMem = {buf, // Starting address
-			   bufLength,   // number of bytes to transfer.
+                           bufLength,   // number of bytes to transfer.
   };
 
   doWithCheck(process_vm_writev(t.getPid(), &local, 1, &traceeMem, 1, flags),
-	      "process_vm_writev");
+              "process_vm_writev");
 
   return;
 }
@@ -372,10 +372,10 @@ void getrusageSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
     struct rusage usage = ptracer::readFromTracee(usagePtr, t.getPid());
     /* user CPU time used */
     usage.ru_utime = timeval { .tv_sec =  (long) s.getLogicalTime(),
-			       .tv_usec = (long )s.getLogicalTime() };
+                               .tv_usec = (long )s.getLogicalTime() };
     /* system CPU time used */
     usage.ru_stime = timeval { .tv_sec =  (long) s.getLogicalTime(),
-			       .tv_usec = (long )s.getLogicalTime() };
+                               .tv_usec = (long )s.getLogicalTime() };
     usage.ru_maxrss = LONG_MAX;                    /* maximum resident set size */
     usage.ru_ixrss = LONG_MAX;                     /* integral shared memory size */
     usage.ru_idrss = LONG_MAX;    		   /* integral unshared data size */
@@ -432,17 +432,17 @@ void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 
   // These are fine, allow them through.
   else if(TIOCGPGRP == request || // group pid of foreground process.
-	  SIOCSIFMAP == request || // efficient reading of files.
-	  0xC020660B /*FS_IOC_FIEMAP*/ == request // For some reason causes compiler
-	                                          // error if I use the macro?
-	  #ifdef FICLONE
-	  || FICLONE == request // Not avaliable in older kernel versions.
-	  #endif
-	  ){ // clone file
+          SIOCSIFMAP == request || // efficient reading of files.
+          0xC020660B /*FS_IOC_FIEMAP*/ == request // For some reason causes compiler
+          // error if I use the macro?
+#ifdef FICLONE
+          || FICLONE == request // Not avaliable in older kernel versions.
+#endif
+          ){ // clone file
     return;
   }else{
     throw runtime_error("Unsupported ioctl call: fd=" + to_string(t.arg1()) +
-			" request=" + to_string(request));
+                        " request=" + to_string(request));
   }
   return;
 }
@@ -492,9 +492,9 @@ void newfstatatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
     gs.log.writeToLog(Importance::info, "This newfstatat was injected.\n");
 
     if((int) t.getReturnValue() < 0){
-      throw runtime_error("Unable to inject newfstatat call to tracee\n"
-                          "newfstatat returned with: " +
-                          to_string((int) t.getReturnValue()) + "\n");
+      gs.log.writeToLog(Importance::info, "No such file, that's okay.\n");
+      s.inodeToDelete = -1;
+      return;
     }
 
     s.syscallInjected = false;
@@ -553,7 +553,7 @@ bool openatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 }
 
 void openatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-   // Nothing for us to do skip the post hook!
+  // Nothing for us to do skip the post hook!
   if((int) t.getReturnValue() < 0){
     return;
   }
@@ -630,7 +630,7 @@ bool prlimit64SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
   int pid = (pid_t) t.arg1();
   if(pid != 0){
     throw runtime_error("prlimit64: We do not support prlimit64 on other processes.\n "
-			"(pid: " + to_string(pid));
+                        "(pid: " + to_string(pid));
   }
 
   return true;
@@ -645,7 +645,7 @@ void prlimit64SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
    * the illusion that they can be changed. It may be possible to actually
    * change limits deterministically in many cases, if need be, so long as the
    * starting limits are deterministic.
-  */
+   */
   t.writeArg3(s.originalArg3);
   struct rlimit* rp = (struct rlimit*) t.arg4();
   if (rp != nullptr) {
@@ -681,7 +681,7 @@ void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
   ssize_t bytes_read = t.getReturnValue();
   if(bytes_read < 0){
     gs.log.writeToLog(Importance::info, "Returned negative: %d.",
-                     bytes_read);
+                      bytes_read);
     return;
   }
 
@@ -691,7 +691,7 @@ void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     // readVmTracee((void*) t.arg2(), buffer, bytes_read, s.traceePid);
     // gs.log.writeToLog(Importance::extra, "Read output: \"\n");
     // for(int i = 0; i < bytes_read; i++){
-      // gs.log.writeToLog(Importance::extra, "%d", (int) buffer[i]);
+    // gs.log.writeToLog(Importance::extra, "%d", (int) buffer[i]);
     // }
     // gs.log.writeToLog(Importance::extra, "\"\n");
   }
@@ -820,14 +820,14 @@ bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     // Has to be created in memory.
     uint64_t rsp = t.getRsp();
     timespec* newAddr = (timespec*) (rsp - 128 - sizeof(struct timespec));
-if(first){
-    ptracer::writeToTracee(newAddr, ourTimeout, s.traceePid);
- t.writeArg5((uint64_t) newAddr);
- first = false;
-}
-}else{
+    if(first){
+      ptracer::writeToTracee(newAddr, ourTimeout, s.traceePid);
+      t.writeArg5((uint64_t) newAddr);
+      first = false;
+    }
+  }else{
     // Already exists in memory.
-  //  ptracer::writeToTracee(timeoutPtr, ourTimeout, s.traceePid);
+    //  ptracer::writeToTracee(timeoutPtr, ourTimeout, s.traceePid);
   }
 
   return true;
@@ -919,7 +919,7 @@ bool tgkillSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   int tid = (int) t.arg2();
   int signal = (int) t.arg3();
   gs.log.writeToLog(Importance::info, "tgkill(tgid = %d, tid = %d, signal = %d)\n",
-		   tgid, tid, signal);
+                    tgid, tid, signal);
   return true;
 }
 
@@ -931,7 +931,7 @@ void timeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
   int retVal = (int) t.getReturnValue();
   if(retVal < 0){
     gs.log.writeToLog(Importance::info,
-		     "Time call failed: \n" + string { strerror(- retVal)});
+                      "Time call failed: \n" + string { strerror(- retVal)});
     return;
   }
 
@@ -1029,7 +1029,6 @@ unlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler
   // Not our first time. This is after the real unlink actually happened.
   if((int) t.getReturnValue() >= 0){
     removeInodeFromMaps(s.inodeToDelete, gs, t);
-    s.inodeToDelete = -1;
     s.firstTrySystemcall = true;
   }
 
@@ -1203,7 +1202,7 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 
   if((int) bytes_written < 0){
     gs.log.writeToLog(Importance::info, "Returned negative: %d.\n",
-                     bytes_written);
+                      bytes_written);
     return;
   }
 
@@ -1306,7 +1305,7 @@ void writevSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
 bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched, int64_t errornoValue){
   if(- errornoValue == (int64_t) t.getReturnValue()){
     gs.log.writeToLog(Importance::info,
-                     s.systemcall->syscallName + " would have blocked!\n");
+                      s.systemcall->syscallName + " would have blocked!\n");
 
     sched.preemptAndScheduleNext(s.traceePid);
     replaySystemCall(t);
@@ -1333,20 +1332,20 @@ void replaySystemCall(ptracer& t){
 }
 // =======================================================================================
 void zeroOutStatfs(struct statfs& stats){
-    // Type of filesystem
-    stats.f_type = 0xEF53;// EXT4_SUPER_MAGIC
-    stats.f_bsize = 100;   /* Optimal transfer block size */
-    stats.f_blocks = 1000;  /* Total data blocks in filesystem */
-    stats.f_bfree = 10000;   /* Free blocks in filesystem */
-    stats.f_bavail = 5000;  /* Free blocks available to
-			      unprivileged user */
-    stats.f_files = 1000;   /* Total file nodes in filesystem */
-    stats.f_ffree = 1000;   /* Free file nodes in filesystem */
-    stats.f_fsid.__val[0] = 0;
-    stats.f_fsid.__val[1] = 0;
-    stats.f_namelen = 200; /* Maximum length of filenames */
-    stats.f_frsize = 20;  /* Fragment size (since Linux 2.6) */
-    stats.f_flags = 1;   /* Mount flags of filesystem */
+  // Type of filesystem
+  stats.f_type = 0xEF53;// EXT4_SUPER_MAGIC
+  stats.f_bsize = 100;   /* Optimal transfer block size */
+  stats.f_blocks = 1000;  /* Total data blocks in filesystem */
+  stats.f_bfree = 10000;   /* Free blocks in filesystem */
+  stats.f_bavail = 5000;  /* Free blocks available to
+                             unprivileged user */
+  stats.f_files = 1000;   /* Total file nodes in filesystem */
+  stats.f_ffree = 1000;   /* Free file nodes in filesystem */
+  stats.f_fsid.__val[0] = 0;
+  stats.f_fsid.__val[1] = 0;
+  stats.f_namelen = 200; /* Maximum length of filenames */
+  stats.f_frsize = 20;  /* Fragment size (since Linux 2.6) */
+  stats.f_flags = 1;   /* Mount flags of filesystem */
 }
 // =======================================================================================
 void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName){
@@ -1499,15 +1498,20 @@ void injectNewfstatat(globalState& gs, state& s, ptracer& t, int dirfd,
  * Only delete if exists, not existing is not an error.
  */
 void removeInodeFromMaps(ino_t inode, globalState& gs, ptracer& t){
-    // Remove from inode and mtime maps if exists.
-    if(gs.inodeMap.realValueExists(inode)){
-      gs.inodeMap.eraseBasedOnKey(inode);
-    }
-    if(gs.mtimeMap.realValueExists(inode)){
-      gs.mtimeMap.eraseBasedOnKey(inode);
-    }
-
+  // Nothing to do.
+  if(inode == -1){
     return;
+  }
+
+  // Remove from inode and mtime maps if exists.
+  if(gs.inodeMap.realValueExists(inode)){
+    gs.inodeMap.eraseBasedOnKey(inode);
+  }
+  if(gs.mtimeMap.realValueExists(inode)){
+    gs.mtimeMap.eraseBasedOnKey(inode);
+  }
+
+  return;
 }
 // =======================================================================================
 // Turn system call into a noop by changing it into a getpid. This should be called from
