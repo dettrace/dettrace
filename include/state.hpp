@@ -56,6 +56,7 @@ public:
    * The pid of the process represented by this state.
    */
   pid_t traceePid;
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
   /*
    * Per process bool to know if this is the pre or post hook event as ptrace does
@@ -70,16 +71,48 @@ public:
    */
   int signalToDeliver = 0;
 
+  /**
+   * We need to delete inodes from our maps whenever the tracee calls unlink, unlinkat,
+   * or rmdir, that is, any system call that removes files. This is necessary since the
+   * filesystem may recycle this inode leading to unreproducible behavior when:
+   * 1) Some file is given an inode say i1.
+   * 2) Our inode map says i1 -> n1.
+   * 3) This file is deleted by a call to unlink, unlinkat, rmdir.
+   * 4) Some new file comes around and _sometimes_ gets assigned i1.
+   *
+   * This messes up our assumption that files get unique inodes for the lifetime of the
+   * program. So we delete inodes when they're done and delete them from our maps.
+   *
+   * We would like to do:
+   * 1) See a call to unlink, unlinkat, or rmdir.
+   * 2) On the post hook we inject a call to newfstatat to find what the inode belonging
+   *    to this file is. We use this inode as a key to delete that entry from our inode map
+   *    and mtime map.
+   *
+   * This doesn't work though, as the call to newfstatat fails since the file has already
+   * been deleted at this point! So instead we do:
+   * 1) See a call to unlink, unlinkat, or rmdir. If this is the first time we have seen
+   *    this syscall we cut if off early at the pre hook and do a call to newfstatat to
+   *    find the correct inode, we populate inodeToDelete in the state class. From
+   *    newfstatat we replay the call to unlink, unlinkat, or rmdir respectively. In the
+   *    post hook of the original call we use inodeToDelete to remove the correct entries.
+   */
+  ino_t inodeToDelete = -1;
+
   /*
    * register values from (the post-hook) before any retries
    */
   struct user_regs_struct beforeRetry = {0};
   uint64_t totalBytes = 0;
-  bool firstTryReadWrite = true;
 
-  // For deterministic modified times we inject fstat system calls, this variable lets
-  // fstat know if it is in this event.
-  bool fstatMtimeInjection = false;
+  /*
+   * Ptrace cannot tell the difference between a system call we are replaying or injecting
+   * and one that has already been replayed. We use this variable to differenatiate.
+   */
+  bool firstTrySystemcall = true;
+
+  // Flag to let us know if the current system call was artifically injected by us.
+  bool syscallInjected = false;
 
   // Our old values before post hook, for simple restoring of the user's register state.
   struct user_regs_struct prevRegisterState = {0};

@@ -12,7 +12,7 @@ void writeVmTracee(void* localMemory, void* traceeMemory, size_t numberOfBytes,
                    pid_t traceePid);
 void readVmTracee(void* traceeMemory, void* localMemory, size_t numberOfBytes,
                   pid_t traceePid);
-void replaySystemcall(ptracer& t);
+void replaySystemCall(ptracer& t);
 /**
  * Hopefully this will server as documentation for all our system calls.
  * Please keep in alphabetical order.
@@ -719,6 +719,14 @@ public:
   using systemCall::systemCall;
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
+// =======================================================================================
+class rmdirSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
 
 // =======================================================================================
 /**
@@ -920,7 +928,7 @@ class unlinkSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -948,6 +956,7 @@ class unlinkatSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
  };
 // =======================================================================================
 /**
@@ -1155,7 +1164,7 @@ void handleDents(globalState& gs, state& s, ptracer& t, scheduler& sched){
     s.dirEntries.at(fd).addChunk(newChunk);
 
     gs.log.writeToLog(Importance::info, "Replaying system call to read more bytes...\n");
-    replaySystemcall(t);
+    replaySystemCall(t);
   }
   return;
 }

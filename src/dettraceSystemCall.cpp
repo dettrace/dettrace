@@ -35,6 +35,10 @@ void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName)
 void printInfoString(uint64_t addressOfCString, globalState& gs, state& s,
                      string postFix = " path: ");
 void injectFstat(globalState& gs, state& s, ptracer& t, int fd);
+void injectNewfstatat(globalState& gs, state& s, ptracer& t, int dirfd,
+                      char* pathnameTraceesMem);
+void removeInodeFromMaps(ino_t inode, globalState& gs, ptracer& t);
+void noopSystemCall(globalState& gs, ptracer& t);
 // =======================================================================================
 /**
  *
@@ -117,7 +121,6 @@ void creatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   }
 
   // Inject fstat, creat always make a new file with write permissions.
-  s.prevRegisterState = t.getRegs();
   injectFstat(gs, s, t, t.getReturnValue());
   return;
 }
@@ -185,13 +188,14 @@ void flistxattrSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
 void fstatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
 
   // This isn't a natural call fstat from the tracee we injected this call ourselves!
-  if(s.fstatMtimeInjection){
+  if(s.syscallInjected){
     gs.log.writeToLog(Importance::info, "This fstat was inject for mtime puposes.\n");
     if((int) t.getReturnValue() < 0){
-      throw runtime_error("Unable to properly inject fstat call to tracee!"
-                          "fstat call returned: " + to_string(t.getReturnValue()) + "\n");
+      throw runtime_error("Unable to properly inject fstat call to tracee!\n"
+                          "fstat call returned: " +
+                          to_string(t.getReturnValue()) + "\n");
     }
-    s.fstatMtimeInjection = false;
+    s.syscallInjected = false;
     struct stat myStat = ptracer::readFromTracee((struct stat*) t.arg2(), s.traceePid);
 
     // Add an entry for this new file to our inode with a newer modified date.
@@ -482,7 +486,32 @@ void newfstatatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                          scheduler& sched){
   printInfoString(t.arg2(), gs, s);
 
-  handleStatFamily(gs, s, t, "newfstatat");
+  // This newfstatat was injected to get the inode belonging to a file that was deleted
+  // through: unlink, unlinkat, or rmdir.
+  if(s.syscallInjected){
+    gs.log.writeToLog(Importance::info, "This newfstatat was injected.\n");
+
+    if((int) t.getReturnValue() < 0){
+      throw runtime_error("Unable to inject newfstatat call to tracee\n"
+                          "newfstatat returned with: " +
+                          to_string((int) t.getReturnValue()) + "\n");
+    }
+
+    s.syscallInjected = false;
+
+    struct stat* statbufPtr = (struct stat*) t.arg3();
+    struct stat statbuf = ptracer::readFromTracee(statbufPtr, s.traceePid);
+    s.inodeToDelete = statbuf.st_ino;
+
+    // We got what we wanted. The inode that matches the file called from either
+    // unlink, unlinkat, or rmdir. Now replay that system call as we did not let
+    // it though.
+    t.setRegs(s.prevRegisterState);
+    replaySystemCall(t);
+  }else{
+    handleStatFamily(gs, s, t, "newfstatat");
+  }
+
   return;
 }
 // =======================================================================================
@@ -509,7 +538,6 @@ void openSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     return;
   }
 
-  s.prevRegisterState = t.getRegs();
   int flags = t.arg2();
 
   // Check if this file is modifiable by tracee.
@@ -530,7 +558,6 @@ void openatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
     return;
   }
 
-  s.prevRegisterState = t.getRegs();
   int flags = t.arg3();
 
   // Check if this file is modifiable by tracee.
@@ -672,9 +699,9 @@ void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
   // Replay system call if not enought bytes were read.
   s.totalBytes += bytes_read;
 
-  if(s.firstTryReadWrite){
+  if(s.firstTrySystemcall){
     gs.log.writeToLog(Importance::info, "First time seeing this read!\n");
-    s.firstTryReadWrite = false;
+    s.firstTrySystemcall = false;
     s.beforeRetry = t.getRegs();
   }
 
@@ -689,14 +716,14 @@ void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     t.writeArg3(s.beforeRetry.rdx);
 
     // reset for next syscall that we may have to retry
-    s.firstTryReadWrite = true;
+    s.firstTrySystemcall = true;
     s.totalBytes = 0;
   } else {
     gs.log.writeToLog(Importance::info, "Got less bytes than requested.\n");
     t.writeArg2(t.arg2() + bytes_read);
     t.writeArg3(t.arg3() - bytes_read);
 
-    replaySystemcall(t);
+    replaySystemCall(t);
   }
 
   return;
@@ -735,6 +762,38 @@ bool renameSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
 
   return false;
 
+}
+// =======================================================================================
+bool rmdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if(s.firstTrySystemcall){
+    // Skip. All the work to inject newfstatat will be done in the post hook.
+    noopSystemCall(gs, t);
+  }else{
+    printInfoString(t.arg1(), gs, s);
+  }
+
+  return true;
+}
+
+void rmdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if(s.firstTrySystemcall){
+    s.firstTrySystemcall = false;
+
+    // This was a noop. Set our system call number register back to us.
+    t.changeSystemCall(SYS_rmdir);
+
+    // Go to a newfstatat call to figure out what inode to delete as well.
+    // See fistTrySystemcall for full documentation.
+    injectNewfstatat(gs, s, t, AT_FDCWD, (char*) t.arg1());
+    return;
+  }
+
+  // Not our first time. This is after the real unlink actually happened.
+  if((int) t.getReturnValue() >= 0){
+    removeInodeFromMaps(s.inodeToDelete, gs, t);
+    s.inodeToDelete = -1;
+    s.firstTrySystemcall = true;
+  }
 }
 // =======================================================================================
 // TODO
@@ -941,17 +1000,76 @@ void unameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   return;
 }
 // =======================================================================================
-bool unlinkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  printInfoString(t.arg1(), gs, s);
-
-  return false;
-}
-
-// =======================================================================================
-bool unlinkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  printInfoString(t.arg2(), gs, s);
+bool
+unlinkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if(s.firstTrySystemcall){
+    // Skip. All the work to inject newfstatat will be done in the post hook.
+    noopSystemCall(gs, t);
+  }else{
+    printInfoString(t.arg1(), gs, s);
+  }
 
   return true;
+}
+
+void
+unlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if(s.firstTrySystemcall){
+    s.firstTrySystemcall = false;
+
+    // This was a noop. Set our system call number register back to us.
+    t.changeSystemCall(SYS_unlink);
+
+    // Go to a newfstatat call to figure out what inode to delete as well.
+    // See fistTrySystemcall for full documentation.
+    injectNewfstatat(gs, s, t, AT_FDCWD, (char*) t.arg1());
+    return;
+  }
+
+  // Not our first time. This is after the real unlink actually happened.
+  if((int) t.getReturnValue() >= 0){
+    removeInodeFromMaps(s.inodeToDelete, gs, t);
+    s.inodeToDelete = -1;
+    s.firstTrySystemcall = true;
+  }
+
+  return;
+}
+// =======================================================================================
+bool
+unlinkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if(s.firstTrySystemcall){
+    // Skip. All the work to inject newfstatat will be done in the post hook.
+    noopSystemCall(gs, t);
+  }else{
+    printInfoString(t.arg2(), gs, s);
+  }
+
+  return true;
+}
+
+void
+unlinkatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if(s.firstTrySystemcall){
+    s.firstTrySystemcall = false;
+
+    // This was a noop. Set our system call number register back to us.
+    t.changeSystemCall(SYS_unlinkat);
+
+    // Go to a newfstatat call to figure out what inode to delete as well.
+    // See fistTrySystemcall for full documentation.
+    injectNewfstatat(gs, s, t, (int) t.arg1(), (char*) t.arg2());
+    return;
+  }
+
+  // Not our first time. This is after the real unlink actually happened.
+  if((int) t.getReturnValue() >= 0){
+    removeInodeFromMaps(s.inodeToDelete, gs, t);
+    s.inodeToDelete = -1;
+    s.firstTrySystemcall = true;
+  }
+
+  return;
 }
 
 // =======================================================================================
@@ -1092,8 +1210,8 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 
 
   s.totalBytes += bytes_written;
-  if(s.firstTryReadWrite){
-    s.firstTryReadWrite = false;
+  if(s.firstTrySystemcall){
+    s.firstTrySystemcall = false;
     s.beforeRetry = t.getRegs();
   }
 
@@ -1111,13 +1229,13 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     t.writeArg2(s.beforeRetry.rsi);
     t.writeArg3(s.beforeRetry.rdx);
 
-    s.firstTryReadWrite = true;
+    s.firstTrySystemcall = true;
     s.totalBytes = 0;
   }else{
     gs.log.writeToLog(Importance::info, "Not all bytes written: Replaying system call!\n");
     t.writeArg2(t.arg2() + bytes_written);
     t.writeArg3(t.arg3() - bytes_written);
-    replaySystemcall(t);
+    replaySystemCall(t);
   }
 
   return;
@@ -1160,8 +1278,8 @@ void writevSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   // s.totalBytes += bytes_written;
   // //ssize_t bytes_requested = t.arg3();
 
-  // if (s.firstTryReadWrite) {
-  //   s.firstTryReadWrite = false;
+  // if (s.firstTrySystemcall) {
+  //   s.firstTrySystemcall = false;
   //   //s.beforeRetry = t.regs;
   //   s.beforeRetry = t.getRegs();
   // }
@@ -1179,7 +1297,7 @@ void writevSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   //    t.writeArg1(s.beforeRetry.rdi);
   //    t.writeArg2(s.beforeRetry.rsi);
   //    t.writeArg3(s.beforeRetry.rdx);
-  //    s.firstTryReadWrite = true;
+  //    s.firstTrySystemcall = true;
   //    s.totalBytes = 0;
   //  }
   return;
@@ -1191,7 +1309,7 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sc
                      s.systemcall->syscallName + " would have blocked!\n");
 
     sched.preemptAndScheduleNext(s.traceePid);
-    replaySystemcall(t);
+    replaySystemCall(t);
     return true;
   }else{
     // Disambiguiate. Otherwise it's impossible to tell the difference between a
@@ -1203,7 +1321,7 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sc
   }
 }
 // =======================================================================================
-void replaySystemcall(ptracer& t){
+void replaySystemCall(ptracer& t){
   uint16_t minus2 = t.readFromTracee((uint16_t*) (t.getRip() - 2), t.getPid());
   if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
     throw runtime_error("IP does not point to system call instruction!\n");
@@ -1268,11 +1386,9 @@ void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName)
     // result?
     myStat.st_dev = 1;         /* ID of device containing file */
 
-    // inode virtualization
-    if( ! gs.inodeMap.realValueExists(inode) ){
-      gs.inodeMap.addRealValue(inode);
-    }
-    myStat.st_ino = gs.inodeMap.getVirtualValue(inode);
+    myStat.st_ino = gs.inodeMap.realValueExists(inode) ?
+      gs.inodeMap.getVirtualValue(inode) :
+      gs.inodeMap.addRealValue(inode) ;
 
     // st_mode holds the permissions to the file. If we zero it out libc functions
     // will think we don't have access to this file. Hence we keep our permissions
@@ -1334,13 +1450,13 @@ void injectFstat(globalState& gs, state& s, ptracer& t, int fd){
   s.prevRegisterState = t.getRegs();
 
   // Inject fstat system call to perform!
-  s.fstatMtimeInjection = true;
+  s.syscallInjected = true;
 
   uint64_t rsp = t.getRsp();
   struct stat* traceesMem = (struct stat*) (rsp - 128 - sizeof(struct stat));
 
   // This does most of the work, but it will try to replay open! Change it to fstat.
-  replaySystemcall(t);
+  replaySystemCall(t);
 
   // This should NOT be moved before "replaySystemCall"!
   t.writeRax(SYS_fstat);
@@ -1349,4 +1465,58 @@ void injectFstat(globalState& gs, state& s, ptracer& t, int fd){
 
   gs.log.writeToLog(Importance::info, "fstat(%d, %p)!\n", fd, traceesMem);
 }
+// =======================================================================================
+// Inject newfstatat system call. struct stat is written belows the stack and can be fetched
+// by ptrace read.
+void injectNewfstatat(globalState& gs, state& s, ptracer& t, int dirfd,
+                      char* pathnameTraceesMem){
+  gs.log.writeToLog(Importance::info, "Replacing newfstatat call in tracee!\n");
+
+  // Save current register state to restore in newfstatat.
+  s.prevRegisterState = t.getRegs();
+
+  // Inject fstat system call to perform!
+  s.syscallInjected = true;
+
+  uint64_t rsp = t.getRsp();
+  struct stat* traceesMem = (struct stat*) (rsp - 128 - sizeof(struct stat));
+
+  // This does most of the work, but it will try to replay open! Change it to newfstatat.
+  replaySystemCall(t);
+
+  // This should NOT be moved before "replaySystemCall"!
+  t.writeRax(SYS_newfstatat);
+  t.writeArg1(dirfd); // file descriptor.
+  t.writeArg2((uint64_t) pathnameTraceesMem);
+  t.writeArg3((uint64_t ) traceesMem);
+  t.writeArg4((uint64_t) 0);
+
+  return;
+}
+
+// =======================================================================================
+/*
+ * Only delete if exists, not existing is not an error.
+ */
+void removeInodeFromMaps(ino_t inode, globalState& gs, ptracer& t){
+    // Remove from inode and mtime maps if exists.
+    if(gs.inodeMap.realValueExists(inode)){
+      gs.inodeMap.eraseBasedOnKey(inode);
+    }
+    if(gs.mtimeMap.realValueExists(inode)){
+      gs.mtimeMap.eraseBasedOnKey(inode);
+    }
+
+    return;
+}
+// =======================================================================================
+// Turn system call into a noop by changing it into a getpid. This should be called from
+// the post hook only!
+void noopSystemCall(globalState& gs, ptracer& t){
+  t.changeSystemCall(SYS_getpid);
+  gs.log.writeToLog(Importance::info, "Turning this system call into a NOOP\n");
+  return;
+}
+
+
 // =======================================================================================

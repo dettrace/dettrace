@@ -66,9 +66,25 @@ void logger::writeToLog(Importance imp, std::string format, ...){
   }
 
   if(print){
+    switch(imp){
+    case Importance::extra:
+      fprintf(fin, "[5]EXTRA ");
+      break;
+      case Importance::info:
+        fprintf(fin, "[4]INFO  "); // Extra space for correct alignment.
+      break;
+      case Importance::inter:
+        fprintf(fin, "[3]INTER ");
+      break;
+      case Importance::error:
+        fprintf(fin, "[0]ERROR ");
+      break;
+    }
+
     if(padding){
       fprintf(fin, "  ");
     }
+
     va_start(args, format);
     vfprintf(fin, format.c_str(), args);
     va_end(args);

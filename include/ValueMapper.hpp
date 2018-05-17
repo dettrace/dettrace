@@ -1,8 +1,10 @@
 #ifndef VALUE_MAPPER_H
 #define VALUE_MAPPER_H
 
-#include <map>
+#include <unordered_map>
 #include "logger.hpp"
+
+using namespace std;
 
 /**
  * Simple wrapper around std::map for virtualizing values like inodes.
@@ -16,11 +18,11 @@ protected:
   // that unless I use phantom types and wrapper classes...
 
   // Tables to keep track of mappings.
-  std::map<Virtual, Real> virtualToRealValue;
-  std::map<Real, Virtual> realToVirtualValue;
+  unordered_map<Virtual, Real> virtualToRealValue;
+  unordered_map<Real, Virtual> realToVirtualValue;
   Virtual freshValue;
   logger& myLogger;
-  const std::string mappingName;
+  const string mappingName;
 
 public:
   /**
@@ -28,7 +30,7 @@ public:
    * @myLogger: initialized logger to write data to.
    * @name: name of this mapping for debugging.
    */
-  ValueMapper(logger& logr, std::string name, Virtual startingValue) :
+  ValueMapper(logger& logr, string name, Virtual startingValue) :
     myLogger(logr),
     mappingName(name) {
     freshValue = startingValue;
@@ -118,6 +120,23 @@ public:
     myLogger.writeToLog(Importance::extra, "realValueExists(" + to_string(virtualValue) +
                         ") = " + to_string(keyExists) + "\n");
     return keyExists;
+  }
+
+  // Erase entry based on key.
+  void eraseBasedOnKey(Real key){
+    Virtual value;
+    try{
+      value = realToVirtualValue.at(key);
+    }catch(...){
+      throw runtime_error("Key does not exist in real to virtual map.\n");
+    }
+
+    // We know it's there. We just checked.
+    realToVirtualValue.erase(key);
+    auto res = virtualToRealValue.erase(value);
+    if(res == 0){
+      throw runtime_error("value does not exist in virtual to real map.\n");
+    }
   }
 };
 

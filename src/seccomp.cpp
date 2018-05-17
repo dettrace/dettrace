@@ -84,8 +84,6 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_rename);
   noIntercept(SYS_renameat);
   noIntercept(SYS_renameat2);
-  noIntercept(SYS_rmdir);
-  noIntercept(SYS_rmdir);
   noIntercept(SYS_rt_sigreturn);
   noIntercept(SYS_rt_sigtimedwait);
   noIntercept(SYS_setgid);
@@ -167,6 +165,7 @@ void seccomp::loadRules(bool debug){
   // TODO
   intercept(SYS_recvmsg);
   intercept(SYS_rename, debug);
+  intercept(SYS_rmdir);
   intercept(SYS_sendto);
   // Defintely not deteministic </3
   intercept(SYS_select);
@@ -184,8 +183,8 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_utimes);
   noIntercept(SYS_utimensat);
   intercept(SYS_uname);
-  intercept(SYS_unlink, debug);
-  intercept(SYS_unlinkat, debug);
+  intercept(SYS_unlink);
+  intercept(SYS_unlinkat);
   intercept(SYS_wait4);
   intercept(SYS_write);
   // TODO
