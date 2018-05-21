@@ -1503,9 +1503,11 @@ void removeInodeFromMaps(ino_t inode, globalState& gs, ptracer& t){
 
   // Remove from inode and mtime maps if exists.
   if(gs.inodeMap.realValueExists(inode)){
+    gs.log.writeToLog(Importance::extra, "Deleted inode from map: %d\n", inode);
     gs.inodeMap.eraseBasedOnKey(inode);
   }
   if(gs.mtimeMap.realValueExists(inode)){
+    gs.log.writeToLog(Importance::extra, "Deleted mtime from map: %d\n", inode);
     gs.mtimeMap.eraseBasedOnKey(inode);
   }
 
