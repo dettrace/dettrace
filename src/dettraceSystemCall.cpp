@@ -1486,7 +1486,8 @@ void injectNewfstatat(globalState& gs, state& s, ptracer& t, int dirfd,
   t.writeArg1(dirfd); // file descriptor.
   t.writeArg2((uint64_t) pathnameTraceesMem);
   t.writeArg3((uint64_t ) traceesMem);
-  t.writeArg4((uint64_t) 0);
+  // Needed to handle directories and symlinks correctly.
+  t.writeArg4((uint64_t) AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH);
 
   return;
 }
