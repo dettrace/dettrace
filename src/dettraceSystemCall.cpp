@@ -812,7 +812,7 @@ void renameat2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
 bool rmdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(s.firstTrySystemcall){
     // Turn into a newfstatat system call.
-    injectNewfstatat(gs, s, t, AT_FDCWD, (char*) t.arg2());
+    injectNewfstatat(gs, s, t, AT_FDCWD, (char*) t.arg1());
 
     // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
     // true.
@@ -1043,7 +1043,7 @@ bool
 unlinkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(s.firstTrySystemcall){
     // Turn into a newfstatat system call.
-    injectNewfstatat(gs, s, t, AT_FDCWD, (char*) t.arg2());
+    injectNewfstatat(gs, s, t, AT_FDCWD, (char*) t.arg1());
 
     // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
     // true.
