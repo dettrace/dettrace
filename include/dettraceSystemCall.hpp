@@ -5,14 +5,16 @@
 
 using namespace std;
 
-// TODO: chown
-// TODO: fchown
-// TODO: lchown
 void writeVmTracee(void* localMemory, void* traceeMemory, size_t numberOfBytes,
                    pid_t traceePid);
 void readVmTracee(void* traceeMemory, void* localMemory, size_t numberOfBytes,
                   pid_t traceePid);
-void replaySystemCall(ptracer& t);
+
+/**
+ * Replay system call passed in. The registers should already be in the correct format.
+ * You should save your previous register state if needed.
+ */
+void replaySystemCall(ptracer& t, uint64_t systemCall);
 /**
  * Hopefully this will server as documentation for all our system calls.
  * Please keep in alphabetical order.
@@ -687,13 +689,26 @@ public:
  * readlink, readlinkat - read value of a symbolic link
  * Deterministic thanks to our jail. Intercepted merely for debugging purposes.
  *
- * TODO
  */
 class readlinkSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
+// =======================================================================================
+/*
+ * ssize_t readlinkat(int dirfd, const char *pathname, char *buf, size_t bufsiz);
+ *
+ * readlinkat - read value of a symbolic link
+ * Deterministic thanks to our jail. Intercepted merely for debugging purposes.
+ *
+ */
+class readlinkatSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
 // =======================================================================================
 /**
  * ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags);
@@ -711,14 +726,29 @@ public:
 /**
  * int rename(const char *oldpath, const char *newpath);
  *
- *
- * No reason it shouldn't be deterministic.
+ * Must be intercepted as this changes the inode for newpath if newpath exists.
  */
 class renameSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
+// =======================================================================================
+class renameatSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+class renameat2SystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
 // =======================================================================================
 class rmdirSystemCall : public systemCall{
 public:
@@ -1164,7 +1194,7 @@ void handleDents(globalState& gs, state& s, ptracer& t, scheduler& sched){
     s.dirEntries.at(fd).addChunk(newChunk);
 
     gs.log.writeToLog(Importance::info, "Replaying system call to read more bytes...\n");
-    replaySystemCall(t);
+    replaySystemCall(t, t.getSystemCallNumber());
   }
   return;
 }

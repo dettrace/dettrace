@@ -136,6 +136,17 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
 }
 // =======================================================================================
 void execution::handlePostSystemCall(state& currState){
+
+  // Sometimes, we change the system call midway. That is, at the prehook of a system call
+  // we insert a new system call. So we must fetch the system call object again.
+  int syscallNum = tracer.getSystemCallNumber();
+  currState.systemcall = getSystemCall(syscallNum, systemCallMappings[syscallNum]);
+
+  // No idea what this system call is! error out.
+  if(syscallNum < 0 || syscallNum > SYSTEM_CALL_COUNT){
+    throw runtime_error("Unkown system call number: " + to_string(syscallNum));
+  }
+
   log.writeToLog(Importance::info,"%s value before post-hook: %d\n",
                  currState.systemcall->syscallName.c_str(),
                  tracer.getReturnValue());
@@ -143,7 +154,6 @@ void execution::handlePostSystemCall(state& currState){
   currState.systemcall->
     handleDetPost(myGlobalState, currState, tracer, myScheduler);
 
-  // System call was done in the last iteration.
   log.writeToLog(Importance::info,"%s returned with value: %d\n",
                  currState.systemcall->syscallName.c_str(),
                  tracer.getReturnValue());
@@ -497,10 +507,16 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<readSystemCall>(syscallNumber, syscallName);
   case SYS_readlink:
     return make_unique<readlinkSystemCall>(syscallNumber, syscallName);
+  case SYS_readlinkat:
+    return make_unique<readlinkatSystemCall>(syscallNumber, syscallName);
   case SYS_recvmsg:
     return make_unique<recvmsgSystemCall>(syscallNumber, syscallName);
   case SYS_rename:
     return make_unique<renameSystemCall>(syscallNumber, syscallName);
+  case SYS_renameat:
+    return make_unique<renameatSystemCall>(syscallNumber, syscallName);
+  case SYS_renameat2:
+    return make_unique<renameat2SystemCall>(syscallNumber, syscallName);
   case SYS_rmdir:
     return make_unique<rmdirSystemCall>(syscallNumber, syscallName);
   case SYS_sendto:

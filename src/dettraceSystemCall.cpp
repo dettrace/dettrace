@@ -38,7 +38,6 @@ void injectFstat(globalState& gs, state& s, ptracer& t, int fd);
 void injectNewfstatat(globalState& gs, state& s, ptracer& t, int dirfd,
                       char* pathnameTraceesMem);
 void removeInodeFromMaps(ino_t inode, globalState& gs, ptracer& t);
-void noopSystemCall(globalState& gs, ptracer& t);
 // =======================================================================================
 /**
  *
@@ -505,7 +504,7 @@ void newfstatatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
     // unlink, unlinkat, or rmdir. Now replay that system call as we did not let
     // it though.
     t.setRegs(s.prevRegisterState);
-    replaySystemCall(t);
+    replaySystemCall(t, t.getSystemCallNumber());
   }else{
     handleStatFamily(gs, s, t, "newfstatat");
   }
@@ -721,7 +720,7 @@ void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     t.writeArg2(t.arg2() + bytes_read);
     t.writeArg3(t.arg3() - bytes_read);
 
-    replaySystemCall(t);
+    replaySystemCall(t, t.getSystemCallNumber());
   }
 
   return;
@@ -742,6 +741,13 @@ bool readlinkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
   return false;
 }
 // =======================================================================================
+bool readlinkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
+                                      scheduler& sched){
+  printInfoString(t.arg2(), gs, s);
+
+  return false;
+}
+// =======================================================================================
 bool recvmsgSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                      scheduler& sched){
   return true;
@@ -755,38 +761,73 @@ void recvmsgSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
 // =======================================================================================
 bool renameSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                     scheduler& sched){
-  printInfoString(t.arg1(), gs, s, " renaming-ing path: ");
-  printInfoString(t.arg2(), gs, s, " to path: ");
+  if(s.firstTrySystemcall){
+    // Turn into a newfstatat system call to see if oldpath existed. If so, we must mark
+    // all path as deleted.
+    injectNewfstatat(gs, s, t, AT_FDCWD, (char*) t.arg2());
 
+    // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
+    // true.
+    return true;
+  }
+  else{
+    printInfoString(t.arg1(), gs, s, " renaming-ing path: ");
+    printInfoString(t.arg2(), gs, s, " to path: ");
+    // We must go into the post hook to delete the inode.
+    return true;
+  }
+}
+
+void renameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
+                                    scheduler& sched){
+  if((int) t.getReturnValue() >= 0){
+    removeInodeFromMaps(s.inodeToDelete, gs, t);
+    s.inodeToDelete = -1;
+    s.firstTrySystemcall = true;
+  }
+
+  return;
+}
+// =======================================================================================
+bool renameatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
+                                    scheduler& sched){
   return false;
+}
 
+void renameatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
+                                    scheduler& sched){
+  return;
+}
+// =======================================================================================
+bool renameat2SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
+                                    scheduler& sched){
+  return false;
+}
+
+void renameat2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
+                                    scheduler& sched){
+  return;
 }
 // =======================================================================================
 bool rmdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(s.firstTrySystemcall){
-    // Skip. All the work to inject newfstatat will be done in the post hook.
-    noopSystemCall(gs, t);
+    // Turn into a newfstatat system call.
+    injectNewfstatat(gs, s, t, AT_FDCWD, (char*) t.arg2());
+
+    // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
+    // true.
+    return true;
   }else{
     printInfoString(t.arg1(), gs, s);
+    // We must go into the post hook to delete the inode.
+    return true;
   }
-
-  return true;
 }
 
 void rmdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if(s.firstTrySystemcall){
-    s.firstTrySystemcall = false;
-
-    // This was a noop. Set our system call number register back to us.
-    t.changeSystemCall(SYS_rmdir);
-
-    // Go to a newfstatat call to figure out what inode to delete as well.
-    // See fistTrySystemcall for full documentation.
-    injectNewfstatat(gs, s, t, AT_FDCWD, (char*) t.arg1());
-    return;
-  }
-
-  // Not our first time. This is after the real unlink actually happened.
+  // We delete the inode here instead of at newfstatatSystemCall since we don't know
+  // until here whether the call to rmdir actually succeeded.
+  // TODO: What happens if this a symbolic link to a directory?
   if((int) t.getReturnValue() >= 0){
     removeInodeFromMaps(s.inodeToDelete, gs, t);
     s.inodeToDelete = -1;
@@ -1001,30 +1042,22 @@ void unameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 bool
 unlinkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(s.firstTrySystemcall){
-    // Skip. All the work to inject newfstatat will be done in the post hook.
-    noopSystemCall(gs, t);
+    // Turn into a newfstatat system call.
+    injectNewfstatat(gs, s, t, AT_FDCWD, (char*) t.arg2());
+
+    // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
+    // true.
+    return true;
   }else{
     printInfoString(t.arg1(), gs, s);
+    // We must go into the post hook to delete the inode.
+    return true;
   }
-
-  return true;
 }
 
 void
 unlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if(s.firstTrySystemcall){
-    s.firstTrySystemcall = false;
-
-    // This was a noop. Set our system call number register back to us.
-    t.changeSystemCall(SYS_unlink);
-
-    // Go to a newfstatat call to figure out what inode to delete as well.
-    // See fistTrySystemcall for full documentation.
-    injectNewfstatat(gs, s, t, AT_FDCWD, (char*) t.arg1());
-    return;
-  }
-
-  // Not our first time. This is after the real unlink actually happened.
+   // Not our first time. This is after the real unlink actually happened.
   if((int) t.getReturnValue() >= 0){
     removeInodeFromMaps(s.inodeToDelete, gs, t);
     s.firstTrySystemcall = true;
@@ -1036,29 +1069,21 @@ unlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler
 bool
 unlinkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(s.firstTrySystemcall){
-    // Skip. All the work to inject newfstatat will be done in the post hook.
-    noopSystemCall(gs, t);
+    // Turn into a newfstatat system call.
+    injectNewfstatat(gs, s, t, AT_FDCWD, (char*) t.arg2());
+
+    // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
+    // true.
+    return true;
   }else{
     printInfoString(t.arg2(), gs, s);
+    // We must go into the post hook to delete the inode.
+    return true;
   }
-
-  return true;
 }
 
 void
 unlinkatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if(s.firstTrySystemcall){
-    s.firstTrySystemcall = false;
-
-    // This was a noop. Set our system call number register back to us.
-    t.changeSystemCall(SYS_unlinkat);
-
-    // Go to a newfstatat call to figure out what inode to delete as well.
-    // See fistTrySystemcall for full documentation.
-    injectNewfstatat(gs, s, t, (int) t.arg1(), (char*) t.arg2());
-    return;
-  }
-
   // Not our first time. This is after the real unlink actually happened.
   if((int) t.getReturnValue() >= 0){
     removeInodeFromMaps(s.inodeToDelete, gs, t);
@@ -1232,7 +1257,7 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     gs.log.writeToLog(Importance::info, "Not all bytes written: Replaying system call!\n");
     t.writeArg2(t.arg2() + bytes_written);
     t.writeArg3(t.arg3() - bytes_written);
-    replaySystemCall(t);
+    replaySystemCall(t, t.getSystemCallNumber());
   }
 
   return;
@@ -1306,7 +1331,7 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sc
                       s.systemcall->syscallName + " would have blocked!\n");
 
     sched.preemptAndScheduleNext(s.traceePid);
-    replaySystemCall(t);
+    replaySystemCall(t, t.getSystemCallNumber());
     return true;
   }else{
     // Disambiguiate. Otherwise it's impossible to tell the difference between a
@@ -1318,14 +1343,14 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sc
   }
 }
 // =======================================================================================
-void replaySystemCall(ptracer& t){
+void replaySystemCall(ptracer& t, uint64_t systemCall){
   uint16_t minus2 = t.readFromTracee((uint16_t*) (t.getRip() - 2), t.getPid());
   if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
     throw runtime_error("IP does not point to system call instruction!\n");
   }
 
   // Replay system call!
-  t.writeRax(t.getSystemCallNumber());
+  t.changeSystemCall(systemCall);
   t.writeIp(t.getRip() - 2);
 }
 // =======================================================================================
@@ -1452,13 +1477,10 @@ void injectFstat(globalState& gs, state& s, ptracer& t, int fd){
   uint64_t rsp = t.getRsp();
   struct stat* traceesMem = (struct stat*) (rsp - 128 - sizeof(struct stat));
 
-  // This does most of the work, but it will try to replay open! Change it to fstat.
-  replaySystemCall(t);
-
-  // This should NOT be moved before "replaySystemCall"!
-  t.writeRax(SYS_fstat);
+  // Call fstat.
   t.writeArg1(fd); // file descriptor.
   t.writeArg2((uint64_t )traceesMem);
+  replaySystemCall(t, SYS_fstat);
 
   gs.log.writeToLog(Importance::info, "fstat(%d, %p)!\n", fd, traceesMem);
 }
@@ -1478,16 +1500,14 @@ void injectNewfstatat(globalState& gs, state& s, ptracer& t, int dirfd,
   uint64_t rsp = t.getRsp();
   struct stat* traceesMem = (struct stat*) (rsp - 128 - sizeof(struct stat));
 
-  // This does most of the work, but it will try to replay open! Change it to newfstatat.
-  replaySystemCall(t);
-
-  // This should NOT be moved before "replaySystemCall"!
-  t.writeRax(SYS_newfstatat);
+  replaySystemCall(t, SYS_newfstatat);
   t.writeArg1(dirfd); // file descriptor.
   t.writeArg2((uint64_t) pathnameTraceesMem);
   t.writeArg3((uint64_t ) traceesMem);
   // Needed to handle directories and symlinks correctly.
   t.writeArg4((uint64_t) AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH);
+
+  s.firstTrySystemcall = false;
 
   return;
 }

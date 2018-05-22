@@ -178,6 +178,7 @@ long ptracer::doPtrace(enum __ptrace_request request, pid_t pid, void *addr, voi
 
 void ptracer::changeSystemCall(uint64_t val){
   regs.orig_rax = val;
+  regs.rax = val;
   doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
   return;
 }

@@ -22,29 +22,37 @@ seccomp::seccomp(int debugLevel){
 }
 
 void seccomp::loadRules(bool debug){
-  // This is a variant of loadRules which intercepts extra system calls for
-  // debug purposes!
+  // sets architecture-specific process or thread state.
   noIntercept(SYS_arch_prctl);
+  // Change location of the program break.
   noIntercept(SYS_brk);
   // Bind seems safe enough to let though, specially since user is stuck in chroot.
   // There might be some slight issues with permission denied if we set up our
   // bind mounts wrong and might need to allow for recursive mounting. But it will
   // be obvious.
   noIntercept(SYS_bind);
+  // Change owner of file
   noIntercept(SYS_chown);
+  // like chown but does not dereference symbolic links.
   noIntercept(SYS_lchown);
+  // Get clock resolution, TODO might be non deterministic.
   noIntercept(SYS_clock_getres);
+  // Duplicate file descriptor.
   noIntercept(SYS_dup);
   noIntercept(SYS_dup2);
+  // End process.
   noIntercept(SYS_exit);
+  // End process group.
   noIntercept(SYS_exit_group);
+  // Advise on access patter by program of file.
   noIntercept(SYS_fadvise64);
+  // Variants of regular function that use file descriptor instead of char* path.
   noIntercept(SYS_fchdir);
   noIntercept(SYS_fchmod);
   noIntercept(SYS_fchmodat);
   noIntercept(SYS_fchown);
   noIntercept(SYS_fcntl);
-  // Flock may block! In the future this may lead to deadlock.
+  // TODO Flock may block! In the future this may lead to deadlock.
   // deal with it then :)
   noIntercept(SYS_flock);
   noIntercept(SYS_fsync);
@@ -69,8 +77,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_mprotect);
   noIntercept(SYS_mremap);
   noIntercept(SYS_lseek);
-  noIntercept(SYS_link);
-  noIntercept(SYS_linkat);
+
   noIntercept(SYS_pread64);
   noIntercept(SYS_rt_sigprocmask);
   noIntercept(SYS_rt_sigaction);
@@ -79,11 +86,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_set_tid_address);
   noIntercept(SYS_setxattr);
   noIntercept(SYS_sigaltstack);
-  // TODO move to intercept with debug
-  noIntercept(SYS_readlinkat);
-  noIntercept(SYS_rename);
-  noIntercept(SYS_renameat);
-  noIntercept(SYS_renameat2);
+
   noIntercept(SYS_rt_sigreturn);
   noIntercept(SYS_rt_sigtimedwait);
   noIntercept(SYS_setgid);
@@ -95,7 +98,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_socket);
   noIntercept(SYS_umask);
 
-  // These system calls must intercepted as to know when a fork even has happened:
+  // These system calls must be intercepted as to know when a fork even has happened:
   // We handle forks when see the system call pre exit.
   // Since this is the easiest time to tell a fork even happened. It's not trivial
   // to check the event as we might get a signal first from the child process.
@@ -106,7 +109,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_vfork);
   intercept(SYS_clone);
 
-  // These system calls cause an even that is caught by ptrace and determinized.
+  // These system calls cause an even that is caught by ptrace and determinized:
   intercept(SYS_access, debug);
   // Not used, let's figure out who does one!
   // intercept(SYS_alarm);
@@ -149,6 +152,13 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_nanosleep);
   intercept(SYS_newfstatat);
   intercept(SYS_lstat);
+  // We usually intercept every system call that can create a new file or directory.
+  // This is used to give a newer modified time to files. So ommiting this here or
+  // in mkdir* is not neccessarily an error, since we don't expect process' to check
+  // this. If they do, we will get some error, but it will not leave to nondeterminism.
+  intercept(SYS_link);
+  intercept(SYS_linkat);
+
   intercept(SYS_open);
   intercept(SYS_openat);
   // TODO Pipe
@@ -162,9 +172,14 @@ void seccomp::loadRules(bool debug){
   // TODO
   intercept(SYS_readv);
   intercept(SYS_readlink, debug);
+  intercept(SYS_readlinkat, debug);
   // TODO
   intercept(SYS_recvmsg);
-  intercept(SYS_rename, debug);
+
+  intercept(SYS_rename);
+  intercept(SYS_renameat);
+  intercept(SYS_renameat2);
+
   intercept(SYS_rmdir);
   intercept(SYS_sendto);
   // Defintely not deteministic </3
@@ -181,7 +196,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_times);
   intercept(SYS_utime);
   intercept(SYS_utimes);
-  noIntercept(SYS_utimensat);
+  intercept(SYS_utimensat);
   intercept(SYS_uname);
   intercept(SYS_unlink);
   intercept(SYS_unlinkat);
