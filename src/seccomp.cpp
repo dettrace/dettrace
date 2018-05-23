@@ -6,7 +6,7 @@
 
 #include <sys/personality.h>
 #include <sys/ptrace.h>
-#include <sys/reg.h>     /* For constants ORIgetpeernameG_EAX, etc */
+#include <sys/reg.h>     /* For constants ORIG_EAX, etc */
 #include <sys/syscall.h>    /* For SYS_write, etc */
 
 using namespace std;
@@ -124,12 +124,12 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_faccessat, debug);
   intercept(SYS_fgetxattr, debug);
   intercept(SYS_flistxattr, debug);
-  intercept(SYS_fchownat);
+  intercept(SYS_fchownat, debug);
   intercept(SYS_fstat);
   intercept(SYS_fstatfs);
   // TODO
   intercept(SYS_futex);
-  intercept(SYS_getcwd);
+  intercept(SYS_getcwd, debug);
   intercept(SYS_getdents);
   // TODO
   intercept(SYS_getdents64);

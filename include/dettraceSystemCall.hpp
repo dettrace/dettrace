@@ -15,6 +15,7 @@ void readVmTracee(void* traceeMemory, void* localMemory, size_t numberOfBytes,
  * You should save your previous register state if needed.
  */
 void replaySystemCall(ptracer& t, uint64_t systemCall);
+
 /**
  * Hopefully this will server as documentation for all our system calls.
  * Please keep in alphabetical order.

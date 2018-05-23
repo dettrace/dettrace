@@ -35,8 +35,22 @@ void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName)
 void printInfoString(uint64_t addressOfCString, globalState& gs, state& s,
                      string postFix = " path: ");
 void injectFstat(globalState& gs, state& s, ptracer& t, int fd);
-void injectNewfstatat(globalState& gs, state& s, ptracer& t, int dirfd,
-                      char* pathnameTraceesMem);
+
+/**
+ *
+ * newfstatat is a stat variant with a "at" for using a file descriptor to a directory
+ * to prepend to the relative path. For several system calls that delete a file e.g.
+ * rename, renameat, renameat2,  we intercept them and make the original call a noop.
+ * This is needed as once we hit the post-hook it is too late to call newfstatat.
+
+ * This function does all the work to "switch out" the current system call and convert it
+ * to newfstatat, only if needed, that is, based on whether this is the "first try" for
+ * the current system call, or our replay done _after_ we have already injected newfstatat.
+ *
+ * returns true if the system call is to be injected, otherwise false.
+ */
+bool injectNewfstatatIfNeeded(globalState& gs, state& s, ptracer& t, int dirfd,
+                              char* pathnameTraceesMem);
 void removeInodeFromMaps(ino_t inode, globalState& gs, ptracer& t);
 // =======================================================================================
 /**
@@ -505,6 +519,7 @@ void newfstatatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
     // it though.
     t.setRegs(s.prevRegisterState);
     replaySystemCall(t, t.getSystemCallNumber());
+    s.firstTrySystemcall = false;
   }else{
     handleStatFamily(gs, s, t, "newfstatat");
   }
@@ -761,21 +776,19 @@ void recvmsgSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
 // =======================================================================================
 bool renameSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                     scheduler& sched){
-  if(s.firstTrySystemcall){
-    // Turn into a newfstatat system call to see if oldpath existed. If so, we must mark
-    // all path as deleted.
-    injectNewfstatat(gs, s, t, AT_FDCWD, (char*) t.arg2());
-
+  // Turn into a newfstatat system call to see if oldpath existed. If so, we must mark
+  // all path as deleted.
+  bool ret = injectNewfstatatIfNeeded(gs, s, t, AT_FDCWD, (char*) t.arg2());
+  if(ret){
     // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
     // true.
     return true;
   }
-  else{
-    printInfoString(t.arg1(), gs, s, " renaming-ing path: ");
-    printInfoString(t.arg2(), gs, s, " to path: ");
-    // We must go into the post hook to delete the inode.
-    return true;
-  }
+
+  printInfoString(t.arg1(), gs, s, " renaming-ing path: ");
+  printInfoString(t.arg2(), gs, s, " to path: ");
+  // We must go into the post hook to delete the inode.
+  return true;
 }
 
 void renameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
@@ -810,18 +823,18 @@ void renameat2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
 }
 // =======================================================================================
 bool rmdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if(s.firstTrySystemcall){
-    // Turn into a newfstatat system call.
-    injectNewfstatat(gs, s, t, AT_FDCWD, (char*) t.arg1());
-
+  // Turn into a newfstatat system call.
+  bool ret = injectNewfstatatIfNeeded(gs, s, t, AT_FDCWD, (char*) t.arg1());
+  if(ret){
     // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
     // true.
     return true;
-  }else{
-    printInfoString(t.arg1(), gs, s);
-    // We must go into the post hook to delete the inode.
-    return true;
   }
+
+  printInfoString(t.arg1(), gs, s);
+  // We must go into the post hook to delete the inode.
+  return true;
+
 }
 
 void rmdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -1041,18 +1054,17 @@ void unameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 // =======================================================================================
 bool
 unlinkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if(s.firstTrySystemcall){
-    // Turn into a newfstatat system call.
-    injectNewfstatat(gs, s, t, AT_FDCWD, (char*) t.arg1());
-
+  // Turn into a newfstatat system call.
+  bool ret = injectNewfstatatIfNeeded(gs, s, t, AT_FDCWD, (char*) t.arg1());
+  if(ret){
     // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
     // true.
     return true;
-  }else{
-    printInfoString(t.arg1(), gs, s);
-    // We must go into the post hook to delete the inode.
-    return true;
   }
+
+  printInfoString(t.arg1(), gs, s);
+  // We must go into the post hook to delete the inode.
+  return true;
 }
 
 void
@@ -1068,18 +1080,16 @@ unlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler
 // =======================================================================================
 bool
 unlinkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if(s.firstTrySystemcall){
-    // Turn into a newfstatat system call.
-    injectNewfstatat(gs, s, t, AT_FDCWD, (char*) t.arg2());
-
+  // Turn into a newfstatat system call.
+  bool ret = injectNewfstatatIfNeeded(gs, s, t, AT_FDCWD, (char*) t.arg2());
+  if(ret){
     // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
     // true.
     return true;
-  }else{
-    printInfoString(t.arg2(), gs, s);
-    // We must go into the post hook to delete the inode.
-    return true;
   }
+  printInfoString(t.arg2(), gs, s);
+  // We must go into the post hook to delete the inode.
+  return true;
 }
 
 void
@@ -1088,8 +1098,9 @@ unlinkatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedul
   if((int) t.getReturnValue() >= 0){
     removeInodeFromMaps(s.inodeToDelete, gs, t);
     s.inodeToDelete = -1;
-    s.firstTrySystemcall = true;
   }
+
+  s.firstTrySystemcall = true;
 
   return;
 }
@@ -1485,10 +1496,14 @@ void injectFstat(globalState& gs, state& s, ptracer& t, int fd){
   gs.log.writeToLog(Importance::info, "fstat(%d, %p)!\n", fd, traceesMem);
 }
 // =======================================================================================
-// Inject newfstatat system call. struct stat is written belows the stack and can be fetched
-// by ptrace read.
-void injectNewfstatat(globalState& gs, state& s, ptracer& t, int dirfd,
-                      char* pathnameTraceesMem){
+bool injectNewfstatatIfNeeded(globalState& gs, state& s, ptracer& t, int dirfd,
+                              char* pathnameTraceesMem){
+  // This is not the first time we see this system call. We have already replayed it.
+  // not injecting.
+  if(! s.firstTrySystemcall){
+    return false;
+  }
+
   gs.log.writeToLog(Importance::info, "Replacing newfstatat call in tracee!\n");
 
   // Save current register state to restore in newfstatat.
@@ -1509,7 +1524,7 @@ void injectNewfstatat(globalState& gs, state& s, ptracer& t, int dirfd,
 
   s.firstTrySystemcall = false;
 
-  return;
+  return true;
 }
 
 // =======================================================================================
