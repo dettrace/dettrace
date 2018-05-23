@@ -804,22 +804,64 @@ void renameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
 // =======================================================================================
 bool renameatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                     scheduler& sched){
-  return false;
+  // Turn into a newfstatat system call to see if oldpath existed. If so, we must mark
+  // all path as deleted.
+  int newdirfd = (int) t.arg3();
+  char* newpath = (char*) t.arg4();
+  bool ret = injectNewfstatatIfNeeded(gs, s, t, newdirfd, newpath);
+  if(ret){
+    // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
+    // true.
+    return true;
+  }
+
+  printInfoString(t.arg2(), gs, s, " renaming-ing path: ");
+  printInfoString(t.arg4(), gs, s, " to path: ");
+  // We must go into the post hook to delete the inode.
+  return true;
 }
 
 void renameatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                     scheduler& sched){
-  return;
+  if((int) t.getReturnValue() >= 0){
+    removeInodeFromMaps(s.inodeToDelete, gs, t);
+    s.inodeToDelete = -1;
+    s.firstTrySystemcall = true;
+  }
 }
 // =======================================================================================
 bool renameat2SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                     scheduler& sched){
-  return false;
+  int flags = (int) t.arg5();
+  // We do not handle this flag TODO
+  if((flags | RENAME_EXCHANGE) == flags){
+    throw runtime_error("We do not handle RENAME_EXCHANGE flag.\n");
+  }
+
+  // Turn into a newfstatat system call to see if oldpath existed. If so, we must mark
+  // all path as deleted.
+  int newdirfd = (int) t.arg3();
+  char* newpath = (char*) t.arg4();
+  bool ret = injectNewfstatatIfNeeded(gs, s, t, newdirfd, newpath);
+  if(ret){
+    // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
+    // true.
+    return true;
+  }
+
+  printInfoString(t.arg2(), gs, s, " renaming-ing path: ");
+  printInfoString(t.arg4(), gs, s, " to path: ");
+  // We must go into the post hook to delete the inode.
+  return true;
 }
 
 void renameat2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                     scheduler& sched){
-  return;
+  if((int) t.getReturnValue() >= 0){
+    removeInodeFromMaps(s.inodeToDelete, gs, t);
+    s.inodeToDelete = -1;
+    s.firstTrySystemcall = true;
+  }
 }
 // =======================================================================================
 bool rmdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -1081,7 +1123,7 @@ unlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler
 bool
 unlinkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // Turn into a newfstatat system call.
-  bool ret = injectNewfstatatIfNeeded(gs, s, t, AT_FDCWD, (char*) t.arg2());
+  bool ret = injectNewfstatatIfNeeded(gs, s, t, (int) t.arg1(), (char*) t.arg2());
   if(ret){
     // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
     // true.
