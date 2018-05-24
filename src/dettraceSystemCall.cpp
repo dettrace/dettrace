@@ -9,6 +9,8 @@
 #include <fcntl.h>              /* Obtain O_* constant definitions */
 #include <inttypes.h>
 #include <sys/times.h>
+#include <sys/select.h>
+#include <sys/socket.h>
 
 #include <climits>
 #include <cstring>
@@ -916,26 +918,33 @@ void sendtoSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   return;
 }
 // =======================================================================================
-bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // Nothing to do for now. (Until fixed)
-  return false;
-
-	static bool first = true;
-	// Set the timeout to zero.
-  timespec* timeoutPtr = (timespec*) t.arg5();
+bool selectSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
+  // Get the original set structs.
+  // Set them in the state class.
+  if(t.arg2() != NULL){
+    s.rdfsNotNull = true;
+    readVmTracee((void*) t.arg2(), (void*) & s.origRdfs, sizeof(fd_set), t.getPid());
+  }
+  if(t.arg3() != NULL){ 
+    s.wrfsNotNull = true;
+    readVmTracee((void*) t.arg3(), (void*) & s.origWrfs, sizeof(fd_set), t.getPid());
+  }
+  if(t.arg4() != NULL){
+    s.exfsNotNull = true;
+    readVmTracee((void*) t.arg4(), (void*) & s.origExfs, sizeof(fd_set), t.getPid());
+  }
+  // Set the timeout to zero.
+  timeval* timeoutPtr = (timeval*) t.arg5();
   s.originalArg5 = (uint64_t) timeoutPtr;
-  timespec ourTimeout = {0};
-  ourTimeout.tv_sec = 5;
+  timeval ourTimeout = {0};
+  ourTimeout.tv_sec = 0;
 
   if(timeoutPtr == nullptr){
     // Has to be created in memory.
     uint64_t rsp = t.getRsp();
-    timespec* newAddr = (timespec*) (rsp - 128 - sizeof(struct timespec));
-    if(first){
-      ptracer::writeToTracee(newAddr, ourTimeout, s.traceePid);
-      t.writeArg5((uint64_t) newAddr);
-      first = false;
-    }
+    timeval* newAddr = (timeval*) (rsp - 128 - sizeof(struct timeval));
+    ptracer::writeToTracee(newAddr, ourTimeout, s.traceePid);
+    t.writeArg5((uint64_t) newAddr);
   }else{
     // Already exists in memory.
     //  ptracer::writeToTracee(timeoutPtr, ourTimeout, s.traceePid);
@@ -944,10 +953,30 @@ bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   return true;
 }
 
-void selectSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  //uint64_t retVal = t.getReturnValue();
-  // restore return val todo
-  replaySyscallIfBlocked(gs, s, t, sched, 0);
+void selectSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
+  bool replayed = replaySyscallIfBlocked(s, t, sched, 0);
+  printf("REPLAY: %d\n", replayed); 
+  if(replayed){
+    if(s.rdfsNotNull){
+      //s.rdfsNotNull = false;
+      writeVmTracee((void*) & s.origRdfs, (void*) t.arg2(), sizeof(fd_set), t.getPid());
+      //t.writeArg2((uint64_t) s.origRdfs);
+    }
+    if(s.wrfsNotNull){
+      //s.wrfsNotNull = false;
+      writeVmTracee((void*) & s.origWrfs, (void*) t.arg3(), sizeof(fd_set), t.getPid());
+      //t.writeArg3((uint64_t) s.origWrfs);
+    }
+    if(s.exfsNotNull){
+      //s.exfsNotNull = false;
+      writeVmTracee((void*) & s.origExfs, (void*) t.arg4(), sizeof(fd_set), t.getPid());
+      //t.writeArg4((uint64_t) s.origExfs);
+    }
+    s.rdfsNotNull = false;
+    s.wrfsNotNull = false;
+    s.exfsNotNull = false;
+    t.writeArg5((uint64_t) s.originalArg5);
+  }
   return;
 }
 // =======================================================================================

@@ -80,7 +80,9 @@ int main(){
     int child1Status;
     //waitpid(&child1Status);
 
-    waitpid(pid2, &child1Status, 0);
+    printf("parent is waiting\n");
+    int v = waitpid(pid2, &child1Status, 0);
+    printf("val is %d.\n", v);
     return 0;
   }
   // Parent = 1
@@ -89,7 +91,10 @@ int main(){
   fflush(NULL);
   int parentStatus;
   //wait(&parentStatus);
-  waitpid(pid1, &parentStatus, 0);
+  //waitpid(pid1, &parentStatus, 0);
+  printf("grandparent is waiting\n");
+  int v = waitpid(pid1, &parentStatus, 0);
+  printf("val is %d.\n", v);
   return 0;
 }
 

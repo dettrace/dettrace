@@ -8,6 +8,7 @@
 #include <sys/user.h>
 #include <sys/vfs.h>
 #include <unordered_map>
+#include <sys/select.h>
 
 #include "ptracer.hpp"
 #include "ValueMapper.hpp"
@@ -113,6 +114,12 @@ public:
 
   // Flag to let us know if the current system call was artifically injected by us.
   bool syscallInjected = false;
+  bool rdfsNotNull = false;
+  bool wrfsNotNull = false;
+  bool exfsNotNull = false;
+  fd_set origRdfs;
+  fd_set origWrfs;
+  fd_set origExfs;
 
   // Our old values before post hook, for simple restoring of the user's register state.
   struct user_regs_struct prevRegisterState = {0};
