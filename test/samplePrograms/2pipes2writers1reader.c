@@ -11,91 +11,93 @@
 int doWithCheck(int returnValue, char* errorMessage);
 void writeToPipe(int writeEnd, int childNum);
 void readFromPipe(int pipefd);
+void readFromEither(int max_fd, int readEndParent, int readEndGrandparent, fd_set* rfds);
 
 const int bytesToUse = 100;
 
 int main(){
+  int grandparentPipe[2];
   int parentPipe[2];
-  int child1Pipe[2];
+  doWithCheck(pipe(grandparentPipe), "pipe");
   doWithCheck(pipe(parentPipe), "pipe");
-  doWithCheck(pipe(child1Pipe), "pipe");
 
+  int readEndGrandparent = grandparentPipe[0];
+  int writeEndGrandparent = grandparentPipe[1];
   int readEndParent = parentPipe[0];
   int writeEndParent = parentPipe[1];
-  int readEndChild1 = child1Pipe[0];
-  int writeEndChild1 = child1Pipe[1];
 
   // Forking Child 1
   pid_t pid1 = doWithCheck(fork(), "fork");
 
-  printf("we are alive\n");
+  printf("parent spawned\n");
   // Child 1: Fork Child 2
 	// And also write to the second pipe.
   if(pid1 == 0){
     pid_t pid2 = doWithCheck(fork(), "fork");
+    printf("grandchild spawned\n");
 
-    // Child 2: Forked from Child 1
-    // TODO: stuff
+    // Grandchild
     if(pid2 == 0){
       fd_set rfds;
       int retVal;
       FD_ZERO(&rfds);
-      FD_SET(readEndChild1, &rfds);
+      FD_SET(readEndGrandparent, &rfds);
       FD_SET(readEndParent, &rfds);
 
-      int max_fd = -1;
-      if(readEndChild1 > readEndParent){
-        max_fd = readEndChild1;
-      }else{
-      	max_fd = readEndParent;
-      }
+      int max_fd = readEndGrandparent > readEndParent ?
+        readEndGrandparent :
+      	readEndParent;
 
-      doWithCheck(select(max_fd + 1, &rfds, NULL, NULL, NULL), "select");
-      if(FD_ISSET(readEndChild1, &rfds)){
-        readFromPipe(readEndChild1);
-      }
-      else if(FD_ISSET(readEndParent, &rfds)){
-        readFromPipe(readEndParent);
-      }
-      else{ 
-      	printf("Nothing ready\n");
-      }
+      readFromEither(max_fd, readEndParent, readEndGrandparent, & rfds);
 
-      doWithCheck(select(max_fd + 1, &rfds, NULL, NULL, NULL), "select");
-      if(FD_ISSET(readEndChild1, &rfds)){
-        readFromPipe(readEndChild1);
-      }
-      else if(FD_ISSET(readEndParent, &rfds)){
-        readFromPipe(readEndParent);
-      }
-      else{ 
-      	printf("Nothing ready\n");
-      }
+      FD_ZERO(&rfds);
+      FD_SET(readEndGrandparent, &rfds);
+      FD_SET(readEndParent, &rfds);
+      readFromEither(max_fd, readEndParent, readEndGrandparent, & rfds);
+
       return 0;
     }
-    // Child1 = 2
-    writeToPipe(writeEndChild1, 2);
-    printf("parent done!\n");
+    // Parent
+    printf("parent attempting to write...\n");
+    writeToPipe(writeEndParent, 2);
+    printf("parent wrote!\n");
     fflush(NULL);
     int child1Status;
-    //waitpid(&child1Status);
 
     printf("parent is waiting\n");
     int v = waitpid(pid2, &child1Status, 0);
-    printf("val is %d.\n", v);
     return 0;
   }
+
   // Parent = 1
-  writeToPipe(writeEndParent, 1);
-  printf("grandparent done!\n");
-  fflush(NULL);
+  printf("grandparent attempting to write...!\n");
+  writeToPipe(writeEndGrandparent, 1);
+  printf("grandparent wrote!\n");
+
   int parentStatus;
   //wait(&parentStatus);
   //waitpid(pid1, &parentStatus, 0);
   printf("grandparent is waiting\n");
   int v = waitpid(pid1, &parentStatus, 0);
-  printf("val is %d.\n", v);
   return 0;
+}
+
+void readFromEither(int max_fd, int readEndParent, int readEndGrandparent, fd_set* rfds){
+  doWithCheck(select(max_fd + 1, rfds, NULL, NULL, NULL), "select");
+
+  if(FD_ISSET(readEndParent, rfds)){
+    printf("parent pipe ready for reading!\n");
+    readFromPipe(readEndParent);
+  }
+  else if(FD_ISSET(readEndGrandparent, rfds)){
+    printf("grandparent pipe ready for reading!\n");
+    readFromPipe(readEndGrandparent);
+  }
+  else{
+    printf("Nothing ready\n");
+  }
+
+  return;
 }
 
 
@@ -113,15 +115,12 @@ void writeToPipe(int writeEnd, int childNum){
   memset(buffer, childNum, bytesToUse);
 
   for(int i = 0; i < 5; i++){
-    printf("PID %d writing.\n", childNum);
     int bytes = doWithCheck(write(writeEnd, buffer, bytesToUse), "write");
     if(bytesToUse != bytes){
       fprintf(stderr, "Read %d bytes, expected %d...", bytes, bytesToUse);
       exit(1);
     }
   }
-
-  printf("Done writing!\n");
 }
 
 void readFromPipe(int pipefd){
@@ -129,9 +128,7 @@ void readFromPipe(int pipefd){
   for(int i = 0; i < 5; i++){
     int bytes = doWithCheck(read(pipefd, buffer, bytesToUse), "read");
     if(buffer[0] == 1){
-      printf("Read from grandparent\n");
     }else if (buffer[0] == 2){
-      printf("Read from parent\n");
     }
   }
 }

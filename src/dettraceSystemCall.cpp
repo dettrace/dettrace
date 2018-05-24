@@ -921,15 +921,15 @@ void sendtoSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
 bool selectSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   // Get the original set structs.
   // Set them in the state class.
-  if(t.arg2() != NULL){
+  if((void*) t.arg2() != NULL){
     s.rdfsNotNull = true;
     readVmTracee((void*) t.arg2(), (void*) & s.origRdfs, sizeof(fd_set), t.getPid());
   }
-  if(t.arg3() != NULL){ 
+  if((void*) t.arg3() != NULL){
     s.wrfsNotNull = true;
     readVmTracee((void*) t.arg3(), (void*) & s.origWrfs, sizeof(fd_set), t.getPid());
   }
-  if(t.arg4() != NULL){
+  if((void*) t.arg4() != NULL){
     s.exfsNotNull = true;
     readVmTracee((void*) t.arg4(), (void*) & s.origExfs, sizeof(fd_set), t.getPid());
   }
@@ -955,7 +955,8 @@ bool selectSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
 
 void selectSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
   bool replayed = replaySyscallIfBlocked(s, t, sched, 0);
-  printf("REPLAY: %d\n", replayed); 
+  printf("replaying?: %s\n", replayed ? "true" : "false");
+
   if(replayed){
     if(s.rdfsNotNull){
       //s.rdfsNotNull = false;
