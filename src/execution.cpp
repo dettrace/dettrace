@@ -489,6 +489,10 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<mkdiratSystemCall>(syscallNumber, syscallName);
   case SYS_lstat:
     return make_unique<lstatSystemCall>(syscallNumber, syscallName);
+  case SYS_link:
+      return make_unique<linkSystemCall>(syscallNumber, syscallName);
+  case SYS_linkat:
+    return make_unique<linkatSystemCall>(syscallNumber, syscallName);
   case SYS_open:
     return make_unique<openSystemCall>(syscallNumber, syscallName);
   case SYS_openat:

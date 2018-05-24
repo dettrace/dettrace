@@ -538,6 +538,23 @@ void lstatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   return;
 }
 // =======================================================================================
+bool linkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+
+  printInfoString(t.arg2(), gs, s, " hardlinking path: ");
+  printInfoString(t.arg1(), gs, s, " to path: ");
+
+  return false;
+}
+// =======================================================================================
+bool linkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+
+  printInfoString(t.arg4(), gs, s, " hardlinking path: ");
+  printInfoString(t.arg2(), gs, s, " to path: ");
+
+  return false;
+}
+
+// =======================================================================================
 bool openSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), gs, s);
 

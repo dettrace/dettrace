@@ -518,6 +518,31 @@ public:
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
+/*
+ * int link(const char *oldpath, const char *newpath);
+ *
+ * Creates hardlink.
+ */
+class linkSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
+// =======================================================================================
+/**
+ * int linkat(int olddirfd, const char *oldpath,
+ *            int newdirfd, const char *newpath, int flags);
+ *
+ * Creates hardlink.
+ */
+class linkatSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
+// =======================================================================================
 /**
  *
  * int open(const char *pathname, int flags);

@@ -152,12 +152,8 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_nanosleep);
   intercept(SYS_newfstatat);
   intercept(SYS_lstat);
-  // We usually intercept every system call that can create a new file or directory.
-  // This is used to give a newer modified time to files. So ommiting this here or
-  // in mkdir* is not neccessarily an error, since we don't expect process' to check
-  // this. If they do, we will get some error, but it will not leave to nondeterminism.
-  intercept(SYS_link);
-  intercept(SYS_linkat);
+  intercept(SYS_link, debug);
+  intercept(SYS_linkat, debug);
 
   intercept(SYS_open);
   intercept(SYS_openat);
