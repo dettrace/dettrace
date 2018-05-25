@@ -918,7 +918,7 @@ void sendtoSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   return;
 }
 // =======================================================================================
-bool selectSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
+bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // Get the original set structs.
   // Set them in the state class.
   if((void*) t.arg2() != NULL){
@@ -953,8 +953,8 @@ bool selectSystemCall::handleDetPre(state& s, ptracer& t, scheduler& sched){
   return true;
 }
 
-void selectSystemCall::handleDetPost(state& s, ptracer& t, scheduler& sched){
-  bool replayed = replaySyscallIfBlocked(s, t, sched, 0);
+void selectSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  bool replayed = replaySyscallIfBlocked(gs, s, t, sched, 0);
   printf("replaying?: %s\n", replayed ? "true" : "false");
 
   if(replayed){
