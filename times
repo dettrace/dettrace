@@ -1,0 +1,45 @@
+make: Entering directory '/home/gatowololo/GradSchool/DeterminismProject/Dettrace/src'
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o dettraceSystemCall.o dettraceSystemCall.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o ptracer.o ptracer.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o seccomp.o seccomp.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o state.o state.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o globalState.o globalState.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o scheduler.o scheduler.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o logger.o logger.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o systemCall.o systemCall.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o main.o main.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o execution.o execution.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o util.o util.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include dettraceSystemCall.o ptracer.o seccomp.o state.o globalState.o scheduler.o logger.o systemCall.o main.o execution.o util.o -o dettrace -pthread -lseccomp -L ../lib/lib64
+gcc -g -Wall -Wextra -Wconversion -fPIC -shared -Wl,--no-as-needed -std=c++1z -o libdet.so libdet.c -ldl -lm
+make: Leaving directory '/home/gatowololo/GradSchool/DeterminismProject/Dettrace/src'
+make: Entering directory '/home/gatowololo/GradSchool/DeterminismProject/Dettrace/src'
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o dettraceSystemCall.o dettraceSystemCall.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o ptracer.o ptracer.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o seccomp.o seccomp.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o state.o state.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o globalState.o globalState.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o scheduler.o scheduler.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o logger.o logger.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o systemCall.o systemCall.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o main.o main.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o execution.o execution.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o util.o util.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include dettraceSystemCall.o ptracer.o seccomp.o state.o globalState.o scheduler.o logger.o systemCall.o main.o execution.o util.o -o dettrace -pthread -lseccomp -L ../lib/lib64
+gcc -g -Wall -Wextra -Wconversion -fPIC -shared -Wl,--no-as-needed -std=c++1z -o libdet.so libdet.c -ldl -lm
+make: Leaving directory '/home/gatowololo/GradSchool/DeterminismProject/Dettrace/src'
+make: Entering directory '/home/gatowololo/GradSchool/DeterminismProject/Dettrace/src'
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o dettraceSystemCall.o dettraceSystemCall.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o ptracer.o ptracer.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o seccomp.o seccomp.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o state.o state.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o globalState.o globalState.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o scheduler.o scheduler.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o logger.o logger.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o systemCall.o systemCall.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o main.o main.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o execution.o execution.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include   -c -o util.o util.cpp
+g++ -O3 -g -std=c++14 -Wall -I ../include/ -I ../lib/include dettraceSystemCall.o ptracer.o seccomp.o state.o globalState.o scheduler.o logger.o systemCall.o main.o execution.o util.o -o dettrace -pthread -lseccomp -L ../lib/lib64
+gcc -g -Wall -Wextra -Wconversion -fPIC -shared -Wl,--no-as-needed -std=c++1z -o libdet.so libdet.c -ldl -lm
+make: Leaving directory '/home/gatowololo/GradSchool/DeterminismProject/Dettrace/src'
