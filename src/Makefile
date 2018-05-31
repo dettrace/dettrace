@@ -30,7 +30,7 @@ dettrace-static: $(obj) $(libs)
 # rule to generate a dep file by using the C preprocessor
 # (see man cpp for details on the -MM and -MT options)
 %.d: %.cpp
-	@cpp $(CXXFLAGS) $< -MM -MT $(@:.d=.o) >$@
+	@$(CXX) $(CXXFLAGS) $< -MM -MT $(@:.d=.o) >$@
 
 
 libdet.so: libdet.c
