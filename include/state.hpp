@@ -114,6 +114,9 @@ public:
   // Flag to let us know if the current system call was artifically injected by us.
   bool syscallInjected = false;
 
+  // Flag to differentiate our injected timeout into a system call from a user one.
+  bool userDefinedTimeout = false;
+
   // Our old values before post hook, for simple restoring of the user's register state.
   struct user_regs_struct prevRegisterState = {0};
 

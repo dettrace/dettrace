@@ -249,21 +249,44 @@ void fstatfsSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
 }
 // =======================================================================================
 bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // If operation is a FUTEX_WAIT, set timeout to zero. That is, immediately return
-  // instead of blocking.
+  // If operation is a FUTEX_WAIT, set timeout to zero for polling instead of blocking.
   int futexOp = t.arg2();
+  int futexValue = t.arg3();
   timespec* timeoutPtr = (timespec*) t.arg4();
+  string operation;
 
-  gs.log.writeToLog(Importance::extra, "Futex operation: %d.\n", futexOp);
+  try{
+     operation = futexNames.at(futexOp);
+  }catch(...){
+    // Uknown operation? Pehaps a combination of multiple non trivial options.
+    operation = to_string(futexOp);
+  }
+
+  gs.log.writeToLog(Importance::extra, "Futex operation: " + operation + "\n");
 
   // See definitions of variables here.
   // https://github.com/spotify/linux/blob/master/include/linux/futex.h
   int futexCmd = futexOp & FUTEX_CMD_MASK;
+
+  // Handle wake operations by notifying scheduler of progress.
+  if(futexCmd == FUTEX_WAKE || futexCmd == FUTEX_REQUEUE || futexCmd == FUTEX_CMP_REQUEUE ||
+     futexCmd == FUTEX_WAKE_BITSET || futexCmd == FUTEX_WAKE_OP){
+    sched.reportProgress(t.getPid());
+    gs.log.writeToLog(Importance::extra, "Waking on address: %p\n", t.arg1());
+    // No need to go into the post hook.
+    return false;
+  }
+
+  // Handle wait operations, by setting our timeout to zero, and seeing if time runs out.
   if(futexCmd == FUTEX_WAIT ||
      futexCmd == FUTEX_WAIT_BITSET ||
      futexCmd == FUTEX_WAIT_REQUEUE_PI
      ){
-    gs.log.writeToLog(Importance::extra, "Futex wait operation.\n");
+    gs.log.writeToLog(Importance::extra, "Futex wait on: %p.\n", t.arg1());
+    gs.log.writeToLog(Importance::extra, "On value: " + to_string(futexValue) + "\n");
+    int actualValue = (int) t.readFromTracee((int*) t.arg1(), t.getPid());
+    gs.log.writeToLog(Importance::extra, "Actual value: " + to_string(actualValue) + "\n");
+
     // Overwrite the current value with our value. Restore value in post hook.
     s.originalArg4 = (uint64_t) timeoutPtr;
     // Our timespec value to copy over.
@@ -286,9 +309,10 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
     }else{
       timespec timeout = ptracer::readFromTracee(timeoutPtr, t.getPid());
       gs.log.writeToLog(Importance::extra,
-                        "Writing over original timeout value: (s = %d, ns = %d)\n",
+                        "Using original timeout value: (s = %d, ns = %d)\n",
                         timeout.tv_sec, timeout.tv_nsec);
       ptracer::writeToTracee(timeoutPtr, ourTimeout, s.traceePid);
+      s.userDefinedTimeout = true;
     }
   }
 
@@ -302,10 +326,19 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
      futexCmd == FUTEX_WAIT_BITSET ||
      futexCmd == FUTEX_WAIT_REQUEUE_PI
      ){
-    // Restore register state.
-    t.writeArg4(s.originalArg4);
 
-    replaySyscallIfBlocked(gs, s, t, sched, ETIMEDOUT);
+    // The process is trying to poll. We preempt to but do not mark as blocked to avoid
+    // getting stuck on an infite polling loop.
+    if(s.userDefinedTimeout){
+      sched.preemptAndScheduleNext(s.traceePid, preemptOptions::runnable);
+      s.userDefinedTimeout = false;
+      return;
+    } else {
+      // Restore register state.
+      t.writeArg4(s.originalArg4);
+      replaySyscallIfBlocked(gs, s, t, sched, ETIMEDOUT);
+    }
+
   }
   return;
 }
@@ -1009,7 +1042,7 @@ void sysinfoSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
   info.procs = SHRT_MAX;
   info.totalhigh = LONG_MAX;
   info.freehigh = LONG_MAX;
-
+  info.mem_unit = LONG_MAX;
 
   info.loads[0] = LONG_MAX;
   info.loads[1] = LONG_MAX;
@@ -1400,7 +1433,7 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sc
     gs.log.writeToLog(Importance::info,
                       s.systemcall->syscallName + " would have blocked!\n");
 
-    sched.preemptAndScheduleNext(s.traceePid);
+    sched.preemptAndScheduleNext(s.traceePid, preemptOptions::markAsBlocked);
     replaySystemCall(t, t.getSystemCallNumber());
     return true;
   }else{
