@@ -13,7 +13,14 @@
 #include <limits.h>
 #include <sys/uio.h>
 
+#include<unordered_map>
+
+#include <linux/futex.h>
+
 using namespace std;
+
+extern unordered_map<int, string> futexNames;
+
 /*======================================================================================*/
 /**
  * Get env variable copy to free space and return as a heap-allocated pointer.

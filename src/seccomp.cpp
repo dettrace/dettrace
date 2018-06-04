@@ -98,6 +98,8 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_socket);
   noIntercept(SYS_umask);
 
+  noIntercept(SYS_sched_yield);
+
   // These system calls must be intercepted as to know when a fork even has happened:
   // We handle forks when see the system call pre exit.
   // Since this is the easiest time to tell a fork even happened. It's not trivial

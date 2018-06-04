@@ -18,8 +18,18 @@ using namespace std;
  * finished:      This process has finished. This process will not receive a "nonEventExit"
  *                from ptrace until all the children are done first. This might take a while
  *                we keep the process around until it's ready to leave this world.
+ * polling:       This is a process with a timeout to a system call, e.g. futex with the
+ *                timeout field set to not-null, mark the process as polling.
+ *                Polling processes run last in the scheduler.
  */
 enum class processState{ runnable, maybeRunnable, blocked, finished };
+
+/**
+ * Options for process being preempted. Sometimes we want to mark it as blocked,
+ * sometimes we want to continue to let it run.
+ *
+ */
+enum class preemptOptions { runnable, markAsBlocked };
 
 string to_string(processState p);
 
@@ -31,12 +41,10 @@ string to_string(processState p);
  * Detects deadlocks in program and throws error, if this ever happens.
 
  * We never really need the user to pass in the process to remove or preempt. It should
- * only ever be currently running process. But this adds an extra safety check. Throws
+ * only ever be the currently running process. But this adds an extra safety check. Throws
  * error if it ever doesn't match.
 
- * Current Scheduling policy: current process continues running until it forks/clones.
- * Then, child runs. If current process blocks, let newest process run, this process
- * is now the current process.
+ * Current Scheduling policy: Round Robin.
  */
 class scheduler{
 public:
@@ -47,13 +55,6 @@ public:
    * real pids for scheduling.
    */
   ValueMapper<pid_t, pid_t>& pidMap;
-
-  /**
-   * This function should only be used to schedule a finished parent to run once
-   * it's children are done. The scheduler makes assumptions which may be broken
-   * if this function is missused.
-   */
-  void scheduleThisProcess(pid_t process);
 
   /**
    * Check if this process has been marked as finished.
@@ -74,10 +75,11 @@ public:
   pid_t getNext();
 
   /**
-   * Current process is blocked! Mark for blocking, and get pid of process that ptrace
-   * should run next. Throws exception if empty.
+   * Preempt current process and get pid of process that ptrace should run next. Throws
+   * exception if empty.
+   * @param p: Options for process we're preempting.
    */
-  void preemptAndScheduleNext(pid_t process);
+  void preemptAndScheduleNext(pid_t process, preemptOptions p);
 
   /**
    * Adds new process to scheduler! This new process will be scheduled to run next.
@@ -86,16 +88,15 @@ public:
 
   /**
    * Removes specified process and schedule new process to run.
-   * @param empty: return true if we're all done!
+   * @param empty: return true if we're all done with all processes in the scheduler.
+   * this marks the end of the program.
    */
   bool removeAndScheduleNext(pid_t terminatedProcess);
-
 
   /**
    * Removes specified process, let our parent run to completion.
    * Should only be called by the last child of parent, when parent has already
    * been marked as finished.
-   * @param empty: return true if we're all done!
    */
   void removeAndScheduleParent(pid_t terminatedProcess, pid_t parent);
 
@@ -135,9 +136,6 @@ private:
   // removeAndScheduleNext and removeAndScheduleParent.
   void remove(pid_t terminatedProcess);
 
-  // Find and delete process.
-  void deleteProcess(pid_t terminatedProcess);
-
   // Get next process based on which is runnable/maybeRunnable in order of our deque.
   // @param currentProcess: Process that just got preempted. This is needed to avoid
   // repicking ourselves.
@@ -146,7 +144,7 @@ private:
   // Iterate through all blocked process' and change their status to maybeBlocked.
   // This is needed as we consider both maybeRunnable processes for running, but never
   // blocked.
-  void toMaybeProgress();
+  void changeToMaybeRunnable();
 
 
   // Debug function to print all data about processes.
