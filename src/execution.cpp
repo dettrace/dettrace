@@ -381,7 +381,7 @@ void execution::handleExecve(const pid_t traceesPid){
 // =======================================================================================
 bool execution::handleSeccomp(const pid_t traceesPid){
   // Fetch system call provided to us via seccomp.
-  uint16_t syscallNum;
+  long syscallNum;
   ptracer::doPtrace(PTRACE_GETEVENTMSG, traceesPid, nullptr, &syscallNum);
 
   // INT16_MAX is sent by seccomp by convention as for system calls with no
