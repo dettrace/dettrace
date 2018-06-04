@@ -327,10 +327,14 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
      futexCmd == FUTEX_WAIT_REQUEUE_PI
      ){
 
-    // The process is trying to poll. We preempt to but do not mark as blocked to avoid
+    // The process is trying to poll. We preempt but do not mark as blocked to avoid
     // getting stuck on an infite polling loop.
     if(s.userDefinedTimeout){
-      sched.preemptAndScheduleNext(s.traceePid, preemptOptions::runnable);
+      // Only preempt if we would have timeout out. Othewise let if continue running!
+      if(t.getReturnValue() == -ETIMEDOUT){
+        sched.preemptAndScheduleNext(s.traceePid, preemptOptions::runnable);
+      }
+
       s.userDefinedTimeout = false;
       return;
     } else {
@@ -884,9 +888,11 @@ bool renameat2SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                     scheduler& sched){
   int flags = (int) t.arg5();
   // We do not handle this flag TODO
+#ifdef RENAME_EXCHANGE
   if((flags | RENAME_EXCHANGE) == flags){
     throw runtime_error("We do not handle RENAME_EXCHANGE flag.\n");
   }
+#endif
 
   // Turn into a newfstatat system call to see if oldpath existed. If so, we must mark
   // all path as deleted.

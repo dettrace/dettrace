@@ -93,7 +93,7 @@ void scheduler::addAndScheduleNext(pid_t newProcess){
   processQueue.push_back(newProcess);
   processStateMap[newProcess] = processState::runnable;
   nextPid = newProcess;
-  printProcesses();
+  // printProcesses();
   return;
 }
 
@@ -146,7 +146,7 @@ bool scheduler::removeAndScheduleNext(pid_t terminatedProcess){
 }
 
 pid_t scheduler::scheduleNextProcess(pid_t currentProcess){
-  printProcesses();
+  // printProcesses();
   int numberOfProcesses = processQueue.size();
 
   for(int i = 0; i < numberOfProcesses; i++){
@@ -164,15 +164,6 @@ pid_t scheduler::scheduleNextProcess(pid_t currentProcess){
       return p;
     }
   }
-
-    // pop element and stick in back.
-    pid_t p = processQueue.front();
-    processQueue.pop_front();
-    processQueue.push_back(p);
-    auto msg = log.makeTextColored(Color::blue, "Allowed blocked process: [%d].\n");
-    auto virtualPid = pidMap.getVirtualValue(p);
-    log.writeToLog(Importance::info, msg, virtualPid);
-    return p;
 
   // Went through all processes and none were ready. This is a dead lock.
   throw runtime_error("No runnable processes left in scheduler!\n");
@@ -200,7 +191,7 @@ void scheduler::printProcesses(){
   for(auto curr : processQueue){
     auto proc = pidMap.getVirtualValue(curr);
     auto status = processStateMap.at(curr);
-    log.writeToLog(Importance::info, "Pid [%d], Status %s\n", proc,
+    log.writeToLog(Importance::extra, "Pid [%d], Status %s\n", proc,
 		   to_string(status).c_str());
   }
   return;
