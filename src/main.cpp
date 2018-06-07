@@ -6,6 +6,7 @@
 #include <sys/user.h>
 #include <sys/vfs.h>
 #include <sys/wait.h>
+#include <sys/utsname.h>
 #include <string.h>
 #include <getopt.h>
 
@@ -71,6 +72,33 @@ struct childArgs{
 };
 // =======================================================================================
 
+// Make sure our kernel is at least 4.8.0 because of seccomp
+int kernelVersionCheck(void) {
+  struct utsname utsname = {0,};
+  long x, y, z;
+  char* r = NULL, *rp =NULL;
+#define MAKE_KERNEL_VERSION(x, y, z) ((x) << 16 | (y) << 8 | (z) )
+
+  if (uname(&utsname) < 0) {
+    return -1;
+  }
+
+  r = utsname.release;
+  x = strtoul(r, &rp, 10);
+  if (rp == r) return -1;
+  r = 1 + rp;
+  y = strtoul(r, &rp, 10);
+  if (rp == r) return -1;
+  r = 1 + rp;
+  z = strtoul(r, &rp, 10);
+
+  if (MAKE_KERNEL_VERSION(x, y, z) < MAKE_KERNEL_VERSION(4, 8, 0)) {
+    return -1;
+  }
+#undef MAKE_KERNEL_VERSIN
+  return 0;
+}
+
 const string usageMsg =
   "  Dettrace\n"
   "\n"
@@ -102,6 +130,12 @@ int main(int argc, char** argv){
   int optIndex, debugLevel;
   string path; bool useContainer;
   bool inSchroot, useColor;
+
+  if (kernelVersionCheck() < 0) {
+    std::cout << "kernel must be at least 4.8.0" << std::endl;
+    exit(1);
+  }
+
   tie(optIndex, debugLevel, path, useContainer, inSchroot, useColor) =
     parseProgramArguments(argc, argv);
 
