@@ -174,7 +174,7 @@ int runTracee(void* voidArgs){
   bool useContainer = args.useContainer;
 
   // Find absolute path to our build directory relative to the dettrace binary.
-  char argv0[strlen(argv[0])];
+  char argv0[strlen(argv[0])+1/*NUL*/];
   strcpy(argv0, argv[0]); // Use a copy since dirname may mutate contents.
   string pathToExe{ dirname(argv0) };
 
