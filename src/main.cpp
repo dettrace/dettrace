@@ -292,40 +292,35 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
   mkdirIfNotExist(pathToChroot + "/dettrace/lib/"); // /dettrace/lib directory
   mkdirIfNotExist(pathToChroot + "/dettrace/bin/"); // /dettrace/bin directory
 
-  // First we mount cwd in our /build/ directory.
-  char* cwdPtr = get_current_dir_name();
-  mountDir(string { cwdPtr }, buildDir);
-  free(cwdPtr);
+  // First we mount detTrace top in our /build/ directory.
+  string detTraceDir = pathToExe + "/../";
+  mountDir(detTraceDir, buildDir);
 
   // Mount our dettrace/bin and dettrace/lib folders.
   mountDir(pathToExe + "/../bin/", pathToChroot + "/dettrace/bin/");
   mountDir(pathToExe + "/../lib/", pathToChroot + "/dettrace/lib/");
 
-  // Move over to our build directory! This will make code cleaner as all logic is
-  // relative this dir.
-  doWithCheck(chdir(buildDir.c_str()), "Unable to chdir");
-
   // Bind mount our directories.
   if(!userDefinedChroot){
-    mountDir("/bin/", "../bin/");
-    mountDir("/usr/", "../usr/");
-    mountDir("/lib/", "../lib/");
-    mountDir("/lib64/", "../lib64/");
+    mountDir("/bin/", pathToChroot + "/bin/");
+    mountDir("/usr/", pathToChroot + "/usr/");
+    mountDir("/lib/", pathToChroot + "/lib/");
+    mountDir("/lib64/", pathToChroot + "/lib64/");
     // Ld cache
-    mountDir("/etc/ld.so.cache", "../etc/ld.so.cache");
+    mountDir("/etc/ld.so.cache", pathToChroot + "/etc/ld.so.cache");
   }
 
   // Still wanna bind mount some folders:
-  mountDir(pathToExe + "/../root/dev/null", "../dev/null");
-  mountDir(pathToExe + "/../root/dev/random", "../dev/random");
-  mountDir(pathToExe + "/../root/dev/urandom", "../dev/urandom");
+  mountDir(pathToChroot + "/build/root/dev/null", pathToChroot + "/dev/null");
+  mountDir(pathToChroot + "/build/root/dev/random", pathToChroot + "/dev/random");
+  mountDir(pathToChroot + "/build/root/dev/urandom", pathToChroot + "/dev/urandom");
 
   // Proc is special, we mount a new proc dir.
-  doWithCheck(mount("/proc", "../proc/", "proc", MS_MGC_VAL, nullptr),
+  doWithCheck(mount("/proc", (pathToChroot + "/proc/").c_str(), "proc", MS_MGC_VAL, nullptr),
 	      "Mounting proc failed");
 
   // Chroot our process!
-  doWithCheck(chroot("../"), "Failed to chroot");
+  doWithCheck(chroot(pathToChroot.c_str()), "Failed to chroot");
 
   // Disable ASLR for our child
   doWithCheck(personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");
