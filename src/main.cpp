@@ -286,15 +286,19 @@ int runTracee(void* voidArgs){
 void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChroot){
   string buildDir = pathToChroot + "/build/";
 
-  // Create our build directories as top level folders in our schroot.
-  mkdirIfNotExist(buildDir);
-  mkdirIfNotExist(pathToChroot + "/dettrace/"); // /dettrace directory
-  mkdirIfNotExist(pathToChroot + "/dettrace/lib/"); // /dettrace/lib directory
-  mkdirIfNotExist(pathToChroot + "/dettrace/bin/"); // /dettrace/bin directory
+  const vector<string> mountDirs = {  "/dettrace", "/dettrace/lib", "/dettrace/bin",
+				      "/bin", "/usr", "/lib", "/lib64", "/dev", "/etc", "/proc" };
 
-  // First we mount detTrace top in our /build/ directory.
-  string detTraceDir = pathToExe + "/../";
-  mountDir(detTraceDir, buildDir);
+  mkdirIfNotExist(buildDir);
+
+  for (auto it = mountDirs.cbegin(); it != mountDirs.cend(); ++it) {
+      mkdirIfNotExist(pathToChroot + *it);
+  }
+
+  // First we mount cwd in our /build/ directory.
+  char* cwdPtr = get_current_dir_name();
+  mountDir(string { cwdPtr }, buildDir);
+  free(cwdPtr);
 
   // Mount our dettrace/bin and dettrace/lib folders.
   mountDir(pathToExe + "/../bin/", pathToChroot + "/dettrace/bin/");
@@ -311,9 +315,9 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
   }
 
   // Still wanna bind mount some folders:
-  mountDir(pathToChroot + "/build/root/dev/null", pathToChroot + "/dev/null");
-  mountDir(pathToChroot + "/build/root/dev/random", pathToChroot + "/dev/random");
-  mountDir(pathToChroot + "/build/root/dev/urandom", pathToChroot + "/dev/urandom");
+  mountDir(pathToExe + "/../root/dev/null", pathToChroot + "/dev/null");
+  mountDir(pathToExe + "/../root/dev/random", pathToChroot + "/dev/random");
+  mountDir(pathToExe + "/../root/dev/urandom", pathToChroot + "/dev/urandom");
 
   // Proc is special, we mount a new proc dir.
   doWithCheck(mount("/proc", (pathToChroot + "/proc/").c_str(), "proc", MS_MGC_VAL, nullptr),
@@ -321,6 +325,9 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
 
   // Chroot our process!
   doWithCheck(chroot(pathToChroot.c_str()), "Failed to chroot");
+
+  // set working directory to buildDir
+  doWithCheck(chdir(buildDir.c_str()), "Failed to set working directory to " + buildDir);
 
   // Disable ASLR for our child
   doWithCheck(personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");
