@@ -1,9 +1,6 @@
 #ifndef UTIL_H
 #define UTIL_H
 
-/**
- * Utility functions.
- */
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,45 +14,64 @@
 
 #include <linux/futex.h>
 
+/**
+ * Utility Functions
+ */
+
 using namespace std;
 
-extern unordered_map<int, string> futexNames;
+extern unordered_map<int, string> futexNames; /**< map of futex words (32-bits) to string representations */ 
 
-/*======================================================================================*/
 /**
  * Get env variable copy to free space and return as a heap-allocated pointer.
- * @param var: env variable to fetch from system.
- * @param dieIfNotSet: if variable is not found, should system crash?
- * @return returnVar: value of variable as string or if not found and dieifNotSet == false.
- *                    otherwise return NUll.
+ * @param var: env variable to fetch from system (e.g. "HOME").
+ * @param dieIfNotSet: if True, system will crash in case var was not found.
+ * @return value of env variable as string if found. NULL if variable is 
+ *                    not found and dieifNotSet == false.
  */
 char* getEnvVar(char* var, bool dieIfNotSet);
-/*======================================================================================*/
+
 /**
- * Given a string attemp to parse using strtol. Handles all errors by crashing and sending
- * an appropriate error. Warning: does not check for underflows!
- @param: numToParse.
- @return: parsedNum ;)
+ * Parses a string of numbers while safely handing all errors by reporting
+ * error to stderr and exit(1). Warning: does not check for underflows!
+ * @param numToParse: a pointer to the string to be parsed.
+ * @return parsedNum
  */
 int parseNum(const char* const numToParse);
-// =======================================================================================
+
 /**
- * Call clib function that returns an integer and sets errno with automatic checking
- * and exiting on -1. Returns returnValue on success.
- *
- * Example:
- * doWithCheck(mount(cwd, pathToBuild.c_str(), nullptr, MS_BIND, nullptr),
+ * Used as a wrapper for clib function calls which return int as indicator of
+ * success. If the clib function returns -1, an error message containing 
+ * contents of errno and the supplied parameter errorMessage is written to 
+ * cerr, and exit(1).
+ * Example: 
+ *  doWithCheck(mount(cwd, pathToBuild.c_str(), nullptr, MS_BIND, nullptr),
  *             "Unable to bind mount cwd");
+
+ * @param returnValue the int return value of a clib function
+ * @param errorMessage a string to be appended to the description of errno if 
+ *                     an the clib function returned -1 (failed)
+ * @return the return value of the clib function.
  */
 int doWithCheck(int returnValue, string errorMessage);
-// =======================================================================================
-// Read bytes from user.
-// Ptrace read is way too slow as it works at word granularity. Time to use
-// process_vm_read!
+
+/* Read bytes from tracee memory using process_vm_readv while safely 
+ * handling errors.
+ * @param traceeMemory starting address in tracee memory (remote)
+ * @param localMemory starting address in local memory (local)
+ * @param numberOfBytes number of bytes to be read
+ * @param traceePid tracee process' pid, whose address space is being read
+ */
 void readVmTracee(void* traceeMemory, void* localMemory, size_t numberOfBytes,
                   pid_t traceePid);
-// =======================================================================================
+/* Write bytes to tracee memory using process_vm_writev while safely 
+ * handling errors.
+ * @param localMemory starting address in local memory (remote)
+ * @param traceeMemory starting address in tracee memory (local)
+ * @param numbeOfBytes number of bytes to be read
+ * @param traceepid tracee process' pid, whose address space is being written to
+ */
 void writeVmTracee(void* localMemory, void* traceeMemory, size_t numberOfBytes,
                    pid_t traceePid);
-// =======================================================================================
+
 #endif
