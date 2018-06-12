@@ -47,7 +47,7 @@ int parseNum(const char* const numToParse);
  * Example: 
  *  doWithCheck(mount(cwd, pathToBuild.c_str(), nullptr, MS_BIND, nullptr),
  *             "Unable to bind mount cwd");
-
+ *
  * @param returnValue the int return value of a clib function
  * @param errorMessage a string to be appended to the description of errno if 
  *                     an the clib function returned -1 (failed)
