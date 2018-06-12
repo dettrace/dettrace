@@ -17,6 +17,7 @@
 
 
 /**
+ * Execution class.
  * This class handles the event driven loop that is a process execution. Events from
  * a running program are intercepted, and a handler is called for that event.
  * Events include: clone, execve, fork, vfork, signal received, and system calls.
@@ -58,6 +59,7 @@ private:
   ValueMapper<pid_t, pid_t> pidMap;
 
   /**
+   * Map of parent processes to children.
    * Keep track of our children. We can only ever exit once all our children have exited.
    * We map the parent's process id to children:
    * 1 -> 2
@@ -68,15 +70,23 @@ private:
   multimap<pid_t, pid_t> processTree;
 
   /**
+   * Process scheduler.
    * Tells us which process to run next, keeps track of current processes.
    */
   scheduler myScheduler;
-
-  // Debug level, should be [1, 5]. Used to tell if we should always call the post hook
-  // (to see return value of system call).
+  /**
+   * Debug level.
+   * Range should be [1, 5]. Used to tell if we should always call the post hook
+   * (to see return value of system call).
+   */
   const int debugLevel;
 
 public:
+
+  /**
+   * Constructor.
+   *
+   */
   execution(int debugLevel, pid_t startingPid, bool useColor);
 
   // Processs is done. Remove it from our processHier stack and let parent process run.
