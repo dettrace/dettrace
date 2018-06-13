@@ -20,7 +20,7 @@
 
 /**
  * seccomp class.
- * Helper class for working with seccomp (short for secure computing mode), a computer security facility in the Linux kernel. 
+ * Helper class for working with seccomp (short for secure computing mode), a computer security facility in the Linux kernel.
  * seccomp allows a process to make a one-way transition into a "secure" state where it cannot make any system calls
  * except exit(), sigreturn(), read() and write() to already-open file descriptors.
  */
