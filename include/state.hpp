@@ -22,33 +22,31 @@ class systemCall;
 /**
  * Class to hold all state that we will need to update in between system calls inside the
  * tracer so far this includes:
-
- * Logical Clocks.
-
+ *  - Logical Clocks.
  */
 class state{
 private:
   /**
-   * Logical clock. Ticks only on time related system calls where the user can observe
-   * time since we want to present progress.
-   * See [[https://github.com/upenn-acg/detTrace/issues/24][Github issue]] for more
-   * information.
-   * Start at this number to avoid seeing files "in the future", if we were to start at
-   * zero.
+   * Logical clock. Ticks only on time related system calls where the user 
+   * can observe time since we want to present progress.
+   * See [Github issue](https://github.com/upenn-acg/detTrace/issues/24) for more
+   * information. The clock starts at this number to avoid seeing 
+   * files "in the future", if we were to start at zero.
    */
   size_t clock = 744847200;
 
 public:
-  /**
-   * @pidMap: Notice this is a reference -> same map is shared among all instances of
-   * of state.
-   * @ppid: Parent pid of this process.
+ /*REVIEW: The previous comment appears to be related to a previous declaration of this constructor that used pidMap and ppid.*//**
+   * Constructor.
+   * Initialize traceePid and debugLevel to the provided values, and 
+   * clock is initialized to 0.
+   * @param traceePid pid of tracee
+   * @param debugLevel debug level to be used
    */
-  state(pid_t myPid, int debugLevel);
+  state(pid_t traceePid, int debugLevel);
 
   /**
    * Map from file descriptors to directory entries.
-   *
    */
   unordered_map<int, directoryEntries<linux_dirent>> dirEntries;
 
@@ -58,12 +56,13 @@ public:
   pid_t traceePid;
 
   /**
-   * Signal to deliver for next time this process runs. Zero means none. Otherwise
-   * this int represents the signal number.
+   * Signal to be delivered the next time this process runs. If 0, no signal 
+   * will be delivered. Otherwise the value represents the signal number.
    */
   int signalToDeliver = 0;
 
   /**
+   * inode number to be deleted.
    * We need to delete inodes from our maps whenever the tracee calls unlink, unlinkat,
    * or rmdir, that is, any system call that removes files. This is necessary since the
    * filesystem may recycle this inode leading to unreproducible behavior when:
@@ -95,16 +94,28 @@ public:
    * register values from (the post-hook) before any retries
    */
   struct user_regs_struct beforeRetry = {0};
+
+  /**
+   * TODO (azm): Document this
+   */
   uint64_t totalBytes = 0;
 
-  /*
-   * Ptrace cannot tell the difference between a system call we are replaying or injecting
-   * and one that has already been replayed. We use this variable to differenatiate.
+  /* REVIEW: I tried to clarify this, is it accurate? --azm
+   * Indicator to differentiate between a syscall we are injecting and one that has already been replayed. 
+   * Used since Ptrace cannot tell the difference.
+   *
+   * If true, system call is being injected for the first try.
+   * If false, system call is being replayed.
    */
   bool firstTrySystemcall = true;
 
-  // Flag to let us know if the current system call was artifically injected by us.
+
+  /** Flag to let us know if the current system call was artifically injected by us. */
   bool syscallInjected = false;
+
+  /**
+   * TODO (azm): Document this 
+   */
   bool rdfsNotNull = false;
   bool wrfsNotNull = false;
   bool exfsNotNull = false;
@@ -112,21 +123,21 @@ public:
   fd_set origWrfs;
   fd_set origExfs;
 
-  // Flag to differentiate our injected timeout into a system call from a user one.
+  /** Flag to differentiate between our injected timeout into a system call from a user one. */
   bool userDefinedTimeout = false;
 
-  // Our old values before post hook, for simple restoring of the user's register state.
+  /** Our old values before post hook, for simple restoring of the user's register state. */
   struct user_regs_struct prevRegisterState = {0};
 
   /**
-   * Original register arguments before we modified them. We need to restore them at the
-   * post-hook after modifying. Sometimes.
+   * Original register arguments before we modified them. We sometimes need to restore them at the
+   * post-hook after modification.
    */
-  uint64_t originalArg1 = 0;
-  uint64_t originalArg2 = 0;
-  uint64_t originalArg3 = 0;
-  uint64_t originalArg4 = 0;
-  uint64_t originalArg5 = 0;
+  uint64_t originalArg1 = 0; /**< original register arg 1 */
+  uint64_t originalArg2 = 0; /**< original register arg 2 */
+  uint64_t originalArg3 = 0; /**< original register arg 3 */
+  uint64_t originalArg4 = 0; /**< original register arg 4 */
+  uint64_t originalArg5 = 0; /**< original register arg 5 */
 
   /**
    * Debug level. Mainly used by the dettraceSytemCall classes to avoid doing unnecesary
@@ -134,11 +145,13 @@ public:
    */
   const int debugLevel;
 
-  // Bytes to allocate for our directory entries.
-  // This is what glibc uses as it's standard size, so do we.
+  /** 
+   * Bytes to allocate for our directory entries. We use the standard size used in glibc.
+   */
   const size_t dirEntriesBytes = 32768;
 
-  /*
+  /* REVIEW: I tried to clarify some parts, is this accruate --azm.
+   * Smart pointer to the system call being processed.
    * We need to know what system call was/is that we are not. This is important in
    * cases like clone:
    * 1) Parent performs clone.
@@ -156,12 +169,12 @@ public:
   unique_ptr<systemCall> systemcall;
 
   /**
-   * Increase value of internal logical clock.
+   * Function to increase value of internal logical clock.
    */
   void incrementTime();
 
   /**
-   * Get value of internal logical clock.
+   * Function to get value of internal logical clock.
    */
   int getLogicalTime();
 };
