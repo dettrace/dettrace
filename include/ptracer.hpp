@@ -28,11 +28,8 @@
 
 using namespace std;
 
-/**
- * Size of word.
- * Words are 8 bytes for x86_64.
- */
-const size_t wordSize = 8;
+const size_t wordSize = 8; /**< Size of word, 8 bytes for x86_64. */
+
 
 /**
  * ptrace event enum.
@@ -68,6 +65,10 @@ enum class syscallState {
  */
 class ptracer{
 public:
+
+  /**
+   * Map of real inodes to virtual inodes.
+   */
   map<ino_t,ino_t> real2VirtualMap;
 
   /**
@@ -82,37 +83,128 @@ public:
    */
   ptracer(pid_t pid);
 
-  // Get the argument from our system call.
+  /**
+   * Retrieves value for arg1: rdi register.
+   * @return rdi register value
+   */
   uint64_t arg1();
+
+  /**
+   * Retrieves value for arg2: rsi register.
+   * @return rsi register value
+   */
   uint64_t arg2();
+
+  /**
+   * Retrieves value for arg3: rdx register.
+   * @return rdx register value
+   */
   uint64_t arg3();
+
+  /**
+   * Retrieves value for arg4: r10 register.
+   * RCX, along with R11, is used by the syscall instruction, being immediately destroyed by it.
+   * Thus these registers are not only not saved after syscall, but they can't even be used for parameter passing.
+   * Thus R10 was chosen to replace unusable RCX to pass fourth parameter.
+   * per: https://stackoverflow.com/questions/21322100/linux-x64-why-does-r10-come-before-r8-and-r9-in-syscalls
+   *
+   * @return r10 register value
+   */
   uint64_t arg4();
+
+  /**
+   * Retrieves value for arg5: r8 register.
+   * @return r8 register value
+   */
   uint64_t arg5();
+
+  /**
+   * Retrieves value for arg6: r9 register.
+   * @return r9 register value
+   */
   uint64_t arg6();
+
+  /**
+   * Retrieves register struct.
+   * @return x86 register struct
+   */
   struct user_regs_struct getRegs();
 
-  // Set regs to the values given by passed struct.
+  /**
+   * Set regs to the values given by passed struct.
+   * @param newValues struct of new register values
+   */
   void setRegs(struct user_regs_struct newValues);
+
+  /**
+   * Retrieves value for Rip register.
+   * @return Rip register value
+   */
   uint64_t getRip();
+
+  /**
+   * Retrieves value for Rsp register.
+   * @return Rsp register value
+   */
   uint64_t getRsp();
 
   /**
    * Change system call.
-   * Writing to eax register, be careful!
+   * Writing to rax register, be careful!
    * @param val value to write to eax for new system call
    */
   void changeSystemCall(uint64_t val);
 
+  /**
+   * Write  value to Arg1: rdi register.
+   * @param val new rdi register value
+   */
   void writeArg1(uint64_t val);
+
+  /**
+   * Write  value to Arg2: rsi register.
+   * @param val new rsi register value
+   */
   void writeArg2(uint64_t val);
+
+  /**
+   * Write  value to Arg3: rdx register.
+   * @param val new rdx register value
+   */
   void writeArg3(uint64_t val);
+
+  /**
+   * Write  value to Arg4: r10 register.
+   * @param val new r10 register value
+   */
   void writeArg4(uint64_t val);
+
+  /**
+   * Write  value to Arg5: r8 register.
+   * @param val new r8 register value
+   */
   void writeArg5(uint64_t val);
+
+  /**
+   * Write  value to Arg6: r9 register.
+   * @param val new r9 register value
+   */
+  void writeArg6(uint64_t val);
+
+  /**
+   * Write  value to ip register.
+   * @param val new ip register value
+   */
   void writeIp(uint64_t val);
+
+  /**
+   * Write  value to rax register.
+   * @param val new rax register value
+   */
   void writeRax(uint64_t val);
 
   /**
-   * All system call return an argument through their eax register.
+   * All system call return an argument through their rax register.
    * Set state here.
    * @param retVal return value
    */
@@ -218,16 +310,9 @@ public:
 
 
 private:
-  /**
-  * The pid of the tracee.
-  */
-  pid_t traceePid;
+  pid_t traceePid;   /**< The pid of the tracee.  */
 
-  /**
-   * Registers struct
-   * defined in sys
-   */
-  struct user_regs_struct regs;
+  struct user_regs_struct regs;   /**< Registers struct defined in sys.   */
 };
 
 #endif
