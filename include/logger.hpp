@@ -1,9 +1,6 @@
 #ifndef LOGGER_H
 #define LOGGER_H
-/**
- * Simple logger to write debug info and other information of interest to a file without
- * polluting stderr or stdout. Based off the detmonad libdet logger.
- */
+
 #include <unistd.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -14,55 +11,58 @@
 
 using namespace std;
 
-/*======================================================================================*/
 /**
- * Type representing the priority of messages.
+ * Enum type representing the priority of messages.
  * Options to pass to libDetLog() for importance of message.
  */
 enum class Importance {
-  error,     /* This is a fatal error. */
-  inter,     /* We intercepted this system call */
-  info,      /* Less important information */
-  extra,     /* Extra information not useful most of the time. */
+  error,     /*< This is a fatal error. */
+  inter,     /*< We intercepted this system call */
+  info,      /*< Less important information */
+  extra,     /*< Extra information not useful most of the time. */
 };
 
-/*======================================================================================*/
+/**
+ * Enum of log color.
+ */
 enum class Color{
   green,
   red,
   blue,
 };
-/*======================================================================================*/
+
+/**
+ * Simple logger.
+ * Write debug info and other information of interest to a file without
+ * polluting stderr or stdout. Based off the detmonad libdet logger.
+ */
 class logger {
 public:
   /**
-   * Constructor. Requires file to write to and debug level to use.
+   * Constructor.
+   * Requires file to write to and debug level to use.
+   * @param myFile: FILE handle to write to.
+   * @param debugLevel debugging level
+   * @param useColor whether to use color in logging (default true)
    */
   logger(FILE* myFile, int debugLevel, bool useColor = true);
 
   /**
-   * Wrapper for printf. Decides wether to print based on debug level.
-   * @param imp: The importance of the message.
-   * @param format: message to print.
-   * @param fin: FILE handle to write to.
-   * ... : arguments to format string.
-
+   * Logging wrapper for printf.
+   * Decides wether to print based on debug level.
    * Uses debugLevel global.
    * Currently:
    * Level 5: Print all.
    * Level 4: Print information, errors, and intercepted call.s
    * Level 2, 3: Print errors and intercepted calls.
    * Level 1   : Print only errors.
-
    * Note 2, 3 work the same. This may change in the future.
+   *
+   * @param imp: The importance of the message.
+   * @param format: message to print.
+   * ... : arguments to format string.
    */
   void writeToLog(Importance imp, std::string format, ...);
-
-  /**
-   * Wrapper for @writeToLog() using errorI. This function cannot exists as C/C++
-   * does not allow us to pass variadic arguments to other functions :/
-   */
-  /* void writeError(std::string format, ...); */
 
   /**
    * Set padding.
@@ -75,33 +75,31 @@ public:
   void unsetPadding();
 
   /**
-   * Unset padding.
+   * Retrieve current debug level.
+   * @return current debug level
    */
   int getDebugLevel();
 
   /**
    * Return new string meant to be printed in color to terminal.
+   * @param color color to be displayed
+   * @param text text to write
+   * @return string to be printed
    */
   string makeTextColored(Color color, string text);
 
 private:
   /**
-   * C++ makes it a pain to initialize this if it's const...
+   * Level of debugging (1-5).
+   * C++ makes it a pain to initialize this if it's const.
    */
   const int debugLevel;
 
-  // Flag to tell us to use colors or not! Useful for writing output to files
-  // without annoying color sequences in file.
-  const bool useColor;
+  const bool useColor;   /**< Flag to tell us to use colors or not! Useful for writing output to files without annoying color sequences in file. */
 
-  /**
-   * File pointer to write to.
-   */
-  FILE* fin;
-  /**
-   * Add a 2 space padding to the string to print. Useful for nested messages.
-   */
-  bool padding;
-  /*======================================================================================*/
+  FILE* fin;   /**< File pointer to write to.   */
+
+  bool padding;   /**< Add a 2 space padding to the string to print. Useful for nested messages. */
+
 };
 #endif
