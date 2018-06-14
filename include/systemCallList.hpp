@@ -3,11 +3,17 @@
 
 #include <string>
 
+/**
+  * The count of system calls.
+  * @see systemCallMappings
+  */
 const int SYSTEM_CALL_COUNT = 326;
 
-// This system call list was compiled from the header file:
-// /usr/include/x86_64-linux-gnu/bits/syscall.h on Ubuntu 16.04 LTS,
-// Kernel version: 4.4.0-93-generic
+/**
+  * A list of system calls. This was compiled from the header file:
+  * /usr/include/x86_64-linux-gnu/bits/syscall.h on Ubuntu 16.04 LTS,
+  * Kernel version: 4.4.0-93-generic
+  */
 const std::string systemCallMappings[SYSTEM_CALL_COUNT] = {
   "read",
   "write",
