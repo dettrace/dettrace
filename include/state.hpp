@@ -36,7 +36,7 @@ private:
   size_t clock = 744847200;
 
 public:
- /*REVIEW: The previous comment appears to be related to a previous declaration of this constructor that used pidMap and ppid.*//**
+ /**
    * Constructor.
    * Initialize traceePid and debugLevel to the provided values, and 
    * clock is initialized to 0.
@@ -96,11 +96,11 @@ public:
   struct user_regs_struct beforeRetry = {0};
 
   /**
-   * TODO (azm): Document this
+   * Number of total bytes.
    */
   uint64_t totalBytes = 0;
 
-  /* REVIEW: I tried to clarify this, is it accurate? --azm
+  /*
    * Indicator to differentiate between a syscall we are injecting and one that has already been replayed. 
    * Used since Ptrace cannot tell the difference.
    *
@@ -113,15 +113,12 @@ public:
   /** Flag to let us know if the current system call was artifically injected by us. */
   bool syscallInjected = false;
 
-  /**
-   * TODO (azm): Document this 
-   */
-  bool rdfsNotNull = false;
-  bool wrfsNotNull = false;
-  bool exfsNotNull = false;
-  fd_set origRdfs;
-  fd_set origWrfs;
-  fd_set origExfs;
+  bool rdfsNotNull = false; /**< Indicates whether rdfs is NULL. */
+  bool wrfsNotNull = false; /**< Indicates whether wrfs is NULL. */
+  bool exfsNotNull = false; /**< Indicates whether exfs is NULL. */
+  fd_set origRdfs; /**< Original file descriptors set to watch for read availability. */
+  fd_set origWrfs; /**< Original file descriptors set to watch for write availability. */
+  fd_set origExfs; /**< Original file descriptors set to watch for exceptions. */
 
   /** Flag to differentiate between our injected timeout into a system call from a user one. */
   bool userDefinedTimeout = false;
@@ -150,7 +147,7 @@ public:
    */
   const size_t dirEntriesBytes = 32768;
 
-  /* REVIEW: I tried to clarify some parts, is this accruate --azm.
+  /*
    * Smart pointer to the system call being processed.
    * We need to know what system call was/is that we are not. This is important in
    * cases like clone:
