@@ -57,6 +57,8 @@ public:
 };
 // =======================================================================================
 /**
+ * int access(const char *pathname, int mode);
+ *
  * access()  checks  whether the calling process can access the file pathname.  If path‐
  * name is a symbolic link, it is dereferenced.
  */
@@ -126,8 +128,7 @@ public:
 };
 // =======================================================================================
 /**
- * long
- * clone(unsigned long flags,
+ * long clone(unsigned long flags,
  *       void *child_stack,
  *       int *ptid,
  *       int *ctid,
@@ -180,6 +181,8 @@ public:
 };
 // =======================================================================================
 /**
+ * int execve(const char *filename, char *const argv[], char *const envp[]);
+ *
  * execve()  executes  the  program  pointed  to by filename.
  *
  * Deterministic. We print the path for debugging purposes here.
@@ -323,6 +326,17 @@ public:
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
+
+/**
+ *
+ * int getdents64(unsigned int fd, struct linux_dirent64 *dirp, unsigned int count);
+ *
+ * Reads several linux_dirent structures from the directory referred to by the open file
+ * descriptor fd into the buffer pointed to by  dirp.
+ * Reads files in directory.
+ *
+ * TODO: Contains linux_dirent struct with inode that we could virtualize.
+ */
 class getdents64SystemCall : public systemCall{
 public:
   using systemCall::systemCall;
@@ -364,17 +378,11 @@ public:
 };
 // =======================================================================================
 /**
- *
+ * int getrlimit(int resource, struct rlimit *rlim);
  *
  *        The getrlimit() and setrlimit() system calls get and set resource
- *               limits respectively.  Each resource has an associated soft and hard
- *                      limit, as defined by the rlimit structure.
- *
- *
- *
- *        int getrlimit(int resource, struct rlimit *rlim);
- *
- *
+ *        limits respectively.  Each resource has an associated soft and hard
+ *        limit, as defined by the rlimit structure.
  *
  */
 class getrlimitSystemCall : public systemCall{
@@ -510,7 +518,7 @@ public:
 };
 // =======================================================================================
 /**
- *
+ * int mkdirat(int dirfd, const char *pathname, mode_t mode);
  *
  * "at" variat of mkdir. Same things apply.
  */
