@@ -5,14 +5,32 @@
 
 using namespace std;
 
+/**
+ * Write to tracee.
+ * @param localMemory pointer to local memory address
+ * @param traceeMemory pointer to tracee memory address
+ * @param numberOfBytes number of bytes to write
+ * @param traceePid pid of tracee
+ */
 void writeVmTracee(void* localMemory, void* traceeMemory, size_t numberOfBytes,
                    pid_t traceePid);
+
+/**
+ * Read from tracee.
+ * @param traceeMemory pointer to tracee memory address
+ * @param localMemory pointer to local memory address
+ * @param numberOfBytes number of bytes to read
+ * @param traceePid pid of tracee
+ */
 void readVmTracee(void* traceeMemory, void* localMemory, size_t numberOfBytes,
                   pid_t traceePid);
 
 /**
- * Replay system call passed in. The registers should already be in the correct format.
+ * Replay system call passed in.
+ * The registers should already be in the correct format.
  * You should save your previous register state if needed.
+ * @param t ptracer
+ * @param systemCall system call to replay
  */
 void replaySystemCall(ptracer& t, uint64_t systemCall);
 
@@ -598,7 +616,7 @@ public:
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
-/** 
+/**
  * int pipe2(int pipefd[2], int flags);
  */
 class pipe2SystemCall : public systemCall{
@@ -770,7 +788,7 @@ public:
 };
 // =======================================================================================
 /**
- *  int renameat2(int olddirfd, const char *oldpath, int newdirfd, 
+ *  int renameat2(int olddirfd, const char *oldpath, int newdirfd,
  *                 const char *newpath, unsigned int flags);
  */
 class renameat2SystemCall : public systemCall{
