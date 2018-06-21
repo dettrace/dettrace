@@ -17,6 +17,8 @@
 
 #include <linux/futex.h>
 
+#include "TraceePtr.hpp"
+
 using namespace std;
 
 extern unordered_map<int, string> futexNames;
@@ -52,10 +54,31 @@ int doWithCheck(int returnValue, string errorMessage);
 // Read bytes from user.
 // Ptrace read is way too slow as it works at word granularity. Time to use
 // process_vm_read!
-void readVmTracee(void* traceeMemory, void* localMemory, size_t numberOfBytes,
-                  pid_t traceePid);
+template <typename T>
+void readVmTracee(TraceePtr<T> traceeMemory, void* localMemory, size_t numberOfBytes,
+                  pid_t traceePid) {
+  iovec remoteIoVec = {traceeMemory.ptr, numberOfBytes};
+  iovec localIoVec = {localMemory, numberOfBytes };
+  const unsigned long flags = 0;
+
+  doWithCheck(process_vm_readv(traceePid, &localIoVec, 1, &remoteIoVec, 1, flags),
+              "process_vm_writev");
+
+  return;
+
+}
 // =======================================================================================
-void writeVmTracee(void* localMemory, void* traceeMemory, size_t numberOfBytes,
-                   pid_t traceePid);
+template <typename T>
+void writeVmTracee(void* localMemory, TraceePtr<T> traceeMemory, size_t numberOfBytes,
+                   pid_t traceePid) {
+  iovec remoteIoVec = {traceeMemory.ptr, numberOfBytes};
+  iovec localIoVec = {localMemory, numberOfBytes };
+  const unsigned long flags = 0;
+
+  doWithCheck(process_vm_writev(traceePid, &localIoVec, 1, &remoteIoVec, 1, flags),
+              "process_vm_writev");
+
+  return;
+}
 // =======================================================================================
 #endif
