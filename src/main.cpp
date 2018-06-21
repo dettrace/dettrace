@@ -54,6 +54,7 @@ int runTracee(void* args);
 void runTracer(int debugLevel, pid_t childPid, bool inSchroot, bool useColor);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
+bool dirExists(string directory);
 void mountDir(string source, string target);
 void setUpContainer(string pathToExe, string pathToChroot, bool userDefinedChroot);
 void mkdirIfNotExist(string dir);
@@ -446,10 +447,27 @@ tuple<int, int, string, bool, bool, bool> parseProgramArguments(int argc, char* 
   return make_tuple(optind, debugLevel, pathToChroot, useContainer, inSchroot, useColor);
 }
 // =======================================================================================
+bool dirExists(string directory) {
+
+  struct stat sb;
+
+  if (stat(directory.c_str(), &sb) == 0 && S_ISDIR(sb.st_mode)) return true;
+
+  return false;
+}
 /**
  * Wrapper around mount with strings.
  */
 void mountDir(string source, string target){
+
+  /* Check if source path exists*/
+  if (dirExists(source)) fprintf(stderr, "Source path: %s found\n", source.c_str());
+  else fprintf(stderr, "Error: Source path: %s not found\n", source.c_str());
+
+  /* Check if target path exists*/
+  if (dirExists(target)) fprintf(stderr, "Target path: %s found\n", target.c_str());
+  else fprintf(stderr, "Error: Target path: %s not found\n", target.c_str());
+
   doWithCheck(mount(source.c_str(), target.c_str(), nullptr, MS_BIND, nullptr),
 	      "Unable to bind mount: " + source + " to " + target);
 }
