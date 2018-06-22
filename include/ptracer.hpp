@@ -150,9 +150,9 @@ public:
    * fetch the other pointers yourself.
    */
   template<typename T>
-  static T readFromTracee(T* sourceAddress, pid_t traceePid){
+  static T readFromTracee(traceePtr<T> sourceAddress, pid_t traceePid){
     T myData;
-    readVmTracee(traceePtr<T>(sourceAddress), &myData, sizeof(T), traceePid);
+    readVmTracee(sourceAddress, &myData, sizeof(T), traceePid);
     return myData;
   }
 
@@ -168,7 +168,7 @@ public:
    * Write a value
    */
   template<typename T>
-  static void writeToTracee(T* writeAddress, T valueToCopy, pid_t traceePid){
+  static void writeToTracee(traceePtr<T> writeAddress, T valueToCopy, pid_t traceePid){
     writeVmTracee(&valueToCopy, traceePtr<T>(writeAddress), sizeof(T), traceePid);
 
     return;

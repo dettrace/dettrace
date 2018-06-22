@@ -97,7 +97,7 @@ void clock_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& 
     myTp.tv_sec = s.getLogicalTime();
     myTp.tv_nsec = 0;
 
-    ptracer::writeToTracee(tp, myTp, t.getPid());
+    ptracer::writeToTracee(traceePtr<struct timespec>(tp), myTp, t.getPid());
     s.incrementTime();
   }
   return;
@@ -152,7 +152,7 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     // ourselves!
     for(int i = 0; true; i++){
       // Make sure it's non null before reading to string.
-      char* address = ptracer::readFromTracee<char*>(&(argv[i]), t.getPid());
+      char* address = ptracer::readFromTracee(traceePtr<char*>(&(argv[i])), t.getPid());
       if(address == nullptr){
         break;
       }
@@ -211,7 +211,7 @@ void fstatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
                           to_string(t.getReturnValue()) + "\n");
     }
     s.syscallInjected = false;
-    struct stat myStat = ptracer::readFromTracee((struct stat*) t.arg2(), s.traceePid);
+    struct stat myStat = ptracer::readFromTracee(traceePtr<struct stat>((struct stat*) t.arg2()), s.traceePid);
 
     // Add an entry for this new file to our inode with a newer modified date.
     if( ! gs.mtimeMap.realValueExists(myStat.st_ino) ){
@@ -237,14 +237,14 @@ void fstatfsSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
   }
 
   // Read values written to by system call.
-  struct statfs myStatfs = ptracer::readFromTracee(statfsPtr, s.traceePid);
+  struct statfs myStatfs = ptracer::readFromTracee(traceePtr<struct statfs>(statfsPtr), s.traceePid);
 
   if(t.getReturnValue() == 0){
     // Assume we're using this file sytem?
     zeroOutStatfs(myStatfs);
 
     // Write back result for child.
-    ptracer::writeToTracee(statfsPtr, myStatfs, s.traceePid);
+    ptracer::writeToTracee(traceePtr<struct statfs>(statfsPtr), myStatfs, s.traceePid);
   }
 
   return;
@@ -286,7 +286,7 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
      ){
     gs.log.writeToLog(Importance::extra, "Futex wait on: %p.\n", t.arg1());
     gs.log.writeToLog(Importance::extra, "On value: " + to_string(futexValue) + "\n");
-    int actualValue = (int) t.readFromTracee((int*) t.arg1(), t.getPid());
+    int actualValue = (int) t.readFromTracee(traceePtr<int>((int*) t.arg1()), t.getPid());
     gs.log.writeToLog(Importance::extra, "Actual value: " + to_string(actualValue) + "\n");
 
     // Overwrite the current value with our value. Restore value in post hook.
@@ -304,16 +304,16 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
       // Enough space for timespec struct.
       timespec* newAddress = (timespec*) (rsp - 128 - sizeof(struct timespec));
 
-      ptracer::writeToTracee(newAddress, ourTimeout, s.traceePid);
+      ptracer::writeToTracee(traceePtr<timespec>(newAddress), ourTimeout, s.traceePid);
 
       // Point system call to new address.
       t.writeArg4((uint64_t) newAddress);
     }else{
-      timespec timeout = ptracer::readFromTracee(timeoutPtr, t.getPid());
+      timespec timeout = ptracer::readFromTracee(traceePtr<timespec>(timeoutPtr), t.getPid());
       gs.log.writeToLog(Importance::extra,
                         "Using original timeout value: (s = %d, ns = %d)\n",
                         timeout.tv_sec, timeout.tv_nsec);
-      ptracer::writeToTracee(timeoutPtr, ourTimeout, s.traceePid);
+      ptracer::writeToTracee(traceePtr<timespec>(timeoutPtr), ourTimeout, s.traceePid);
       s.userDefinedTimeout = true;
     }
   }
@@ -421,7 +421,7 @@ void getrusageSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
   if(usagePtr == nullptr){
     gs.log.writeToLog(Importance::info, "getrusage pointer null.");
   }else{
-    struct rusage usage = ptracer::readFromTracee(usagePtr, t.getPid());
+    struct rusage usage = ptracer::readFromTracee(traceePtr<struct rusage>(usagePtr), t.getPid());
     /* user CPU time used */
     usage.ru_utime = timeval { .tv_sec =  (long) s.getLogicalTime(),
                                .tv_usec = (long )s.getLogicalTime() };
@@ -443,7 +443,7 @@ void getrusageSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
     usage.ru_nvcsw = LONG_MAX;    		   /* voluntary context switches */
     usage.ru_nivcsw = LONG_MAX;   		   /* involuntary context switches */
 
-    ptracer::writeToTracee(usagePtr, usage, t.getPid());
+    ptracer::writeToTracee(traceePtr<struct rusage>(usagePtr), usage, t.getPid());
   }
 
   s.incrementTime();
@@ -457,7 +457,7 @@ void gettimeofdaySystemCall::handleDetPost(globalState& gs, state& s, ptracer& t
     myTv.tv_sec = s.getLogicalTime();
     myTv.tv_usec = 0;
 
-    ptracer::writeToTracee(tp, myTv, t.getPid());
+    ptracer::writeToTracee(traceePtr<struct timeval>(tp), myTv, t.getPid());
     s.incrementTime();
   }
   return;
@@ -546,7 +546,7 @@ void newfstatatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
 
     if((int) t.getReturnValue() >= 0){
       struct stat* statbufPtr = (struct stat*) t.arg3();
-      struct stat statbuf = ptracer::readFromTracee(statbufPtr, s.traceePid);
+      struct stat statbuf = ptracer::readFromTracee(traceePtr<struct stat>(statbufPtr), s.traceePid);
       s.inodeToDelete = statbuf.st_ino;
     }else{
       gs.log.writeToLog(Importance::info, "No such file, that's okay.\n");
@@ -982,7 +982,7 @@ bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     // Has to be created in memory.
     uint64_t rsp = t.getRsp();
     timeval* newAddr = (timeval*) (rsp - 128 - sizeof(struct timeval));
-    ptracer::writeToTracee(newAddr, ourTimeout, s.traceePid);
+    ptracer::writeToTracee(traceePtr<timeval>(newAddr), ourTimeout, s.traceePid);
     t.writeArg5((uint64_t) newAddr);
   }else{
     // Already exists in memory.
@@ -1049,13 +1049,13 @@ void statfsSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   }
 
   // Read values written to by system call.
-  struct statfs stats = ptracer::readFromTracee(statfsPtr, s.traceePid);
+  struct statfs stats = ptracer::readFromTracee(traceePtr<struct statfs>(statfsPtr), s.traceePid);
   if(t.getReturnValue() == 0){
     // Assume we're using this file sytem?
     zeroOutStatfs(stats);
 
     // Write back result for child.
-    ptracer::writeToTracee(statfsPtr, stats, s.traceePid);
+    ptracer::writeToTracee(traceePtr<struct statfs>(statfsPtr), stats, s.traceePid);
   }
 
   return;
@@ -1084,7 +1084,7 @@ void sysinfoSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
   info.loads[1] = LONG_MAX;
   info.loads[2] = LONG_MAX;
 
-  ptracer::writeToTracee(infoPtr, info, t.getPid());
+  ptracer::writeToTracee(traceePtr<struct sysinfo>(infoPtr), info, t.getPid());
   return;
 }
 // =======================================================================================
@@ -1122,7 +1122,7 @@ void timeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     return;
   }
 
-  ptracer::writeToTracee(timePtr, (time_t) s.getLogicalTime(), s.traceePid);
+  ptracer::writeToTracee(traceePtr<time_t>(timePtr), (time_t) s.getLogicalTime(), s.traceePid);
   // Tick up time.
   s.incrementTime();
   return;
@@ -1144,7 +1144,7 @@ void timesSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
       .tms_cstime = 0,
     };
 
-    ptracer::writeToTracee(bufPtr, myTms, s.traceePid);
+    ptracer::writeToTracee(traceePtr<tms>(bufPtr), myTms, s.traceePid);
   }
 
   t.writeRax(0);
@@ -1175,7 +1175,7 @@ void unameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     strncpy(myUts.version, "#1", MEMBER_LENGTH);
     strncpy(myUts.machine, "x86_64", MEMBER_LENGTH);
 
-    ptracer::writeToTracee(utsnamePtr, myUts, t.getPid());
+    ptracer::writeToTracee(traceePtr<struct utsname>(utsnamePtr), myUts, t.getPid());
   }
   return;
 }
@@ -1253,7 +1253,7 @@ bool utimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   };
 
   // Write our struct to the tracee's memory.
-  ptracer::writeToTracee(ourUtimbuf, clockTime, s.traceePid);
+  ptracer::writeToTracee(traceePtr<utimbuf>(ourUtimbuf), clockTime, s.traceePid);
 
   // Point system call to new address.
   t.writeArg2((uint64_t) ourUtimbuf);
@@ -1291,8 +1291,8 @@ bool utimesSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   };
 
   // Write our struct to the tracee's memory.
-  ptracer::writeToTracee(& (ourTimeval[0]), clockTime, s.traceePid);
-  ptracer::writeToTracee(& (ourTimeval[1]), clockTime, s.traceePid);
+  ptracer::writeToTracee(traceePtr<timeval>(& (ourTimeval[0])), clockTime, s.traceePid);
+  ptracer::writeToTracee(traceePtr<timeval>(& (ourTimeval[1])), clockTime, s.traceePid);
 
   // Point system call to new address.
   t.writeArg2((uint64_t) ourTimeval);
@@ -1330,8 +1330,8 @@ bool utimensatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
   };
 
   // Write our struct to the tracee's memory.
-  ptracer::writeToTracee(& (ourTimespec[0]), clockTime, s.traceePid);
-  ptracer::writeToTracee(& (ourTimespec[1]), clockTime, s.traceePid);
+  ptracer::writeToTracee(traceePtr<timespec>(& (ourTimespec[0])), clockTime, s.traceePid);
+  ptracer::writeToTracee(traceePtr<timespec>(& (ourTimespec[1])), clockTime, s.traceePid);
 
   // Point system call to new address.
   t.writeArg3((uint64_t) ourTimespec);
@@ -1483,7 +1483,7 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sc
 }
 // =======================================================================================
 void replaySystemCall(ptracer& t, uint64_t systemCall){
-  uint16_t minus2 = t.readFromTracee((uint16_t*) (t.getRip() - 2), t.getPid());
+  uint16_t minus2 = t.readFromTracee(traceePtr<uint16_t>((uint16_t*) (t.getRip() - 2)), t.getPid());
   if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
     throw runtime_error("IP does not point to system call instruction!\n");
   }
@@ -1526,7 +1526,7 @@ void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName)
 
   int retVal = t.getReturnValue();
   if(retVal == 0){
-    struct stat myStat = ptracer::readFromTracee(statPtr, s.traceePid);
+    struct stat myStat = ptracer::readFromTracee(traceePtr<struct stat>(statPtr), s.traceePid);
     ino_t inode = myStat.st_ino;
     // Use inode to check if we created this file during our run.
     time_t virtualMtime = gs.mtimeMap.realValueExists(inode) ?
@@ -1577,7 +1577,7 @@ void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName)
     // s.incrementTime();
 
     // Write back result for child.
-    ptracer::writeToTracee(statPtr, myStat, s.traceePid);
+    ptracer::writeToTracee(traceePtr<struct stat>(statPtr), myStat, s.traceePid);
   }
   return;
 }
