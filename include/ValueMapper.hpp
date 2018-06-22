@@ -8,27 +8,30 @@ using namespace std;
 
 /**
  * Simple wrapper around std::map for virtualizing values like inodes.
- * Template parameter T must be an integral type.
+ * Template parameter Virtual must be an integral type.
  */
 template <typename Real, typename Virtual>
 class ValueMapper {
 protected:
-  // I would ideally like to type alias real values to virtual values from int and have
-  // the compiler enforce them through type errors. But it seems like C++ doesn't support
-  // that unless I use phantom types and wrapper classes...
+  /**
+   * I would ideally like to type alias real values to virtual values from int and have
+   * the compiler enforce them through type errors. But it seems like C++ doesn't support
+   * that unless I use phantom types and wrapper classes...
+   */
 
-  // Tables to keep track of mappings.
-  unordered_map<Virtual, Real> virtualToRealValue;
-  unordered_map<Real, Virtual> realToVirtualValue;
-  Virtual freshValue;
-  logger& myLogger;
-  const string mappingName;
+  unordered_map<Virtual, Real> virtualToRealValue; /**< A mapping from Virtual to Real. */
+  unordered_map<Real, Virtual> realToVirtualValue; /**< A mapping from Real to Virtual. */
+  Virtual freshValue; /**< Next available Virtual value to be added to map. */
+  logger& myLogger; /**< A logger. */
+  const string mappingName; /**< String name of this map, useful for debugging. */
 
 public:
   /**
-   * Constructor. Takes in logger for writing data and name of this mapping.
-   * @myLogger: initialized logger to write data to.
-   * @name: name of this mapping for debugging.
+   * Constructor.
+   * Takes in logger for writing data, name of the mapping, and a starting virtual value.
+   * @param logr initialized logger to write data to.
+   * @param name string name of this mapping, useful for debugging.
+   * @param startingValue initial Virtual value to start with.
    */
   ValueMapper(logger& logr, string name, Virtual startingValue) :
     myLogger(logr),
@@ -38,8 +41,9 @@ public:
 
   /**
    * Given a real value, add it to our mapping tables and map it to a fresh new virtual value.
+   * Throws error if realValue already exists.
    * @param realValue: realValue to add. Assumed to be unique.
-   * @return virtualValue: a fresh new virtual value.
+   * @return the mapped virtual value.
    */
   virtual Virtual addRealValue(Real realValue) {
     if(realToVirtualValue.find(realValue) != realToVirtualValue.end()){
@@ -61,9 +65,10 @@ public:
   }
 
   /**
-   * Get the real value of a process from our @valueMappingTable based on the virtual value.
-   * @param virtualValue: virtual value of process.
-   * @return realValue: real value. Throws if it doesn't exist.
+   * Get the real value from the virtual value. 
+   * Throws error if virtual value does not exist in map.
+   * @param virtualValue virtual value of process.
+   * @return real value that is mapped to the virtual one.
    */
   Real getRealValue(Virtual virtualValue) {
     // does element exist?
@@ -79,10 +84,10 @@ public:
   }
 
   /**
-   * Get the virtual value from the real value. This assumes the value has already been added
-   * through @addRealValue.
-   * @param realValue: real value of process.
-   * @return virtualValue: real value. Throws if it doesn't exist.
+   * Get the virtual value from the real value.
+   * Throws error if real value does not exist.
+   * @param realValue real value of process.
+   * @return virtual value that is mapped to the real one.
    */
   Virtual getVirtualValue(Real realValue) {
     if (realToVirtualValue.find(realValue) != realToVirtualValue.end()) {
@@ -100,8 +105,8 @@ public:
 
   /**
    * Check if real value is already in map for real values.
-   * @realValue: real value to check for.
-   * @return bool: true if real value already exists in @realToVirtualValue.
+   * @param realValue: real value to check for.
+   * @return True if real value exists, otherwise False.
    */
   bool realValueExists(Real realValue) {
     bool keyExists = realToVirtualValue.find(realValue) != realToVirtualValue.end();
@@ -112,8 +117,8 @@ public:
 
   /**
    * Check if virtual value is already in map for virtual values.
-   * @realValue: virtual value to check for.
-   * @return bool: true if virtual value already exists in @virtualToRealValue.
+   * @param virtualValue virtual value to check for.
+   * @return True if virtual value exists, otherwise False.
    */
   bool virtualValueExists(Virtual virtualValue) {
     bool keyExists = virtualToRealValue.find(virtualValue) != virtualToRealValue.end();
@@ -122,7 +127,11 @@ public:
     return keyExists;
   }
 
-  // Erase entry based on key.
+  /** 
+   * Given a real value, erase the entry from the map.
+   * Throws error if key does not exist in map.
+   * @param key real value of the entry to be erased.
+   */
   void eraseBasedOnKey(Real key){
     Virtual value;
     try{
