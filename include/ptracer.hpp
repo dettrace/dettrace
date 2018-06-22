@@ -84,7 +84,7 @@ public:
   // Set regs to the values given by passed struct.
   void setRegs(struct user_regs_struct newValues);
   uint64_t getRip();
-  uint64_t getRsp();
+  traceePtr<void> getRsp();
 
   /**
    * Change system call by writing to eax register, be careful!

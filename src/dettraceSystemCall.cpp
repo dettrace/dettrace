@@ -300,7 +300,7 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
       gs.log.writeToLog(Importance::extra,
                         "timeout null, writing our data below the current stack frame...\n");
 
-      uint64_t rsp = t.getRsp();
+      uint64_t rsp = (uint64_t) t.getRsp().ptr;
       // Enough space for timespec struct.
       timespec* newAddress = (timespec*) (rsp - 128 - sizeof(struct timespec));
 
@@ -980,7 +980,7 @@ bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 
   if(timeoutPtr == nullptr){
     // Has to be created in memory.
-    uint64_t rsp = t.getRsp();
+    uint64_t rsp = (uint64_t) t.getRsp().ptr;
     timeval* newAddr = (timeval*) (rsp - 128 - sizeof(struct timeval));
     ptracer::writeToTracee(traceePtr<timeval>(newAddr), ourTimeout, s.traceePid);
     t.writeArg5((uint64_t) newAddr);
@@ -1243,7 +1243,7 @@ bool utimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   s.originalArg2 = t.arg2();
 
   // Enough space for 2 timespec structs.
-  utimbuf* ourUtimbuf = (utimbuf*) (t.getRsp() - 128 - sizeof(utimbuf));
+  utimbuf* ourUtimbuf = (utimbuf*) (t.getRsp().ptr - 128 - sizeof(utimbuf));
 
   // Create our own struct with our time.
   // TODO: In the future we might want to unify this with our mtimeMapper.
@@ -1279,7 +1279,7 @@ bool utimesSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   // this data below the current stack pointer accounting for the red zone, known to be
   // 128 bytes.
   s.originalArg2 = t.arg2();
-  uint64_t rsp = t.getRsp();
+  uint64_t rsp = (uint64_t) t.getRsp().ptr;
   // Enough space for 2 timeval structs.
   timeval* ourTimeval = (timeval*) (rsp - 128 - 2 * sizeof(timeval));
 
@@ -1318,7 +1318,7 @@ bool utimensatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
   // this data below the current stack pointer accounting for the red zone, known to be
   // 128 bytes.
   s.originalArg3 = t.arg3();
-  uint64_t rsp = t.getRsp();
+  uint64_t rsp = (uint64_t) t.getRsp().ptr;
   // Enough space for 2 timespec structs.
   timespec* ourTimespec = (timespec*) (rsp - 128 - 2 * sizeof(timespec));
 
@@ -1613,7 +1613,7 @@ void injectFstat(globalState& gs, state& s, ptracer& t, int fd){
   // Inject fstat system call to perform!
   s.syscallInjected = true;
 
-  uint64_t rsp = t.getRsp();
+  uint64_t rsp = (uint64_t) t.getRsp().ptr;
   struct stat* traceesMem = (struct stat*) (rsp - 128 - sizeof(struct stat));
 
   // Call fstat.
@@ -1640,7 +1640,7 @@ bool injectNewfstatatIfNeeded(globalState& gs, state& s, ptracer& t, int dirfd,
   // Inject fstat system call to perform!
   s.syscallInjected = true;
 
-  uint64_t rsp = t.getRsp();
+  uint64_t rsp = (uint64_t) t.getRsp().ptr;
   struct stat* traceesMem = (struct stat*) (rsp - 128 - sizeof(struct stat));
 
   replaySystemCall(t, SYS_newfstatat);

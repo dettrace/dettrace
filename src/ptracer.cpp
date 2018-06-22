@@ -67,8 +67,8 @@ void ptracer::setRegs(struct user_regs_struct newValues){
 uint64_t ptracer::getRip() {
   return regs.rip;
 }
-uint64_t ptracer::getRsp() {
-  return regs.rsp;
+traceePtr<void> ptracer::getRsp() {
+  return traceePtr<void>((void*) regs.rsp);
 }
 
 uint64_t ptracer::getEventMessage(){
