@@ -25,7 +25,7 @@
 #include <cstddef>
 
 #include "util.hpp"
-#include "TraceePtr.hpp"
+#include "traceePtr.hpp"
 
 using namespace std;
 
@@ -152,7 +152,7 @@ public:
   template<typename T>
   static T readFromTracee(T* sourceAddress, pid_t traceePid){
     T myData;
-    readVmTracee(TraceePtr<T>(sourceAddress), &myData, sizeof(T), traceePid);
+    readVmTracee(traceePtr<T>(sourceAddress), &myData, sizeof(T), traceePid);
     return myData;
   }
 
@@ -162,14 +162,14 @@ public:
    * Undefined behavior will happen if the location is not actually a C-string.
    * @retval str: A Cpp string version of readAddress.
    */
-  static string readTraceeCString(TraceePtr<char> source, pid_t traceePid);
+  static string readTraceeCString(traceePtr<char> source, pid_t traceePid);
 
   /**
    * Write a value
    */
   template<typename T>
   static void writeToTracee(T* writeAddress, T valueToCopy, pid_t traceePid){
-    writeVmTracee(&valueToCopy, TraceePtr<T>(writeAddress), sizeof(T), traceePid);
+    writeVmTracee(&valueToCopy, traceePtr<T>(writeAddress), sizeof(T), traceePid);
 
     return;
   }

@@ -8,9 +8,9 @@
  * Template parameter T is the type of the pointer.
  */
 template <typename T>
-struct TraceePtr {
+struct traceePtr {
   T* ptr;
-  explicit TraceePtr(T* ptr) : 
+  explicit traceePtr(T* ptr) : 
     ptr(ptr) {
   }
 };

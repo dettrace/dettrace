@@ -157,7 +157,7 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
         break;
       }
 
-      execveArgs += " \"" + ptracer::readTraceeCString(TraceePtr<char>(address), t.getPid()) + "\" ";
+      execveArgs += " \"" + ptracer::readTraceeCString(traceePtr<char>(address), t.getPid()) + "\" ";
     }
 
     auto msg = "Args: " + gs.log.makeTextColored(Color::green, execveArgs) + "\n";
@@ -756,7 +756,7 @@ void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
   if(bytes_read > 0){
     // This operation is very expensive!
     // char buffer[bytes_read];
-    // readVmTracee(TraceePtr<void>((void*) t.arg2()), buffer, bytes_read, s.traceePid);
+    // readVmTracee(traceePtr<void>((void*) t.arg2()), buffer, bytes_read, s.traceePid);
     // gs.log.writeToLog(Importance::extra, "Read output: \"\n");
     // for(int i = 0; i < bytes_read; i++){
     // gs.log.writeToLog(Importance::extra, "%d", (int) buffer[i]);
@@ -962,15 +962,15 @@ bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   // Set them in the state class.
   if((void*) t.arg2() != NULL){
     s.rdfsNotNull = true;
-    readVmTracee(TraceePtr<void>((void*) t.arg2()), (void*) & s.origRdfs, sizeof(fd_set), t.getPid());
+    readVmTracee(traceePtr<void>((void*) t.arg2()), (void*) & s.origRdfs, sizeof(fd_set), t.getPid());
   }
   if((void*) t.arg3() != NULL){
     s.wrfsNotNull = true;
-    readVmTracee(TraceePtr<void>((void*) t.arg3()), (void*) & s.origWrfs, sizeof(fd_set), t.getPid());
+    readVmTracee(traceePtr<void>((void*) t.arg3()), (void*) & s.origWrfs, sizeof(fd_set), t.getPid());
   }
   if((void*) t.arg4() != NULL){
     s.exfsNotNull = true;
-    readVmTracee(TraceePtr<void>((void*) t.arg4()), (void*) & s.origExfs, sizeof(fd_set), t.getPid());
+    readVmTracee(traceePtr<void>((void*) t.arg4()), (void*) & s.origExfs, sizeof(fd_set), t.getPid());
   }
   // Set the timeout to zero.
   timeval* timeoutPtr = (timeval*) t.arg5();
@@ -999,17 +999,17 @@ void selectSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   if(replayed){
     if(s.rdfsNotNull){
       //s.rdfsNotNull = false;
-      writeVmTracee((void*) & s.origRdfs, TraceePtr<void>((void*) t.arg2()), sizeof(fd_set), t.getPid());
+      writeVmTracee((void*) & s.origRdfs, traceePtr<void>((void*) t.arg2()), sizeof(fd_set), t.getPid());
       //t.writeArg2((uint64_t) s.origRdfs);
     }
     if(s.wrfsNotNull){
       //s.wrfsNotNull = false;
-      writeVmTracee((void*) & s.origWrfs, TraceePtr<void>((void*) t.arg3()), sizeof(fd_set), t.getPid());
+      writeVmTracee((void*) & s.origWrfs, traceePtr<void>((void*) t.arg3()), sizeof(fd_set), t.getPid());
       //t.writeArg3((uint64_t) s.origWrfs);
     }
     if(s.exfsNotNull){
       //s.exfsNotNull = false;
-      writeVmTracee((void*) & s.origExfs, TraceePtr<void>((void*) t.arg4()), sizeof(fd_set), t.getPid());
+      writeVmTracee((void*) & s.origExfs, traceePtr<void>((void*) t.arg4()), sizeof(fd_set), t.getPid());
       //t.writeArg4((uint64_t) s.origExfs);
     }
     s.rdfsNotNull = false;
@@ -1592,7 +1592,7 @@ void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName)
  */
 void printInfoString(uint64_t addressOfCString, globalState& gs, state& s, string postFix){
   if((char*) addressOfCString != nullptr){
-    string path = ptracer::readTraceeCString(TraceePtr<char>((char*) addressOfCString), s.traceePid);
+    string path = ptracer::readTraceeCString(traceePtr<char>((char*) addressOfCString), s.traceePid);
     string msg = s.systemcall->syscallName + postFix +
       gs.log.makeTextColored(Color::green, path) + "\n";
     gs.log.writeToLog(Importance::info, msg);

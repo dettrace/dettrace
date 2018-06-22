@@ -1169,7 +1169,7 @@ void handleDents(globalState& gs, state& s, ptracer& t, scheduler& sched){
 
   // Use file descriptor to fetch correct entry in table.
   int fd = (int) t.arg1();
-  TraceePtr<uint8_t> traceeBuffer((uint8_t*) t.arg2());
+  traceePtr<uint8_t> traceeBuffer((uint8_t*) t.arg2());
   size_t traceeBufferSize = t.arg3();
 
   // We have never seen this entry before! This is a new getdents call, not a

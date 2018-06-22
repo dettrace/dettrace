@@ -127,7 +127,7 @@ void ptracer::setOptions(pid_t pid){
   return;
 }
 
-string ptracer::readTraceeCString(TraceePtr<char> readAddress, pid_t traceePid){
+string ptracer::readTraceeCString(traceePtr<char> readAddress, pid_t traceePid){
   string r;
   bool done = false;
 
