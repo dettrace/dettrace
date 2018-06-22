@@ -55,7 +55,7 @@ int doWithCheck(int returnValue, string errorMessage);
 // Ptrace read is way too slow as it works at word granularity. Time to use
 // process_vm_read!
 template <typename T>
-void readVmTracee(traceePtr<T> traceeMemory, void* localMemory, size_t numberOfBytes,
+void readVmTracee(traceePtr<T> traceeMemory, T* localMemory, size_t numberOfBytes,
                   pid_t traceePid) {
   iovec remoteIoVec = {traceeMemory.ptr, numberOfBytes};
   iovec localIoVec = {localMemory, numberOfBytes };
@@ -69,7 +69,7 @@ void readVmTracee(traceePtr<T> traceeMemory, void* localMemory, size_t numberOfB
 }
 // =======================================================================================
 template <typename T>
-void writeVmTracee(void* localMemory, traceePtr<T> traceeMemory, size_t numberOfBytes,
+void writeVmTracee(T* localMemory, traceePtr<T> traceeMemory, size_t numberOfBytes,
                    pid_t traceePid) {
   iovec remoteIoVec = {traceeMemory.ptr, numberOfBytes};
   iovec localIoVec = {localMemory, numberOfBytes };
