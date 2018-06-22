@@ -6,6 +6,7 @@
 #include <sys/user.h>
 #include <sys/vfs.h>
 #include <sys/wait.h>
+#include <sys/utsname.h>
 #include <string.h>
 #include <getopt.h>
 
@@ -71,6 +72,33 @@ struct childArgs{
 };
 // =======================================================================================
 
+// Make sure our kernel is at least 4.8.0 because of seccomp
+int kernelVersionCheck(void) {
+  struct utsname utsname = {0,};
+  long x, y, z;
+  char* r = NULL, *rp =NULL;
+#define MAKE_KERNEL_VERSION(x, y, z) ((x) << 16 | (y) << 8 | (z) )
+
+  if (uname(&utsname) < 0) {
+    return -1;
+  }
+
+  r = utsname.release;
+  x = strtoul(r, &rp, 10);
+  if (rp == r) return -1;
+  r = 1 + rp;
+  y = strtoul(r, &rp, 10);
+  if (rp == r) return -1;
+  r = 1 + rp;
+  z = strtoul(r, &rp, 10);
+
+  if (MAKE_KERNEL_VERSION(x, y, z) < MAKE_KERNEL_VERSION(4, 8, 0)) {
+    return -1;
+  }
+#undef MAKE_KERNEL_VERSIN
+  return 0;
+}
+
 const string usageMsg =
   "  Dettrace\n"
   "\n"
@@ -102,6 +130,12 @@ int main(int argc, char** argv){
   int optIndex, debugLevel;
   string path; bool useContainer;
   bool inSchroot, useColor;
+
+  if (kernelVersionCheck() < 0) {
+    std::cout << "kernel must be at least 4.8.0" << std::endl;
+    exit(1);
+  }
+
   tie(optIndex, debugLevel, path, useContainer, inSchroot, useColor) =
     parseProgramArguments(argc, argv);
 
@@ -174,7 +208,7 @@ int runTracee(void* voidArgs){
   bool useContainer = args.useContainer;
 
   // Find absolute path to our build directory relative to the dettrace binary.
-  char argv0[strlen(argv[0])];
+  char argv0[strlen(argv[0])+1/*NUL*/];
   strcpy(argv0, argv[0]); // Use a copy since dirname may mutate contents.
   string pathToExe{ dirname(argv0) };
 
@@ -252,11 +286,14 @@ int runTracee(void* voidArgs){
 void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChroot){
   string buildDir = pathToChroot + "/build/";
 
-  // Create our build directories as top level folders in our schroot.
+  const vector<string> mountDirs = {  "/dettrace", "/dettrace/lib", "/dettrace/bin",
+				      "/bin", "/usr", "/lib", "/lib64", "/dev", "/etc", "/proc" };
+
   mkdirIfNotExist(buildDir);
-  mkdirIfNotExist(pathToChroot + "/dettrace/"); // /dettrace directory
-  mkdirIfNotExist(pathToChroot + "/dettrace/lib/"); // /dettrace/lib directory
-  mkdirIfNotExist(pathToChroot + "/dettrace/bin/"); // /dettrace/bin directory
+
+  for (auto it = mountDirs.cbegin(); it != mountDirs.cend(); ++it) {
+      mkdirIfNotExist(pathToChroot + *it);
+  }
 
   // First we mount cwd in our /build/ directory.
   char* cwdPtr = get_current_dir_name();
@@ -267,31 +304,30 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
   mountDir(pathToExe + "/../bin/", pathToChroot + "/dettrace/bin/");
   mountDir(pathToExe + "/../lib/", pathToChroot + "/dettrace/lib/");
 
-  // Move over to our build directory! This will make code cleaner as all logic is
-  // relative this dir.
-  doWithCheck(chdir(buildDir.c_str()), "Unable to chdir");
-
   // Bind mount our directories.
   if(!userDefinedChroot){
-    mountDir("/bin/", "../bin/");
-    mountDir("/usr/", "../usr/");
-    mountDir("/lib/", "../lib/");
-    mountDir("/lib64/", "../lib64/");
+    mountDir("/bin/", pathToChroot + "/bin/");
+    mountDir("/usr/", pathToChroot + "/usr/");
+    mountDir("/lib/", pathToChroot + "/lib/");
+    mountDir("/lib64/", pathToChroot + "/lib64/");
     // Ld cache
-    mountDir("/etc/ld.so.cache", "../etc/ld.so.cache");
+    mountDir("/etc/ld.so.cache", pathToChroot + "/etc/ld.so.cache");
   }
 
   // Still wanna bind mount some folders:
-  mountDir(pathToExe + "/../root/dev/null", "../dev/null");
-  mountDir(pathToExe + "/../root/dev/random", "../dev/random");
-  mountDir(pathToExe + "/../root/dev/urandom", "../dev/urandom");
+  mountDir(pathToExe + "/../root/dev/null", pathToChroot + "/dev/null");
+  mountDir(pathToExe + "/../root/dev/random", pathToChroot + "/dev/random");
+  mountDir(pathToExe + "/../root/dev/urandom", pathToChroot + "/dev/urandom");
 
   // Proc is special, we mount a new proc dir.
-  doWithCheck(mount("/proc", "../proc/", "proc", MS_MGC_VAL, nullptr),
+  doWithCheck(mount("/proc", (pathToChroot + "/proc/").c_str(), "proc", MS_MGC_VAL, nullptr),
 	      "Mounting proc failed");
 
   // Chroot our process!
-  doWithCheck(chroot("../"), "Failed to chroot");
+  doWithCheck(chroot(pathToChroot.c_str()), "Failed to chroot");
+
+  // set working directory to buildDir
+  doWithCheck(chdir(buildDir.c_str()), "Failed to set working directory to " + buildDir);
 
   // Disable ASLR for our child
   doWithCheck(personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");

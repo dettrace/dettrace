@@ -28,118 +28,246 @@
 
 using namespace std;
 
-// Words are 8 bytes for x86_64.
-const size_t wordSize = 8;
+const size_t wordSize = 8; /**< Size of word, 8 bytes for x86_64. */
+
 
 /**
+ * ptrace event enum.
  * Types of events we expect returned from getNextEvent(), I wish we had ADTs.
  */
 enum class ptraceEvent {
-  syscall,     /// Post system call execution event.
-  nonEventExit,        /// Process/thread has exited.
-  eventExit,        /// Process/thread has exited.
-  signal,      /// Received signal.
-  exec,        /// Execve event.
-  clone,       /// Clone event.
-  fork,        /// fork event.
-  vfork,        /// fork event.
-  terminatedBySignal, // Tracee terminated by signal.
+  syscall,     /**< Post system call execution event. */
+  nonEventExit,        /** Process/thread has exited. */
+  eventExit,        /**< Process/thread has exited. */
+  signal,      /**< Received signal. */
+  exec,        /**< Execve event. */
+  clone,       /**< Clone event. */
+  fork,        /**< fork event. */
+  vfork,        /** fork event. */
+  terminatedBySignal, /**< Tracee terminated by signal. */
   seccomp,
 };
 
 /**
+ * State of SysCall enum.
  * Ptrace does not keep track for us if this is a pre or a post event. Instead we must
  * track this ourselves.
  */
-enum class syscallState { pre, post };
+enum class syscallState {
+  pre,  /**< pre-hook state*/
+  post /**< post-hook state*/
+};
 
 
 /**
+ * ptracer.
  * Class wrapping the functionality of the system call ptrace.
  */
 class ptracer{
 public:
+
+  /**
+   * Map of real inodes to virtual inodes.
+   */
   map<ino_t,ino_t> real2VirtualMap;
 
   /**
+   * Constructor.
    * Create a ptracer. The child must have called PTRACE_TRACEME and then stopped itself like
    * so:
    *     raise(SIGSTOP);
    *	 execvp(traceeCommand[0], traceeCommand);
    *
    * Else this will block forever. Set up options for our tracer.
+   * @param pid process pid
    */
   ptracer(pid_t pid);
 
-  // Get the argument from our system call.
+  /**
+   * Retrieves value for arg1: rdi register.
+   * @return rdi register value
+   */
   uint64_t arg1();
+
+  /**
+   * Retrieves value for arg2: rsi register.
+   * @return rsi register value
+   */
   uint64_t arg2();
+
+  /**
+   * Retrieves value for arg3: rdx register.
+   * @return rdx register value
+   */
   uint64_t arg3();
+
+  /**
+   * Retrieves value for arg4: r10 register.
+   * RCX, along with R11, is used by the syscall instruction, being immediately destroyed by it.
+   * Thus these registers are not only not saved after syscall, but they can't even be used for parameter passing.
+   * Thus R10 was chosen to replace unusable RCX to pass fourth parameter.
+   * per: https://stackoverflow.com/questions/21322100/linux-x64-why-does-r10-come-before-r8-and-r9-in-syscalls
+   *
+   * @return r10 register value
+   */
   uint64_t arg4();
+
+  /**
+   * Retrieves value for arg5: r8 register.
+   * @return r8 register value
+   */
   uint64_t arg5();
+
+  /**
+   * Retrieves value for arg6: r9 register.
+   * @return r9 register value
+   */
   uint64_t arg6();
+
+  /**
+   * Retrieves register struct.
+   * @return x86 register struct
+   */
   struct user_regs_struct getRegs();
 
-  // Set regs to the values given by passed struct.
+  /**
+   * Set regs to the values given by passed struct.
+   * @param newValues struct of new register values
+   */
   void setRegs(struct user_regs_struct newValues);
+
+  /**
+   * Retrieves value for Rip register.
+   * @return Rip register value
+   */
   uint64_t getRip();
+
+  /**
+   * Retrieves value for Rsp register.
+   * @return Rsp register value
+   */
   uint64_t getRsp();
 
   /**
-   * Change system call by writing to eax register, be careful!
+   * Change system call.
+   * Writing to rax register, be careful!
+   * @param val value to write to eax for new system call
    */
   void changeSystemCall(uint64_t val);
 
+  /**
+   * Write  value to Arg1: rdi register.
+   * @param val new rdi register value
+   */
   void writeArg1(uint64_t val);
+
+  /**
+   * Write  value to Arg2: rsi register.
+   * @param val new rsi register value
+   */
   void writeArg2(uint64_t val);
+
+  /**
+   * Write  value to Arg3: rdx register.
+   * @param val new rdx register value
+   */
   void writeArg3(uint64_t val);
+
+  /**
+   * Write  value to Arg4: r10 register.
+   * @param val new r10 register value
+   */
   void writeArg4(uint64_t val);
+
+  /**
+   * Write  value to Arg5: r8 register.
+   * @param val new r8 register value
+   */
   void writeArg5(uint64_t val);
+
+  /**
+   * Write  value to Arg6: r9 register.
+   * @param val new r9 register value
+   */
+  void writeArg6(uint64_t val);
+
+  /**
+   * Write  value to ip register.
+   * @param val new ip register value
+   */
   void writeIp(uint64_t val);
+
+  /**
+   * Write  value to rax register.
+   * @param val new rax register value
+   */
   void writeRax(uint64_t val);
- /**
-   * All system call return an argument through their eax register. Set state here.
+
+  /**
+   * All system call return an argument through their rax register.
+   * Set state here.
+   * @param retVal return value
    */
   void setReturnRegister(uint64_t retVal);
 
   /**
-   * Get results of system calls. During post system call event.
+   * Get results of system calls.
+   * During post system call event.
+   * @return Return value
    */
   uint64_t getReturnValue();
 
   /**
-   * Get system call number. During pre system call event.
+   * Get system call number.
+   * During pre system call event.
+   * @return System call number
    */
   uint64_t getSystemCallNumber();
 
   /**
    * Wrapper around PTRACE_GETEVENTMSG for our current tracee.
+   * @return Event message
    */
   uint64_t getEventMessage();
 
   /**
    * Compare status returned from waitpid to ptrace event.
+   * @param status
+   * @param event
+   * @return
    */
   static bool isPtraceEvent(int status, enum __ptrace_eventcodes event);
 
   /**
    * Update registers to the state of the passed pid. This is now the new pid.
+   * @param newPid new pid number
    */
   void updateState(pid_t newPid);
 
   /**
    * Return the pid for the current process we have stopped in an event.
+   * @return pid
    */
   pid_t getPid();
 
   /**
    * Set the correct tracing options for a child we plan to trace. This should be called
    * per child and only once! This must be called when child is stopped waiting on ptrace.
+   * @param pid process id
    */
   static void setOptions(pid_t pid);
 
   /*
    * Ptrace wrapper with error checking, use this instead of raw ptrace.
+   * @param request
+   * @param pid
+   * @param addr
+   * @param data
+   * @return On success, PTRACE_PEEK* requests return the requested data, while other
+   * requests return zero. On error, all requests return -1, and errno is set
+   * appropriately. Since the value returned by a successful PTRACE_PEEK* request may
+   * be -1, the caller must clear errno before the call, and then check it afterward
+   * to determine whether or not an error occurred.
    */
   static long doPtrace(enum __ptrace_request request, pid_t pid, void *addr, void *data);
 
@@ -157,14 +285,21 @@ public:
 
 
   /**
-   * Read the C-string from the tracee's memory. Notice we keep reading until we hit a null.
+   * Read the C-string from the tracee's memory.
+   * Notice we keep reading until we hit a null.
    * Undefined behavior will happen if the location is not actually a C-string.
-   * @retval str: A Cpp string version of readAddress.
+   * @param readAddress address to be read from
+   * REVIEW these mismatched between cpp and hpp (was source in hpp, readAddress in cpp)
+   * @param traceePid the pid of the tracee
+   * @return cpp string version of readAddress.
    */
-  static string readTraceeCString(const char* source, pid_t traceePid);
+  static string readTraceeCString(const char* readAddress, pid_t traceePid);
 
   /**
-   * Write a value
+   * Write a value to tracee.
+   * @param writeAddress
+   * @param valueToCopy
+   * @param traceePid the pid of the tracee
    */
   template<typename T>
   static void writeToTracee(T* writeAddress, T valueToCopy, pid_t traceePid){
@@ -175,8 +310,9 @@ public:
 
 
 private:
-  pid_t traceePid;
-  struct user_regs_struct regs;
+  pid_t traceePid;   /**< The pid of the tracee.  */
+
+  struct user_regs_struct regs;   /**< Registers struct defined in sys.   */
 };
 
 #endif

@@ -1,5 +1,3 @@
-#include <linux/version.h>
-
 #include "logger.hpp"
 #include "systemCallList.hpp"
 #include "systemCall.hpp"
@@ -87,10 +85,6 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
 
   bool callPostHook =
     currState.systemcall->handleDetPre(myGlobalState, currState, tracer, myScheduler);
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
-  // Next event will be a sytem call pre-exit event.
-  currState.isPreExit = true;
-#endif
 
   // This is the easiest time to tell a fork even happened. It's not trivial
   // to check the event as we might get a signal first from the child process.
@@ -102,17 +96,6 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
     ptraceEvent e;
     pid_t newPid;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
-    // fork/vfork/clone pre system call.
-    // On older version of the kernel, we would need to catch the pre-system call
-    // event to forking system calls. This is needed here to ignore this event.
-    tie(e, newPid, status) = getNextEvent(traceesPid, true);
-    if(e != ptraceEvent::syscall){
-      throw runtime_error("Expected pre system call event after fork.");
-    }
-    // That was the pre-exit event, make sure we set isPreExit to false.
-    currState.isPreExit = false;
-#endif
     // This event is known to be either a fork/vfork event or a signal. We check this
     // in handleFork.
     tie(e, newPid, status) = getNextEvent(traceesPid, false);
@@ -122,17 +105,10 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
     return false;
   }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
-  // This is the seccomp event where we do the work for the pre-system call hook.
-  // In older versions of seccomp, we must also do the pre-exit ptrace event, as we
-  // have to. This is dictated by this variable.
-  return true;
-#else
   // If debugging we let system call go to post hook so we can see return values.
   // Notice we must still return false in the fork case. So we should not move this
   // expression "higher up" in the call chain.
   return debugLevel >= 4 ? true : callPostHook;
-#endif
 }
 // =======================================================================================
 void execution::handlePostSystemCall(state& currState){
@@ -189,16 +165,6 @@ void execution::runProgram(){
     // interception of system calls through PTRACE_SYSCALL. Only post system call
     // events come here.
     if(ret == ptraceEvent::syscall){
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
-      state& currentState = states.at(traceesPid);
-      // Skip pre exit calls nothing for us to do. We did the work during handleSeccomp()
-      // on the seccomp event.
-      if(currentState.isPreExit){
-        callPostHook = true;
-        currentState.isPreExit = false;
-        continue;
-      }
-#endif
       tracer.updateState(traceesPid);
       handlePostSystemCall( states.at(traceesPid) );
       // Nope, we're done with the current system call. Wait for next seccomp event.

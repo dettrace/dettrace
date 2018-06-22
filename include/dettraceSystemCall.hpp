@@ -5,14 +5,32 @@
 
 using namespace std;
 
+/**
+ * Write to tracee.
+ * @param localMemory pointer to local memory address
+ * @param traceeMemory pointer to tracee memory address
+ * @param numberOfBytes number of bytes to write
+ * @param traceePid pid of tracee
+ */
 void writeVmTracee(void* localMemory, void* traceeMemory, size_t numberOfBytes,
                    pid_t traceePid);
+
+/**
+ * Read from tracee.
+ * @param traceeMemory pointer to tracee memory address
+ * @param localMemory pointer to local memory address
+ * @param numberOfBytes number of bytes to read
+ * @param traceePid pid of tracee
+ */
 void readVmTracee(void* traceeMemory, void* localMemory, size_t numberOfBytes,
                   pid_t traceePid);
 
 /**
- * Replay system call passed in. The registers should already be in the correct format.
+ * Replay system call passed in.
+ * The registers should already be in the correct format.
  * You should save your previous register state if needed.
+ * @param t ptracer
+ * @param systemCall system call to replay
  */
 void replaySystemCall(ptracer& t, uint64_t systemCall);
 
@@ -39,6 +57,8 @@ public:
 };
 // =======================================================================================
 /**
+ * int access(const char *pathname, int mode);
+ *
  * access()  checks  whether the calling process can access the file pathname.  If path‐
  * name is a symbolic link, it is dereferenced.
  */
@@ -108,8 +128,7 @@ public:
 };
 // =======================================================================================
 /**
- * long
- * clone(unsigned long flags,
+ * long clone(unsigned long flags,
  *       void *child_stack,
  *       int *ptid,
  *       int *ctid,
@@ -162,6 +181,8 @@ public:
 };
 // =======================================================================================
 /**
+ * int execve(const char *filename, char *const argv[], char *const envp[]);
+ *
  * execve()  executes  the  program  pointed  to by filename.
  *
  * Deterministic. We print the path for debugging purposes here.
@@ -305,6 +326,17 @@ public:
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
+
+/**
+ *
+ * int getdents64(unsigned int fd, struct linux_dirent64 *dirp, unsigned int count);
+ *
+ * Reads several linux_dirent structures from the directory referred to by the open file
+ * descriptor fd into the buffer pointed to by  dirp.
+ * Reads files in directory.
+ *
+ * TODO: Contains linux_dirent struct with inode that we could virtualize.
+ */
 class getdents64SystemCall : public systemCall{
 public:
   using systemCall::systemCall;
@@ -346,17 +378,11 @@ public:
 };
 // =======================================================================================
 /**
- *
+ * int getrlimit(int resource, struct rlimit *rlim);
  *
  *        The getrlimit() and setrlimit() system calls get and set resource
- *               limits respectively.  Each resource has an associated soft and hard
- *                      limit, as defined by the rlimit structure.
- *
- *
- *
- *        int getrlimit(int resource, struct rlimit *rlim);
- *
- *
+ *        limits respectively.  Each resource has an associated soft and hard
+ *        limit, as defined by the rlimit structure.
  *
  */
 class getrlimitSystemCall : public systemCall{
@@ -492,7 +518,7 @@ public:
 };
 // =======================================================================================
 /**
- *
+ * int mkdirat(int dirfd, const char *pathname, mode_t mode);
  *
  * "at" variat of mkdir. Same things apply.
  */
@@ -518,7 +544,7 @@ public:
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
-/*
+/**
  * int link(const char *oldpath, const char *newpath);
  *
  * Creates hardlink.
@@ -544,7 +570,6 @@ public:
 
 // =======================================================================================
 /**
- *
  * int open(const char *pathname, int flags);
  *
  * Given  a  pathname for a file, open() returns a file descriptor, a small, nonnegative
@@ -588,7 +613,6 @@ public:
 };
 // =======================================================================================
 /**
- *
  * int pipe(int pipefd[2]);
  *
  * Create a pipe communication channel.
@@ -600,6 +624,9 @@ public:
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
+/**
+ * int pipe2(int pipefd[2], int flags);
+ */
 class pipe2SystemCall : public systemCall{
 public:
   using systemCall::systemCall;
@@ -609,7 +636,6 @@ public:
 
 // =======================================================================================
 /**
- *
  * The  Linux  pselect6() system call modifies its timeout argument.  However, the glibc
  * wrapper function hides this behavior by using a local variable for the timeout  argu‐
  * ment  that is passed to the system call.  Thus, the glibc pselect() function does not
@@ -639,7 +665,6 @@ public:
 };
 // =======================================================================================
 /**
- *
  * int poll(struct pollfd *fds, nfds_t nfds, int timeout);*
  *
  * Wait for one of a set of fds to become ready to perform I/O
@@ -658,7 +683,6 @@ public:
 };
 // =======================================================================================
 /**
- *
  * int prlimit64(pid_t pid, int resource, const struct rlimit *new_limit,
                    struct rlimit *old_limit);
  *
@@ -681,6 +705,8 @@ public:
 };
 // =======================================================================================
 /**
+ * ssize_t read(int fd, void *buf, size_t count);
+ *
  * TODO
  * FILESYSTEM RELATED.
  */
@@ -692,8 +718,6 @@ public:
 };
 // =======================================================================================
 /**
- *
- *
  * ssize_t readv(int fd, const struct iovec *iov, int iovcnt);
  *
  * read or write data into multiple buffers
@@ -709,7 +733,7 @@ public:
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
-/*
+/**
  * ssize_t readlink(const char *pathname, char *buf, size_t bufsiz);
  *
  * readlink, readlinkat - read value of a symbolic link
@@ -722,7 +746,7 @@ public:
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
-/*
+/**
  * ssize_t readlinkat(int dirfd, const char *pathname, char *buf, size_t bufsiz);
  *
  * readlinkat - read value of a symbolic link
@@ -761,6 +785,9 @@ public:
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
+/**
+ *  int renameat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath);
+ */
 class renameatSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
@@ -768,6 +795,10 @@ public:
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
+/**
+ *  int renameat2(int olddirfd, const char *oldpath, int newdirfd,
+ *                 const char *newpath, unsigned int flags);
+ */
 class renameat2SystemCall : public systemCall{
 public:
   using systemCall::systemCall;
@@ -776,6 +807,9 @@ public:
 };
 
 // =======================================================================================
+/**
+ * int rmdir(const char *pathname);
+ */
 class rmdirSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
@@ -786,8 +820,6 @@ public:
 
 // =======================================================================================
 /**
- *
- *
  *  ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
  *                 const struct sockaddr *dest_addr, socklen_t addrlen);
  *
@@ -807,7 +839,6 @@ public:
 };
 // =======================================================================================
 /**
- *
  * int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
  *            struct timeval *timeout);
  *
@@ -838,7 +869,6 @@ public:
 };
 // =======================================================================================
 /**
- *
  * int stat(const char *pathname, struct stat *statbuf);
  *
  * stat() and retrieve information about the file pointed to by pathname.
@@ -855,6 +885,7 @@ public:
 };
 // =======================================================================================
 /**
+ * int statfs(const char *path, struct statfs *buf);
  * Implement various fields.
  * FILESYSTEM RELATED.
  */
@@ -866,7 +897,6 @@ public:
 };
 // =======================================================================================
 /**
- *
  * int symlink(const char *target, const char *linkpath);
  *
  * symlink() creates a symbolic link named linkpath which contains the string target.
@@ -881,7 +911,6 @@ public:
 };
 // =======================================================================================
 /**
- *
  * int sysinfo(struct sysinfo *info);
  *
  * sysinfo()  returns  certain  statistics on memory and swap usage, as well as the load
@@ -896,7 +925,6 @@ public:
 };
 // =======================================================================================
 /**
- *
  * int tgkill(int tgid, int tid, int sig);
  *
  * SIGNAL RELATED
@@ -918,6 +946,8 @@ public:
 };
 // =======================================================================================
 /**
+ * time_t time(time_t *tloc);
+ *
  * TODO: Document and verify implementation.
  * TODO: Add logical clock for rt_sigprocmask.
  * Return results from our logical clock.
@@ -930,19 +960,18 @@ public:
 };
 // =======================================================================================
 /**
- *
  * clock_t times(struct tms *buf);
  *
  * times()  stores the current process times in the struct tms that buf points to.  The
  * struct tms is as defined in <sys/times.h>:
-
+ *
  *        struct tms {
  *             clock_t tms_utime;  // user time
  *             clock_t tms_stime;  // system time
  *             clock_t tms_cutime; // user time of children
  *             clock_t tms_cstime; // system time of children
  *         };
-
+ *
  * We simply zero out everything for now :3
  */
 class timesSystemCall : public systemCall{
@@ -953,7 +982,6 @@ public:
 };
 // =======================================================================================
 /**
- *
  * int uname(struct utsname *buf);
  *
  * uname()  returns  system information in the structure pointed to by buf.
@@ -969,7 +997,6 @@ public:
 };
 // =======================================================================================
 /**
- *
  * int unlink(const char *pathname);
  *
  * unlink()  deletes  a  name  from the filesystem.  If that name was the last link to a
@@ -988,24 +1015,23 @@ public:
 };
 // =======================================================================================
 /**
- *
  * int unlinkat(int dirfd, const char *pathname, int flags);
  *
  * The unlinkat() system call operates in exactly the same way  as  either  unlink()  or
  * rmdir(2)  (depending  on  whether or not flags includes the AT_REMOVEDIR flag) except
  * for the differences described here.
-
+ *
  * If the pathname given in pathname is relative, then it is interpreted relative to the
  * directory  referred to by the file descriptor dirfd (rather than relative to the cur‐
  * rent working directory of the calling process, as is done by  unlink()  and  rmdir(2)
  * for a relative pathname).
-
+ *
  * If  the  pathname  given  in  pathname  is  relative  and  dirfd is the special value
  * AT_FDCWD, then pathname is interpreted relative to the current working  directory  of
  * the calling process (like unlink() and rmdir(2)).
-
+ *
  * If the pathname given in pathname is absolute, then dirfd is ignored.
-
+ *
  * Seems deterministic enough :)
  */
 class unlinkatSystemCall : public systemCall{
@@ -1016,7 +1042,6 @@ public:
  };
 // =======================================================================================
 /**
- *
  * int utime(const char *filename, const struct utimbuf *times);
  *
  * The utime() system call changes the access and modification times of the inode speci‐
@@ -1034,7 +1059,6 @@ public:
 
 // =======================================================================================
 /**
- *
  * int utimes(const char *filename, const struct timeval times[2]);
  *
  * The utimes() system call changes the access and modification times of the inode speci‐
@@ -1051,7 +1075,6 @@ public:
 };
 // =======================================================================================
 /**
- *
  * int utimensat(int dirfd, const char *pathname, const struct timespec times[2], int flags);
  *
  * Updates the timestamps of a file with nanosecond precision.
@@ -1069,7 +1092,6 @@ public:
 };
 // =======================================================================================
 /**
- *
  * pid_t vfork(void);
  *
  * The vfork() function has the same effect as fork(2), except that the
@@ -1101,10 +1123,9 @@ public:
 };
 // =======================================================================================
 /**
- *
  * ssize_t writev(int fd, const struct iovec *iov, int iovcnt)
  *
- * The  writev()  system call writes iovcnt buffers of data described by iov to the file
+ * The writev()  system call writes iovcnt buffers of data described by iov to the file
  * associated with the file descriptor fd ("gather output").
  *
  * Non deterministic!
@@ -1119,7 +1140,6 @@ public:
 };
 // =======================================================================================
 /**
- *
  * ssize_t write(int fd, const void *buf, size_t count);
  *
  * write()  writes up to count bytes from the buffer pointed buf to the file referred to
