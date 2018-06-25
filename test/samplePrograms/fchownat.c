@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/types.h>
 
 // int fchownat(int dirfd, const char *pathname,
 // uid_t owner, gid_t group, int flags);

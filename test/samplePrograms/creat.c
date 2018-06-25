@@ -22,8 +22,8 @@ int main(){
   struct stat myStat2;
   withError(fstat(fd2, &myStat2), "fstat");
 
-  time_t time = myStat.st_mtim.tv_sec;
-  time_t time2 = myStat2.st_mtim.tv_sec;
+  time_t time = myStat.st_mtime;
+  time_t time2 = myStat2.st_mtime;
 
   system("rm -f temp.txt");
   system("rm -f temp2.txt");

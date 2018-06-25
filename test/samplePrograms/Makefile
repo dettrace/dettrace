@@ -13,7 +13,7 @@ run: $(patsubst %, %.ok, $(SIMPLE_BUILD_BINARIES)) $(patsubst %, %.ok, $(PIPE_BI
 
 # compile each sample program binary
 $(SIMPLE_BUILD_BINARIES): %: %.c
-	gcc $< -Wall -g -o $@ -pthread
+	gcc $< -Wall -g -o $@ -pthread -std=gnu99
 
 setup:
 	@mkdir -p ActualOutputs
