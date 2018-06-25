@@ -284,16 +284,14 @@ int runTracee(void* voidArgs){
 void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChroot){
   string buildDir = pathToChroot + "/build/";
 
-  const vector<string> mountDirs = {  "/dettrace", "/dettrace/lib", "/dettrace/bin",
-				      "/bin", "/usr", "/lib", "/lib64", "/dev", "/etc", "/proc" };
-
-  mkdirIfNotExist(buildDir);
-
-  for (auto it = mountDirs.cbegin(); it != mountDirs.cend(); ++it) {
-      mkdirIfNotExist(pathToChroot + *it);
+  const vector<string> mountDirs =
+    {  "/dettrace", "/dettrace/lib", "/dettrace/bin", "/bin", "/usr", "/lib", "/lib64",
+       "/dev", "/etc", "/proc", "/build" };
+  for(auto dir : mountDirs){
+      mkdirIfNotExist(pathToChroot + dir);
   }
 
-  // First we mount cwd in our /build/ directory.
+  // First we mount our current working directory in our /build/ directory.
   char* cwdPtr = get_current_dir_name();
   mountDir(string { cwdPtr }, buildDir);
   free(cwdPtr);
@@ -302,18 +300,18 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
   mountDir(pathToExe + "/../bin/", pathToChroot + "/dettrace/bin/");
   mountDir(pathToExe + "/../lib/", pathToChroot + "/dettrace/lib/");
 
-  // Bind mount our directories.
-  if(!userDefinedChroot){
+  // The user specified no chroot, try to scrape a minimal filesystem from the host OS'.
+  if(! userDefinedChroot){
     mountDir("/bin/", pathToChroot + "/bin/");
     mountDir("/usr/", pathToChroot + "/usr/");
     mountDir("/lib/", pathToChroot + "/lib/");
     mountDir("/lib64/", pathToChroot + "/lib64/");
-    // Ld cache
     mountDir("/etc/ld.so.cache", pathToChroot + "/etc/ld.so.cache");
   }
 
-  // Still wanna bind mount some folders:
+  // Sometimes the chroot won't have a /dev/null, bind mount the host's just in case.
   mountDir(pathToExe + "/../root/dev/null", pathToChroot + "/dev/null");
+  // We always want to bind mount these directories to replace the host OS or chroot ones.
   mountDir(pathToExe + "/../root/dev/random", pathToChroot + "/dev/random");
   mountDir(pathToExe + "/../root/dev/urandom", pathToChroot + "/dev/urandom");
 
@@ -321,15 +319,11 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
   doWithCheck(mount("/proc", (pathToChroot + "/proc/").c_str(), "proc", MS_MGC_VAL, nullptr),
 	      "Mounting proc failed");
 
+  // set working directory to buildDir
+  doWithCheck(chdir(buildDir.c_str()), "Failed to set working directory to " + buildDir);
+
   // Chroot our process!
   doWithCheck(chroot(pathToChroot.c_str()), "Failed to chroot");
-
-  // set working directory to buildDir
-  char* path = realpath(buildDir.c_str(), nullptr);
-  if(path == nullptr){
-    throw runtime_error("Unable to fetch canonical path!");
-  }
-  doWithCheck(chdir(path), "Failed to set working directory to " + buildDir);
 
   // Disable ASLR for our child
   doWithCheck(personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");
