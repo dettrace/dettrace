@@ -62,7 +62,7 @@ public:
   bool isPreExit = true;
 
   /**
-   * Signal to be delivered the next time this process runs. If 0, no signal 
+   * Signal to be delivered the next time this process runs. If 0, no signal
    * will be delivered. Otherwise the value represents the signal number.
    */
   int signalToDeliver = 0;

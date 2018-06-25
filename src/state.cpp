@@ -3,6 +3,7 @@
 state::state(pid_t traceePid, int debugLevel)
   : clock(0),
     traceePid(traceePid),
+    signalToDeliver(0),
     debugLevel(debugLevel){
   return;
 }

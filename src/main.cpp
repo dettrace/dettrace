@@ -319,11 +319,11 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
   doWithCheck(mount("/proc", (pathToChroot + "/proc/").c_str(), "proc", MS_MGC_VAL, nullptr),
 	      "Mounting proc failed");
 
-  // set working directory to buildDir
-  doWithCheck(chdir(buildDir.c_str()), "Failed to set working directory to " + buildDir);
-
   // Chroot our process!
   doWithCheck(chroot(pathToChroot.c_str()), "Failed to chroot");
+
+  // set working directory to buildDir
+  doWithCheck(chdir("/build/"), "Failed to set working directory to " + buildDir);
 
   // Disable ASLR for our child
   doWithCheck(personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");
