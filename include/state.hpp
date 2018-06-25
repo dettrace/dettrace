@@ -55,6 +55,12 @@ public:
    */
   pid_t traceePid;
 
+  /*
+   * Per process bool to know if this is the pre or post hook event as ptrace does
+   * not track this for us. Only used for older kernel vesions.
+   */
+  bool isPreExit = true;
+
   /**
    * Signal to be delivered the next time this process runs. If 0, no signal 
    * will be delivered. Otherwise the value represents the signal number.

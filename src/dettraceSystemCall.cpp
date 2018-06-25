@@ -333,7 +333,7 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     // getting stuck on an infite polling loop.
     if(s.userDefinedTimeout){
       // Only preempt if we would have timeout out. Othewise let if continue running!
-      if(t.getReturnValue() == -ETIMEDOUT){
+      if((int) t.getReturnValue() == -ETIMEDOUT){
         sched.preemptAndScheduleNext(s.traceePid, preemptOptions::runnable);
       }
 

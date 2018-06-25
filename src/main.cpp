@@ -41,6 +41,8 @@
 
 #include <seccomp.h>
 
+#define MAKE_KERNEL_VERSION(x, y, z) ((x) << 16 | (y) << 8 | (z) )
+
 /**
  * Useful link for understanding ptrace as it works with execve.
  * https://stackoverflow.com/questions/7514837/why-does
@@ -73,30 +75,31 @@ struct childArgs{
 // =======================================================================================
 
 // Make sure our kernel is at least 4.8.0 because of seccomp
-int kernelVersionCheck(void) {
+bool newerKernelVersion(){
   struct utsname utsname = {0,};
   long x, y, z;
   char* r = NULL, *rp =NULL;
-#define MAKE_KERNEL_VERSION(x, y, z) ((x) << 16 | (y) << 8 | (z) )
 
-  if (uname(&utsname) < 0) {
-    return -1;
-  }
+  doWithCheck(uname(&utsname), "uname");
 
   r = utsname.release;
   x = strtoul(r, &rp, 10);
-  if (rp == r) return -1;
+  if (rp == r){
+    throw runtime_error("Problem parsing uname results.\n");
+  }
   r = 1 + rp;
   y = strtoul(r, &rp, 10);
-  if (rp == r) return -1;
+  if (rp == r){
+    throw runtime_error("Problem parsing uname results.\n");
+  }
   r = 1 + rp;
   z = strtoul(r, &rp, 10);
 
   if (MAKE_KERNEL_VERSION(x, y, z) < MAKE_KERNEL_VERSION(4, 8, 0)) {
-    return -1;
+    return false;
   }
-#undef MAKE_KERNEL_VERSIN
-  return 0;
+
+  return true;
 }
 
 const string usageMsg =
@@ -130,11 +133,6 @@ int main(int argc, char** argv){
   int optIndex, debugLevel;
   string path; bool useContainer;
   bool inSchroot, useColor;
-
-  if (kernelVersionCheck() < 0) {
-    std::cout << "kernel must be at least 4.8.0" << std::endl;
-    exit(1);
-  }
 
   tie(optIndex, debugLevel, path, useContainer, inSchroot, useColor) =
     parseProgramArguments(argc, argv);
@@ -367,7 +365,7 @@ void runTracer(int debugLevel, pid_t startingPid, bool inSchroot, bool useColor)
   }
 
   // Init tracer and execution context.
-  execution exe {debugLevel, startingPid, useColor};
+  execution exe {debugLevel, startingPid, useColor, newerKernelVersion()};
   exe.runProgram();
 
   return;
@@ -524,5 +522,4 @@ void mkdirIfNotExist(string dir){
   }
   return;
 }
-
 // =======================================================================================
