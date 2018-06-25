@@ -325,7 +325,11 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
   doWithCheck(chroot(pathToChroot.c_str()), "Failed to chroot");
 
   // set working directory to buildDir
-  doWithCheck(chdir(buildDir.c_str()), "Failed to set working directory to " + buildDir);
+  char* path = realpath(buildDir.c_str(), nullptr);
+  if(path == nullptr){
+    throw runtime_error("Unable to fetch canonical path!");
+  }
+  doWithCheck(chdir(path), "Failed to set working directory to " + buildDir);
 
   // Disable ASLR for our child
   doWithCheck(personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");
