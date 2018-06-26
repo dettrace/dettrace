@@ -54,7 +54,7 @@ int runTracee(void* args);
 void runTracer(int debugLevel, pid_t childPid, bool inSchroot, bool useColor);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
-bool dirExists(string directory);
+bool fileExists(string directory);
 void mountDir(string source, string target);
 void setUpContainer(string pathToExe, string pathToChroot, bool userDefinedChroot);
 void mkdirIfNotExist(string dir);
@@ -447,13 +447,16 @@ tuple<int, int, string, bool, bool, bool> parseProgramArguments(int argc, char* 
   return make_tuple(optind, debugLevel, pathToChroot, useContainer, inSchroot, useColor);
 }
 // =======================================================================================
-bool dirExists(string directory) {
+/**
+ * Use stat to check if file/directory exists to mount.
+ * @return boolean if file exists
+ */
+bool fileExists(string file) {
 
   struct stat sb;
 
-  if (stat(directory.c_str(), &sb) == 0 && S_ISDIR(sb.st_mode)) return true;
+  return (stat(file.c_str(), &sb) == 0);
 
-  return false;
 }
 /**
  * Wrapper around mount with strings.
@@ -461,12 +464,14 @@ bool dirExists(string directory) {
 void mountDir(string source, string target){
 
   /* Check if source path exists*/
-  if (dirExists(source)) fprintf(stderr, "Source path: %s found\n", source.c_str());
-  else fprintf(stderr, "Error: Source path: %s not found\n", source.c_str());
+  if (!fileExists(source)) {
+    throw runtime_error("Source file/directory " + source + "does not exist.\n");
+  }
 
   /* Check if target path exists*/
-  if (dirExists(target)) fprintf(stderr, "Target path: %s found\n", target.c_str());
-  else fprintf(stderr, "Error: Target path: %s not found\n", target.c_str());
+  if (!fileExists(target))  {
+    throw runtime_error("Target file/drectory " + target + "does not exist.\n");
+  }
 
   doWithCheck(mount(source.c_str(), target.c_str(), nullptr, MS_BIND, nullptr),
 	      "Unable to bind mount: " + source + " to " + target);
