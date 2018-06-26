@@ -187,6 +187,8 @@ int main(int argc, char** argv){
       cerr << "You must have CAP_SYS_ADMIN to work inside schroot." << endl;
       return 1;
     }
+
+    return 1;
   }
 
   // Parent falls through.
