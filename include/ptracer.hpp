@@ -83,7 +83,7 @@ public:
 
   // Set regs to the values given by passed struct.
   void setRegs(struct user_regs_struct newValues);
-  uint64_t getRip();
+  traceePtr<void> getRip();
   traceePtr<void> getRsp();
 
   /**

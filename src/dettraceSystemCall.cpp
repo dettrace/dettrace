@@ -1243,7 +1243,7 @@ bool utimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   s.originalArg2 = t.arg2();
 
   // Enough space for 2 timespec structs.
-  utimbuf* ourUtimbuf = (utimbuf*) (t.getRsp().ptr - 128 - sizeof(utimbuf));
+  utimbuf* ourUtimbuf = (utimbuf*) ((uint64_t) t.getRsp().ptr - 128 - sizeof(utimbuf));
 
   // Create our own struct with our time.
   // TODO: In the future we might want to unify this with our mtimeMapper.
@@ -1483,14 +1483,14 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sc
 }
 // =======================================================================================
 void replaySystemCall(ptracer& t, uint64_t systemCall){
-  uint16_t minus2 = t.readFromTracee(traceePtr<uint16_t>((uint16_t*) (t.getRip() - 2)), t.getPid());
+  uint16_t minus2 = t.readFromTracee(traceePtr<uint16_t>((uint16_t*) ((uint64_t) t.getRip().ptr - 2)), t.getPid());
   if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
     throw runtime_error("IP does not point to system call instruction!\n");
   }
 
   // Replay system call!
   t.changeSystemCall(systemCall);
-  t.writeIp(t.getRip() - 2);
+  t.writeIp((uint64_t) t.getRip().ptr - 2);
 }
 // =======================================================================================
 void zeroOutStatfs(struct statfs& stats){
