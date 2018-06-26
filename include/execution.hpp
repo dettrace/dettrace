@@ -34,6 +34,12 @@
 class execution{
 
 private:
+  /**
+   * Using kernel version 4.8 or newer. Needed as semantics of ptrace + seccomp have changed.
+   * See `man 2 ptrace`
+   */
+  bool newerKernel;
+
   /** Main log.
    * For writing all messages.
    */
@@ -100,9 +106,10 @@ public:
    * Constructor.
    * @param debugLevel debug paramater level (1-5)
    * @param startingPid pid of starting process
-   * @param userColor Toggles color in logging process
+   * @param useColor Toggles color in logging process
+   * @param Using kernel version 4.8 or higher.
    */
-  execution(int debugLevel, pid_t startingPid, bool useColor);
+  execution(int debugLevel, pid_t startingPid, bool useColor, bool newerKernel);
 
   /**
    * Handles exit from current process.

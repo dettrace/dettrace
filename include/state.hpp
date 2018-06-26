@@ -27,10 +27,10 @@ class systemCall;
 class state{
 private:
   /**
-   * Logical clock. Ticks only on time related system calls where the user 
+   * Logical clock. Ticks only on time related system calls where the user
    * can observe time since we want to present progress.
    * See [Github issue](https://github.com/upenn-acg/detTrace/issues/24) for more
-   * information. The clock starts at this number to avoid seeing 
+   * information. The clock starts at this number to avoid seeing
    * files "in the future", if we were to start at zero.
    */
   size_t clock = 744847200;
@@ -38,7 +38,7 @@ private:
 public:
  /**
    * Constructor.
-   * Initialize traceePid and debugLevel to the provided values, and 
+   * Initialize traceePid and debugLevel to the provided values, and
    * clock is initialized to 0.
    * @param traceePid pid of tracee
    * @param debugLevel debug level to be used
@@ -55,8 +55,14 @@ public:
    */
   pid_t traceePid;
 
+  /*
+   * Per process bool to know if this is the pre or post hook event as ptrace does
+   * not track this for us. Only used for older kernel vesions.
+   */
+  bool isPreExit = true;
+
   /**
-   * Signal to be delivered the next time this process runs. If 0, no signal 
+   * Signal to be delivered the next time this process runs. If 0, no signal
    * will be delivered. Otherwise the value represents the signal number.
    */
   int signalToDeliver = 0;
@@ -101,7 +107,7 @@ public:
   uint64_t totalBytes = 0;
 
   /*
-   * Indicator to differentiate between a syscall we are injecting and one that has already been replayed. 
+   * Indicator to differentiate between a syscall we are injecting and one that has already been replayed.
    * Used since Ptrace cannot tell the difference.
    *
    * If true, system call is being injected for the first try.
@@ -142,7 +148,7 @@ public:
    */
   const int debugLevel;
 
-  /** 
+  /**
    * Bytes to allocate for our directory entries. We use the standard size used in glibc.
    */
   const size_t dirEntriesBytes = 32768;

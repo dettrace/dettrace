@@ -13,7 +13,8 @@
 
 pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process);
 // =======================================================================================
-execution::execution(int debugLevel, pid_t startingPid, bool useColor):
+execution::execution(int debugLevel, pid_t startingPid, bool useColor, bool newerKernel):
+  newerKernel {newerKernel},
   log {stderr, debugLevel, useColor},
   silentLogger {stderr, 0},
   // Waits for first process to be ready!
@@ -86,6 +87,11 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   bool callPostHook =
     currState.systemcall->handleDetPre(myGlobalState, currState, tracer, myScheduler);
 
+  if(! newerKernel){
+    // Next event will be a sytem call pre-exit event.
+    currState.isPreExit = true;
+  }
+
   // This is the easiest time to tell a fork even happened. It's not trivial
   // to check the event as we might get a signal first from the child process.
   // See:
@@ -96,6 +102,18 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
     ptraceEvent e;
     pid_t newPid;
 
+    if(! newerKernel){
+      // fork/vfork/clone pre system call.
+      // On older version of the kernel, we would need to catch the pre-system call
+      // event to forking system calls. This is needed here to ignore this event.
+      tie(e, newPid, status) = getNextEvent(traceesPid, true);
+      if(e != ptraceEvent::syscall){
+        throw runtime_error("Expected pre-system call event after fork.");
+      }
+      // That was the pre-exit event, make sure we set isPreExit to false.
+      currState.isPreExit = false;
+    }
+
     // This event is known to be either a fork/vfork event or a signal. We check this
     // in handleFork.
     tie(e, newPid, status) = getNextEvent(traceesPid, false);
@@ -103,6 +121,13 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
 
     // This was a fork, vfork, or clone. No need to go into the post-interception hook.
     return false;
+  }
+
+  if(! newerKernel){
+    // This is the seccomp event where we do the work for the pre-system call hook.
+    // In older versions of seccomp, we must also do the pre-exit ptrace event, as we
+    // have to. This is dictated by this variable.
+    return true;
   }
 
   // If debugging we let system call go to post hook so we can see return values.
@@ -165,6 +190,17 @@ void execution::runProgram(){
     // interception of system calls through PTRACE_SYSCALL. Only post system call
     // events come here.
     if(ret == ptraceEvent::syscall){
+      if(! newerKernel){
+        state& currentState = states.at(traceesPid);
+        // Skip pre exit calls nothing for us to do. We did the work during handleSeccomp()
+        // on the seccomp event.
+        if(currentState.isPreExit){
+          callPostHook = true;
+          currentState.isPreExit = false;
+          continue;
+        }
+      }
+
       tracer.updateState(traceesPid);
       handlePostSystemCall( states.at(traceesPid) );
       // Nope, we're done with the current system call. Wait for next seccomp event.

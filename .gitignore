@@ -31,3 +31,5 @@ test/samplePrograms/pipe-pcWpR
 test/samplePrograms/pipe-pcWpcR
 test/samplePrograms/shTestFile
 test/samplePrograms/waitOnChild
+test/samplePrograms/multipleThreads
+test/samplePrograms/simpleThreads
