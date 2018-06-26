@@ -54,6 +54,7 @@ int runTracee(void* args);
 void runTracer(int debugLevel, pid_t childPid, bool inSchroot, bool useColor);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
+bool fileExists(string directory);
 void mountDir(string source, string target);
 void setUpContainer(string pathToExe, string pathToChroot, bool userDefinedChroot);
 void mkdirIfNotExist(string dir);
@@ -187,6 +188,8 @@ int main(int argc, char** argv){
       cerr << "You must have CAP_SYS_ADMIN to work inside schroot." << endl;
       return 1;
     }
+
+    return 1;
   }
 
   // Parent falls through.
@@ -447,9 +450,31 @@ tuple<int, int, string, bool, bool, bool> parseProgramArguments(int argc, char* 
 }
 // =======================================================================================
 /**
+ * Use stat to check if file/directory exists to mount.
+ * @return boolean if file exists
+ */
+bool fileExists(string file) {
+
+  struct stat sb;
+
+  return (stat(file.c_str(), &sb) == 0);
+
+}
+/**
  * Wrapper around mount with strings.
  */
 void mountDir(string source, string target){
+
+  /* Check if source path exists*/
+  if (!fileExists(source)) {
+    throw runtime_error("Source file/directory " + source + "does not exist.\n");
+  }
+
+  /* Check if target path exists*/
+  if (!fileExists(target))  {
+    throw runtime_error("Target file/drectory " + target + "does not exist.\n");
+  }
+
   doWithCheck(mount(source.c_str(), target.c_str(), nullptr, MS_BIND, nullptr),
 	      "Unable to bind mount: " + source + " to " + target);
 }
