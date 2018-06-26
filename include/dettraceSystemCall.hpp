@@ -2,28 +2,8 @@
 #define DETTRACE_SYSTEM_CALL_H
 
 #include "systemCall.hpp"
-
+#include "util.hpp"
 using namespace std;
-
-/**
- * Write to tracee.
- * @param localMemory pointer to local memory address
- * @param traceeMemory pointer to tracee memory address
- * @param numberOfBytes number of bytes to write
- * @param traceePid pid of tracee
- */
-void writeVmTracee(void* localMemory, void* traceeMemory, size_t numberOfBytes,
-                   pid_t traceePid);
-
-/**
- * Read from tracee.
- * @param traceeMemory pointer to tracee memory address
- * @param localMemory pointer to local memory address
- * @param numberOfBytes number of bytes to read
- * @param traceePid pid of tracee
- */
-void readVmTracee(void* traceeMemory, void* localMemory, size_t numberOfBytes,
-                  pid_t traceePid);
 
 /**
  * Replay system call passed in.
@@ -1194,7 +1174,7 @@ void handleDents(globalState& gs, state& s, ptracer& t, scheduler& sched){
 
   // Use file descriptor to fetch correct entry in table.
   int fd = (int) t.arg1();
-  uint8_t* traceeBuffer = (uint8_t*) t.arg2();
+  traceePtr<uint8_t> traceeBuffer((uint8_t*) t.arg2());
   size_t traceeBufferSize = t.arg3();
 
   // We have never seen this entry before! This is a new getdents call, not a

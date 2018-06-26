@@ -14,9 +14,7 @@
 
 #include <linux/futex.h>
 
-/**
- * Utility Functions
- */
+#include "traceePtr.hpp"
 
 using namespace std;
 
@@ -55,23 +53,47 @@ int parseNum(const char* const numToParse);
  */
 int doWithCheck(int returnValue, string errorMessage);
 
-/* Read bytes from tracee memory using process_vm_readv while safely 
+// =======================================================================================
+/**
+ * Read bytes from tracee memory using process_vm_readv while safely 
  * handling errors.
  * @param traceeMemory starting address in tracee memory (remote)
  * @param localMemory starting address in local memory (local)
  * @param numberOfBytes number of bytes to be read
  * @param traceePid tracee process' pid, whose address space is being read
  */
-void readVmTracee(void* traceeMemory, void* localMemory, size_t numberOfBytes,
-                  pid_t traceePid);
-/* Write bytes to tracee memory using process_vm_writev while safely 
+template <typename T>
+void readVmTracee(traceePtr<T> traceeMemory, T* localMemory, size_t numberOfBytes,
+                  pid_t traceePid) {
+  iovec remoteIoVec = {traceeMemory.ptr, numberOfBytes};
+  iovec localIoVec = {localMemory, numberOfBytes };
+  const unsigned long flags = 0;
+
+  doWithCheck(process_vm_readv(traceePid, &localIoVec, 1, &remoteIoVec, 1, flags),
+              "process_vm_writev");
+
+  return;
+
+}
+// =======================================================================================
+/**
+ * Write bytes to tracee memory using process_vm_writev while safely 
  * handling errors.
  * @param localMemory starting address in local memory (remote)
  * @param traceeMemory starting address in tracee memory (local)
  * @param numbeOfBytes number of bytes to be read
  * @param traceepid tracee process' pid, whose address space is being written to
  */
-void writeVmTracee(void* localMemory, void* traceeMemory, size_t numberOfBytes,
-                   pid_t traceePid);
+template <typename T>
+void writeVmTracee(T* localMemory, traceePtr<T> traceeMemory, size_t numberOfBytes,
+                   pid_t traceePid) {
+  iovec remoteIoVec = {traceeMemory.ptr, numberOfBytes};
+  iovec localIoVec = {localMemory, numberOfBytes };
+  const unsigned long flags = 0;
 
+  doWithCheck(process_vm_writev(traceePid, &localIoVec, 1, &remoteIoVec, 1, flags),
+              "process_vm_writev");
+
+  return;
+}
 #endif

@@ -64,11 +64,11 @@ void ptracer::setRegs(struct user_regs_struct newValues){
   return;
 }
 
-uint64_t ptracer::getRip() {
-  return regs.rip;
+traceePtr<void> ptracer::getRip() {
+  return traceePtr<void>((void*) regs.rip);
 }
-uint64_t ptracer::getRsp() {
-  return regs.rsp;
+traceePtr<void> ptracer::getRsp() {
+  return traceePtr<void>((void*) regs.rsp);
 }
 
 uint64_t ptracer::getEventMessage(){
@@ -127,13 +127,13 @@ void ptracer::setOptions(pid_t pid){
   return;
 }
 
-string ptracer::readTraceeCString(const char* readAddress, pid_t traceePid){
+string ptracer::readTraceeCString(traceePtr<char> readAddress, pid_t traceePid){
   string r;
   bool done = false;
 
   // Read long-sized chunks of memory at at time.
   while (!done){
-    int64_t result = doPtrace(PTRACE_PEEKDATA, traceePid, (void*) readAddress, nullptr);
+    int64_t result = doPtrace(PTRACE_PEEKDATA, traceePid, readAddress.ptr, nullptr);
     const char* p = (const char*) &result;
     const size_t bytesRead = strnlen(p, wordSize);
     if (wordSize != bytesRead) {
@@ -145,7 +145,7 @@ string ptracer::readTraceeCString(const char* readAddress, pid_t traceePid){
     }
 
     // Notice this doesn't change readAddress outside this function -> pass by value.
-    readAddress += bytesRead;
+    readAddress.ptr += bytesRead;
   }
 
   return r;

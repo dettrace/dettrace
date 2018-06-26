@@ -25,6 +25,7 @@
 #include <cstddef>
 
 #include "util.hpp"
+#include "traceePtr.hpp"
 
 using namespace std;
 
@@ -135,18 +136,17 @@ public:
    * @param newValues struct of new register values
    */
   void setRegs(struct user_regs_struct newValues);
-
   /**
    * Retrieves value for Rip register.
    * @return Rip register value
    */
-  uint64_t getRip();
-
+  traceePtr<void> getRip();
+  
   /**
    * Retrieves value for Rsp register.
    * @return Rsp register value
    */
-  uint64_t getRsp();
+  traceePtr<void> getRsp();
 
   /**
    * Change system call.
@@ -277,7 +277,7 @@ public:
    * fetch the other pointers yourself.
    */
   template<typename T>
-  static T readFromTracee(T* sourceAddress, pid_t traceePid){
+  static T readFromTracee(traceePtr<T> sourceAddress, pid_t traceePid){
     T myData;
     readVmTracee(sourceAddress, &myData, sizeof(T), traceePid);
     return myData;
@@ -293,7 +293,8 @@ public:
    * @param traceePid the pid of the tracee
    * @return cpp string version of readAddress.
    */
-  static string readTraceeCString(const char* readAddress, pid_t traceePid);
+  static string readTraceeCString(traceePtr<char> source, pid_t traceePid);
+
 
   /**
    * Write a value to tracee.
@@ -302,8 +303,8 @@ public:
    * @param traceePid the pid of the tracee
    */
   template<typename T>
-  static void writeToTracee(T* writeAddress, T valueToCopy, pid_t traceePid){
-    writeVmTracee(&valueToCopy, writeAddress, sizeof(T), traceePid);
+  static void writeToTracee(traceePtr<T> writeAddress, T valueToCopy, pid_t traceePid){
+    writeVmTracee(&valueToCopy, traceePtr<T>(writeAddress), sizeof(T), traceePid);
 
     return;
   }
