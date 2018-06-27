@@ -93,7 +93,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   if(oldKernel){
     // Next event will be a sytem call pre-exit event as older kernels make us catch the
     // seccomp event and the ptrace pre-system call event.
-    currState.isPreExit = true;
+    currState.onPreExitEvent = true;
   }
 
   // This is the easiest time to tell a fork even happened. It's not trivial
@@ -115,8 +115,8 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
       if(e != ptraceEvent::syscall){
         throw runtime_error("Expected pre-system call event after fork.");
       }
-      // That was the pre-exit event, make sure we set isPreExit to false.
-      currState.isPreExit = false;
+      // That was the pre-exit event, make sure we set onPreExitEvent to false.
+      currState.onPreExitEvent = false;
     }
 
     // This event is known to be either a clone/fork/vfork event or a signal. We check
@@ -203,13 +203,13 @@ void execution::runProgram(){
       state& currentState = states.at(traceesPid);
 
       // old-kernel-only ptrace system call event for pre exit hook.
-      if(oldKernel && currentState.isPreExit){
+      if(oldKernel && currentState.onPreExitEvent){
           callPostHook = true;
-          currentState.isPreExit = false;
+          currentState.onPreExitEvent = false;
       }else{
         tracer.updateState(traceesPid);
         handlePostSystemCall( currentState );
-        // Nope, we're done with the current system call. Wait for next seccomp event.
+        // set callPostHook to default value for next iteration.
         callPostHook = false;
       }
 
