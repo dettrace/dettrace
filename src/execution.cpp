@@ -239,7 +239,7 @@ void execution::runProgram(){
        nonEventExit will never arrive. Therefore we set process as exited.
        Only when all children have exited do we get a the nonEvent exit.
 
-       Therefore we keep track of the process hierachy and only wait for the
+       Therefore we keep track of the process hierarchy and only wait for the
        evenExit when our children have exited.
     */
     if(ret == ptraceEvent::eventExit){
