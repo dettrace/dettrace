@@ -13,8 +13,8 @@
 
 pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process);
 // =======================================================================================
-execution::execution(int debugLevel, pid_t startingPid, bool useColor, bool newerKernel):
-  newerKernel {newerKernel},
+execution::execution(int debugLevel, pid_t startingPid, bool useColor, bool oldKernel):
+  oldKernel {oldKernel},
   log {stderr, debugLevel, useColor},
   silentLogger {stderr, 0},
   // Waits for first process to be ready!
@@ -37,8 +37,8 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor, bool newe
     ptracer::setOptions(startingPid);
   }
 // =======================================================================================
-// Notice a ptrace::nonEventExit gets us here. We only receive this event once our own
-// children have all finished.
+// We only call this function on a ptrace::nonEventExit. We only receive this event once
+// all the process' children have finished.
 bool execution::handleExit(const pid_t traceesPid){
   auto msg = log.makeTextColored(Color::blue, "Process [%d] has completely  finished."
                                      " (ptrace nonEventExit).\n");
@@ -67,11 +67,14 @@ bool execution::handleExit(const pid_t traceesPid){
   }
 }
 // =======================================================================================
+// Despite what the name will imply, this function is actually called during a
+// ptrace seccomp event. Not a pre-system call event. In newer kernel version there is no
+// need to deal with ptrace pre system call events. So the only reason we refer to it here
+// is for backward compatibility reasons.
 bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   int syscallNum = tracer.getSystemCallNumber();
   currState.systemcall = getSystemCall(syscallNum, systemCallMappings[syscallNum]);
 
-  // No idea what this system call is! error out.
   if(syscallNum < 0 || syscallNum > SYSTEM_CALL_COUNT){
     throw runtime_error("Unkown system call number: " + to_string(syscallNum));
   }
@@ -87,8 +90,9 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   bool callPostHook =
     currState.systemcall->handleDetPre(myGlobalState, currState, tracer, myScheduler);
 
-  if(! newerKernel){
-    // Next event will be a sytem call pre-exit event.
+  if(oldKernel){
+    // Next event will be a sytem call pre-exit event as older kernels make us catch the
+    // seccomp event and the ptrace pre-system call event.
     currState.isPreExit = true;
   }
 
@@ -102,10 +106,11 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
     ptraceEvent e;
     pid_t newPid;
 
-    if(! newerKernel){
+    if(oldKernel){
       // fork/vfork/clone pre system call.
       // On older version of the kernel, we would need to catch the pre-system call
-      // event to forking system calls. This is needed here to ignore this event.
+      // event to forking system calls. This is event needs to be taken off the ptrace
+      // queue so we do that here and simply ignore the event.
       tie(e, newPid, status) = getNextEvent(traceesPid, true);
       if(e != ptraceEvent::syscall){
         throw runtime_error("Expected pre-system call event after fork.");
@@ -114,8 +119,8 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
       currState.isPreExit = false;
     }
 
-    // This event is known to be either a fork/vfork event or a signal. We check this
-    // in handleFork.
+    // This event is known to be either a clone/fork/vfork event or a signal. We check
+    // this in handleFork.
     tie(e, newPid, status) = getNextEvent(traceesPid, false);
     handleFork(e, newPid);
 
@@ -123,7 +128,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
     return false;
   }
 
-  if(! newerKernel){
+  if(oldKernel){
     // This is the seccomp event where we do the work for the pre-system call hook.
     // In older versions of seccomp, we must also do the pre-exit ptrace event, as we
     // have to. This is dictated by this variable.
@@ -137,7 +142,6 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
 }
 // =======================================================================================
 void execution::handlePostSystemCall(state& currState){
-
   // Sometimes, we change the system call midway. That is, at the prehook of a system call
   // we insert a new system call. So we must fetch the system call object again.
   int syscallNum = tracer.getSystemCallNumber();
@@ -164,10 +168,14 @@ void execution::handlePostSystemCall(state& currState){
 }
 // =======================================================================================
 void execution::runProgram(){
-  // When using seccomp, we usually run with PTRACE_CONT. The issue is that seccomp only
-  // reports pre hook events. To get post hook events we must call ptrace with
-  // PTRACE_SYSCALL intead. This happens in @getNextEvent.
+  // When using seccomp, we run with PTRACE_CONT, but seccomp only reports pre-hook
+  // events. To get post hook events we must call ptrace with PTRACE_SYSCALL intead.
+  // This happens in @getNextEvent.
+
+  // Whether we will skip to the next system call or get a ptrace event at the post hook.
+  // This is set by the return value of a pre-hook function call.
   bool callPostHook = false;
+
   // Once all process' have ended. We exit.
   bool exitLoop = false;
 
@@ -179,8 +187,7 @@ void execution::runProgram(){
     tie(ret, traceesPid, status) = getNextEvent(myScheduler.getNext(), callPostHook);
     auto virtualPid = pidMap.getVirtualValue(traceesPid);
 
-    // Most common event. Basically, only system calls that must be determinized
-    // come here, we run the pre-systemCall hook.
+    // Most common event. We handle the pre-hook for system calls here.
     if(ret == ptraceEvent::seccomp){
       callPostHook = handleSeccomp(traceesPid);
       continue;
@@ -190,21 +197,22 @@ void execution::runProgram(){
     // interception of system calls through PTRACE_SYSCALL. Only post system call
     // events come here.
     if(ret == ptraceEvent::syscall){
-      if(! newerKernel){
-        state& currentState = states.at(traceesPid);
-        // Skip pre exit calls nothing for us to do. We did the work during handleSeccomp()
-        // on the seccomp event.
-        if(currentState.isPreExit){
+      // For older kernels, we see a system call event and we also see a handle seccomp
+      // event. I chose to always handle the pre-system call on the ptracer seccomp event.
+      // So we skip the pre-system call event here on older kernels.
+      state& currentState = states.at(traceesPid);
+
+      // old-kernel-only ptrace system call event for pre exit hook.
+      if(oldKernel && currentState.isPreExit){
           callPostHook = true;
           currentState.isPreExit = false;
-          continue;
-        }
+      }else{
+        tracer.updateState(traceesPid);
+        handlePostSystemCall( currentState );
+        // Nope, we're done with the current system call. Wait for next seccomp event.
+        callPostHook = false;
       }
 
-      tracer.updateState(traceesPid);
-      handlePostSystemCall( states.at(traceesPid) );
-      // Nope, we're done with the current system call. Wait for next seccomp event.
-      callPostHook = false;
       continue;
     }
 
@@ -220,26 +228,28 @@ void execution::runProgram(){
       continue;
     }
 
-    // A process needs to do two things before dying:
-    // 1) eventExit through ptrace. This process is not truly done, it is stopped
-    //    until we let it continue.
-    // 2) A nonEventExit at this point the process is done and can no longer be
-    //    peeked or poked.
-    // If the process has remaining children, we will get an eventExit but the
-    // nonEventExit will never arrive. Therefore we set process as exited.
-    // Only when all children have exited do we get a the nonEvent exit.
+    /**
+       A process needs to do two things before dying:
+       1) eventExit through ptrace. This process is not truly done, it is stopped
+       until we let it continue and all it's children have also finished.
+       2) A nonEventExit at this point the process is done and can no longer be
+       peeked or poked.
 
-    // Therefore we keep track of the process hierachy and only wait for the
-    // evenExit when our children have exited.
+       If the process has remaining children, we will get an eventExit but the
+       nonEventExit will never arrive. Therefore we set process as exited.
+       Only when all children have exited do we get a the nonEvent exit.
+
+       Therefore we keep track of the process hierachy and only wait for the
+       evenExit when our children have exited.
+    */
     if(ret == ptraceEvent::eventExit){
       auto msg = log.makeTextColored(Color::blue, "Process [%d] has finished. "
                                          "With ptrace exit event.\n");
       log.writeToLog(Importance::inter, msg, virtualPid);
       callPostHook = false;
 
-      // We get to an exit if we made progress, report this.
-      // This covers the case where we had no blocking system calls in our execution
-      // path.
+      // We get only get an exit if we made progress, report this. This covers the case
+      // where we had no blocking system calls in our execution path.
       myScheduler.reportProgress(traceesPid);
 
       // We have children still, we cannot exit.
@@ -249,7 +259,7 @@ void execution::runProgram(){
       continue;
     }
 
-    // Current process is done.
+    // Current process is finally truly done (unlike eventExit).
     if(ret == ptraceEvent::nonEventExit){
       callPostHook = false;
       exitLoop = handleExit(traceesPid);
@@ -268,12 +278,16 @@ void execution::runProgram(){
     }
 
     if(ret == ptraceEvent::clone){
-      handleClone(traceesPid);
+      log.writeToLog(Importance::inter,
+                     log.makeTextColored(Color::blue, "[%d] caught clone event!\n"),
+                     pidMap.getVirtualValue(traceesPid));
       continue;
     }
 
     if(ret == ptraceEvent::exec){
-      handleExecve(traceesPid);
+      log.writeToLog(Importance::inter,
+                     log.makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
+                     pidMap.getVirtualValue(traceesPid));
       continue;
     }
 
@@ -364,30 +378,11 @@ void execution::handleForkSignal(const pid_t traceesPid){
   return;
 }
 // =======================================================================================
-void execution::handleClone(const pid_t traceesPid){
-  // Nothing to do for now...
-  log.writeToLog(Importance::inter,
-                 log.makeTextColored(Color::blue, "[%d] caught clone event!\n"),
-                 pidMap.getVirtualValue(traceesPid));
-  return;
-}
-// =======================================================================================
-void execution::handleExecve(const pid_t traceesPid){
-  // Nothing to do for now... New process is already automatically ptraced by
-  // our tracer.
-  log.writeToLog(Importance::inter,
-                 log.makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
-                 pidMap.getVirtualValue(traceesPid));
-  return;
-}
-// =======================================================================================
 bool execution::handleSeccomp(const pid_t traceesPid){
-  // Fetch system call provided to us via seccomp.
   long syscallNum;
   ptracer::doPtrace(PTRACE_GETEVENTMSG, traceesPid, nullptr, &syscallNum);
 
-  // INT16_MAX is sent by seccomp by convention as for system calls with no
-  // rules.
+  // INT16_MAX is sent by seccomp by convention as for system calls with no rules.
   if(syscallNum == INT16_MAX){
     // Fetch real system call from register.
     tracer.updateState(traceesPid);
@@ -400,7 +395,8 @@ bool execution::handleSeccomp(const pid_t traceesPid){
   // small optimization we might not want to...
   // Get registers from tracee.
   tracer.updateState(traceesPid);
-  return handlePreSystemCall( states.at(traceesPid), traceesPid );
+  auto callPostHook = handlePreSystemCall( states.at(traceesPid), traceesPid );
+  return callPostHook;
 }
 // =======================================================================================
 void execution::handleSignal(int sigNum, const pid_t traceesPid){
