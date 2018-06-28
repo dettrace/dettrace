@@ -9,7 +9,15 @@
  */
 template <typename T>
 struct traceePtr {
-  T* ptr;
+  T* ptr; /**< pointer of a value fo type T*/i
+  /**
+   * Constructor. The constructor has to be explicit or else the 
+   * compiler will automatically 'promote' T* types to traceePtr<T> 
+   * and that would lead to the compiler not detecting a case where 
+   * a memory pointer (T*) was provided instead of a memory pointer 
+   * in the tracee address space (traceePtr<T>)
+   * @param ptr the pointer of type T
+   */
   explicit traceePtr(T* ptr) : 
     ptr(ptr) {
   }

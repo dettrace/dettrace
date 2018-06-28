@@ -56,7 +56,9 @@ int doWithCheck(int returnValue, string errorMessage);
 // =======================================================================================
 /**
  * Read bytes from tracee memory using process_vm_readv while safely 
- * handling errors.
+ * handling errors. The type T does not affect the behavior of the 
+ * function, however it provides clarity as to what the caller 
+ * is wishing to read/write.
  * @param traceeMemory starting address in tracee memory (remote)
  * @param localMemory starting address in local memory (local)
  * @param numberOfBytes number of bytes to be read
@@ -78,7 +80,9 @@ void readVmTracee(traceePtr<T> traceeMemory, T* localMemory, size_t numberOfByte
 // =======================================================================================
 /**
  * Write bytes to tracee memory using process_vm_writev while safely 
- * handling errors.
+ * handling errors. The type T does not affect the behavior of the 
+ * function, however it provides clarity as to what the caller 
+ * is wishing to read/write.
  * @param localMemory starting address in local memory (remote)
  * @param traceeMemory starting address in tracee memory (local)
  * @param numbeOfBytes number of bytes to be read
