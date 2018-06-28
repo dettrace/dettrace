@@ -75,8 +75,8 @@ struct childArgs{
 };
 // =======================================================================================
 
-// Make sure our kernel is at least 4.8.0 because of seccomp
-bool newerKernelVersion(){
+// Check if using kernel < 4.8.0. Ptrace + seccomp semantics changed in this version.
+bool usingOldKernel(){
   struct utsname utsname = {0,};
   long x, y, z;
   char* r = NULL, *rp =NULL;
@@ -96,11 +96,8 @@ bool newerKernelVersion(){
   r = 1 + rp;
   z = strtoul(r, &rp, 10);
 
-  if (MAKE_KERNEL_VERSION(x, y, z) < MAKE_KERNEL_VERSION(4, 8, 0)) {
-    return false;
-  }
-
-  return true;
+  return (MAKE_KERNEL_VERSION(x, y, z) < MAKE_KERNEL_VERSION(4, 8, 0) ?
+          true : false);
 }
 
 const string usageMsg =
@@ -366,7 +363,7 @@ void runTracer(int debugLevel, pid_t startingPid, bool inSchroot, bool useColor)
   }
 
   // Init tracer and execution context.
-  execution exe {debugLevel, startingPid, useColor, newerKernelVersion()};
+  execution exe {debugLevel, startingPid, useColor, usingOldKernel()};
   exe.runProgram();
 
   return;

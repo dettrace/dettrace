@@ -35,10 +35,10 @@ class execution{
 
 private:
   /**
-   * Using kernel version 4.8 or newer. Needed as semantics of ptrace + seccomp have changed.
+   * Using kernel version < 4.8 . Needed as semantics of ptrace + seccomp have changed.
    * See `man 2 ptrace`
    */
-  bool newerKernel;
+  bool oldKernel;
 
   /** Main log.
    * For writing all messages.
@@ -107,9 +107,9 @@ public:
    * @param debugLevel debug paramater level (1-5)
    * @param startingPid pid of starting process
    * @param useColor Toggles color in logging process
-   * @param Using kernel version 4.8 or higher.
+   * @param Using kernel version < 4.8.
    */
-  execution(int debugLevel, pid_t startingPid, bool useColor, bool newerKernel);
+  execution(int debugLevel, pid_t startingPid, bool useColor, bool oldKernel);
 
   /**
    * Handles exit from current process.
@@ -177,16 +177,7 @@ public:
    * @see handleFork.
    */
   void handleForkSignal(const pid_t traceesPid);
-  /**
-   * Handle clone event in trace.
-   * @param traceesPid the pid of the tracee
-   */
-  void handleClone(const pid_t traceesPid);
-  /**
-   * Handle execve event in trace.
-   * @param traceesPid the pid of the tracee
-   */
-  void handleExecve(const pid_t traceesPid);
+
   /**
    * Handle signal event in trace.
    * @param signum signal number

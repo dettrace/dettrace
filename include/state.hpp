@@ -59,7 +59,7 @@ public:
    * Per process bool to know if this is the pre or post hook event as ptrace does
    * not track this for us. Only used for older kernel vesions.
    */
-  bool isPreExit = true;
+  bool onPreExitEvent = true;
 
   /**
    * Signal to be delivered the next time this process runs. If 0, no signal
