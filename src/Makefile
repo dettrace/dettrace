@@ -1,5 +1,5 @@
 CXX = clang++
-CC= clang++
+CC= clang
 
 DEBUG =  -O0 -g
 CXXFLAGS = $(DEBUG) -std=c++14 -Wall $(INCLUDE)
@@ -7,7 +7,7 @@ CFLAGS = $(DEBUG) -Wall -Wshadow $(INCLUDE)
 LIBS = -pthread -lseccomp -L ../lib/lib64
 
 # Libdet only.
-LIBDETFLAGS= -g -Wall -Wextra -Wconversion -fPIC -shared -Wl,--no-as-needed -std=c++1z
+LIBDETFLAGS= -g -Wall -Wextra -Wconversion -fPIC -shared -Wl,--no-as-needed -std=c99
 LIBDETLIBS=-ldl -lm
 
 INCLUDE = -I ../include/ -I ../lib/include
