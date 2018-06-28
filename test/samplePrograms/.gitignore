@@ -1,3 +1,4 @@
+2pipes2writers1reader
 ActualOutputs/
 alarm
 callSshKeygen
@@ -8,11 +9,13 @@ fuse-single-write
 getRandom
 getpid
 inverseFork
+multipleThreads
 nestedFork
 partialfs
 pipe
 pipe-multiwrite
 simpleFork
+simpleThreads
 thisKey
 thisKey.pub
 uname
