@@ -37,7 +37,7 @@ void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName)
 void printInfoString(uint64_t addressOfCString, globalState& gs, state& s,
                      string postFix = " path: ");
 void injectFstat(globalState& gs, state& s, ptracer& t, int fd);
-
+void noopSystemCall(globalState& gs, ptracer& t);
 /**
  *
  * newfstatat is a stat variant with a "at" for using a file descriptor to a directory
@@ -509,15 +509,12 @@ void lgetxattrSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
 
 }
 // =======================================================================================
-
-bool nanosleepSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  return true;
-}
-
-void nanosleepSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // TODO: Turn nano sleep into a no op.
-
-  return;
+bool
+nanosleepSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  noopSystemCall(gs, t);
+  sched.reportProgress(s.traceePid);
+  sched.preemptAndScheduleNext(s.traceePid, preemptOptions::runnable);
+  return false;
 }
 // =======================================================================================
 bool mkdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
@@ -1679,7 +1676,7 @@ void removeInodeFromMaps(ino_t inode, globalState& gs, ptracer& t){
 }
 // =======================================================================================
 // Turn system call into a noop by changing it into a getpid. This should be called from
-// the post hook only!
+// the pre hook only!
 void noopSystemCall(globalState& gs, ptracer& t){
   t.changeSystemCall(SYS_getpid);
   gs.log.writeToLog(Importance::info, "Turning this system call into a NOOP\n");
