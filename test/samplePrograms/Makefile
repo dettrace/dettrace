@@ -13,7 +13,7 @@ run: $(patsubst %, %.ok, $(SIMPLE_BUILD_BINARIES)) $(patsubst %, %.ok, $(PIPE_BI
 
 # compile each sample program binary
 $(SIMPLE_BUILD_BINARIES): %: %.c
-	gcc $< -Wall -g -o $@ -pthread -std=gnu99
+	clang $< -Wall -g -o $@ -pthread -std=gnu99
 
 setup:
 	@mkdir -p ActualOutputs
@@ -167,7 +167,7 @@ deadlockingPipe.ok: deadlockingPipe
 
 # 1-file "filesystem" using FUSE (https://github.com/libfuse/libfuse) that only reads/writes 1 byte at a time
 partialfs: partialfs.c
-	@gcc $< -Wall -g -D_FILE_OFFSET_BITS=64 -lfuse -pthread -o $@
+	@clang $< -Wall -g -D_FILE_OFFSET_BITS=64 -lfuse -pthread -o $@
 
 FUSE_FILE=file.fuse
 fuse-%.ok: fuse-% partialfs
@@ -185,17 +185,17 @@ fuse-%.ok: fuse-% partialfs
 # and so on...
 
 pipe-pWcR: pipe-rw.c
-	gcc $^ -Wall -g -DPARENT_WRITE=true -DCHILD_READ=true -o $@
+	clang $^ -Wall -g -DPARENT_WRITE=true -DCHILD_READ=true -o $@
 pipe-cWpR: pipe-rw.c
-	gcc $^ -Wall -g -DCHILD_WRITE=true -DPARENT_READ=true -o $@
+	clang $^ -Wall -g -DCHILD_WRITE=true -DPARENT_READ=true -o $@
 pipe-pcWpR: pipe-rw.c
-	gcc $^ -Wall -g -DPARENT_WRITE=true -DCHILD_WRITE=true -DPARENT_READ=true -o $@
+	clang $^ -Wall -g -DPARENT_WRITE=true -DCHILD_WRITE=true -DPARENT_READ=true -o $@
 pipe-pWpcR: pipe-rw.c
-	gcc $^ -Wall -g -DPARENT_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
+	clang $^ -Wall -g -DPARENT_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
 pipe-cWpcR: pipe-rw.c
-	gcc $^ -Wall -g -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
+	clang $^ -Wall -g -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
 pipe-pcWpcR: pipe-rw.c
-	gcc $^ -Wall -g -DPARENT_WRITE=true -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
+	clang $^ -Wall -g -DPARENT_WRITE=true -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
 
 .PHONY: build setup run clean
 clean:
