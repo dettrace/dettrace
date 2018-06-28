@@ -9,7 +9,7 @@
  */
 template <typename T>
 struct traceePtr {
-  T* ptr; /**< pointer of a value fo type T*/i
+  T* ptr; /**< pointer of a value fo type T*/
   /**
    * Constructor. The constructor has to be explicit or else the 
    * compiler will automatically 'promote' T* types to traceePtr<T> 
