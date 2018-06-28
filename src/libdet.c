@@ -5,7 +5,7 @@
 
  * Extern "C" needed to avoid name magling when linking.
  */
-// #define _GNU_SOURCE
+#define _GNU_SOURCE
 
 #include <stdio.h>
 #include <stdlib.h>
