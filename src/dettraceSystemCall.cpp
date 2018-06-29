@@ -12,7 +12,7 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 
-#include <climits>
+#include <limits>
 #include <cstring>
 
 #include <sys/time.h>
@@ -404,7 +404,7 @@ void getrandomSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
 void getrlimitSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   struct rlimit* rp = (struct rlimit*) t.arg2();
   if (rp != nullptr) {
-    struct rlimit noLimits = {};
+    // struct rlimit noLimits = {};
     // TODO See prlimit64SystemCall
     // noLimits.rlim_cur = RLIM_INFINITY;
     // noLimits.rlim_max = RLIM_INFINITY;
@@ -1068,22 +1068,20 @@ void sysinfoSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
   }
 
   struct sysinfo info = {0};
-  info.uptime = LONG_MAX;
-  info.totalram = LONG_MAX;
-  info.freeram = LONG_MAX;
-  info.sharedram = LONG_MAX;
-  info.bufferram = LONG_MAX;
-  info.totalswap = LONG_MAX;
-  info.freeswap = LONG_MAX;
-  info.procs = SHRT_MAX;
-  info.totalhigh = LONG_MAX;
-  info.freehigh = LONG_MAX;
-  info.mem_unit = LONG_MAX;
-
-  info.loads[0] = LONG_MAX;
-  info.loads[1] = LONG_MAX;
-  info.loads[2] = LONG_MAX;
-
+  info.uptime = std::numeric_limits<decltype(info.uptime)>::max();
+  info.totalram = std::numeric_limits<decltype(info.totalram)>::max();
+  info.freeram = std::numeric_limits<decltype(info.freeram)>::max();
+  info.sharedram = std::numeric_limits<decltype(info.sharedram)>::max();
+  info.bufferram = std::numeric_limits<decltype(info.bufferram)>::max();
+  info.totalswap = std::numeric_limits<decltype(info.totalram)>::max();
+  info.freeswap = std::numeric_limits<decltype(info.freeswap)>::max();
+  info.procs = std::numeric_limits<decltype(info.procs)>::max();
+  info.totalhigh = std::numeric_limits<decltype(info.totalhigh)>::max();
+  info.freehigh = std::numeric_limits<decltype(info.freehigh)>::max();
+  info.mem_unit = std::numeric_limits<decltype(info.mem_unit)>::max();
+  info.loads[0] = std::numeric_limits<unsigned long>::max();
+  info.loads[1] = std::numeric_limits<unsigned long>::max();
+  info.loads[2] = std::numeric_limits<unsigned long>::max();
   ptracer::writeToTracee(traceePtr<struct sysinfo>(infoPtr), info, t.getPid());
   return;
 }
