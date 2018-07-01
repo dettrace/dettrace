@@ -13,6 +13,7 @@
 #include "ValueMapper.hpp"
 #include "systemCall.hpp"
 #include "directoryEntries.hpp"
+#include "registerSaver.hpp"
 
 using namespace std;
 
