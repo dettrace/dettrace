@@ -224,7 +224,7 @@ TEST_CASE("uname", "uname"){
 }
 
 TEST_CASE("utime", "utime"){
-  char* test = "utimeTestFile.txt";
+  char* test = (char*)"utimeTestFile.txt";
   system("touch utimeTestFile.txt");
   if(-1 == utime(test, NULL)){
     REQUIRE(false);

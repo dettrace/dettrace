@@ -47,7 +47,6 @@ int main(){
     }
 
   printf("Parent done!\n");
-  int status;
   return 0;
 }
 

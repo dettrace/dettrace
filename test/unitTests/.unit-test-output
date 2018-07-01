@@ -1,3 +1,22 @@
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+systemCallTests is a Catch v1.10.0 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+sysinfo
+-------------------------------------------------------------------------------
+systemCallTests.cpp:190
+...............................................................................
+
+systemCallTests.cpp:195: FAILED:
+  REQUIRE( info.totalram == 9223372036854775807L )
+with expansion:
+  18446744073709551615 (0xffffffffffffffff)
+  ==
+  9223372036854775807
+
 ===============================================================================
-All tests passed (76 assertions in 18 test cases)
+test cases: 18 | 17 passed | 1 failed
+assertions: 70 | 69 passed | 1 failed
 

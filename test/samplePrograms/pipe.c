@@ -5,12 +5,12 @@
 #include <sys/types.h>
 #include <assert.h>
 
-/* 
-Program that uses fork to create one process that writes the pipe and another 
+/*
+Program that uses fork to create one process that writes the pipe and another
 that reads from it. Writer sends pseudo-random bytes through the pipe, and reader
 reads from the pipe and echoes output to stdout (formatted with %x). In the reader,
-the results of each call to read() appears on its own line, so the output is only 
-deterministic if read() calls are deterministic. 
+the results of each call to read() appears on its own line, so the output is only
+deterministic if read() calls are deterministic.
 */
 
 // the number of bytes to send through the pipe
@@ -19,16 +19,16 @@ const unsigned BYTES_TO_SEND = 5000;
 int main(void) {
   int     fd[2], rv;
   pid_t   childpid;
-  
+
   // fd[0] is for reading, fd[1] for writing
   rv = pipe(fd);
   assert(0 == rv);
-  
+
   if ((childpid = fork()) == -1) {
     perror("fork");
     return 1;
   }
-  
+
   if (childpid == 0) { // child: write random bytes to pipe
     // close the read end
     rv = close(fd[0]);
@@ -42,7 +42,7 @@ int main(void) {
     unsigned bytesWritten = 0;
 
     do {
-      unsigned lsb = lfsr & 1;   
+      unsigned lsb = lfsr & 1;
       lfsr >>= 1;
       lfsr ^= (-lsb) & 0xB400u;
 
@@ -56,12 +56,12 @@ int main(void) {
     assert(0 == rv);
 
     return 0;
-    
+
   } else { // parent: read from pipe
     // close the write end
     rv = close(fd[1]);
     assert(0 == rv);
-    
+
     int bytesRead;
     char readbuffer[79]; // prime, to encourage partial results from read()
 
@@ -71,11 +71,11 @@ int main(void) {
       // NB: bytesRead is often partial but not EOF
       //assert(bytesRead == sizeof(readbuffer) || bytesRead == 0);
       for (int i = 0; i < bytesRead; i++) {
-        printf("%04hx", readbuffer[i]);
+        printf("%04hhx", readbuffer[i]);
       }
       printf("\n");
     } while (0 != bytesRead); // EOF
   }
-  
+
   return 0;
 }

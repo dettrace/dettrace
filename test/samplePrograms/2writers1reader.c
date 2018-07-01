@@ -42,6 +42,7 @@ int main(){
   char buffer[bytesToUse];
   for(int i = 0; i < 10; i++){
     int bytes = doWithCheck(read(readEnd, buffer, bytesToUse), "read");
+    (void)bytes;
     /* if(bytesToUse != bytes){ */
       /* fprintf(stderr, "Wrote less bytes than expected..."); */
       /* exit(1); */
@@ -89,4 +90,3 @@ void writeToPipe(int writeEnd, int childNum){
 
   exit(0);
 }
-
