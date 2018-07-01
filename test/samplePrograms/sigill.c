@@ -35,8 +35,8 @@ static void handler(int sig, siginfo_t *si, void *ctxt) {
          c->uc_mcontext.gregs[REG_RIP]);
 
   
-  // we don't do anything to repair the segv, so we have to exit here as
-  // otherwise the program will just re-trigger the segv
+  // we don't do anything to repair the sigill, so we have to exit here as
+  // otherwise the program will just re-trigger the sigill
   exit(0);
 }
 
