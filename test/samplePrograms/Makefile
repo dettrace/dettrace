@@ -1,8 +1,7 @@
 # binaries that are simple to build (1 source file, same name as binary)
-SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat simpleThreads multipleThreads sigsegv sigill sigabrt
+SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat simpleThreads multipleThreads sigsegv sigill sigabrt kill tgkill
 PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
 LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat getdents getdents64 # relativeTimeStamps1 relativeTimeStamps2 tars to fix one day.
-
 
 DIFF_CMD=diff
 
@@ -196,6 +195,12 @@ pipe-cWpcR: pipe-rw.c
 	gcc $^ -Wall -g -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
 pipe-pcWpcR: pipe-rw.c
 	gcc $^ -Wall -g -DPARENT_WRITE=true -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
+
+kill.ok: kill
+	@for s in $$(seq 1 64); do echo "   Testing $< $$s..." && (../../bin/dettrace ./$< $$s 2> ActualOutputs/$<-$$s.output || true) && $(DIFF_CMD) ActualOutputs/$<-$$s.output ExpectedOutputs/$<.output ; done
+
+tgkill.ok: tgkill
+	@for s in $$(seq 1 64); do echo "   Testing $< $$s..." && (../../bin/dettrace ./$< $$s 2> ActualOutputs/$<-$$s.output || true) && $(DIFF_CMD) ActualOutputs/$<-$$s.output ExpectedOutputs/$<.output ; done
 
 .PHONY: build setup run clean
 clean:

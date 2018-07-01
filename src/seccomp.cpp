@@ -189,7 +189,6 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_sysinfo);
   intercept(SYS_symlink, debug);
   intercept(SYS_symlinkat, debug);
-  intercept(SYS_tgkill);
   intercept(SYS_time);
   intercept(SYS_times);
   intercept(SYS_utime);
