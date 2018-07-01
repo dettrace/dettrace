@@ -157,6 +157,8 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_link, debug);
   intercept(SYS_linkat, debug);
 
+  intercept(SYS_tgkill);
+
   intercept(SYS_open);
   intercept(SYS_openat);
   // TODO Pipe
