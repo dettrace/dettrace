@@ -130,8 +130,8 @@ public:
   /** Flag to differentiate between our injected timeout into a system call from a user one. */
   bool userDefinedTimeout = false;
 
-  /** Our old values before post hook, for simple restoring of the user's register state. */
-  struct user_regs_struct prevRegisterState = {0};
+  /** A register saver used to store the previous register state and retrieve at a later stage */
+  registerSaver regSaver;
 
   /**
    * Original register arguments before we modified them. We sometimes need to restore them at the
