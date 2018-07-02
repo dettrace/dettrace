@@ -14,6 +14,7 @@ systemCallTests: $(obj)
 run: systemCallTests
 	../../bin/dettrace ./systemCallTests -r console | tee .unit-test-output
 	@grep --quiet "All tests passed" .unit-test-output
+	make -C ./otherClassesTests/ run
 
 -include $(dep)
 
