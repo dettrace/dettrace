@@ -2,6 +2,7 @@
 #define REGISTER_SAVER_H
 
 #include <sys/user.h>
+using namespace std;
 /**
  * A register saver class that has the ability to save/retrieve a register struct
  * by pushing and popping. Only a single register struct can be saved at a time, and 
