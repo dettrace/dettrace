@@ -1066,22 +1066,26 @@ void sysinfoSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
   if(infoPtr == nullptr){
     return;
   }
+  
+  struct sysinfo info = {};
+  info.uptime = 365LL * 24 * 3600;
+  // total = used + free + buff/cache
+  // buff/cache includes shared
+  info.totalram = 32ULL << 32;
+  info.freeram = 31ULL << 32;
+  info.sharedram = 1ULL << 30;
+  info.bufferram = 1ULL << 32;
+  info.totalswap = 0;
+  info.freeswap = 0;
+  info.procs = 256;
+  info.totalhigh = 0;
+  info.freehigh = 0;
+  info.mem_unit = 1;
+  // set loadavg to 1.0
+  info.loads[0] = 65536;
+  info.loads[1] = 65536;
+  info.loads[2] = 65536;
 
-  struct sysinfo info = {0};
-  info.uptime = std::numeric_limits<decltype(info.uptime)>::max();
-  info.totalram = std::numeric_limits<decltype(info.totalram)>::max();
-  info.freeram = std::numeric_limits<decltype(info.freeram)>::max();
-  info.sharedram = std::numeric_limits<decltype(info.sharedram)>::max();
-  info.bufferram = std::numeric_limits<decltype(info.bufferram)>::max();
-  info.totalswap = std::numeric_limits<decltype(info.totalram)>::max();
-  info.freeswap = std::numeric_limits<decltype(info.freeswap)>::max();
-  info.procs = std::numeric_limits<decltype(info.procs)>::max();
-  info.totalhigh = std::numeric_limits<decltype(info.totalhigh)>::max();
-  info.freehigh = std::numeric_limits<decltype(info.freehigh)>::max();
-  info.mem_unit = std::numeric_limits<decltype(info.mem_unit)>::max();
-  info.loads[0] = std::numeric_limits<unsigned long>::max();
-  info.loads[1] = std::numeric_limits<unsigned long>::max();
-  info.loads[2] = std::numeric_limits<unsigned long>::max();
   ptracer::writeToTracee(traceePtr<struct sysinfo>(infoPtr), info, t.getPid());
   return;
 }
