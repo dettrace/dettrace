@@ -983,36 +983,38 @@ bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     t.writeArg5((uint64_t) newAddr);
   }else{
     // Already exists in memory.
-    //  ptracer::writeToTracee(timeoutPtr, ourTimeout, s.traceePid);
+    timeval timeout = ptracer::readFromTracee(traceePtr<timeval>(timeoutPtr), t.getPid());
+    ptracer::writeToTracee(traceePtr<timeval>(timeoutPtr), ourTimeout, s.traceePid);
+    s.userDefinedTimeout = true;
   }
 
   return true;
 }
 
 void selectSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  bool replayed = replaySyscallIfBlocked(gs, s, t, sched, 0);
-  printf("replaying?: %s\n", replayed ? "true" : "false");
+  if(s.userDefinedTimeout){
+    if(t.getReturnValue() == 0){
+      sched.preemptAndScheduleNext(s.traceePid, preemptOptions::runnable);
+    }
+  } else {
+    bool replayed = replaySyscallIfBlocked(gs, s, t, sched, 0);
+    printf("replaying?: %s\n", replayed ? "true" : "false");
 
-  if(replayed){
-    if(s.rdfsNotNull){
-      //s.rdfsNotNull = false;
-      writeVmTracee((void*) & s.origRdfs, traceePtr<void>((void*) t.arg2()), sizeof(fd_set), t.getPid());
-      //t.writeArg2((uint64_t) s.origRdfs);
+    if(replayed){
+      if(s.rdfsNotNull){
+        writeVmTracee((void*) & s.origRdfs, traceePtr<void>((void*) t.arg2()), sizeof(fd_set), t.getPid());
+      }
+      if(s.wrfsNotNull){
+        writeVmTracee((void*) & s.origWrfs, traceePtr<void>((void*) t.arg3()), sizeof(fd_set), t.getPid());
+      }
+      if(s.exfsNotNull){
+        writeVmTracee((void*) & s.origExfs, traceePtr<void>((void*) t.arg4()), sizeof(fd_set), t.getPid());
+      }
+      s.rdfsNotNull = false;
+      s.wrfsNotNull = false;
+      s.exfsNotNull = false;
+      t.writeArg5((uint64_t) s.originalArg5);
     }
-    if(s.wrfsNotNull){
-      //s.wrfsNotNull = false;
-      writeVmTracee((void*) & s.origWrfs, traceePtr<void>((void*) t.arg3()), sizeof(fd_set), t.getPid());
-      //t.writeArg3((uint64_t) s.origWrfs);
-    }
-    if(s.exfsNotNull){
-      //s.exfsNotNull = false;
-      writeVmTracee((void*) & s.origExfs, traceePtr<void>((void*) t.arg4()), sizeof(fd_set), t.getPid());
-      //t.writeArg4((uint64_t) s.origExfs);
-    }
-    s.rdfsNotNull = false;
-    s.wrfsNotNull = false;
-    s.exfsNotNull = false;
-    t.writeArg5((uint64_t) s.originalArg5);
   }
   return;
 }
