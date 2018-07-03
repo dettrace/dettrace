@@ -275,6 +275,9 @@ public:
    * Read a type T from the tracee at source address. Be careful when reading
    * record types which may further contain other pointers! You will have to
    * fetch the other pointers yourself.
+   * @param sourceAddress memory address of the type T in tracee memory to read.
+   * @param traceePid Pid of the tracee
+   * @return the data of type T at the memory address in tracee address space
    */
   template<typename T>
   static T readFromTracee(traceePtr<T> sourceAddress, pid_t traceePid){
@@ -288,18 +291,17 @@ public:
    * Read the C-string from the tracee's memory.
    * Notice we keep reading until we hit a null.
    * Undefined behavior will happen if the location is not actually a C-string.
-   * @param readAddress address to be read from
-   * REVIEW these mismatched between cpp and hpp (was source in hpp, readAddress in cpp)
+   * @param readAddress address of CString to be read from (in tracee address space)
    * @param traceePid the pid of the tracee
    * @return cpp string version of readAddress.
    */
-  static string readTraceeCString(traceePtr<char> source, pid_t traceePid);
+  static string readTraceeCString(traceePtr<char> readAddress, pid_t traceePid);
 
 
   /**
    * Write a value to tracee.
-   * @param writeAddress
-   * @param valueToCopy
+   * @param writeAddress memory address in trace memory to write to.
+   * @param valueToCopy value of type T to be written in tracee memory
    * @param traceePid the pid of the tracee
    */
   template<typename T>

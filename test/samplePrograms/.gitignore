@@ -1,4 +1,5 @@
-2pipes2writers1reader
+selectWithoutTimeout
+selectWithTimeout
 ActualOutputs/
 alarm
 callSshKeygen
@@ -9,13 +10,18 @@ fuse-single-write
 getRandom
 getpid
 inverseFork
+kill
 multipleThreads
 nestedFork
 partialfs
 pipe
 pipe-multiwrite
+sigabrt
+sigill
+sigsegv
 simpleFork
 simpleThreads
+tgkill
 thisKey
 thisKey.pub
 uname

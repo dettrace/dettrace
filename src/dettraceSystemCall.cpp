@@ -37,7 +37,7 @@ void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName)
 void printInfoString(uint64_t addressOfCString, globalState& gs, state& s,
                      string postFix = " path: ");
 void injectFstat(globalState& gs, state& s, ptracer& t, int fd);
-
+void noopSystemCall(globalState& gs, ptracer& t);
 /**
  *
  * newfstatat is a stat variant with a "at" for using a file descriptor to a directory
@@ -509,15 +509,12 @@ void lgetxattrSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
 
 }
 // =======================================================================================
-
-bool nanosleepSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  return true;
-}
-
-void nanosleepSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // TODO: Turn nano sleep into a no op.
-
-  return;
+bool
+nanosleepSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  noopSystemCall(gs, t);
+  sched.reportProgress(s.traceePid);
+  sched.preemptAndScheduleNext(s.traceePid, preemptOptions::runnable);
+  return false;
 }
 // =======================================================================================
 bool mkdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
@@ -986,36 +983,38 @@ bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     t.writeArg5((uint64_t) newAddr);
   }else{
     // Already exists in memory.
-    //  ptracer::writeToTracee(timeoutPtr, ourTimeout, s.traceePid);
+    timeval timeout = ptracer::readFromTracee(traceePtr<timeval>(timeoutPtr), t.getPid());
+    ptracer::writeToTracee(traceePtr<timeval>(timeoutPtr), ourTimeout, s.traceePid);
+    s.userDefinedTimeout = true;
   }
 
   return true;
 }
 
 void selectSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  bool replayed = replaySyscallIfBlocked(gs, s, t, sched, 0);
-  printf("replaying?: %s\n", replayed ? "true" : "false");
+  if(s.userDefinedTimeout){
+    if(t.getReturnValue() == 0){
+      sched.preemptAndScheduleNext(s.traceePid, preemptOptions::runnable);
+    }
+  } else {
+    bool replayed = replaySyscallIfBlocked(gs, s, t, sched, 0);
+    printf("replaying?: %s\n", replayed ? "true" : "false");
 
-  if(replayed){
-    if(s.rdfsNotNull){
-      //s.rdfsNotNull = false;
-      writeVmTracee((void*) & s.origRdfs, traceePtr<void>((void*) t.arg2()), sizeof(fd_set), t.getPid());
-      //t.writeArg2((uint64_t) s.origRdfs);
+    if(replayed){
+      if(s.rdfsNotNull){
+        writeVmTracee((void*) & s.origRdfs, traceePtr<void>((void*) t.arg2()), sizeof(fd_set), t.getPid());
+      }
+      if(s.wrfsNotNull){
+        writeVmTracee((void*) & s.origWrfs, traceePtr<void>((void*) t.arg3()), sizeof(fd_set), t.getPid());
+      }
+      if(s.exfsNotNull){
+        writeVmTracee((void*) & s.origExfs, traceePtr<void>((void*) t.arg4()), sizeof(fd_set), t.getPid());
+      }
+      s.rdfsNotNull = false;
+      s.wrfsNotNull = false;
+      s.exfsNotNull = false;
+      t.writeArg5((uint64_t) s.originalArg5);
     }
-    if(s.wrfsNotNull){
-      //s.wrfsNotNull = false;
-      writeVmTracee((void*) & s.origWrfs, traceePtr<void>((void*) t.arg3()), sizeof(fd_set), t.getPid());
-      //t.writeArg3((uint64_t) s.origWrfs);
-    }
-    if(s.exfsNotNull){
-      //s.exfsNotNull = false;
-      writeVmTracee((void*) & s.origExfs, traceePtr<void>((void*) t.arg4()), sizeof(fd_set), t.getPid());
-      //t.writeArg4((uint64_t) s.origExfs);
-    }
-    s.rdfsNotNull = false;
-    s.wrfsNotNull = false;
-    s.exfsNotNull = false;
-    t.writeArg5((uint64_t) s.originalArg5);
   }
   return;
 }
@@ -1102,6 +1101,15 @@ bool tgkillSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   int signal = (int) t.arg3();
   gs.log.writeToLog(Importance::info, "tgkill(tgid = %d, tid = %d, signal = %d)\n",
                     tgid, tid, signal);
+
+  // TODO: when we support threads, we should compare against tracee's Tid instead
+  if (signal == SIGABRT /*&& tid == s.traceePid*/) {
+    // ok
+  } else {
+    gs.log.writeToLog(Importance::info, "tgkillSystemCall::handleDetPre: tracee tgid="+to_string(tgid)+" tid=" +to_string(tid)+ " trying to send unsupported signal="+to_string(signal));
+    throw runtime_error("tgkillSystemCall::handleDetPre: tracee trying to send unsupported signal");
+  }
+  
   return true;
 }
 
@@ -1681,7 +1689,7 @@ void removeInodeFromMaps(ino_t inode, globalState& gs, ptracer& t){
 }
 // =======================================================================================
 // Turn system call into a noop by changing it into a getpid. This should be called from
-// the post hook only!
+// the pre hook only!
 void noopSystemCall(globalState& gs, ptracer& t){
   t.changeSystemCall(SYS_getpid);
   gs.log.writeToLog(Importance::info, "Turning this system call into a NOOP\n");
