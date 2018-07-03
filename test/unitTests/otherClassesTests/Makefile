@@ -6,15 +6,14 @@ src = $(wildcard *.cpp)
 obj = $(src:.cpp=.o)
 dep = $(obj:.o=.d)
 
-build: systemCallTests
+build: otherClassesTests
 
-systemCallTests: $(obj)
+otherClassesTests: $(obj)
 	$(CXX) $^ -o $@
 
-run: systemCallTests
-	../../bin/dettrace ./systemCallTests -r console | tee .unit-test-output
-	@grep --quiet "All tests passed" .unit-test-output
-	make -C ./otherClassesTests/ run
+run: otherClassesTests
+	./otherClassesTests | tee .other-classes-test-output
+	@grep --quiet "All tests passed" .other-classes-test-output
 
 -include $(dep)
 
@@ -27,7 +26,6 @@ run: systemCallTests
 clean:
 	$(RM) $(obj)
 	$(RM) $(dep)
-	$(RM) systemCallTests
-	make -C ./otherClassesTests clean
+	$(RM) otherClassesTests
 # Credits to the awesome makefile guide:
 # http://nuclear.mutantstargoat.com/articles/make/
