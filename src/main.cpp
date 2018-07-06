@@ -60,6 +60,7 @@ bool fileExists(string directory);
 void mountDir(string source, string target);
 void setUpContainer(string pathToExe, string pathToChroot, bool userDefinedChroot);
 void mkdirIfNotExist(string dir);
+void createFileIfNotExist(string path);
 
 // See user_namespaces(7)
 static void update_map(char* mapping, char* map_file);
@@ -310,9 +311,13 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
   }
 
   // Sometimes the chroot won't have a /dev/null, bind mount the host's just in case.
+  createFileIfNotExist(pathToChroot + "/dev/null");
   mountDir(pathToExe + "/../root/dev/null", pathToChroot + "/dev/null");
   // We always want to bind mount these directories to replace the host OS or chroot ones.
+  createFileIfNotExist(pathToChroot + "/dev/random");
   mountDir(pathToExe + "/../root/dev/random", pathToChroot + "/dev/random");
+
+  createFileIfNotExist(pathToChroot + "/dev/urandom");
   mountDir(pathToExe + "/../root/dev/urandom", pathToChroot + "/dev/urandom");
 
   // Proc is special, we mount a new proc dir.
@@ -447,12 +452,11 @@ tuple<int, int, string, bool, bool, bool> parseProgramArguments(int argc, char* 
  * @return boolean if file exists
  */
 bool fileExists(string file) {
-
   struct stat sb;
 
   return (stat(file.c_str(), &sb) == 0);
-
 }
+
 /**
  * Wrapper around mount with strings.
  */
@@ -460,12 +464,12 @@ void mountDir(string source, string target){
 
   /* Check if source path exists*/
   if (!fileExists(source)) {
-    throw runtime_error("Source file/directory " + source + "does not exist.\n");
+    throw runtime_error("Trying to mount source " + source + ". File does not exist.\n");
   }
 
   /* Check if target path exists*/
   if (!fileExists(target))  {
-    throw runtime_error("Target file/drectory " + target + "does not exist.\n");
+    throw runtime_error("Trying to mount target " + target + ". File does not exist.\n");
   }
 
   doWithCheck(mount(source.c_str(), target.c_str(), nullptr, MS_BIND, nullptr),
@@ -540,6 +544,18 @@ void mkdirIfNotExist(string dir){
       throw runtime_error("Unable to make directory: " + dir + "\nReason: " + reason);
     }
   }
+  return;
+}
+// =======================================================================================
+// Create a blank file with sensible permissions.
+void createFileIfNotExist(string path){
+  if(fileExists(path)){
+    return;
+  }
+
+  doWithCheck(open(path.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH),
+              "Unable to create file: " + path);
+
   return;
 }
 // =======================================================================================
