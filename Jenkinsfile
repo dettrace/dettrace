@@ -1,7 +1,7 @@
 pipeline {
   // This is designed to run on Cutter @ IU
   agent {
-    label 'cutter01-tmp-label'
+    label 'cutter-tmp-label'
   }
 
   triggers {
