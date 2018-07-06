@@ -220,7 +220,7 @@ void fstatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 
     // Previous state that should have been set by system call that created this fstat
     // injection.
-    t.setRegs(s.prevRegisterState);
+    t.setRegs(s.regSaver.popRegisterState());
   }else{
     handleStatFamily(gs, s, t, "fstat");
   }
@@ -553,7 +553,7 @@ void newfstatatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
     // We got what we wanted. The inode that matches the file called from either
     // unlink, unlinkat, or rmdir. Now replay that system call as we did not let
     // it though.
-    t.setRegs(s.prevRegisterState);
+    t.setRegs(s.regSaver.popRegisterState());
     replaySystemCall(t, t.getSystemCallNumber());
     s.firstTrySystemcall = false;
   }else{
@@ -1618,7 +1618,7 @@ void printInfoString(uint64_t addressOfCString, globalState& gs, state& s, strin
 void injectFstat(globalState& gs, state& s, ptracer& t, int fd){
   gs.log.writeToLog(Importance::info, "Injecting fstat call to tracee!\n");
   // Save current register state to restore in fstat.
-  s.prevRegisterState = t.getRegs();
+  s.regSaver.pushRegisterState(t.getRegs());
 
   // Inject fstat system call to perform!
   s.syscallInjected = true;
@@ -1645,7 +1645,7 @@ bool injectNewfstatatIfNeeded(globalState& gs, state& s, ptracer& t, int dirfd,
   gs.log.writeToLog(Importance::info, "Replacing newfstatat call in tracee!\n");
 
   // Save current register state to restore in newfstatat.
-  s.prevRegisterState = t.getRegs();
+  s.regSaver.pushRegisterState(t.getRegs());
 
   // Inject fstat system call to perform!
   s.syscallInjected = true;
