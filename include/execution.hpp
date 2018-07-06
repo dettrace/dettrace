@@ -69,11 +69,10 @@ private:
    */
   globalState myGlobalState;
   /**
-   * Debug pid map.
-   * This pid map is purely for debugging puposes. Ptrace does not really know the
-   * virtual pids of the tracee since that's all handled by the kernel, so we keep our
-   * own mapping to be able to deterministically output logging information related
-   * to processes.
+   * Virtual<=>real pid map. Ptrace does not know the virtual pids of the tracee
+   * since that's all handled by the kernel, so we keep our own mapping to be
+   * able to deterministically output logging information related to processes,
+   * and support translation between virtual and real pids as necessary.
    */
   ValueMapper<pid_t, pid_t> pidMap;
 
