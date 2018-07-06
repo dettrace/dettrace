@@ -12,7 +12,7 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 
-#include <climits>
+#include <limits>
 #include <cstring>
 
 #include <sys/time.h>
@@ -404,7 +404,7 @@ void getrandomSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
 void getrlimitSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   struct rlimit* rp = (struct rlimit*) t.arg2();
   if (rp != nullptr) {
-    struct rlimit noLimits = {};
+    // struct rlimit noLimits = {};
     // TODO See prlimit64SystemCall
     // noLimits.rlim_cur = RLIM_INFINITY;
     // noLimits.rlim_max = RLIM_INFINITY;
@@ -984,6 +984,7 @@ bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   }else{
     // Already exists in memory.
     timeval timeout = ptracer::readFromTracee(traceePtr<timeval>(timeoutPtr), t.getPid());
+    (void) timeout; //suppress unused variable warning
     ptracer::writeToTracee(traceePtr<timeval>(timeoutPtr), ourTimeout, s.traceePid);
     s.userDefinedTimeout = true;
   }
@@ -1066,22 +1067,24 @@ void sysinfoSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
     return;
   }
 
-  struct sysinfo info = {0};
-  info.uptime = LONG_MAX;
-  info.totalram = LONG_MAX;
-  info.freeram = LONG_MAX;
-  info.sharedram = LONG_MAX;
-  info.bufferram = LONG_MAX;
-  info.totalswap = LONG_MAX;
-  info.freeswap = LONG_MAX;
-  info.procs = SHRT_MAX;
-  info.totalhigh = LONG_MAX;
-  info.freehigh = LONG_MAX;
-  info.mem_unit = LONG_MAX;
-
-  info.loads[0] = LONG_MAX;
-  info.loads[1] = LONG_MAX;
-  info.loads[2] = LONG_MAX;
+  struct sysinfo info = {};
+  info.uptime = 365LL * 24 * 3600;
+  // total = used + free + buff/cache
+  // buff/cache includes shared
+  info.totalram = 32ULL << 32;
+  info.freeram = 31ULL << 32;
+  info.sharedram = 1ULL << 30;
+  info.bufferram = 1ULL << 32;
+  info.totalswap = 0;
+  info.freeswap = 0;
+  info.procs = 256;
+  info.totalhigh = 0;
+  info.freehigh = 0;
+  info.mem_unit = 1;
+  // set loadavg to 1.0
+  info.loads[0] = 65536;
+  info.loads[1] = 65536;
+  info.loads[2] = 65536;
 
   ptracer::writeToTracee(traceePtr<struct sysinfo>(infoPtr), info, t.getPid());
   return;
@@ -1107,7 +1110,7 @@ bool tgkillSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     gs.log.writeToLog(Importance::info, "tgkillSystemCall::handleDetPre: tracee vtgid="+to_string(tgid)+" vtid=" +to_string(tid)+ " ptgid="+to_string(sched.pidMap.getVirtualValue(s.traceePid))+" trying to send unsupported signal="+to_string(signal));
     throw runtime_error("tgkillSystemCall::handleDetPre: tracee trying to send unsupported signal");
   }
-  
+
   return true;
 }
 

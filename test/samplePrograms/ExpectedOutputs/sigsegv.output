@@ -1,4 +1,4 @@
 Received signal 11
  siginfo_t fields: signo:11 errno:0 code:1 pid:1 uid:0 status:2 utime:140737354131200 stime:140737354113448 value:0x2 int:2 ptr:0x2 overrun:0 timerid:1 addr:0x1 band:1 fd:2 addr_lsb:2 lower:0x7ffff7ffe700 upper:0x7ffff7ffa1a8 call_addr:0x1 syscall:2 uarch:0
-context: R8:0, R9:0, R10:8, R11:246, R12:400690, R13:7fffffffee10, R14:0, R15:0
- RDI:b, RSI:7fffffffeb20, RBP:7fffffffed30, RBX:0, RDX:0, RAX:1, RCX:7ffff79c948e, RSP:7fffffffec70, RIP:400a46
+context: R8:0, R9:0, R10:8, R11:246, R12:4005b0, R13:7fffffffee10, R14:0, R15:0
+ RDI:b, RSI:7fffffffeb20, RBP:7fffffffed30, RBX:0, RDX:0, RAX:1, RCX:1, RSP:7fffffffec70, RIP:400750

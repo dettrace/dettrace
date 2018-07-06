@@ -190,15 +190,15 @@ TEST_CASE("prlimit64", "prlimit64"){
 TEST_CASE("sysinfo", "sysinfo"){
   struct sysinfo info;
   sysinfo(&info);
+  REQUIRE(info.uptime == 365LL * 24 * 3600);
+  REQUIRE(info.totalram == 32ULL << 32);
+  REQUIRE(info.freehigh == 0);
+  REQUIRE(info.loads[2] == 65536);
+  REQUIRE(info.sharedram == 1ULL << 30);
+  REQUIRE(info.totalswap == 0);
+  REQUIRE(info.procs == 256);
+  REQUIRE(info.freeswap == 0);
 
-  REQUIRE(info.uptime == LONG_MAX);
-  REQUIRE(info.totalram == LONG_MAX);
-  REQUIRE(info.freehigh == LONG_MAX);
-  REQUIRE(info.loads[2] == LONG_MAX);
-  REQUIRE(info.sharedram == LONG_MAX);
-  REQUIRE(info.totalswap == LONG_MAX);
-  REQUIRE(info.procs == SHRT_MAX);
-  REQUIRE(info.freeswap == LONG_MAX);
 }
 
 TEST_CASE("utimensat", "utimensat"){
@@ -224,7 +224,7 @@ TEST_CASE("uname", "uname"){
 }
 
 TEST_CASE("utime", "utime"){
-  char* test = "utimeTestFile.txt";
+  char* test = (char*)"utimeTestFile.txt";
   system("touch utimeTestFile.txt");
   if(-1 == utime(test, NULL)){
     REQUIRE(false);

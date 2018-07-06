@@ -5,7 +5,7 @@
 
  * Extern "C" needed to avoid name magling when linking.
  */
-// #define _GNU_SOURCE
+#define _GNU_SOURCE
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -93,10 +93,8 @@ int clock_gettime(clockid_t clk_id, struct timespec *tp){
  * (However, compilation warnings will result if tv is NULL.)
  */
 int gettimeofday(struct timeval *tv, struct timezone *tz){
-  if(tv != NULL) {
-    tv->tv_sec = libdet_clock;
-    tv->tv_usec = libdet_clock;
-  }
+  tv->tv_sec = libdet_clock;
+  tv->tv_usec = libdet_clock;
   libdet_clock++;
   if(tz != NULL){
     // No minutes west of Greenwich and no daylight correction.
@@ -119,7 +117,7 @@ time_t time(time_t* tloc){
     *tloc = libdet_clock;
   }
 
-  int retTime = libdet_clock;
+  time_t retTime = libdet_clock;
   libdet_clock++;
   return retTime;
 }

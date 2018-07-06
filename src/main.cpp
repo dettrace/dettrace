@@ -77,9 +77,9 @@ struct childArgs{
 
 // Check if using kernel < 4.8.0. Ptrace + seccomp semantics changed in this version.
 bool usingOldKernel(){
-  struct utsname utsname = {0,};
+  struct utsname utsname = {};
   long x, y, z;
-  char* r = NULL, *rp =NULL;
+  char* r = NULL, *rp = NULL;
 
   doWithCheck(uname(&utsname), "uname");
 

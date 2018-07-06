@@ -27,6 +27,7 @@ public:
    */
   systemCall(long syscallNumber, string syscallName);
 
+  virtual ~systemCall() { };
   /**
    * Function called by tracer before the system call is executed by the tracer.
    * By default, we return true. Override function to set behavior to false.

@@ -1,4 +1,4 @@
-CXX = g++
+CXX = clang++
 DEBUG =  -O0 -g
 CXXFLAGS = $(DEBUG) -std=c++14 -Wall $(INCLUDE)
 
