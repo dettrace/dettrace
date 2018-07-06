@@ -48,8 +48,7 @@ public:
   scheduler(pid_t startingPid, logger& log, ValueMapper<pid_t, pid_t>& pidMap);
 
   /*
-   * Virtual pid mapper useful for logging deterministic pids even though we use
-   * real pids for scheduling.
+   * Virtual<=>real pid mapper. Real pids are used for scheduling.
    */
   ValueMapper<pid_t, pid_t>& pidMap;
 
