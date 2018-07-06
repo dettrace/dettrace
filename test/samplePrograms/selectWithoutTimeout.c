@@ -39,7 +39,6 @@ int main(){
     // Grandchild
     if(pid2 == 0){
       fd_set rfds;
-      int retVal;
       FD_ZERO(&rfds);
       FD_SET(readEndGrandparent, &rfds);
       FD_SET(readEndParent, &rfds);
@@ -66,6 +65,7 @@ int main(){
 
     printf("parent is waiting\n");
     int v = waitpid(pid2, &child1Status, 0);
+    (void) v;
     return 0;
   }
 
@@ -79,6 +79,7 @@ int main(){
   //waitpid(pid1, &parentStatus, 0);
   printf("grandparent is waiting\n");
   int v = waitpid(pid1, &parentStatus, 0);
+  (void) v;
   return 0;
 }
 
@@ -127,6 +128,7 @@ void readFromPipe(int pipefd){
   char buffer[bytesToUse];
   for(int i = 0; i < 5; i++){
     int bytes = doWithCheck(read(pipefd, buffer, bytesToUse), "read");
+    (void) bytes;
     if(buffer[0] == 1){
     }else if (buffer[0] == 2){
     }
