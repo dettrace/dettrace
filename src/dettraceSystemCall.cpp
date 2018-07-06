@@ -1100,11 +1100,11 @@ bool tgkillSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   gs.log.writeToLog(Importance::info, "tgkill(tgid = %d, tid = %d, signal = %d)\n",
                     tgid, tid, signal);
 
-  // TODO: when we support threads, we should compare against tracee's Tid instead
-  if (signal == SIGABRT /*&& tid == s.traceePid*/) {
+  if (signal == SIGABRT && tgid == sched.pidMap.getVirtualValue(s.traceePid) &&
+      tgid == tid /* TODO: when we support threads, we should also compare against tracee's tid (from gettid) */) {
     // ok
   } else {
-    gs.log.writeToLog(Importance::info, "tgkillSystemCall::handleDetPre: tracee tgid="+to_string(tgid)+" tid=" +to_string(tid)+ " trying to send unsupported signal="+to_string(signal));
+    gs.log.writeToLog(Importance::info, "tgkillSystemCall::handleDetPre: tracee vtgid="+to_string(tgid)+" vtid=" +to_string(tid)+ " ptgid="+to_string(sched.pidMap.getVirtualValue(s.traceePid))+" trying to send unsupported signal="+to_string(signal));
     throw runtime_error("tgkillSystemCall::handleDetPre: tracee trying to send unsupported signal");
   }
   
