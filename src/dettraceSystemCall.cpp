@@ -984,6 +984,7 @@ bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   }else{
     // Already exists in memory.
     timeval timeout = ptracer::readFromTracee(traceePtr<timeval>(timeoutPtr), t.getPid());
+    (void) timeout; //suppress unused variable warning
     ptracer::writeToTracee(traceePtr<timeval>(timeoutPtr), ourTimeout, s.traceePid);
     s.userDefinedTimeout = true;
   }
@@ -1065,7 +1066,7 @@ void sysinfoSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
   if(infoPtr == nullptr){
     return;
   }
-  
+
   struct sysinfo info = {};
   info.uptime = 365LL * 24 * 3600;
   // total = used + free + buff/cache
@@ -1109,7 +1110,7 @@ bool tgkillSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     gs.log.writeToLog(Importance::info, "tgkillSystemCall::handleDetPre: tracee tgid="+to_string(tgid)+" tid=" +to_string(tid)+ " trying to send unsupported signal="+to_string(signal));
     throw runtime_error("tgkillSystemCall::handleDetPre: tracee trying to send unsupported signal");
   }
-  
+
   return true;
 }
 
