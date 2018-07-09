@@ -133,6 +133,9 @@ public:
   /** A register saver used to store the previous register state and retrieve at a later stage */
   registerSaver regSaver;
 
+  /** The starting address of the memory page we can use for writing/reading */
+  traceePtr<void> mmapAddr = traceePtr<void>(NULL); // TODO: if this was used for reading/writing before mmap was injected, it could segfault?
+
   /**
    * Original register arguments before we modified them. We sometimes need to restore them at the
    * post-hook after modification.

@@ -447,6 +447,21 @@ public:
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 
+
+// =======================================================================================
+/*
+ * void* mmap(void* addr, size_t length, int prot, int flags, int fd, off_t offset);
+ *
+ * TODO
+ */
+class mmapSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
+
 // =======================================================================================
 /**
  * int fstatat(int dirfd, const char *pathname, struct stat *statbuf, int flags);

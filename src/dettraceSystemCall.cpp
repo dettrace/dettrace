@@ -11,6 +11,7 @@
 #include <sys/times.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/mman.h>
 
 #include <limits>
 #include <cstring>
@@ -38,6 +39,7 @@ void printInfoString(uint64_t addressOfCString, globalState& gs, state& s,
                      string postFix = " path: ");
 void injectFstat(globalState& gs, state& s, ptracer& t, int fd);
 void noopSystemCall(globalState& gs, ptracer& t);
+void injectMmap(globalState& gs, state& s, ptracer& t);
 /**
  *
  * newfstatat is a stat variant with a "at" for using a file descriptor to a directory
@@ -588,6 +590,30 @@ bool linkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   printInfoString(t.arg2(), gs, s, " to path: ");
 
   return false;
+}
+
+// ======================================================================================
+void mmapSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  // this is an injected mmap call
+  if(s.syscallInjected){
+    gs.log.writeToLog(Importance::info, "This mmap was injected\n");
+    if((void*) t.getReturnValue() == MAP_FAILED){
+      throw runtime_error("Unable to properly inject mmap call to tracee!\n"
+                          "mmap call returned MAP_FAILED\n");
+    }
+    s.syscallInjected = false;
+    
+    // store mmapAddr into state
+    s.mmapAddr = traceePtr<void>((void*) t.getReturnValue());
+
+    // restore previous state
+    t.setRegs(s.regSaver.popRegisterState());
+  } else {
+    // TODO: handle mmap deterministically?
+  }
+
+  return;
+
 }
 
 // =======================================================================================
@@ -1697,5 +1723,37 @@ void noopSystemCall(globalState& gs, ptracer& t){
   return;
 }
 
+
+// =======================================================================================
+/**
+ * Inject an mmap system call.
+ */
+void injectMmap(globalState& gs, state& s, ptracer& t) {
+  gs.log.writeToLog(Importance::info, "Injecting mmap call to tracee!\n");
+  // save current register state
+  s.regSaver.pushRegisterState(t.getRegs());
+
+  // inject mmap system call
+  s.syscallInjected = true;
+
+  void* addr = NULL;
+  size_t length = 2048;
+  int prot = PROT_READ | PROT_WRITE;
+  int flags = MAP_ANONYMOUS;
+  int fd = -1;
+  off_t offset = 0;
+
+  // call mmap
+  t.writeArg1((uint64_t) addr); // kernel will choose address of mapping
+  t.writeArg2(length); // size of memory page in bytes
+  t.writeArg3(prot); // page can be read and written
+  t.writeArg4(flags); // mapping is initialized to 0 and is not backed by a file
+  t.writeArg5(fd);  // not used in anonymous
+  t.writeArg6(offset); // not used in anonymous
+
+  replaySystemCall(t, SYS_mmap);
+
+  gs.log.writeToLog(Importance::info, "mmap(%p, %d, %d, %d)", addr, length, prot, flags);
+}
 
 // =======================================================================================
