@@ -7,16 +7,27 @@ PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
 # built-in Linux utilities, nothing to build
 LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat # relativeTimeStamps1 relativeTimeStamps2 tars to fix one day.
 
+# tests of random number generator insns, need special build flags
+RNG_INSN_BINARIES=rdrand #rdseed
+
 DIFF_CMD=diff
 
 build: $(SIMPLE_BUILD_BINARIES) $(PIPE_BINARIES)
 
 
-run: $(patsubst %, %.ok, $(SIMPLE_BUILD_BINARIES)) $(patsubst %, %.ok, $(PIPE_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES))
+run: $(patsubst %, %.ok, $(SIMPLE_BUILD_BINARIES)) $(patsubst %, %.ok, $(PIPE_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES)) $(patsubst %, %.ok, $(RNG_INSN_BINARIES))
 
 # compile each sample program binary
 $(SIMPLE_BUILD_BINARIES): %: %.c
 	clang $< -Wall -g -o $@ -pthread -std=gnu99
+
+# HW RNG tests need >=broadwell codegen
+$(RNG_INSN_BINARIES): %: %.c
+	clang $< -Wall -g -o $@ -pthread -std=gnu99 -march=broadwell
+
+# NB: disable rdrand test for now
+rdrand.ok: rdrand
+	@echo "   **IGNORING** $^ test..."
 
 setup:
 	@mkdir -p ActualOutputs
