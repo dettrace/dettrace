@@ -16,8 +16,11 @@ int main()
 {
     long long unsigned int result;
 
-    rdrand(&result);
+    if(rdrand(&result)) {
+      printf("RDRAND value: %llu\n", result);
+    } else {
+      printf("RDRAND Failure. Insufficient Entropy.");
+    }
 
-    printf("RDRAND value: %llu\n", result);
 
 }
