@@ -1,6 +1,10 @@
 # binaries that are simple to build (1 source file, same name as binary)
 SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat simpleThreads multipleThreads sigsegv sigill sigabrt kill tgkill selectWithoutTimeout selectWithTimeout getdents getdents64
+
+# binaries for pipe tests, they use a parameterized build
 PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
+
+# built-in Linux utilities, nothing to build
 LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat # relativeTimeStamps1 relativeTimeStamps2 tars to fix one day.
 
 DIFF_CMD=diff
