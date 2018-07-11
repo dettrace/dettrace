@@ -1,14 +1,23 @@
 #include <stdio.h>
+#include <stdint.h>
+#include <x86intrin.h>
+
+#define MAX_ATTEMPTS 10
+
+int rdrand(long long unsigned int* result) {
+    int success;
+    int attempts = MAX_ATTEMPTS;
+    while (!(success = _rdrand64_step(result)) && --attempts != 0) {
+    }
+    return success;
+}
 
 int main()
 {
-  unsigned int rand = 100;
-  char ok;
+    long long unsigned int result;
 
-  asm volatile("rdrand %0; setc %1"
-   : "=r" (rand), "=qm" (ok));
+    rdrand(&result);
 
-   if (ok) {
-    printf("RDRAND value: %u\n", rand % 99);
-   }
+    printf("RDRAND value: %llu\n", result);
+
 }
