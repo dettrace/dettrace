@@ -4,7 +4,7 @@
 int main()
 {
     unsigned long long int i;
-    
+
     i = __rdtsc();
-    printf("%llu ticks\n", i);
+    printf("RDTSC: %llu ticks\n", i);
 }
