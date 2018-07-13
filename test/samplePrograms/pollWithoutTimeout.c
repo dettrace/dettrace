@@ -42,8 +42,6 @@ int main(){
       // array of pollfds, which are wrappers for fds
       struct pollfd fds[2];
 
-      int retVal;
-      
       // set fds[1] to be the fd for readEndGrandparent
       fds[1].fd = readEndGrandparent;
       fds[1].events = POLLIN;
@@ -72,6 +70,7 @@ int main(){
 
     printf("parent is waiting\n");
     int v = waitpid(pid2, &child1Status, 0);
+    (void) v;
     return 0;
   }
 
@@ -85,6 +84,7 @@ int main(){
   //waitpid(pid1, &parentStatus, 0);
   printf("grandparent is waiting\n");
   int v = waitpid(pid1, &parentStatus, 0);
+  (void) v;
   return 0;
 }
 
@@ -134,6 +134,7 @@ void readFromPipe(int pipefd){
   char buffer[bytesToUse];
   for(int i = 0; i < 5; i++){
     int bytes = doWithCheck(read(pipefd, buffer, bytesToUse), "read");
+    (void) bytes;
     if(buffer[0] == 1){
     }else if (buffer[0] == 2){
     }

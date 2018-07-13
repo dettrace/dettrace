@@ -671,7 +671,9 @@ void pselect6SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sc
 bool pollSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   s.originalArg3 = t.arg3();
   // Make this call non blocking by setting timeout to zero!
-  t.writeArg3(0);
+  if ((int) s.originalArg3 != 0){
+    t.writeArg3(0);
+  }
   return true;
 }
 
