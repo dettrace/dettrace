@@ -14,16 +14,17 @@ DIFF_CMD=diff
 
 build: $(SIMPLE_BUILD_BINARIES) $(PIPE_BINARIES)
 
+CC=clang
 
 run: $(patsubst %, %.ok, $(SIMPLE_BUILD_BINARIES)) $(patsubst %, %.ok, $(PIPE_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES)) $(patsubst %, %.ok, $(RNG_INSN_BINARIES))
 
 # compile each sample program binary
 $(SIMPLE_BUILD_BINARIES): %: %.c
-	clang $< -Wall -g -o $@ -pthread -std=gnu99
+	$(CC) $< -Wall -g -o $@ -pthread -std=gnu99
 
 # HW RNG tests need >=broadwell codegen
 $(RNG_INSN_BINARIES): %: %.c
-	clang $< -Wall -g -o $@ -pthread -std=gnu99 -march=broadwell
+	$(CC) $< -Wall -g -o $@ -pthread -std=gnu99 -march=broadwell
 
 # NB: disable rd tests for now
 rdrand.ok: rdrand
@@ -187,7 +188,7 @@ deadlockingPipe.ok: deadlockingPipe
 
 # 1-file "filesystem" using FUSE (https://github.com/libfuse/libfuse) that only reads/writes 1 byte at a time
 partialfs: partialfs.c
-	@clang $< -Wall -g -D_FILE_OFFSET_BITS=64 -lfuse -pthread -o $@
+	@$(CC) $< -Wall -g -D_FILE_OFFSET_BITS=64 -lfuse -pthread -o $@
 
 FUSE_FILE=file.fuse
 fuse-%.ok: fuse-% partialfs
@@ -205,17 +206,17 @@ fuse-%.ok: fuse-% partialfs
 # and so on...
 
 pipe-pWcR: pipe-rw.c
-	clang $^ -Wall -g -DPARENT_WRITE=true -DCHILD_READ=true -o $@
+	$(CC) $^ -Wall -g -DPARENT_WRITE=true -DCHILD_READ=true -o $@
 pipe-cWpR: pipe-rw.c
-	clang $^ -Wall -g -DCHILD_WRITE=true -DPARENT_READ=true -o $@
+	$(CC) $^ -Wall -g -DCHILD_WRITE=true -DPARENT_READ=true -o $@
 pipe-pcWpR: pipe-rw.c
-	clang $^ -Wall -g -DPARENT_WRITE=true -DCHILD_WRITE=true -DPARENT_READ=true -o $@
+	$(CC) $^ -Wall -g -DPARENT_WRITE=true -DCHILD_WRITE=true -DPARENT_READ=true -o $@
 pipe-pWpcR: pipe-rw.c
-	clang $^ -Wall -g -DPARENT_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
+	$(CC) $^ -Wall -g -DPARENT_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
 pipe-cWpcR: pipe-rw.c
-	clang $^ -Wall -g -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
+	$(CC) $^ -Wall -g -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
 pipe-pcWpcR: pipe-rw.c
-	clang $^ -Wall -g -DPARENT_WRITE=true -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
+	$(CC) $^ -Wall -g -DPARENT_WRITE=true -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
 
 kill.ok: kill
 	@for s in $$(seq 1 64); do echo "   Testing $< $$s..." && (python3 timeout.py 5s ../../bin/dettrace ./$< $$s 2> ActualOutputs/$<-$$s.output || true) && $(DIFF_CMD) ActualOutputs/$<-$$s.output ExpectedOutputs/$<.output ; done
