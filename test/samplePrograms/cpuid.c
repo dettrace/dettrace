@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <assert.h>
 
 #include <cpuid.h>
@@ -59,9 +60,11 @@ int main(void)
   printf("Highest supported input: %d\n",__get_cpuid_max(ext,&sig));
 
   unsigned int eax=0,ebx=0,ecx=0,edx=0;
-  assert(1 == __get_cpuid(1, &eax,&ebx,&ecx,&edx));
-  printf("Result of __get_cpuid(1) eax|ebx|ecx|edx: %04X %04X %04X %04X\n",
-         eax,ebx,ecx,edx);
+  for(int i=0; i<4; i++) {
+    assert(1 == __get_cpuid(1, &eax,&ebx,&ecx,&edx));
+    printf("Result of __get_cpuid(1) eax|ebx|ecx|edx: %08X %08X %08X %08X\n",
+           eax,ebx,ecx,edx);
+  }
 
   char* orig_supports = malloc(4096);
   char* orig_doesnot  = malloc(4096);
@@ -84,6 +87,7 @@ int main(void)
   if(!(edx & bit_FXSAVE)) doesnot += sprintf(doesnot, "FXSAVE ");
   if(!(edx & bit_SSE)) doesnot += sprintf(doesnot, "SSE ");
   if(!(edx & bit_SSE2)) doesnot += sprintf(doesnot, "SSE2 ");
+
   
   if(ecx & bit_SSE3) supports += sprintf(supports, "SSE3 ");
   if(ecx & bit_PCLMUL) supports += sprintf(supports, "PCLMUL ");
@@ -131,9 +135,95 @@ int main(void)
   if(ecx & bit_TBM) supports += sprintf(supports, "TBM ");
   if(ecx & bit_MWAITX) supports += sprintf(supports, "MWAITX ");
 
+
+  if(!(ecx & bit_LAHF_LM)) doesnot += sprintf(doesnot, "LAHF_LM ");
+  if(!(ecx & bit_ABM)) doesnot += sprintf(doesnot, "ABM ");
+  if(!(ecx & bit_SSE4a)) doesnot += sprintf(doesnot, "SSE4a ");
+  if(!(ecx & bit_PRFCHW)) doesnot += sprintf(doesnot, "PRFCHW ");
+  if(!(ecx & bit_XOP)) doesnot += sprintf(doesnot, "XOP ");
+  if(!(ecx & bit_LWP)) doesnot += sprintf(doesnot, "LWP ");
+  if(!(ecx & bit_FMA4)) doesnot += sprintf(doesnot, "FMA4 ");
+  if(!(ecx & bit_TBM)) doesnot += sprintf(doesnot, "TBM ");
+  if(!(ecx & bit_MWAITX)) doesnot += sprintf(doesnot, "MWAITX ");
+
+  *supports = 0;
+  *doesnot  = 0;
   printf("  supported features: %s\n", orig_supports);
-  printf("  UNsupported features: %s\n", orig_doesnot);
+  printf("  UNsupported features: %s\n", orig_doesnot);  
+  supports = orig_supports;
+  doesnot  = orig_doesnot;
+
+  printf("\n   Extended Features (eax == 7)\n");
+  printf(  "   ----------------------------\n");
+  for(int i=0; i<4; i++) {
+    assert(1 == __get_cpuid(7, &eax,&ebx,&ecx,&edx));
+    printf("Result of __get_cpuid(7) eax|ebx|ecx|edx: %08X %08X %08X %08X\n",
+           eax,ebx,ecx,edx);
+  }
+   
+/* /\* %ebx *\/ */
+  if (bit_FSGSBASE & ebx) supports += sprintf(supports, " FSGSBASE");
+  else doesnot += sprintf(doesnot, " FSGSBASE");
+  if (bit_BMI & ebx) supports += sprintf(supports, " BMI");
+  else doesnot += sprintf(doesnot, " BMI");
+  if (bit_HLE & ebx) supports += sprintf(supports, " HLE");
+  else doesnot += sprintf(doesnot, " HLE");
+  if (bit_AVX2 & ebx) supports += sprintf(supports, " AVX2");
+  else doesnot += sprintf(doesnot, " AVX2");
+  if (bit_BMI2 & ebx) supports += sprintf(supports, " BMI2");
+  else doesnot += sprintf(doesnot, " BMI2");
+  if (bit_RTM & ebx) supports += sprintf(supports, " RTM");
+  else doesnot += sprintf(doesnot, " RTM");
+  if (bit_MPX & ebx) supports += sprintf(supports, " MPX");
+  else doesnot += sprintf(doesnot, " MPX");
+  if (bit_AVX512F & ebx) supports += sprintf(supports, " AVX512F");
+  else doesnot += sprintf(doesnot, " AVX512F");
+  if (bit_AVX512DQ & ebx) supports += sprintf(supports, " AVX512DQ");
+  else doesnot += sprintf(doesnot, " AVX512DQ");
+  if (bit_RDSEED & ebx) supports += sprintf(supports, " RDSEED");
+  else doesnot += sprintf(doesnot, " RDSEED");
+  if (bit_ADX & ebx) supports += sprintf(supports, " ADX");
+  else doesnot += sprintf(doesnot, " ADX");
+  if (bit_AVX512IFMA & ebx) supports += sprintf(supports, " AVX512IFMA");
+  else doesnot += sprintf(doesnot, " AVX512IFMA");
+  //  if (bit_PCOMMIT & ebx) supports += sprintf(supports, " PCOMMIT");
+  //  else doesnot += sprintf(doesnot, " PCOMMIT");
+  if (bit_CLFLUSHOPT & ebx) supports += sprintf(supports, " CLFLUSHOPT");
+  else doesnot += sprintf(doesnot, " CLFLUSHOPT");
+  if (bit_CLWB & ebx) supports += sprintf(supports, " CLWB");
+  else doesnot += sprintf(doesnot, " CLWB");
+  if (bit_AVX512PF & ebx) supports += sprintf(supports, " AVX512PF");
+  else doesnot += sprintf(doesnot, " AVX512PF");
+  /* if (bit_AVX512ER & ebx) supports += sprintf(supports, " AVX512ER"); */
+  /* else doesnot += sprintf(doesnot, " AVX512ER"); */
+  if (bit_AVX512CD & ebx) supports += sprintf(supports, " AVX512CD");
+  else doesnot += sprintf(doesnot, " AVX512CD");
+  if (bit_SHA & ebx) supports += sprintf(supports, " SHA");
+  else doesnot += sprintf(doesnot, " SHA");
+  if (bit_AVX512BW & ebx) supports += sprintf(supports, " AVX512BW");
+  else doesnot += sprintf(doesnot, " AVX512BW");
+  if (bit_AVX512VL & ebx) supports += sprintf(supports, " AVX512VL");
+  else doesnot += sprintf(doesnot, " AVX512VL");
   
+  /* %ecx */
+  /* if (bit_PREFETCHWT1 & ecx) supports += sprintf(supports, " PREFETCHWT1"); */
+  /* else doesnot += sprintf(doesnot, " PREFETCHWT1"); */
+  if (bit_AVX512VBMI & ecx) supports += sprintf(supports, " AVX512VBMI");
+  else doesnot += sprintf(doesnot, " AVX512VBMI");
+
+  /* XFEATURE_ENABLED_MASK register bits (%eax == 13, %ecx == 0) */
+  /* #define bit_BNDREGS     (1 << 3) */
+  /* #define bit_BNDCSR      (1 << 4) */
+
+  /* Extended State Enumeration Sub-leaf (%eax == 13, %ecx == 1) */
+  /* #define bit_XSAVEOPT	(1 << 0) */
+  /* #define bit_XSAVEC	(1 << 1) */
+  /* #define bit_XSAVES	(1 << 3) */
+
+  *supports = 0;
+  *doesnot  = 0;
+  printf("  supported features: %s\n", orig_supports);
+  printf("  UNsupported features: %s\n", orig_doesnot);  
   
   //  printf("RDRAND? %d\n", __may_i_use_cpu_feature(_FEATURE_RDRND)); 
 }
