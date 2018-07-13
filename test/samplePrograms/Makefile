@@ -8,7 +8,7 @@ PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
 LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat # relativeTimeStamps1 relativeTimeStamps2 tars to fix one day.
 
 # tests of random number generator insns, need special build flags
-RNG_INSN_BINARIES=rdrand #rdseed
+RNG_INSN_BINARIES=rdrand rdseed rdtsc
 
 DIFF_CMD=diff
 
@@ -25,8 +25,14 @@ $(SIMPLE_BUILD_BINARIES): %: %.c
 $(RNG_INSN_BINARIES): %: %.c
 	clang $< -Wall -g -o $@ -pthread -std=gnu99 -march=broadwell
 
-# NB: disable rdrand test for now
+# NB: disable rd tests for now
 rdrand.ok: rdrand
+	@echo "   **IGNORING** $^ test..."
+
+rdseed.ok: rdseed
+	@echo "   **IGNORING** $^ test..."
+
+rdtsc.ok: rdtsc
 	@echo "   **IGNORING** $^ test..."
 
 setup:
@@ -220,4 +226,4 @@ tgkill.ok: tgkill
 
 .PHONY: build setup run clean
 clean:
-	$(RM) $(SIMPLE_BUILD_BINARIES) partialfs $(PIPE_BINARIES)
+	$(RM) $(SIMPLE_BUILD_BINARIES) partialfs $(PIPE_BINARIES) $(RNG_INSN_BINARIES)
