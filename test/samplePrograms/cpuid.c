@@ -10,6 +10,13 @@ char vendor_id[12];
 unsigned version;
 unsigned features;
 
+void clean_string(char* str) {
+  while ( ('a' <= *str && *str <= 'z') ||
+          ('A' <= *str && *str <= 'Z'))
+    str++;
+  *str = 0; // Null terminate.
+}
+
 int main(void) 
 {
   //  GetCpuID();
@@ -37,7 +44,8 @@ int main(void)
            "pop     rbx;"
            "pop     rax;"
            );
-  
+
+  clean_string(vendor_id);
   printf("\nvendor_id is %s", vendor_id);
   printf("\nversion is 0x%04X", version);
   printf("\nfeatures are 0x%04X\n\n", features);
