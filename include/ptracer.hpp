@@ -149,8 +149,8 @@ public:
   traceePtr<void> getRsp();
 
   /**
-   * Retrieves value for Rsp register.
-   * @return Rsp register value
+   * Retrieves value for Rax register.
+   * @return Rax register value
    */
   traceePtr<void> getRax();
 
