@@ -141,12 +141,18 @@ public:
    * @return Rip register value
    */
   traceePtr<void> getRip();
-  
+
   /**
    * Retrieves value for Rsp register.
    * @return Rsp register value
    */
   traceePtr<void> getRsp();
+
+  /**
+   * Retrieves value for Rsp register.
+   * @return Rsp register value
+   */
+  traceePtr<void> getRax();
 
   /**
    * Change system call.
@@ -203,6 +209,11 @@ public:
    */
   void writeRax(uint64_t val);
 
+  /**
+   * Write  value to rdx register.
+   * @param val new rdx register value
+   */
+  void writeRdx(uint64_t val);
   /**
    * All system call return an argument through their rax register.
    * Set state here.

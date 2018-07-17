@@ -292,6 +292,7 @@ void execution::runProgram(){
     }
 
     if(ret == ptraceEvent::signal){
+  //    cerr << "rdtsc test is signal" << endl;
       int signalNum = WSTOPSIG(status);
       handleSignal(signalNum, traceesPid);
       myScheduler.reportProgress(traceesPid);
@@ -403,13 +404,42 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
   if(sigNum == SIGALRM){
     throw runtime_error("SIGALRM found, currently not supported.");
   }
-  // Remember to deliver this signal to the tracee for next event! Happens in
-  // getNextEvent.
-  states.at(traceesPid).signalToDeliver = sigNum;
-  auto msg = "[%d] Tracer: Received signal: %d. Forwading signal to tracee.\n";
-  auto coloredMsg = log.makeTextColored(Color::blue, msg);
-  auto virtualPid = pidMap.getVirtualValue(traceesPid);
-  log.writeToLog(Importance::inter, coloredMsg, virtualPid, sigNum);
+  if(sigNum == SIGSEGV){
+
+    tracer.updateState(traceesPid);
+    uint16_t curr_insn = tracer.readFromTracee(traceePtr<uint16_t> ((uint16_t*)tracer.getRip().ptr), tracer.getPid());
+
+
+    if (curr_insn == 0x310F) {
+
+      tracer.writeRax(tscCounter); //write
+      tracer.writeRdx(0);
+      tscCounter++;
+      tracer.writeIp((uint64_t) tracer.getRip().ptr + 2);
+
+      // Remember to deliver this signal to the tracee for next event! Happens in
+      // getNextEvent.
+      states.at(traceesPid).signalToDeliver = 0;
+
+      auto msg = "[%d] Tracer: Received rdtsc: Reading next instruction.\n";
+      auto coloredMsg = log.makeTextColored(Color::blue, msg);
+      auto virtualPid = pidMap.getVirtualValue(traceesPid);
+      log.writeToLog(Importance::inter, coloredMsg, virtualPid, sigNum);
+    }
+  }
+  else
+  {
+    // Remember to deliver this signal to the tracee for next event! Happens in
+    // getNextEvent.
+    states.at(traceesPid).signalToDeliver = sigNum;
+
+    auto msg = "[%d] Tracer: Received signal: %d. Forwading signal to tracee.\n";
+    auto coloredMsg = log.makeTextColored(Color::blue, msg);
+    auto virtualPid = pidMap.getVirtualValue(traceesPid);
+    log.writeToLog(Importance::inter, coloredMsg, virtualPid, sigNum);
+
+  }
+
   return;
 }
 // =======================================================================================

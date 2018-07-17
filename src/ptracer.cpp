@@ -71,6 +71,10 @@ traceePtr<void> ptracer::getRsp() {
   return traceePtr<void>((void*) regs.rsp);
 }
 
+traceePtr<void> ptracer::getRax() {
+  return traceePtr<void>((void*) regs.rax);
+}
+
 uint64_t ptracer::getEventMessage(){
   long event;
   doPtrace(PTRACE_GETEVENTMSG, traceePid, nullptr, &event);
@@ -219,5 +223,10 @@ void ptracer::writeIp(uint64_t val) {
 
 void ptracer::writeRax(uint64_t val) {
   regs.rax = val;
+  doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
+}
+
+void ptracer::writeRdx(uint64_t val) {
+  regs.rdx = val;
   doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
 }

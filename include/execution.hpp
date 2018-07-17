@@ -98,6 +98,10 @@ private:
    * (to see return value of system call).
    */
   const int debugLevel;
+  /**
+   * Atomic counter for rdtsc instruction.
+  */
+  uint32_t tscCounter = 0;
 
 public:
 
