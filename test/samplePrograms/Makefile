@@ -1,5 +1,5 @@
 # binaries that are simple to build (1 source file, same name as binary)
-SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat simpleThreads multipleThreads sigsegv sigill sigabrt kill tgkill selectWithoutTimeout selectWithTimeout getdents getdents64
+SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat simpleThreads multipleThreads sigsegv sigill sigabrt kill tgkill selectWithoutTimeout selectWithTimeout getdents getdents64 pollWithoutTimeout pollWithPositiveTimeout pollWithNegativeTimeout
 
 # binaries for pipe tests, they use a parameterized build
 PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
@@ -8,25 +8,32 @@ PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
 LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat # relativeTimeStamps1 relativeTimeStamps2 tars to fix one day.
 
 # tests of random number generator insns, need special build flags
-RNG_INSN_BINARIES=rdrand #rdseed
+RNG_INSN_BINARIES=rdrand rdseed rdtsc cpuid
 
 DIFF_CMD=diff
 
-build: $(SIMPLE_BUILD_BINARIES) $(PIPE_BINARIES)
+build: $(SIMPLE_BUILD_BINARIES) $(PIPE_BINARIES) $(RNG_INSN_BINARIES)
 
+CC=clang
 
 run: $(patsubst %, %.ok, $(SIMPLE_BUILD_BINARIES)) $(patsubst %, %.ok, $(PIPE_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES)) $(patsubst %, %.ok, $(RNG_INSN_BINARIES))
 
 # compile each sample program binary
 $(SIMPLE_BUILD_BINARIES): %: %.c
-	clang $< -Wall -g -o $@ -pthread -std=gnu99
+	$(CC) $< -Wall -g -o $@ -pthread -std=gnu99
 
 # HW RNG tests need >=broadwell codegen
 $(RNG_INSN_BINARIES): %: %.c
-	clang $< -Wall -g -o $@ -pthread -std=gnu99 -march=broadwell
+	$(CC) $< -Wall -g -o $@ -pthread -std=gnu99 -march=broadwell
 
-# NB: disable rdrand test for now
+# NB: disable rd tests for now
 rdrand.ok: rdrand
+	@echo "   **IGNORING** $^ test..."
+
+rdseed.ok: rdseed
+	@echo "   **IGNORING** $^ test..."
+
+rdtsc.ok: rdtsc
 	@echo "   **IGNORING** $^ test..."
 
 setup:
@@ -181,7 +188,7 @@ deadlockingPipe.ok: deadlockingPipe
 
 # 1-file "filesystem" using FUSE (https://github.com/libfuse/libfuse) that only reads/writes 1 byte at a time
 partialfs: partialfs.c
-	@clang $< -Wall -g -D_FILE_OFFSET_BITS=64 -lfuse -pthread -o $@
+	@$(CC) $< -Wall -g -D_FILE_OFFSET_BITS=64 -lfuse -pthread -o $@
 
 FUSE_FILE=file.fuse
 fuse-%.ok: fuse-% partialfs
@@ -199,17 +206,17 @@ fuse-%.ok: fuse-% partialfs
 # and so on...
 
 pipe-pWcR: pipe-rw.c
-	clang $^ -Wall -g -DPARENT_WRITE=true -DCHILD_READ=true -o $@
+	$(CC) $^ -Wall -g -DPARENT_WRITE=true -DCHILD_READ=true -o $@
 pipe-cWpR: pipe-rw.c
-	clang $^ -Wall -g -DCHILD_WRITE=true -DPARENT_READ=true -o $@
+	$(CC) $^ -Wall -g -DCHILD_WRITE=true -DPARENT_READ=true -o $@
 pipe-pcWpR: pipe-rw.c
-	clang $^ -Wall -g -DPARENT_WRITE=true -DCHILD_WRITE=true -DPARENT_READ=true -o $@
+	$(CC) $^ -Wall -g -DPARENT_WRITE=true -DCHILD_WRITE=true -DPARENT_READ=true -o $@
 pipe-pWpcR: pipe-rw.c
-	clang $^ -Wall -g -DPARENT_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
+	$(CC) $^ -Wall -g -DPARENT_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
 pipe-cWpcR: pipe-rw.c
-	clang $^ -Wall -g -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
+	$(CC) $^ -Wall -g -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
 pipe-pcWpcR: pipe-rw.c
-	clang $^ -Wall -g -DPARENT_WRITE=true -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
+	$(CC) $^ -Wall -g -DPARENT_WRITE=true -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
 
 kill.ok: kill
 	@for s in $$(seq 1 64); do echo "   Testing $< $$s..." && (python3 timeout.py 5s ../../bin/dettrace ./$< $$s 2> ActualOutputs/$<-$$s.output || true) && $(DIFF_CMD) ActualOutputs/$<-$$s.output ExpectedOutputs/$<.output ; done
@@ -220,4 +227,4 @@ tgkill.ok: tgkill
 
 .PHONY: build setup run clean
 clean:
-	$(RM) $(SIMPLE_BUILD_BINARIES) partialfs $(PIPE_BINARIES)
+	$(RM) $(SIMPLE_BUILD_BINARIES) partialfs $(PIPE_BINARIES) $(RNG_INSN_BINARIES)
