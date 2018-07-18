@@ -230,3 +230,8 @@ void ptracer::writeRdx(uint64_t val) {
   regs.rdx = val;
   doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
 }
+
+void ptracer::writeRcx(uint64_t val) {
+  regs.rcx = val;
+  doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
+}

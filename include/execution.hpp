@@ -100,8 +100,14 @@ private:
   const int debugLevel;
   /**
    * Atomic counter for rdtsc instruction.
+   * Emulates IA32_TSC MSR.
   */
   uint32_t tscCounter = 0;
+  /**
+   * Atomic counter for rdtscp instruction.
+   * Emulates IA32_TSC_AUX MSR.
+  */
+  uint32_t tscpCounter = 0;
 
 public:
 

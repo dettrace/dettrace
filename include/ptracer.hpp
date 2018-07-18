@@ -214,6 +214,12 @@ public:
    * @param val new rdx register value
    */
   void writeRdx(uint64_t val);
+
+  /**
+   * Write  value to rcx register.
+   * @param val new rcx register value
+   */
+  void writeRcx(uint64_t val);
   /**
    * All system call return an argument through their rax register.
    * Set state here.

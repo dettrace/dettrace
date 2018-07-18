@@ -8,7 +8,7 @@ PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
 LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat # relativeTimeStamps1 relativeTimeStamps2 tars to fix one day.
 
 # tests of random number generator insns, need special build flags
-RNG_INSN_BINARIES=rdrand rdseed rdtsc cpuid
+RNG_INSN_BINARIES=rdrand rdseed rdtsc rdtscp #cpuid
 
 DIFF_CMD=diff
 
@@ -35,6 +35,12 @@ rdseed.ok: rdseed
 
 rdtsc.ok: rdtsc
 	@echo "   **IGNORING** $^ test..."
+
+rdtscp.ok: rdtscp
+	@echo "   **IGNORING** $^ test..."
+
+# cpuid.ok: cpuid
+# 	@echo "   **IGNORING** $^ test..."
 
 setup:
 	@mkdir -p ActualOutputs

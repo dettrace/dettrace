@@ -407,18 +407,20 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
   if(sigNum == SIGSEGV){
 
     tracer.updateState(traceesPid);
-    uint16_t curr_insn = tracer.readFromTracee(traceePtr<uint16_t> ((uint16_t*)tracer.getRip().ptr), tracer.getPid());
-    uint32_t curr_insn32 = tracer.readFromTracee(traceePtr<uint32_t> ((uint32_t*)tracer.getRip().ptr), tracer.getPid());
+    uint16_t curr_insn16 = tracer.readFromTracee(traceePtr<uint16_t> ((uint16_t*)tracer.getRip().ptr), tracer.getPid());
+    uint32_t curr_insn24 = (tracer.readFromTracee(traceePtr<uint32_t> ((uint32_t*)tracer.getRip().ptr), tracer.getPid()) << 8);
 
-    printf("%04x\n", curr_insn32);
-    if (curr_insn32 == 0xF9010F) {
-      cerr << "rdtscp" << endl;
-    }
+    if (curr_insn16 == 0x310F || curr_insn24 == 0xF9010F00) {
 
+      auto msg = "[%d] Tracer: Received rdtsc: Reading next instruction.\n";
 
-    if (curr_insn == 0x310F) {
+      if (curr_insn24 == 0xF9010F00) {
+        tracer.writeRcx(tscpCounter);
+        tscpCounter++;
+        msg = "[%d] Tracer: Received rdtscp: Reading next instruction.\n";
+      }
 
-      tracer.writeRax(tscCounter); //write
+      tracer.writeRax(tscCounter);
       tracer.writeRdx(0);
       tscCounter++;
       tracer.writeIp((uint64_t) tracer.getRip().ptr + 2);
@@ -427,14 +429,12 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
       // getNextEvent.
       states.at(traceesPid).signalToDeliver = 0;
 
-      auto msg = "[%d] Tracer: Received rdtsc: Reading next instruction.\n";
       auto coloredMsg = log.makeTextColored(Color::blue, msg);
       auto virtualPid = pidMap.getVirtualValue(traceesPid);
       log.writeToLog(Importance::inter, coloredMsg, virtualPid, sigNum);
     }
   }
-  else
-  {
+  else  {
     // Remember to deliver this signal to the tracee for next event! Happens in
     // getNextEvent.
     states.at(traceesPid).signalToDeliver = sigNum;
