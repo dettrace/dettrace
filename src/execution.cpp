@@ -408,6 +408,12 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
     tracer.updateState(traceesPid);
     uint16_t curr_insn = tracer.readFromTracee(traceePtr<uint16_t> ((uint16_t*)tracer.getRip().ptr), tracer.getPid());
+    uint32_t curr_insn32 = tracer.readFromTracee(traceePtr<uint32_t> ((uint32_t*)tracer.getRip().ptr), tracer.getPid());
+
+    printf("%04x\n", curr_insn32);
+    if (curr_insn32 == 0xF9010F) {
+      cerr << "rdtscp" << endl;
+    }
 
 
     if (curr_insn == 0x310F) {
