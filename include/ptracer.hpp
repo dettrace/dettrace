@@ -306,7 +306,7 @@ public:
    */
   template<typename T>
   static void writeToTracee(traceePtr<T> writeAddress, T valueToCopy, pid_t traceePid){
-    writeVmTracee(&valueToCopy, traceePtr<T>(writeAddress), sizeof(T), traceePid);
+    writeVmTracee(&valueToCopy, writeAddress, sizeof(T), traceePid);
 
     return;
   }

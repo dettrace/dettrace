@@ -302,9 +302,8 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
       gs.log.writeToLog(Importance::extra,
                         "timeout null, writing our data below the current stack frame...\n");
 
-      uint64_t rsp = (uint64_t) t.getRsp().ptr;
       // Enough space for timespec struct.
-      timespec* newAddress = (timespec*) (rsp - 128 - sizeof(struct timespec));
+      timespec* newAddress = (timespec*) s.mmapMemory.getAddr().ptr;
 
       ptracer::writeToTracee(traceePtr<timespec>(newAddress), ourTimeout, s.traceePid);
 
@@ -511,6 +510,27 @@ void lgetxattrSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
 
 }
 // =======================================================================================
+void mmapSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  // This isn't a natural call mmap from the tracee we injected this call ourselves!
+  if(s.syscallInjected){
+    gs.log.writeToLog(Importance::info, "This mmap was inject for use in pre and post hook purposes.\n");
+    if((void*) t.getReturnValue() == MAP_FAILED){
+      throw runtime_error("Unable to properly inject mmap call to tracee!\n"
+                          "mmap call returned: " +
+                          to_string(t.getReturnValue()) + "\n");
+    }
+    s.syscallInjected = false;
+
+    // save memory address to be used later
+    s.mmapMemory.setAddr(traceePtr<void>((void*) t.getReturnValue()));
+
+    // Previous state that should have been set by system call that created this fstat
+    // injection.
+    t.setRegs(s.regSaver.popRegisterState());
+  }
+}
+
+// =======================================================================================
 bool
 nanosleepSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   noopSystemCall(gs, t);
@@ -591,31 +611,6 @@ bool linkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 
   return false;
 }
-
-// ======================================================================================
-void mmapSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) {
-  // this is an injected mmap call
-  if(s.syscallInjected){
-    gs.log.writeToLog(Importance::info, "This mmap was injected\n");
-    if((void*) t.getReturnValue() == MAP_FAILED){
-      throw runtime_error("Unable to properly inject mmap call to tracee!\n"
-                          "mmap call returned MAP_FAILED\n");
-    }
-    s.syscallInjected = false;
-    
-    // store mmapAddr into state
-    s.mmapAddr = traceePtr<void>((void*) t.getReturnValue());
-
-    // restore previous state
-    t.setRegs(s.regSaver.popRegisterState());
-  } else {
-    // TODO: handle mmap deterministically?
-  }
-
-  return;
-
-}
-
 // =======================================================================================
 bool openSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), gs, s);
@@ -1003,8 +998,7 @@ bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 
   if(timeoutPtr == nullptr){
     // Has to be created in memory.
-    uint64_t rsp = (uint64_t) t.getRsp().ptr;
-    timeval* newAddr = (timeval*) (rsp - 128 - sizeof(struct timeval));
+    timeval* newAddr = (timeval*) s.mmapMemory.getAddr().ptr;
     ptracer::writeToTracee(traceePtr<timeval>(newAddr), ourTimeout, s.traceePid);
     t.writeArg5((uint64_t) newAddr);
   }else{
@@ -1280,7 +1274,7 @@ bool utimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   s.originalArg2 = t.arg2();
 
   // Enough space for 2 timespec structs.
-  utimbuf* ourUtimbuf = (utimbuf*) ((uint64_t) t.getRsp().ptr - 128 - sizeof(utimbuf));
+  utimbuf* ourUtimbuf = (utimbuf*) s.mmapMemory.getAddr().ptr;
 
   // Create our own struct with our time.
   // TODO: In the future we might want to unify this with our mtimeMapper.
@@ -1316,9 +1310,8 @@ bool utimesSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   // this data below the current stack pointer accounting for the red zone, known to be
   // 128 bytes.
   s.originalArg2 = t.arg2();
-  uint64_t rsp = (uint64_t) t.getRsp().ptr;
   // Enough space for 2 timeval structs.
-  timeval* ourTimeval = (timeval*) (rsp - 128 - 2 * sizeof(timeval));
+  timeval* ourTimeval = (timeval*) s.mmapMemory.getAddr().ptr;
 
   // Create our own struct with our time.
   // TODO: In the future we might want to unify this with our mtimeMapper.
@@ -1355,9 +1348,8 @@ bool utimensatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
   // this data below the current stack pointer accounting for the red zone, known to be
   // 128 bytes.
   s.originalArg3 = t.arg3();
-  uint64_t rsp = (uint64_t) t.getRsp().ptr;
   // Enough space for 2 timespec structs.
-  timespec* ourTimespec = (timespec*) (rsp - 128 - 2 * sizeof(timespec));
+  timespec* ourTimespec = (timespec*) s.mmapMemory.getAddr().ptr;
 
   // Create our own struct with our time.
   // TODO: In the future we might want to unify this with our mtimeMapper.
@@ -1650,8 +1642,7 @@ void injectFstat(globalState& gs, state& s, ptracer& t, int fd){
   // Inject fstat system call to perform!
   s.syscallInjected = true;
 
-  uint64_t rsp = (uint64_t) t.getRsp().ptr;
-  struct stat* traceesMem = (struct stat*) (rsp - 128 - sizeof(struct stat));
+  struct stat* traceesMem = (struct stat*) s.mmapMemory.getAddr().ptr;
 
   // Call fstat.
   t.writeArg1(fd); // file descriptor.
@@ -1677,8 +1668,7 @@ bool injectNewfstatatIfNeeded(globalState& gs, state& s, ptracer& t, int dirfd,
   // Inject fstat system call to perform!
   s.syscallInjected = true;
 
-  uint64_t rsp = (uint64_t) t.getRsp().ptr;
-  struct stat* traceesMem = (struct stat*) (rsp - 128 - sizeof(struct stat));
+  struct stat* traceesMem = (struct stat*) s.mmapMemory.getAddr().ptr;
 
   replaySystemCall(t, SYS_newfstatat);
   t.writeArg1(dirfd); // file descriptor.
@@ -1721,39 +1711,6 @@ void noopSystemCall(globalState& gs, ptracer& t){
   t.changeSystemCall(SYS_getpid);
   gs.log.writeToLog(Importance::info, "Turning this system call into a NOOP\n");
   return;
-}
-
-
-// =======================================================================================
-/**
- * Inject an mmap system call.
- */
-void injectMmap(globalState& gs, state& s, ptracer& t) {
-  gs.log.writeToLog(Importance::info, "Injecting mmap call to tracee!\n");
-  // save current register state
-  s.regSaver.pushRegisterState(t.getRegs());
-
-  // inject mmap system call
-  s.syscallInjected = true;
-
-  void* addr = NULL;
-  size_t length = 2048;
-  int prot = PROT_READ | PROT_WRITE;
-  int flags = MAP_ANONYMOUS;
-  int fd = -1;
-  off_t offset = 0;
-
-  // call mmap
-  t.writeArg1((uint64_t) addr); // kernel will choose address of mapping
-  t.writeArg2(length); // size of memory page in bytes
-  t.writeArg3(prot); // page can be read and written
-  t.writeArg4(flags); // mapping is initialized to 0 and is not backed by a file
-  t.writeArg5(fd);  // not used in anonymous
-  t.writeArg6(offset); // not used in anonymous
-
-  replaySystemCall(t, SYS_mmap);
-
-  gs.log.writeToLog(Importance::info, "mmap(%p, %d, %d, %d)", addr, length, prot, flags);
 }
 
 // =======================================================================================

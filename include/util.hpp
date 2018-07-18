@@ -72,7 +72,7 @@ void readVmTracee(traceePtr<T> traceeMemory, T* localMemory, size_t numberOfByte
   const unsigned long flags = 0;
 
   doWithCheck(process_vm_readv(traceePid, &localIoVec, 1, &remoteIoVec, 1, flags),
-              "process_vm_writev");
+              "process_vm_readv");
 
   return;
 

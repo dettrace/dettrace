@@ -14,11 +14,13 @@
 #include "systemCall.hpp"
 #include "directoryEntries.hpp"
 #include "registerSaver.hpp"
+#include "mappedMemory.hpp"
 
 using namespace std;
 
 // Needed to avoid recursive dependencies between classes.
 class systemCall;
+class mappedMemory;
 
 /**
  * Class to hold all state that we will need to update in between system calls inside the
@@ -133,8 +135,10 @@ public:
   /** A register saver used to store the previous register state and retrieve at a later stage */
   registerSaver regSaver;
 
-  /** The starting address of the memory page we can use for writing/reading */
-  traceePtr<void> mmapAddr = traceePtr<void>(NULL); // TODO: if this was used for reading/writing before mmap was injected, it could segfault?
+  /** An instance of the mappedMemory class which encapsulates the 
+   * logic of ensuring the existance of a memory map.
+   */
+  mappedMemory mmapMemory;
 
   /**
    * Original register arguments before we modified them. We sometimes need to restore them at the

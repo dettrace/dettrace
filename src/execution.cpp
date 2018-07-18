@@ -395,6 +395,11 @@ bool execution::handleSeccomp(const pid_t traceesPid){
   // small optimization we might not want to...
   // Get registers from tracee.
   tracer.updateState(traceesPid);
+
+  // ensure mapping exists
+  // we need to update the tracrer since mappedMemory::ensureExistanceOfMapping checks intercepted call
+  states.at(traceesPid).mmapMemory.ensureExistanceOfMapping(myGlobalState, states.at(traceesPid), tracer);
+
   auto callPostHook = handlePreSystemCall( states.at(traceesPid), traceesPid );
   return callPostHook;
 }
@@ -491,6 +496,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<linkSystemCall>(syscallNumber, syscallName);
   case SYS_linkat:
     return make_unique<linkatSystemCall>(syscallNumber, syscallName);
+  case SYS_mmap:
+    return make_unique<mmapSystemCall>(syscallNumber, syscallName);
   case SYS_open:
     return make_unique<openSystemCall>(syscallNumber, syscallName);
   case SYS_openat:

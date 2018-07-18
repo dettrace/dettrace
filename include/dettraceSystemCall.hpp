@@ -452,7 +452,7 @@ public:
 /*
  * void* mmap(void* addr, size_t length, int prot, int flags, int fd, off_t offset);
  *
- * TODO
+ * TODO: This is currently implemented to handle injected calls only
  */
 class mmapSystemCall : public systemCall{
 public:
