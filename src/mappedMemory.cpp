@@ -12,7 +12,7 @@ bool shouldRunFor(int syscallNumber){
          syscallNumber != SYS_vfork;
 }
 
-bool mappedMemory::ensureExistanceOfMapping(globalState& gs, state& s, ptracer& t) {
+bool mappedMemory::ensureExistenceOfMapping(globalState& gs, state& s, ptracer& t) {
   // only create mapping if one doesn't exist
   if (!doesExist && shouldRunFor(t.getSystemCallNumber())) {
     gs.log.writeToLog(Importance::info, "Injecting mmap call to tracee!\n");

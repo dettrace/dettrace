@@ -31,7 +31,7 @@ public:
    * memory exists. This page can be read/written.
    * @return boolean indicating if mmap was injected
    */
-  bool ensureExistanceOfMapping(globalState& gs, state& s, ptracer& t);
+  bool ensureExistenceOfMapping(globalState& gs, state& s, ptracer& t);
 
   /**
    * Getter for the starting address of the mapped memory page.

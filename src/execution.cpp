@@ -398,7 +398,7 @@ bool execution::handleSeccomp(const pid_t traceesPid){
 
   // ensure mapping exists
   // we need to update the tracrer since mappedMemory::ensureExistanceOfMapping checks intercepted call
-  states.at(traceesPid).mmapMemory.ensureExistanceOfMapping(myGlobalState, states.at(traceesPid), tracer);
+  states.at(traceesPid).mmapMemory.ensureExistenceOfMapping(myGlobalState, states.at(traceesPid), tracer);
 
   auto callPostHook = handlePreSystemCall( states.at(traceesPid), traceesPid );
   return callPostHook;
