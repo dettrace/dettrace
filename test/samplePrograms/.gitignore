@@ -1,5 +1,3 @@
-selectWithoutTimeout
-selectWithTimeout
 ActualOutputs/
 alarm
 callSshKeygen
@@ -16,6 +14,12 @@ nestedFork
 partialfs
 pipe
 pipe-multiwrite
+pollWithPositiveTimeout
+pollWithNegativeTimeout
+pollWithoutTimeout
+rdrand
+selectWithTimeout
+selectWithoutTimeout
 sigabrt
 sigill
 sigsegv
