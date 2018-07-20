@@ -8,32 +8,32 @@ PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
 LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat # relativeTimeStamps1 relativeTimeStamps2 tars to fix one day.
 
 # tests of random number generator insns, need special build flags
-RNG_INSN_BINARIES=rdrand rdseed rdtsc cpuid
+BROADWELL_BINARIES=rdrand rdseed rdtsc cpuid
 
 DIFF_CMD=diff
 
-build: $(SIMPLE_BUILD_BINARIES) $(PIPE_BINARIES) $(RNG_INSN_BINARIES)
+build: $(SIMPLE_BUILD_BINARIES) $(PIPE_BINARIES) $(BROADWELL_BINARIES)
 
 CC=clang
 
-run: $(patsubst %, %.ok, $(SIMPLE_BUILD_BINARIES)) $(patsubst %, %.ok, $(PIPE_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES)) $(patsubst %, %.ok, $(RNG_INSN_BINARIES))
+run: $(patsubst %, %.ok, $(SIMPLE_BUILD_BINARIES)) $(patsubst %, %.ok, $(PIPE_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES)) $(patsubst %, %.ok, $(BROADWELL_BINARIES))
 
 # compile each sample program binary
 $(SIMPLE_BUILD_BINARIES): %: %.c
 	$(CC) $< -Wall -g -o $@ -pthread -std=gnu99
 
 # HW RNG tests need >=broadwell codegen
-$(RNG_INSN_BINARIES): %: %.c
+$(BROADWELL_BINARIES): %: %.c
 	$(CC) $< -Wall -g -o $@ -pthread -std=gnu99 -march=broadwell
 
-# NB: disable rd tests for now
+# NB: disable special cpu insn tests for now
 rdrand.ok: rdrand
 	@echo "   **IGNORING** $^ test..."
-
 rdseed.ok: rdseed
 	@echo "   **IGNORING** $^ test..."
-
 rdtsc.ok: rdtsc
+	@echo "   **IGNORING** $^ test..."
+cpuid.ok: cpuid
 	@echo "   **IGNORING** $^ test..."
 
 setup:
@@ -227,4 +227,4 @@ tgkill.ok: tgkill
 
 .PHONY: build setup run clean
 clean:
-	$(RM) $(SIMPLE_BUILD_BINARIES) partialfs $(PIPE_BINARIES) $(RNG_INSN_BINARIES)
+	$(RM) $(SIMPLE_BUILD_BINARIES) partialfs $(PIPE_BINARIES) $(BROADWELL_BINARIES)
