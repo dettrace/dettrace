@@ -34,7 +34,7 @@ docker:
 run-docker: docker
 	docker run -it --privileged --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG}
 
-test-docker: docker
+test-docker: clean docker
 	docker run --privileged --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG} make -j tests
 
 .PHONY: clean docker run-docker tests build-tests run-tests
