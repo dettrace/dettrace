@@ -31,10 +31,10 @@ rdrand.ok: rdrand
 	@echo "   **IGNORING** $^ test..."
 rdseed.ok: rdseed
 	@echo "   **IGNORING** $^ test..."
-rdtsc.ok: rdtsc
-	@echo "   **IGNORING** $^ test..."
-rdtscp.ok: rdtsc
-	@echo "   **IGNORING** $^ test..."
+# rdtsc.ok: rdtsc
+# 	@echo "   **IGNORING** $^ test..."
+# rdtscp.ok: rdtsc
+# 	@echo "   **IGNORING** $^ test..."
 cpuid.ok: cpuid
 	@echo "   **IGNORING** $^ test..."
 
