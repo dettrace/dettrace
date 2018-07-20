@@ -292,7 +292,6 @@ void execution::runProgram(){
     }
 
     if(ret == ptraceEvent::signal){
-  //    cerr << "rdtsc test is signal" << endl;
       int signalNum = WSTOPSIG(status);
       handleSignal(signalNum, traceesPid);
       myScheduler.reportProgress(traceesPid);
