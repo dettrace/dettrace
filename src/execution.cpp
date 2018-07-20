@@ -406,23 +406,24 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
   if(sigNum == SIGSEGV){
 
     tracer.updateState(traceesPid);
-    uint16_t curr_insn16 = tracer.readFromTracee(traceePtr<uint16_t> ((uint16_t*)tracer.getRip().ptr), tracer.getPid());
-    uint32_t curr_insn24 = (tracer.readFromTracee(traceePtr<uint32_t> ((uint32_t*)tracer.getRip().ptr), tracer.getPid()) << 8);
+    uint32_t curr_insn32 = (tracer.readFromTracee(traceePtr<uint32_t> ((uint32_t*)tracer.getRip().ptr), tracer.getPid()));
 
-    if (curr_insn16 == 0x310F || curr_insn24 == 0xF9010F00) {
+    if ((curr_insn32 << 16) == 0x310F0000 || (curr_insn32 << 8) == 0xF9010F00) {
 
       auto msg = "[%d] Tracer: Received rdtsc: Reading next instruction.\n";
+      int ip_step = 2;
 
-      if (curr_insn24 == 0xF9010F00) {
+      if ((curr_insn32 << 8) == 0xF9010F00) {
         tracer.writeRcx(tscpCounter);
         tscpCounter++;
+        ip_step = 3;
         msg = "[%d] Tracer: Received rdtscp: Reading next instruction.\n";
       }
 
       tracer.writeRax(tscCounter);
       tracer.writeRdx(0);
       tscCounter++;
-      tracer.writeIp((uint64_t) tracer.getRip().ptr + 2);
+      tracer.writeIp((uint64_t) tracer.getRip().ptr + ip_step);
 
       // Remember to deliver this signal to the tracee for next event! Happens in
       // getNextEvent.
