@@ -414,7 +414,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
   if(sigNum == SIGSEGV){
 
     tracer.updateState(traceesPid);
-    uint32_t curr_insn32 = (tracer.readFromTracee(traceePtr<uint32_t> ((uint32_t*)tracer.getRip().ptr), tracer.getPid()));
+    uint32_t curr_insn32 = (tracer.readFromTracee(traceePtr<uint32_t> ((uint32_t*)tracer.getRip().ptr), traceesPid));
 
     if ((curr_insn32 << 16) == 0x310F0000 || (curr_insn32 << 8) == 0xF9010F00) {
 
@@ -433,8 +433,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
       tscCounter++;
       tracer.writeIp((uint64_t) tracer.getRip().ptr + ip_step);
 
-      // Remember to deliver this signal to the tracee for next event! Happens in
-      // getNextEvent.
+      // Signal is now suppressed.
       states.at(traceesPid).signalToDeliver = 0;
 
       auto coloredMsg = log.makeTextColored(Color::blue, msg);
