@@ -412,7 +412,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
     throw runtime_error("SIGALRM found, currently not supported.");
   }
 
-  if(sigNum == SIGSEGV){
+  if(sigNum == SIGSEGV) {
 
     tracer.updateState(traceesPid);
     uint32_t curr_insn32 = (tracer.readFromTracee(traceePtr<uint32_t> ((uint32_t*)tracer.getRip().ptr), traceesPid));
@@ -443,6 +443,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
       return;
     }
+  }
 
     // Remember to deliver this signal to the tracee for next event! Happens in
     // getNextEvent.
@@ -453,7 +454,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
     auto virtualPid = pidMap.getVirtualValue(traceesPid);
     log.writeToLog(Importance::inter, coloredMsg, virtualPid, sigNum);
 
-  }
+
 
   return;
 }
