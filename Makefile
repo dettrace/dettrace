@@ -1,12 +1,15 @@
 # Top-level Makefile to capture different actions you can take.
 all: build
 
-build:
+build: bin
 	cd src && ${MAKE}
 	cp src/dettrace bin/
 	cp src/libdet.so lib/
 
-static:
+bin:
+	mkdir -p ./bin
+
+static: bin
 	cd src && ${MAKE} all-static
 	cp src/dettrace-static bin/dettrace
 	cp src/libdet.so lib/
