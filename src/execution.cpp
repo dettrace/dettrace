@@ -411,6 +411,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
   if(sigNum == SIGALRM){
     throw runtime_error("SIGALRM found, currently not supported.");
   }
+
   if(sigNum == SIGSEGV){
 
     tracer.updateState(traceesPid);
@@ -439,9 +440,10 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
       auto coloredMsg = log.makeTextColored(Color::blue, msg);
       auto virtualPid = pidMap.getVirtualValue(traceesPid);
       log.writeToLog(Importance::inter, coloredMsg, virtualPid, sigNum);
+
+      return;
     }
-  }
-  else  {
+
     // Remember to deliver this signal to the tracee for next event! Happens in
     // getNextEvent.
     states.at(traceesPid).signalToDeliver = sigNum;
