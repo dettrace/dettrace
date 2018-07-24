@@ -413,13 +413,51 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
   if(sigNum == SIGALRM){
     throw runtime_error("SIGALRM found, currently not supported.");
   }
-  // Remember to deliver this signal to the tracee for next event! Happens in
-  // getNextEvent.
-  states.at(traceesPid).signalToDeliver = sigNum;
-  auto msg = "[%d] Tracer: Received signal: %d. Forwading signal to tracee.\n";
-  auto coloredMsg = log.makeTextColored(Color::blue, msg);
-  auto virtualPid = pidMap.getVirtualValue(traceesPid);
-  log.writeToLog(Importance::inter, coloredMsg, virtualPid, sigNum);
+
+  if(sigNum == SIGSEGV) {
+
+    tracer.updateState(traceesPid);
+    uint32_t curr_insn32 = (tracer.readFromTracee(traceePtr<uint32_t> ((uint32_t*)tracer.getRip().ptr), traceesPid));
+
+    if ((curr_insn32 << 16) == 0x310F0000 || (curr_insn32 << 8) == 0xF9010F00) {
+
+      auto msg = "[%d] Tracer: Received rdtsc: Reading next instruction.\n";
+      int ip_step = 2;
+
+      if ((curr_insn32 << 8) == 0xF9010F00) {
+        tracer.writeRcx(tscpCounter);
+        tscpCounter++;
+        ip_step = 3;
+        msg = "[%d] Tracer: Received rdtscp: Reading next instruction.\n";
+      }
+
+      tracer.writeRax(tscCounter);
+      tracer.writeRdx(0);
+      tscCounter++;
+      tracer.writeIp((uint64_t) tracer.getRip().ptr + ip_step);
+
+      // Signal is now suppressed.
+      states.at(traceesPid).signalToDeliver = 0;
+
+      auto coloredMsg = log.makeTextColored(Color::blue, msg);
+      auto virtualPid = pidMap.getVirtualValue(traceesPid);
+      log.writeToLog(Importance::inter, coloredMsg, virtualPid, sigNum);
+
+      return;
+    }
+  }
+
+    // Remember to deliver this signal to the tracee for next event! Happens in
+    // getNextEvent.
+    states.at(traceesPid).signalToDeliver = sigNum;
+
+    auto msg = "[%d] Tracer: Received signal: %d. Forwading signal to tracee.\n";
+    auto coloredMsg = log.makeTextColored(Color::blue, msg);
+    auto virtualPid = pidMap.getVirtualValue(traceesPid);
+    log.writeToLog(Importance::inter, coloredMsg, virtualPid, sigNum);
+
+
+
   return;
 }
 // =======================================================================================
