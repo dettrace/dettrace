@@ -518,8 +518,12 @@ nanosleepSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedul
   // Write zero seconds to time required to skip waiting.
   struct timespec *req = (struct timespec *) t.arg1();
   if(req != nullptr){
-    struct timespec myReq = {0};
-    ptracer::writeToTracee(traceePtr<struct timespec>(req), myReq, s.traceePid);
+    uint64_t rsp = (uint64_t) t.getRsp().ptr;
+    struct timespec* myReq = (timespec*) (rsp - 128 - sizeof(struct timespec));
+    struct timespec localReq = {0};
+
+    ptracer::writeToTracee(traceePtr<struct timespec>(myReq), localReq, s.traceePid);
+    t.writeArg1((uint64_t) myReq);
   }
   return false;
 }
