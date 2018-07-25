@@ -479,6 +479,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<getrlimitSystemCall>(syscallNumber, syscallName);
   case SYS_getrusage:
     return make_unique<getrusageSystemCall>(syscallNumber, syscallName);
+  case SYS_getpid:
+    return make_unique<getpidSystemCall>(syscallNumber, syscallName);
   case SYS_gettimeofday:
     return make_unique<gettimeofdaySystemCall>(syscallNumber, syscallName);
   case SYS_ioctl:
