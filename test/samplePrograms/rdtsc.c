@@ -7,4 +7,6 @@ int main()
 
     i = __rdtsc();
     printf("RDTSC: %llu ticks\n", i);
+    i = __rdtsc();
+    printf("RDTSC: %llu ticks\n", i);
 }

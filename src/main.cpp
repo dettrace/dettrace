@@ -24,6 +24,7 @@
 #include <stdarg.h>
 #include <libgen.h>
 #include <sys/mount.h>
+#include <sys/prctl.h>
 
 #include <iostream>
 #include <tuple>
@@ -176,6 +177,10 @@ int main(int argc, char** argv){
     cloneFlags &= ~CLONE_NEWUSER;
   }
 
+  doWithCheck(prctl(PR_SET_TSC, PR_TSC_SIGSEGV, 0, 0, 0), "Pre-clone prctl error");
+
+  doWithCheck(prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0), "Pre-clone prctl error: setting no new privs");
+
   pid_t pid = clone(runTracee, child_stack + STACK_SIZE, cloneFlags, (void*) &args);
   if(pid == -1){
     string reason = strerror(errno);
@@ -253,6 +258,7 @@ int runTracee(void* voidArgs){
   raise(SIGSTOP);
 
   myFilter.loadFilterToKernel();
+
 
   // execvpe() duplicates the actions of the shell in searching  for  an executable file
   // if the specified filename does not contain a slash (/) character.
