@@ -10,6 +10,8 @@ PIPE_BINARIES= $(addsuffix .bin,$(PIPE_ROOTS))
 # built-in Linux utilities, nothing to build
 LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat # relativeTimeStamps1 relativeTimeStamps2 tars to fix one day.
 
+SHELL_SCRIPTS= bash1.sh 
+
 # tests of random number generator insns, need special build flags
 BROADWELL_ROOTS= rdrand rdseed
 BROADWELL_BINARIES= $(addsuffix .bin,$(BROADWELL_ROOTS))
@@ -21,8 +23,10 @@ build: $(SIMPLE_BINARIES) $(PIPE_BINARIES) $(BROADWELL_BINARIES)
 
 CC=clang
 
-test: run
-run: $(patsubst %.bin, %.ok, $(SIMPLE_BINARIES)) $(patsubst %.bin, %.ok, $(PIPE_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES)) $(patsubst %.bin, %.ok, $(BROADWELL_BINARIES))
+run: test
+test: test-binaries test-scripts
+test-binaries: $(patsubst %.bin, %.ok, $(SIMPLE_BINARIES)) $(patsubst %.bin, %.ok, $(PIPE_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES)) $(patsubst %.bin, %.ok, $(BROADWELL_BINARIES))
+test-scripts: $(patsubst %.sh, %.ok, $(SHELL_SCRIPTS))
 
 # compile each sample program binary
 $(SIMPLE_BINARIES): %.bin: %.c
@@ -49,6 +53,13 @@ setup:
 %.ok: %.bin setup	
 	@echo "   Testing $(basename $<)..."
 	@python3 timeout.py 5s $(DETTRACE) ./$< > ActualOutputs/$(basename $<).output
+	@$(DIFF_CMD) ActualOutputs/$(basename $<).output ExpectedOutputs/$(basename $<).output
+
+# SHELL_SCRIPTS tests:
+%.ok: %.sh setup
+	@echo "   Testing script $(basename $<)..."
+#       Redirect both stdout and stderr (danger?):
+	@$(DETTRACE) ./$< > ActualOutputs/$(basename $<).output 2>&1
 	@$(DIFF_CMD) ActualOutputs/$(basename $<).output ExpectedOutputs/$(basename $<).output
 
 # Linux utilities, which in general need to be run with apropriate flags and/or setup/teardown
@@ -232,4 +243,4 @@ tgkill.ok: tgkill.bin
 .PHONY: build setup run clean test
 clean:
 	$(RM) $(FUSE_FILE)
-	$(RM) *.bin partialfs 
+	$(RM) *.bin partialfs ActualOutputs/*
