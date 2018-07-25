@@ -1,5 +1,5 @@
 # binaries that are simple to build (1 source file, same name as binary)
-SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat  sigsegv sigill sigabrt kill tgkill selectWithoutTimeout selectWithTimeout getdents getdents64 pollWithoutTimeout pollWithPositiveTimeout pollWithNegativeTimeout nanosleep # simpleThreads multipleThreads
+SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat  sigsegv sigill sigabrt kill tgkill selectWithoutTimeout selectWithTimeout getdents getdents64 pollWithoutTimeout pollWithPositiveTimeout pollWithNegativeTimeout rdtsc rdtscp nanosleep # cpuid simpleThreads multipleThreads
 
 # binaries for pipe tests, they use a parameterized build
 PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
@@ -8,7 +8,7 @@ PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
 LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat # relativeTimeStamps1 relativeTimeStamps2 tars to fix one day.
 
 # tests of random number generator insns, need special build flags
-BROADWELL_BINARIES=rdrand rdseed rdtsc cpuid
+BROADWELL_BINARIES=rdrand rdseed 
 
 DIFF_CMD=diff
 
@@ -31,10 +31,8 @@ rdrand.ok: rdrand
 	@echo "   **IGNORING** $^ test..."
 rdseed.ok: rdseed
 	@echo "   **IGNORING** $^ test..."
-rdtsc.ok: rdtsc
-	@echo "   **IGNORING** $^ test..."
-cpuid.ok: cpuid
-	@echo "   **IGNORING** $^ test..."
+# cpuid.ok: cpuid
+# 	@echo "   **IGNORING** $^ test..."
 
 setup:
 	@mkdir -p ActualOutputs
