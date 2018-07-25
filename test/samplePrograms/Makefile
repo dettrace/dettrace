@@ -10,6 +10,8 @@ LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat # relativeTimeStamps1 rel
 # tests of random number generator insns, need special build flags
 BROADWELL_BINARIES=rdrand rdseed 
 
+CXX_BINARIES=random_device
+
 DIFF_CMD=diff
 
 build: $(SIMPLE_BUILD_BINARIES) $(PIPE_BINARIES) $(BROADWELL_BINARIES)
@@ -25,6 +27,9 @@ $(SIMPLE_BUILD_BINARIES): %: %.c
 # HW RNG tests need >=broadwell codegen
 $(BROADWELL_BINARIES): %: %.c
 	$(CC) $< -Wall -g -o $@ -pthread -std=gnu99 -march=broadwell
+
+$(CXX_BINARIES): %: %.cpp
+	$(CXX) $< -Wall -g -o $@
 
 # NB: disable special cpu insn tests for now
 rdrand.ok: rdrand
