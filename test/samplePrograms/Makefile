@@ -1,14 +1,14 @@
 # binaries that are simple to build (1 source file, same name as binary)
-SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat simpleThreads multipleThreads sigsegv sigill sigabrt kill tgkill alarm selectWithoutTimeout selectWithTimeout setitimer-real setitimer-virtual setitimer-prof
-PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
+SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat simpleThreads multipleThreads sigsegv sigill sigabrt kill tgkill alarm selectWithoutTimeout selectWithTimeout
+SPECIAL_BUILD_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR setitimer-real setitimer-virtual setitimer-prof getitimer-real getitimer-virtual getitimer-prof
 LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat getdents getdents64 # relativeTimeStamps1 relativeTimeStamps2 tars to fix one day.
 
 DIFF_CMD=diff
 
-build: $(SIMPLE_BUILD_BINARIES) $(PIPE_BINARIES)
+build: $(SIMPLE_BUILD_BINARIES) $(SPECIAL_BUILD_BINARIES)
 
 
-run: $(patsubst %, %.ok, $(SIMPLE_BUILD_BINARIES)) $(patsubst %, %.ok, $(PIPE_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES))
+run: $(patsubst %, %.ok, $(SIMPLE_BUILD_BINARIES)) $(patsubst %, %.ok, $(SPECIAL_BUILD_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES))
 
 # compile each sample program binary
 $(SIMPLE_BUILD_BINARIES): %: %.c
@@ -196,6 +196,21 @@ pipe-cWpcR: pipe-rw.c
 pipe-pcWpcR: pipe-rw.c
 	clang $^ -Wall -g -DPARENT_WRITE=true -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
 
+# parameterized get/setitimer tests
+
+getitimer-real: getitimer.c
+	clang $^ -Wall -g -DWHICH_ITIMER=ITIMER_REAL -o $@
+getitimer-virtual: getitimer.c
+	clang $^ -Wall -g -DWHICH_ITIMER=ITIMER_VIRTUAL -o $@
+getitimer-prof: getitimer.c
+	clang $^ -Wall -g -DWHICH_ITIMER=ITIMER_PROF -o $@
+setitimer-real: setitimer.c
+	clang $^ -Wall -g -DWHICH_ITIMER=ITIMER_REAL -o $@
+setitimer-virtual: setitimer.c
+	clang $^ -Wall -g -DWHICH_ITIMER=ITIMER_VIRTUAL -o $@
+setitimer-prof: setitimer.c
+	clang $^ -Wall -g -DWHICH_ITIMER=ITIMER_PROF -o $@
+
 kill.ok: kill
 	@for s in $$(seq 1 64); do echo "   Testing $< $$s..." && (python3 timeout.py 5s ../../bin/dettrace ./$< $$s 2> ActualOutputs/$<-$$s.output || true) && $(DIFF_CMD) ActualOutputs/$<-$$s.output ExpectedOutputs/$<.output ; done
 
@@ -205,4 +220,4 @@ tgkill.ok: tgkill
 
 .PHONY: build setup run clean
 clean:
-	$(RM) $(SIMPLE_BUILD_BINARIES) partialfs $(PIPE_BINARIES)
+	$(RM) $(SIMPLE_BUILD_BINARIES) partialfs $(SPECIAL_BUILD_BINARIES)
