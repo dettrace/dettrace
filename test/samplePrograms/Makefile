@@ -223,7 +223,7 @@ pipe-pcWpcR.bin: pipe-rw.c
 	$(CC) $^ -Wall -g -DPARENT_WRITE=true -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
 
 kill.ok: kill.bin
-	@for s in $$(seq 1 64); do echo "   Testing $< $$s..." && (python3 timeout.py 5s $(DETTRACE) ./$< $$s 2> ActualOutputs/$<-$$s.output || true) && $(DIFF_CMD) ActualOutputs/$<-$$s.output ExpectedOutputs/$<.output ; done
+	@for s in $$(seq 1 64); do echo "   Testing $(basename $<) $$s..." && (python3 timeout.py 5s $(DETTRACE) ./$< $$s 2> ActualOutputs/$(basename $<)-$$s.output || true) && $(DIFF_CMD) ActualOutputs/$(basename $<)-$$s.output ExpectedOutputs/$(basename $<).output ; done
 
 # NB: we allow SIGABRT to be sent via tgkill, to support abort() calls
 tgkill.ok: tgkill.bin
