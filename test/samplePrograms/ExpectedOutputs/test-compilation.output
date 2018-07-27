@@ -1,0 +1,8 @@
+compile test with gcc..                                                     OK
+compile test with clang-6.0..                                               OK
+compile test with g++..                                                     OK
+compile test with clang++-6.0..                                             OK
+compile & run helloworld.c with gcc..	hello world!
+compile & run helloworld.c with clang-6.0..	hello world!
+compile & run helloworld.cc with g++..	hello world!
+compile & run helloworld.cc with clang++-6.0..	hello world!

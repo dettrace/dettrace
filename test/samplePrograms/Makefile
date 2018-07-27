@@ -10,7 +10,7 @@ PIPE_BINARIES= $(addsuffix .bin,$(PIPE_ROOTS))
 # built-in Linux utilities, nothing to build
 LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat # relativeTimeStamps1 relativeTimeStamps2 tars to fix one day.
 
-SHELL_SCRIPTS= bash1.sh 
+SHELL_SCRIPTS= bash1.sh test-compilation.sh
 
 # tests of random number generator insns, need special build flags
 BROADWELL_ROOTS= rdrand rdseed
