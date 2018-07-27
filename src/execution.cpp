@@ -400,9 +400,9 @@ bool execution::handleSeccomp(const pid_t traceesPid){
 }
 // =======================================================================================
 void execution::handleSignal(int sigNum, const pid_t traceesPid){
-  if(sigNum == SIGALRM){
-    throw runtime_error("SIGALRM found, currently not supported.");
-  }
+  //if(sigNum == SIGALRM){
+  //  throw runtime_error("SIGALRM found, currently not supported.");
+  //}
   // Remember to deliver this signal to the tracee for next event! Happens in
   // getNextEvent.
   states.at(traceesPid).signalToDeliver = sigNum;
@@ -495,6 +495,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<openSystemCall>(syscallNumber, syscallName);
   case SYS_openat:
     return make_unique<openatSystemCall>(syscallNumber, syscallName);
+  case SYS_pause:
+    return make_unique<pauseSystemCall>(syscallNumber, syscallName);
   case SYS_pipe:
     return make_unique<pipeSystemCall>(syscallNumber, syscallName);
   case SYS_pipe2:

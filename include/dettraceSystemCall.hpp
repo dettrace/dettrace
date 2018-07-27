@@ -34,6 +34,7 @@ void replaySystemCall(ptracer& t, uint64_t systemCall);
 class alarmSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -589,6 +590,17 @@ public:
 
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/**
+ * int pause(void);
+ *
+ * pause() causes the calling process (or thread) to sleep until a signal is delivered that 
+ * either terminates the process or causes the invocation of a signal-catching function.
+ */
+class pauseSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
 };
 // =======================================================================================
 /**

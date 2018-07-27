@@ -11,6 +11,7 @@
 #include <sys/times.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/syscall.h>
 
 #include <limits>
 #include <cstring>
@@ -37,6 +38,7 @@ void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName)
 void printInfoString(uint64_t addressOfCString, globalState& gs, state& s,
                      string postFix = " path: ");
 void injectFstat(globalState& gs, state& s, ptracer& t, int fd);
+void injectPause(globalState& gs, state& s, ptracer& t);
 void noopSystemCall(globalState& gs, ptracer& t);
 /**
  *
@@ -70,6 +72,13 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t,
 bool accessSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), gs, s);
   return false;
+}
+// =======================================================================================
+bool alarmSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  // Inject pause and send alarm signal
+  injectPause(gs, s, t);
+  //int retVal = syscall(SYS_tgkill, t.getPid(), t.getPid(), SIGALRM);
+  return true;
 }
 // =======================================================================================
 bool chdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -1633,6 +1642,13 @@ void injectFstat(globalState& gs, state& s, ptracer& t, int fd){
   replaySystemCall(t, SYS_fstat);
 
   gs.log.writeToLog(Importance::info, "fstat(%d, %p)!\n", fd, traceesMem);
+}
+// =======================================================================================
+void injectPause(globalState& gs, state& s, ptracer& t){
+  gs.log.writeToLog(Importance::info, "Injecting pause call to tracee!\n");
+  s.syscallInjected = true;
+
+  replaySystemCall(t, SYS_pause);
 }
 // =======================================================================================
 bool injectNewfstatatIfNeeded(globalState& gs, state& s, ptracer& t, int dirfd,
