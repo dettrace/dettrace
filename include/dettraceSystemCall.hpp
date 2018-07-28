@@ -389,6 +389,17 @@ public:
 };
 // =======================================================================================
 /**
+ * We use getpid to suppress other system calls that we don't want to allow through.
+ * When the debugging flag is on, the post hook is always called for seeing return values
+ * so we add this dummy call for intercepting gettpid.
+ */
+class getpidSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+};
+
+// =======================================================================================
+/**
  *
  * int gettimeofday(struct timeval *tv, struct timezone *tz);
  *

@@ -1,6 +1,8 @@
+BUILD=debug
 CXX = clang++
-DEBUG =  -O0 -g
-CXXFLAGS = $(DEBUG) -std=c++14 -Wall $(INCLUDE)
+cxxflags.debug   = -O0 -g
+cxxflags.release = -O3 -g
+CXXFLAGS = ${cxxflags.${BUILD}} -std=c++14 -Wall $(INCLUDE)
 
 src = $(wildcard *.cpp)
 obj = $(src:.cpp=.o)

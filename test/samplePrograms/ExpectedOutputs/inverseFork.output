@@ -1,2 +1,2 @@
-Parent: My pid: 1
 Child: My pid: 2
+Parent: My pid: 1

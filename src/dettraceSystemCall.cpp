@@ -549,9 +549,20 @@ void lgetxattrSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
 // =======================================================================================
 bool
 nanosleepSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  noopSystemCall(gs, t);
-  sched.reportProgress(s.traceePid);
-  sched.preemptAndScheduleNext(s.traceePid, preemptOptions::runnable);
+  // noopSystemCall(gs, t);
+  // sched.reportProgress(s.traceePid);
+  // sched.preemptAndScheduleNext(s.traceePid, preemptOptions::runnable);
+
+  // Write zero seconds to time required to skip waiting.
+  struct timespec *req = (struct timespec *) t.arg1();
+  if(req != nullptr){
+    uint64_t rsp = (uint64_t) t.getRsp().ptr;
+    struct timespec* myReq = (timespec*) (rsp - 128 - sizeof(struct timespec));
+    struct timespec localReq = {0};
+
+    ptracer::writeToTracee(traceePtr<struct timespec>(myReq), localReq, s.traceePid);
+    t.writeArg1((uint64_t) myReq);
+  }
   return false;
 }
 // =======================================================================================
