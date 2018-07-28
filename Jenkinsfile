@@ -14,6 +14,7 @@ pipeline {
       steps {
         echo "PATH is: $PATH"
         sh "lsb_release -a"
+        sh "uname -a"
         // Warning: this has global side effects.  Cannot run twice on one machine:
         sh "make docker"
         sh "make test-docker"

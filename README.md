@@ -35,5 +35,6 @@ We use a whitelist to determinize system calls. Therefore any system call not im
 will throw a runtime exception.
 
 ## Testing
-Unit tests are automatically built in the compilation step. You may run these tests from
-the script `python3 runTests.py`. This script merely calls `./dettrace` on the unit tests and sample programs.
+
+`make test` invokes the test runner.  Right now [2018.07.13] we are
+running our tests through Docker (`make test-docker`).
