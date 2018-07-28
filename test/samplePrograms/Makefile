@@ -1,6 +1,6 @@
 # binaries that are simple to build (1 source file, same name as binary)
-SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat simpleThreads multipleThreads sigsegv sigill sigabrt kill tgkill alarm selectWithoutTimeout selectWithTimeout
-SPECIAL_BUILD_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR setitimer-real setitimer-virtual setitimer-prof getitimer-real getitimer-virtual getitimer-prof
+SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat simpleThreads multipleThreads sigsegv sigill sigabrt kill tgkill alarm-handler alarm-nohandler alarm-ignore selectWithoutTimeout selectWithTimeout
+SPECIAL_BUILD_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR #setitimer-real setitimer-virtual setitimer-prof getitimer-real getitimer-virtual getitimer-prof
 LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat getdents getdents64 # relativeTimeStamps1 relativeTimeStamps2 tars to fix one day.
 
 DIFF_CMD=diff
@@ -210,6 +210,11 @@ setitimer-virtual: setitimer.c
 	clang $^ -Wall -g -DWHICH_ITIMER=ITIMER_VIRTUAL -o $@
 setitimer-prof: setitimer.c
 	clang $^ -Wall -g -DWHICH_ITIMER=ITIMER_PROF -o $@
+
+alarm-ignore.ok: alarm-ignore
+	@echo "   Testing $<..."
+#	HACK: check that we time out as expected (247 == -9 means received SIGKILL due to timeout)
+	@python3 timeout.py 2s ../../bin/dettrace ./$< || [ $$? -eq 247 ]
 
 kill.ok: kill
 	@for s in $$(seq 1 64); do echo "   Testing $< $$s..." && (python3 timeout.py 5s ../../bin/dettrace ./$< $$s 2> ActualOutputs/$<-$$s.output || true) && $(DIFF_CMD) ActualOutputs/$<-$$s.output ExpectedOutputs/$<.output ; done

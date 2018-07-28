@@ -35,6 +35,7 @@ class alarmSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -601,6 +602,8 @@ public:
 class pauseSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -853,6 +856,30 @@ public:
  * TODO
  */
 class set_robust_listSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/**
+ * int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
+ * 
+ * Setup a signal handler. Currently only used for determinizing alarm()
+ */
+class rt_sigactionSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/**
+ * sighandler_t signal(int signum, sighandler_t handler);
+ * 
+ * Setup a signal handler. Currently only used for determinizing alarm()
+ */
+class signalSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;

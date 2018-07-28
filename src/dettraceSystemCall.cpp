@@ -75,11 +75,40 @@ bool accessSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 }
 // =======================================================================================
 bool alarmSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // Inject pause and send alarm signal
-  injectPause(gs, s, t);
-  //int retVal = syscall(SYS_tgkill, t.getPid(), t.getPid(), SIGALRM);
+  gs.log.writeToLog(Importance::info, "alarm pre-hook, requesting alarm in %u second(s)\n", t.arg1());
+  /*
+    To determine how to handle alarm(), we need to know what kind of SIGALRM
+    handler the tracee has. For this, we trap on rt_sigaction() to observe the
+    addition/removal of SIGALRM handlers or the ignoring of SIGALRM
+    entirely. See state::actualSigalrmHandler.
+
+    We suppress the original alarm() call with an argument of 0, which means
+    don't generate a real SIGALRM signal. We allow this to go to the kernel, and
+    in the alarm post-hook, if SIGALRM is ignored by the tracee, we do nothing
+    as alarm() is effectively a NOP and we are done. 
+
+    If the tracee has a custom or default SIGALRM handler, we inject a pause()
+    syscall. In the pause pre-hook we know the tracee is just about to block, so
+    we send a signal *from the monitor* to the tracee. The tracee then
+    blocks. If the tracee has a custom SIGALRM handler, we send a SIGALRM from
+    the monitor, the handler runs and then pause() returns and in the post-hook
+    we return 0, to model the original alarm() call which is all the tracee
+    knows about. If the tracee uses the default handler, then we terminate the
+    tracee via SIGKILL per the default SIGALRM behavior.
+   */
+  t.writeArg1(0);
   return true;
 }
+void alarmSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "alarm post-hook, previous alarm was due in %u second(s) (should be 0)\n", t.getReturnValue());
+  if (0 != t.getReturnValue()) {
+    throw runtime_error("There should never be a previous alarm!");
+  }
+  if (SIGNAL_IGNORED != s.actualSigalrmHandler) {
+    injectPause(gs, s, t);
+  }
+}
+
 // =======================================================================================
 bool chdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), gs, s);
@@ -640,6 +669,54 @@ void openatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   }
 }
 // =======================================================================================
+bool pauseSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "pause pre-hook\n");
+
+  if (s.syscallInjected) {
+
+    switch (s.actualSigalrmHandler) {
+    case CUSTOM_SIGNAL_HANDLER: {
+      gs.log.writeToLog(Importance::info, "tracee has a custom SIGALRM handler, sending SIGALRM to pid %u\n", t.getPid());
+      int retVal = syscall(SYS_tgkill, t.getPid(), t.getPid(), SIGALRM);
+      if (0 != retVal) {
+        throw runtime_error("injecting a SIGALRM failed, tgkill returned " + to_string(retVal));
+      }
+    }
+      break;
+    case DEFAULT_HANDLER: {
+      // if tracee doesn't have a SIGALRM handler, we need to kill the tracee per `man 7 signal`
+      gs.log.writeToLog(Importance::info, "tracee has default SIGALRM handler, sending SIGKILL to pid %u\n", t.getPid());
+      int retVal = syscall(SYS_tgkill, t.getPid(), t.getPid(), SIGKILL);
+      if (0 != retVal) {
+        throw runtime_error("injecting a SIGKILL failed, tgkill returned " + to_string(retVal));
+      }      
+    }
+      break;
+    case SIGNAL_IGNORED: // don't do anything
+      gs.log.writeToLog(Importance::info, "tracee is ignoring SIGALRMs, doing nothing\n");
+      break;
+    default:
+      throw runtime_error("invalid state::actualSigalrmHandler " + to_string(s.actualSigalrmHandler));
+    }
+    return true;
+  }
+  
+  return false;
+}
+void pauseSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "pause post-hook\n");
+  if (s.syscallInjected) {
+    uint64_t retval = t.getReturnValue();
+    gs.log.writeToLog(Importance::info, "pause returned %lld\n", retval);
+
+    // ick: fake the return value for the alarm() call we hijacked. 0 means
+    // there was no previously scheduled alarm.
+    s.syscallInjected = false;
+    t.setReturnRegister(0);
+  }
+}
+
+// =======================================================================================
 bool pipeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "Making this pipe non-blocking\n");
   // Convert pipe call to pipe2 to set O_NONBLOCK.
@@ -953,6 +1030,49 @@ void rmdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     s.firstTrySystemcall = true;
   }
 }
+
+// =======================================================================================
+bool rt_sigactionSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "rt_sigaction pre-hook for signal "+to_string(t.arg1())+"\n");
+  if (SIGALRM == t.arg1() && 0 != t.arg2()) {
+    s.originalArg1 = t.arg1();
+    // figure out what kind of SIGALRM handler the tracee is trying to install
+    struct sigaction sa = ptracer::readFromTracee( traceePtr<struct sigaction>((struct sigaction*)t.arg2()), t.getPid() );
+    gs.log.writeToLog(Importance::info, "sa_flags: "+to_string(sa.sa_flags)+" "+to_string(SA_RESETHAND)+" \n");
+    gs.log.writeToLog(Importance::info, "sa_handler: "+to_string((uint64_t)sa.sa_handler)+"\n");
+
+    // JLD: under dettrace, programs that should generate SA_RESETHAND
+    // (according to strace) don't appear here correctly (sa_flags is often -1,
+    // with every field is set, which seems like garbage). Maybe I'm reading the
+    // struct sigaction incorrectly? Or maybe there's one definition in the
+    // program and another one here?
+    
+    //if (sa.sa_flags & SA_RESETHAND) {
+      // SA_RESETHAND flag specified, which restores SIG_DFL after running the custom handler once
+      // this is too complicated, so just throw an error
+    //  throw runtime_error("we don't support rt_sigaction's SA_RESETHAND flag");
+    //}
+    if (SIG_IGN == sa.sa_handler) {
+      s.requestedSigalrmHandler = SIGNAL_IGNORED;
+    } else if (SIG_DFL == sa.sa_handler) {
+      s.requestedSigalrmHandler = DEFAULT_HANDLER;
+    } else {
+      s.requestedSigalrmHandler = CUSTOM_SIGNAL_HANDLER;
+    }
+    gs.log.writeToLog(Importance::info, "SIGALRM handler requested: "+to_string(s.requestedSigalrmHandler)+"\n");
+  }
+  return true;
+}
+void rt_sigactionSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "rt_sigaction post-hook\n");
+  if (SIGALRM == s.originalArg1 && 0 == t.getReturnValue()) {
+    s.actualSigalrmHandler = s.requestedSigalrmHandler;
+    gs.log.writeToLog(Importance::info, "requested SIGALRM handler installed: "+to_string(s.actualSigalrmHandler)+"\n");
+    s.requestedSigalrmHandler = INVALID;
+  }
+  return;
+}
+
 // =======================================================================================
 // TODO
 bool sendtoSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -1034,10 +1154,10 @@ void selectSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
 bool set_robust_listSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   return true;
 }
-
 void set_robust_listSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   return;
 }
+
 // =======================================================================================
 bool statSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), gs, s);
