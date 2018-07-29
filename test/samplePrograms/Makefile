@@ -4,7 +4,7 @@ SIMPLE_ROOTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname 
 SIMPLE_BINARIES= $(addsuffix .bin,$(SIMPLE_ROOTS))
 
 # binaries for pipe tests, they use a parameterized build
-PIPE_ROOTS= pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
+PIPE_ROOTS= pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR #setitimer-real setitimer-virtual setitimer-prof getitimer-real getitimer-virtual getitimer-prof
 PIPE_BINARIES= $(addsuffix .bin,$(PIPE_ROOTS))
 
 # built-in Linux utilities, nothing to build
@@ -84,17 +84,17 @@ relativeTimeStamps2.ok:
 	@echo "   Testing $@..."
 	@bash -c 'diff <(python3 timeout.py 5s $(DETTRACE) bash -c "touch temp.txt && ls -t . | head -n 1") <(touch temp.txt && ls -t . | head -n 1)'
 
-getdents.ok: getdents
-	@echo "   Testing $<..."
-	@python3 timeout.py 5s $(DETTRACE) ./$< > ActualOutputs/$<.output.1
-	@python3 timeout.py 5s $(DETTRACE) ./$< > ActualOutputs/$<.output.2
-	@diff ActualOutputs/$<.output.1 ActualOutputs/$<.output.2
+getdents.ok: getdents.bin
+	@echo "   Testing $(basename $<)..."
+	@python3 timeout.py 5s $(DETTRACE) ./$< > ActualOutputs/$(basename $<).output.1
+	@python3 timeout.py 5s $(DETTRACE) ./$< > ActualOutputs/$(basename $<).output.2
+	@diff ActualOutputs/$(basename $<).output.1 ActualOutputs/$(basename $<).output.2
 
-getdents64.ok: getdents64
-	@echo "   Testing $<..."
-	@python3 timeout.py 5s $(DETTRACE) ./$< > ActualOutputs/$<.output.1
-	@python3 timeout.py 5s $(DETTRACE) ./$< > ActualOutputs/$<.output.2
-	@diff ActualOutputs/$<.output.1 ActualOutputs/$<.output.2
+getdents64.ok: getdents64.bin
+	@echo "   Testing $(basename $<)..."
+	@python3 timeout.py 5s $(DETTRACE) ./$< > ActualOutputs/$(basename $<).output.1
+	@python3 timeout.py 5s $(DETTRACE) ./$< > ActualOutputs/$(basename $<).output.2
+	@diff ActualOutputs/$(basename $<).output.1 ActualOutputs/$(basename $<).output.2
 
 sshkeygen.ok:
 	@echo "   Testing ssh-keygen..."
@@ -193,11 +193,11 @@ cat.ok:
 
 # Other DetTrace tests, with non-trivial invocation or cleanup
 
-deadlockingPipe.ok: deadlockingPipe
-	@echo "   Testing $<..."
+deadlockingPipe.ok: deadlockingPipe.bin
+	@echo "   Testing $(basename $<)..."
 #	ignore expected error when DetTrace detects the deadlock
-	@($(DETTRACE) ./$< || true) 2> ActualOutputs/$<.output
-	@$(DIFF_CMD) ActualOutputs/$<.output ExpectedOutputs/$<.output
+	@($(DETTRACE) ./$< || true) 2> ActualOutputs/$(basename $<).output
+	@$(DIFF_CMD) ActualOutputs/$(basename $<).output ExpectedOutputs/$(basename $<).output
 
 # FUSE tests for read/write retrying
 
