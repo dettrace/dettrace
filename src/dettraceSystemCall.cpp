@@ -696,11 +696,11 @@ bool pauseSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
       break;
     case DEFAULT_HANDLER: {
       // if tracee doesn't have a SIGALRM handler, we need to kill the tracee per `man 7 signal`
-      gs.log.writeToLog(Importance::info, "tracee has default SIGALRM handler, sending SIGKILL to pid %u\n", t.getPid());
-      int retVal = syscall(SYS_tgkill, t.getPid(), t.getPid(), SIGKILL);
-      if (0 != retVal) {
-        throw runtime_error("injecting a SIGKILL failed, tgkill returned " + to_string(retVal));
-      }      
+      gs.log.writeToLog(Importance::info, "tracee has default SIGALRM handler, injecting exit() for pid %u\n", t.getPid());
+      replaySystemCall(t, SYS_exit);
+      t.writeArg1( 128 + SIGALRM ); // status
+      s.syscallInjected = false;
+      return false; // there shouldn't be a post-hook for exit
     }
       break;
     case SIGNAL_IGNORED: // don't do anything
