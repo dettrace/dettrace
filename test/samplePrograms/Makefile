@@ -1,5 +1,5 @@
 # binaries that are simple to build (1 source file, same name as binary)
-SIMPLE_ROOTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat  sigsegv sigill sigabrt kill tgkill selectWithoutTimeout selectWithTimeout getdents getdents64 pollWithoutTimeout pollWithPositiveTimeout pollWithNegativeTimeout rdtsc rdtscp nanosleep nanosleep-par
+SIMPLE_ROOTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat  sigsegv sigill sigabrt kill tgkill alarm-handler alarm-nohandler alarm-ignore selectWithoutTimeout selectWithTimeout getdents getdents64 pollWithoutTimeout pollWithPositiveTimeout pollWithNegativeTimeout rdtsc rdtscp nanosleep nanosleep-par
 # cpuid simpleThreads multipleThreads
 SIMPLE_BINARIES= $(addsuffix .bin,$(SIMPLE_ROOTS))
 
@@ -232,6 +232,11 @@ pipe-cWpcR.bin: pipe-rw.c
 	$(CC) $^ -Wall -g -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
 pipe-pcWpcR.bin: pipe-rw.c
 	$(CC) $^ -Wall -g -DPARENT_WRITE=true -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
+
+alarm-ignore.ok: alarm-ignore.bin
+	@echo "   Testing $(basename $<)..."
+#	HACK: check that we time out as expected (247 == -9 means received SIGKILL due to timeout)
+	@python3 timeout.py 2s ../../bin/dettrace ./$< || [ $$? -eq 247 ]
 
 kill.ok: kill.bin
 	@for s in $$(seq 1 64); do echo "   Testing $(basename $<) $$s..." && (python3 timeout.py 5s $(DETTRACE) ./$< $$s 2> ActualOutputs/$(basename $<)-$$s.output || true) && $(DIFF_CMD) ActualOutputs/$(basename $<)-$$s.output ExpectedOutputs/$(basename $<).output ; done

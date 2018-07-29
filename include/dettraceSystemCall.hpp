@@ -34,6 +34,8 @@ void replaySystemCall(ptracer& t, uint64_t systemCall);
 class alarmSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -603,6 +605,19 @@ public:
 };
 // =======================================================================================
 /**
+ * int pause(void);
+ *
+ * pause() causes the calling process (or thread) to sleep until a signal is delivered that 
+ * either terminates the process or causes the invocation of a signal-catching function.
+ */
+class pauseSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/**
  * int pipe(int pipefd[2]);
  *
  * Create a pipe communication channel.
@@ -852,6 +867,30 @@ public:
  * TODO
  */
 class set_robust_listSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/**
+ * int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
+ * 
+ * Setup a signal handler. Currently only used for determinizing alarm()
+ */
+class rt_sigactionSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/**
+ * sighandler_t signal(int signum, sighandler_t handler);
+ * 
+ * Setup a signal handler. Currently only used for determinizing alarm()
+ */
+class signalSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;

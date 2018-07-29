@@ -410,15 +410,11 @@ bool execution::handleSeccomp(const pid_t traceesPid){
 }
 // =======================================================================================
 void execution::handleSignal(int sigNum, const pid_t traceesPid){
-  if(sigNum == SIGALRM){
-    throw runtime_error("SIGALRM found, currently not supported.");
-  }
-
   if(sigNum == SIGSEGV) {
 
     tracer.updateState(traceesPid);
     uint32_t curr_insn32 = (tracer.readFromTracee(traceePtr<uint32_t> ((uint32_t*)tracer.getRip().ptr), traceesPid));
-
+    
     if ((curr_insn32 << 16) == 0x310F0000 || (curr_insn32 << 8) == 0xF9010F00) {
 
       auto msg = "[%d] Tracer: Received rdtsc: Reading next instruction.\n";
@@ -455,9 +451,6 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
     auto coloredMsg = log.makeTextColored(Color::blue, msg);
     auto virtualPid = pidMap.getVirtualValue(traceesPid);
     log.writeToLog(Importance::inter, coloredMsg, virtualPid, sigNum);
-
-
-
   return;
 }
 // =======================================================================================
@@ -466,6 +459,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
   switch(syscallNumber){
   case SYS_access:
     return make_unique<accessSystemCall>(syscallNumber, syscallName);
+  case SYS_alarm:
+    return make_unique<alarmSystemCall>(syscallNumber, syscallName);
   case SYS_chdir:
     return make_unique<chdirSystemCall>(syscallNumber, syscallName);
   case SYS_chown:
@@ -543,6 +538,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<openSystemCall>(syscallNumber, syscallName);
   case SYS_openat:
     return make_unique<openatSystemCall>(syscallNumber, syscallName);
+  case SYS_pause:
+    return make_unique<pauseSystemCall>(syscallNumber, syscallName);
   case SYS_pipe:
     return make_unique<pipeSystemCall>(syscallNumber, syscallName);
   case SYS_pipe2:
@@ -569,6 +566,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<renameat2SystemCall>(syscallNumber, syscallName);
   case SYS_rmdir:
     return make_unique<rmdirSystemCall>(syscallNumber, syscallName);
+  case SYS_rt_sigaction:
+    return make_unique<rt_sigactionSystemCall>(syscallNumber, syscallName);
   case SYS_sendto:
     return make_unique<sendtoSystemCall>(syscallNumber, syscallName);
   case SYS_select:

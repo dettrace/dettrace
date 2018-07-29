@@ -17,6 +17,8 @@
 
 using namespace std;
 
+enum sighandler_type { INVALID, CUSTOM_SIGNAL_HANDLER, DEFAULT_HANDLER, SIGNAL_IGNORED };
+
 // Needed to avoid recursive dependencies between classes.
 class systemCall;
 
@@ -120,6 +122,14 @@ public:
   /** Flag to let us know if the current system call was artifically injected by us. */
   bool syscallInjected = false;
 
+  /** What kind of SIGALRM handler this tracee has installed. We don't handle
+      everything, in particular sigaction's SA_RESTART semantics */
+  enum sighandler_type actualSigalrmHandler = DEFAULT_HANDLER;
+  /** What kind of SIGALRM handler this tracee has requested via
+      signal/sigaction. actualSigalrmHandler is updated if the syscall completes
+      successfully. */
+  enum sighandler_type requestedSigalrmHandler = INVALID;
+  
   bool rdfsNotNull = false; /**< Indicates whether rdfs is NULL. */
   bool wrfsNotNull = false; /**< Indicates whether wrfs is NULL. */
   bool exfsNotNull = false; /**< Indicates whether exfs is NULL. */
