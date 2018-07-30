@@ -88,12 +88,12 @@ bool usingOldKernel(){
   r = utsname.release;
   x = strtoul(r, &rp, 10);
   if (rp == r){
-    throw runtime_error("Problem parsing uname results.\n");
+    throw runtime_error("dettrace runtime exception: Problem parsing uname results.\n");
   }
   r = 1 + rp;
   y = strtoul(r, &rp, 10);
   if (rp == r){
-    throw runtime_error("Problem parsing uname results.\n");
+    throw runtime_error("dettrace runtime exception: Problem parsing uname results.\n");
   }
   r = 1 + rp;
   z = strtoul(r, &rp, 10);
@@ -144,11 +144,11 @@ int main(int argc, char** argv){
     try{
       debugLevel = stoi(str);
     }catch (...){
-      throw runtime_error("Invalid integer: " + str);
+      throw runtime_error("dettrace runtime exception: Invalid integer: " + str);
     }
 
     if(debugLevel < 0 || debugLevel > 5){
-      throw runtime_error("Debug level must be between [0,5].");
+      throw runtime_error("dettrace runtime exception: Debug level must be between [0,5].");
     }
   }
 
@@ -421,7 +421,7 @@ tuple<int, int, string, bool, bool, bool> parseProgramArguments(int argc, char* 
     case 'd':
       debugLevel = parseNum(optarg);
       if(debugLevel < 0 || debugLevel > 5){
-        throw runtime_error("Debug level must be between [0,5].");
+        throw runtime_error("dettrace runtime exception: Debug level must be between [0,5].");
       }
       break;
       // Help message.
@@ -439,7 +439,7 @@ tuple<int, int, string, bool, bool, bool> parseProgramArguments(int argc, char* 
       useColor = false;
       break;
     case '?':
-      throw runtime_error("Invalid option passed to detTrace!");
+      throw runtime_error("dettrace runtime exception: Invalid option passed to detTrace!");
     }
   }
 
@@ -470,12 +470,12 @@ void mountDir(string source, string target){
 
   /* Check if source path exists*/
   if (!fileExists(source)) {
-    throw runtime_error("Trying to mount source " + source + ". File does not exist.\n");
+    throw runtime_error("dettrace runtime exception: Trying to mount source " + source + ". File does not exist.\n");
   }
 
   /* Check if target path exists*/
   if (!fileExists(target))  {
-    throw runtime_error("Trying to mount target " + target + ". File does not exist.\n");
+    throw runtime_error("dettrace runtime exception: Trying to mount target " + target + ". File does not exist.\n");
   }
 
   doWithCheck(mount(source.c_str(), target.c_str(), nullptr, MS_BIND, nullptr),
@@ -547,7 +547,7 @@ void mkdirIfNotExist(string dir){
       return;
     }else{
       string reason { strerror(errno) };
-      throw runtime_error("Unable to make directory: " + dir + "\nReason: " + reason);
+      throw runtime_error("dettrace runtime exception: Unable to make directory: " + dir + "\nReason: " + reason);
     }
   }
   return;

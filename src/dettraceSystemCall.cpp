@@ -102,7 +102,7 @@ bool alarmSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
 void alarmSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "alarm post-hook, previous alarm was due in %u second(s) (should be 0)\n", t.getReturnValue());
   if (0 != t.getReturnValue()) {
-    throw runtime_error("There should never be a previous alarm!");
+    throw runtime_error("dettrace runtime exception: There should never be a previous alarm!");
   }
   if (SIGNAL_IGNORED != s.actualSigalrmHandler) {
     injectPause(gs, s, t);
@@ -244,7 +244,7 @@ void fstatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   if(s.syscallInjected){
     gs.log.writeToLog(Importance::info, "This fstat was inject for mtime puposes.\n");
     if((int) t.getReturnValue() < 0){
-      throw runtime_error("Unable to properly inject fstat call to tracee!\n"
+      throw runtime_error("dettrace runtime exception: Unable to properly inject fstat call to tracee!\n"
                           "fstat call returned: " +
                           to_string(t.getReturnValue()) + "\n");
     }
@@ -407,7 +407,7 @@ void getdents64SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, 
 void getpeernameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int ret = t.getReturnValue();
   if(ret == 0){
-    throw runtime_error("Call to getpeername with network socket not suported.\n");
+    throw runtime_error("dettrace runtime exception: Call to getpeername with network socket not suported.\n");
   }
   return;
 }
@@ -531,7 +531,7 @@ void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
           ){ // clone file
     return;
   }else{
-    throw runtime_error("Unsupported ioctl call: fd=" + to_string(t.arg1()) +
+    throw runtime_error("dettrace runtime exception: Unsupported ioctl call: fd=" + to_string(t.arg1()) +
                         " request=" + to_string(request));
   }
   return;
@@ -690,7 +690,7 @@ bool pauseSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
       gs.log.writeToLog(Importance::info, "tracee has a custom SIGALRM handler, sending SIGALRM to pid %u\n", t.getPid());
       int retVal = syscall(SYS_tgkill, t.getPid(), t.getPid(), SIGALRM);
       if (0 != retVal) {
-        throw runtime_error("injecting a SIGALRM failed, tgkill returned " + to_string(retVal));
+        throw runtime_error("dettrace runtime exception: injecting a SIGALRM failed, tgkill returned " + to_string(retVal));
       }
     }
       break;
@@ -707,7 +707,7 @@ bool pauseSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
       gs.log.writeToLog(Importance::info, "tracee is ignoring SIGALRMs, doing nothing\n");
       break;
     default:
-      throw runtime_error("invalid state::actualSigalrmHandler " + to_string(s.actualSigalrmHandler));
+      throw runtime_error("dettrace runtime exception: invalid state::actualSigalrmHandler " + to_string(s.actualSigalrmHandler));
     }
     return true;
   }
@@ -793,7 +793,7 @@ bool prlimit64SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
   // TODO: could also always overwrite first argument with zero
   int pid = (pid_t) t.arg1();
   if(pid != 0){
-    throw runtime_error("prlimit64: We do not support prlimit64 on other processes.\n "
+    throw runtime_error("dettrace runtime exception: prlimit64: We do not support prlimit64 on other processes.\n "
                         "(pid: " + to_string(pid));
   }
 
@@ -988,7 +988,7 @@ bool renameat2SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
   // We do not handle this flag TODO
 #ifdef RENAME_EXCHANGE
   if((flags | RENAME_EXCHANGE) == flags){
-    throw runtime_error("We do not handle RENAME_EXCHANGE flag.\n");
+    throw runtime_error("dettrace runtime exception: We do not handle RENAME_EXCHANGE flag.\n");
   }
 #endif
 
@@ -1063,7 +1063,7 @@ bool rt_sigactionSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
     //if (sa.sa_flags & SA_RESETHAND) {
       // SA_RESETHAND flag specified, which restores SIG_DFL after running the custom handler once
       // this is too complicated, so just throw an error
-    //  throw runtime_error("we don't support rt_sigaction's SA_RESETHAND flag");
+    //  throw runtime_error("dettrace runtime exception: we don't support rt_sigaction's SA_RESETHAND flag");
     //}
     if (SIG_IGN == sa.sa_handler) {
       s.requestedSigalrmHandler = SIGNAL_IGNORED;
@@ -1250,7 +1250,7 @@ bool tgkillSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     // ok
   } else {
     gs.log.writeToLog(Importance::info, "tgkillSystemCall::handleDetPre: tracee vtgid="+to_string(tgid)+" vtid=" +to_string(tid)+ " ptgid="+to_string(sched.pidMap.getVirtualValue(s.traceePid))+" trying to send unsupported signal="+to_string(signal));
-    throw runtime_error("tgkillSystemCall::handleDetPre: tracee trying to send unsupported signal");
+    throw runtime_error("dettrace runtime exception: tgkillSystemCall::handleDetPre: tracee trying to send unsupported signal");
   }
 
   return true;
@@ -1319,7 +1319,7 @@ void unameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
         sizeof(((struct utsname*)0)->release) < MEMBER_LENGTH ||
         sizeof(((struct utsname*)0)->version) < MEMBER_LENGTH ||
         sizeof(((struct utsname*)0)->machine) < MEMBER_LENGTH) {
-      throw runtime_error("unameSystemCall::handleDetPost: struct utsname members too small!");
+      throw runtime_error("dettrace runtime exception: unameSystemCall::handleDetPost: struct utsname members too small!");
     }
 
     // NB: this is our standard environment
@@ -1580,13 +1580,13 @@ void writevSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   // TODO: Handle bytes written.
   int retVal = t.getReturnValue();
   if (retVal < 0) {
-    throw runtime_error("Write failed with: " + string{ strerror(- retVal) });
+    throw runtime_error("dettrace runtime exception: Write failed with: " + string{ strerror(- retVal) });
   }
 
   // //uint16_t minus2 = t.readFromTracee((uint16_t*) (t.regs.rip - 2), s.traceePid);
   // uint16_t minus2 = t.readFromTracee((uint16_t*) (t.getRip() - 2), s.traceePid);
   // if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
-  //   throw runtime_error("Write failed with: non syscall insn");
+  //   throw runtime_error("dettrace runtime exception: Write failed with: non syscall insn");
   // }
   // ssize_t bytes_written = retVal;
   // s.totalBytes += bytes_written;
@@ -1638,7 +1638,7 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sc
 void replaySystemCall(ptracer& t, uint64_t systemCall){
   uint16_t minus2 = t.readFromTracee(traceePtr<uint16_t>((uint16_t*) ((uint64_t) t.getRip().ptr - 2)), t.getPid());
   if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
-    throw runtime_error("IP does not point to system call instruction!\n");
+    throw runtime_error("dettrace runtime exception: IP does not point to system call instruction!\n");
   }
 
   // Replay system call!

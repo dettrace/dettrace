@@ -24,7 +24,7 @@ pid_t scheduler::getNext(){
 
 void scheduler::removeAndScheduleParent(pid_t terminatedProcess, pid_t parent){
   if(! isFinished(parent)){
-    throw runtime_error("scheduleThisProcess: Parent : " + to_string(parent) +
+    throw runtime_error("dettrace runtime exception: scheduleThisProcess: Parent : " + to_string(parent) +
                         " was not marked as finished!");
   }
 
@@ -73,7 +73,7 @@ void scheduler::preemptAndScheduleNext(pid_t process, preemptOptions p){
     log.writeToLog(Importance::extra, "Process still runnable.\n" , virtualPid);
     processStateMap[process] = processState::runnable;
   }else{
-    throw runtime_error("Uknown preemptOption!\n");
+    throw runtime_error("dettrace runtime exception: Uknown preemptOption!\n");
   }
 
   nextPid = scheduleNextProcess(process);
@@ -114,9 +114,9 @@ void scheduler::remove(pid_t terminatedProcess){
   }
 
   if(indexOfProc == processQueue.size()){
-    auto err = "scheduler::removeAndSchedulNext:"
+    string err = "scheduler::removeAndSchedulNext:"
       " No such element to delete from scheduler.";
-    throw runtime_error(err);
+    throw runtime_error("dettrace runtime exception: " + err);
   }
 
   msg = log.makeTextColored(Color::blue, "Process found at index [%d]. Deleting...\n");
@@ -166,7 +166,7 @@ pid_t scheduler::scheduleNextProcess(pid_t currentProcess){
   }
 
   // Went through all processes and none were ready. This is a dead lock.
-  throw runtime_error("No runnable processes left in scheduler!\n");
+  throw runtime_error("dettrace runtime exception: No runnable processes left in scheduler!\n");
 }
 
 void scheduler::changeToMaybeRunnable(){

@@ -76,7 +76,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   currState.systemcall = getSystemCall(syscallNum, systemCallMappings[syscallNum]);
 
   if(syscallNum < 0 || syscallNum > SYSTEM_CALL_COUNT){
-    throw runtime_error("Unkown system call number: " + to_string(syscallNum));
+    throw runtime_error("dettrace runtime exception: Unkown system call number: " + to_string(syscallNum));
   }
 
   // Print!
@@ -108,7 +108,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
       unsigned long flags = (unsigned long) tracer.arg1();
       unsigned long threadBit = flags & CLONE_THREAD;
       if(threadBit != 0){
-        throw runtime_error("Threads not supported!");
+        throw runtime_error("dettrace runtime exception: Threads not supported!");
       }
     }
 
@@ -123,7 +123,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
       // queue so we do that here and simply ignore the event.
       tie(e, newPid, status) = getNextEvent(traceesPid, true);
       if(e != ptraceEvent::syscall){
-        throw runtime_error("Expected pre-system call event after fork.");
+        throw runtime_error("dettrace runtime exception: Expected pre-system call event after fork.");
       }
       // That was the pre-exit event, make sure we set onPreExitEvent to false.
       currState.onPreExitEvent = false;
@@ -159,7 +159,7 @@ void execution::handlePostSystemCall(state& currState){
 
   // No idea what this system call is! error out.
   if(syscallNum < 0 || syscallNum > SYSTEM_CALL_COUNT){
-    throw runtime_error("Unkown system call number: " + to_string(syscallNum));
+    throw runtime_error("dettrace runtime exception: Unkown system call number: " + to_string(syscallNum));
   }
 
   log.writeToLog(Importance::info,"%s value before post-hook: %d\n",
@@ -230,7 +230,7 @@ void execution::runProgram(){
     if(ret == ptraceEvent::terminatedBySignal){
       // TODO: A Process terminated by signal might break some of the assumptions I make
       // in handleExit (see function definition above) so we do not support it for now.
-      // throw runtime_error("Process terminated by signal. We currently do not support this.");
+      // throw runtime_error("dettrace runtime exception: Process terminated by signal. We currently do not support this.");
       auto msg =
         log.makeTextColored(Color::blue, "Process [%d] ended by signal %d.\n");
       log.writeToLog(Importance::inter, msg, virtualPid, WTERMSIG(status));
@@ -308,7 +308,7 @@ void execution::runProgram(){
       continue;
     }
 
-    throw runtime_error(to_string(traceesPid) +
+    throw runtime_error("dettrace runtime exception: " + to_string(traceesPid) +
                         " Uknown return value for ptracer::getNextEvent()\n");
   }
 
@@ -333,13 +333,13 @@ void execution::handleFork(ptraceEvent event, const pid_t traceesPid){
 
     // This should never happen.
     if(retPid != newChildPid){
-      throw runtime_error("wait call return pid does not match new child's pid.");
+      throw runtime_error("dettrace runtime exception: wait call return pid does not match new child's pid.");
     }
     log.writeToLog(Importance::info,
                    log.makeTextColored(Color::blue, "Child ready!\n"));
   }else{
     if(event != ptraceEvent::signal){
-      throw runtime_error("Expected signal after fork/vfork event!");
+      throw runtime_error("dettrace runtime exception: Expected signal after fork/vfork event!");
     }
     // Signal event came first.
     handleForkSignal(traceesPid);
@@ -383,7 +383,7 @@ void execution::handleForkSignal(const pid_t traceesPid){
 
   if(! ptracer::isPtraceEvent(status, PTRACE_EVENT_FORK) &&
      ! ptracer::isPtraceEvent(status, PTRACE_EVENT_VFORK)){
-    throw runtime_error("Expected fork or vfork event!\n");
+    throw runtime_error("dettrace runtime exception: Expected fork or vfork event!\n");
   }
   return;
 }
@@ -397,7 +397,7 @@ bool execution::handleSeccomp(const pid_t traceesPid){
     // Fetch real system call from register.
     tracer.updateState(traceesPid);
     syscallNum = tracer.getSystemCallNumber();
-    throw runtime_error("No filter rule for system call: " +
+    throw runtime_error("dettrace runtime exception: No filter rule for system call: " +
                         systemCallMappings[syscallNum]);
   }
 
@@ -611,7 +611,7 @@ execution::getSystemCall(int syscallNumber, string syscallName){
   }
 
   // Generic system call. Throws error.
-  throw runtime_error("Missing case for system call: " + syscallName
+  throw runtime_error("dettrace runtime exception: Missing case for system call: " + syscallName
                       + " this is a bug!");
 }
 // =======================================================================================
@@ -689,7 +689,7 @@ ptraceEvent execution::getPtraceEvent(const int status){
 #ifdef PTRACE_EVENT_STOP
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_STOP) ){
     // log.writeToLog(Importance::extra, "event stop\n");
-    throw runtime_error("Ptrace event stop.\n");
+    throw runtime_error("dettrace runtime exception: Ptrace event stop.\n");
   }
 #endif
 
@@ -729,7 +729,7 @@ ptraceEvent execution::getPtraceEvent(const int status){
     return ptraceEvent::terminatedBySignal;
   }
 
-  throw runtime_error("Uknown event on dettrace::getNextEvent()");
+  throw runtime_error("dettrace runtime exception: Uknown event on dettrace::getNextEvent()");
 }
 // =======================================================================================
 /**

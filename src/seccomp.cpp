@@ -15,7 +15,7 @@ seccomp::seccomp(int debugLevel){
   ctx = seccomp_init(SCMP_ACT_TRACE(INT16_MAX));
 
   if(ctx == nullptr){
-    throw runtime_error("Unable to init seccomp filter.\n");
+    throw runtime_error("dettrace runtime exception: Unable to init seccomp filter.\n");
   }
 
   loadRules(debugLevel >= 4);
@@ -212,7 +212,7 @@ void seccomp::noIntercept(uint16_t systemCall){
   // Send system call number as data to tracer to avoid a ptrace(GET_REGS).
   int ret = seccomp_rule_add(ctx, SCMP_ACT_ALLOW, systemCall, 0);
   if(ret < 0){
-    throw runtime_error("Failed to add system call no interception rule! Reason: \n" +
+    throw runtime_error("dettrace runtime exception: Failed to add system call no interception rule! Reason: \n" +
 			to_string(systemCall));
   }
 
@@ -223,7 +223,7 @@ void seccomp::intercept(uint16_t systemCall){
   // Send system call number as data to tracer to avoid a ptrace(GET_REGS).
   int ret = seccomp_rule_add(ctx, SCMP_ACT_TRACE(systemCall), systemCall, 0);
   if(ret < 0){
-    throw runtime_error("Failed to add system call no interception rule! Reason: \n" +
+    throw runtime_error("dettrace runtime exception: Failed to add system call no interception rule! Reason: \n" +
 			to_string(systemCall));
   }
 
@@ -243,7 +243,7 @@ void seccomp::intercept(uint16_t systemCall, bool cond){
 void seccomp::loadFilterToKernel(){
   int ret = seccomp_load(ctx);
   if(ret < 0){
-    throw runtime_error("Unable to seccomp_load.\n Reason: " + string { strerror(- ret)});
+    throw runtime_error("dettrace runtime exception: Unable to seccomp_load.\n Reason: " + string { strerror(- ret)});
   }
 
 }
