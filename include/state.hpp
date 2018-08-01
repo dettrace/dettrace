@@ -134,6 +134,11 @@ public:
   /** Flag to let us know if the current system call was artifically injected by us. */
   bool syscallInjected = false;
 
+  /** Whether we have injected a noop system call. Return value of the noop
+      (currently, getpid) needs to be fixed up so that tracee doesn't notice
+      the noop. */
+  bool noopSystemCall = false;
+  
   /** What kind of SIGALRM handler this tracee has installed. We don't handle
       everything, in particular sigaction's SA_RESTART semantics */
   enum sighandler_type actualSigalrmHandler = DEFAULT_HANDLER;

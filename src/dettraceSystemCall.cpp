@@ -39,7 +39,7 @@ void printInfoString(uint64_t addressOfCString, globalState& gs, state& s,
                      string postFix = " path: ");
 void injectFstat(globalState& gs, state& s, ptracer& t, int fd);
 void injectPause(globalState& gs, state& s, ptracer& t);
-void noopSystemCall(globalState& gs, ptracer& t);
+void replaceSystemCallWithNoop(globalState& gs, state& s, ptracer& t);
 /**
  *
  * newfstatat is a stat variant with a "at" for using a file descriptor to a directory
@@ -410,6 +410,20 @@ void getpeernameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
     throw runtime_error("dettrace runtime exception: Call to getpeername with network socket not suported.\n");
   }
   return;
+}
+// =======================================================================================
+bool getpidSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  fprintf(stderr, "JLD: getpid pre-hook\n");
+  return true;
+}
+void getpidSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  fprintf(stderr, "JLD: getpid post-hook\n");
+  if (s.noopSystemCall) {
+    fprintf(stderr, "JLD: getpid noopSystemCall \n");
+    gs.log.writeToLog(Importance::info, "NOOP system call (getpid) setting return value to 0\n");
+    s.noopSystemCall = false;
+    t.setReturnRegister(0); // pretend like the system call (that we replaced) has succeeded
+  }
 }
 // =======================================================================================
 void getrandomSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -1282,6 +1296,7 @@ void timeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
 // =======================================================================================
 bool timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "timer_create syscall pre-hook\n");
+  fprintf(stderr, "JLD: timer_create pre-hook\n");
   
   // we support any clockid, but only notification via certain signals delivered to the process
   class timerInfo ti;
@@ -1335,12 +1350,16 @@ bool timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
   // write timerid into tracee memory
   ptracer::writeToTracee(traceePtr<timer_t>((timer_t*)t.arg3()), (timer_t)newTID, s.traceePid);
 
-  // TODO: JLD convert timer_create() into nop (i.e., getpid)
-  
-  return false;
+  // convert timer_create() into nop
+  replaceSystemCallWithNoop(gs, s, t);
+  // in getpid post-hook we set return value to 0 so tracee thinks timer_create has succeeded
+
+  // run the post-hook, which will be the getpid cleanup
+  return true;
 }
-void timer_createSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-}
+//void timer_createSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+//  fprintf(stderr, "JLD: timer_create post-hook\n");
+//}
 
 // =======================================================================================
 void timesSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -1902,9 +1921,10 @@ void removeInodeFromMaps(ino_t inode, globalState& gs, ptracer& t){
 // =======================================================================================
 // Turn system call into a noop by changing it into a getpid. This should be called from
 // the pre hook only!
-void noopSystemCall(globalState& gs, ptracer& t){
+void replaceSystemCallWithNoop(globalState& gs, state& s, ptracer& t){
   t.changeSystemCall(SYS_getpid);
   gs.log.writeToLog(Importance::info, "Turning this system call into a NOOP\n");
+  s.noopSystemCall = true;
   return;
 }
 

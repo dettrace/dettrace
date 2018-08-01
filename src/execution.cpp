@@ -586,6 +586,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<tgkillSystemCall>(syscallNumber, syscallName);
   case SYS_time:
     return make_unique<timeSystemCall>(syscallNumber, syscallName);
+  case SYS_timer_create:
+    return make_unique<timer_createSystemCall>(syscallNumber, syscallName);
   case SYS_times:
     return make_unique<timesSystemCall>(syscallNumber, syscallName);
   case SYS_uname:

@@ -70,7 +70,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_geteuid);
   noIntercept(SYS_getgroups);
   noIntercept(SYS_getpgrp);
-  noIntercept(SYS_getpid);
+  intercept(SYS_getpid); // need to intercept for noopSystemCall()
   noIntercept(SYS_getpgid);
   noIntercept(SYS_getppid);
   noIntercept(SYS_gettid);
