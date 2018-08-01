@@ -91,10 +91,11 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_rt_sigprocmask);
   intercept(SYS_rt_sigaction);
   intercept(SYS_timer_create);
+  intercept(SYS_timer_settime);
   //intercept(SYS_timer_gettime);
   intercept(SYS_pause);
-  //intercept(SYS_sigaction);
-  //intercept(SYS_signal);
+  //intercept(SYS_sigaction); // is mapped to SYS_rt_sigaction on cat16
+  //intercept(SYS_signal); // is mapped to SYS_rt_sigaction on cat16
   noIntercept(SYS_rt_sigsuspend);
   noIntercept(SYS_setpgid);
   noIntercept(SYS_set_tid_address);

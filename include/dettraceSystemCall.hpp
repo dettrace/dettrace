@@ -35,7 +35,7 @@ class alarmSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  //void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -995,6 +995,17 @@ public:
  * int timer_create(clockid_t clockid, struct sigevent *sevp, timer_t *timerid);
  */
 class timer_createSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  //void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/**
+ * int timer_settime(timer_t timerid, int flags, const struct itimerspec *new_value,
+ *                   struct itimerspec *old_value);
+ */
+class timer_settimeSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;

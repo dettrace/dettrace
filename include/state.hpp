@@ -138,6 +138,9 @@ public:
       (currently, getpid) needs to be fixed up so that tracee doesn't notice
       the noop. */
   bool noopSystemCall = false;
+
+  /** Whether we've injected a signal for alarm/timer modeling. */
+  bool signalInjected = false;
   
   /** What kind of SIGALRM handler this tracee has installed. We don't handle
       everything, in particular sigaction's SA_RESTART semantics */
