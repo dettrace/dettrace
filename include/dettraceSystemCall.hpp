@@ -987,6 +987,18 @@ public:
 
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
+
+// =======================================================================================
+/**
+ * int timer_create(clockid_t clockid, struct sigevent *sevp, timer_t *timerid);
+ */
+class timer_createSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
 // =======================================================================================
 /**
  * clock_t times(struct tms *buf);

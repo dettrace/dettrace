@@ -90,6 +90,8 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_pread64);
   noIntercept(SYS_rt_sigprocmask);
   intercept(SYS_rt_sigaction);
+  intercept(SYS_timer_create);
+  //intercept(SYS_timer_gettime);
   intercept(SYS_pause);
   //intercept(SYS_sigaction);
   //intercept(SYS_signal);

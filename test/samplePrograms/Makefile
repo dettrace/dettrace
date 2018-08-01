@@ -3,7 +3,7 @@ SIMPLE_ROOTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname 
 # cpuid simpleThreads multipleThreads
 SIMPLE_BINARIES= $(addsuffix .bin,$(SIMPLE_ROOTS))
 
-# binaries for pipe tests, they use a parameterized build
+# binaries with parameterized builds
 PIPE_ROOTS= pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR #setitimer-real setitimer-virtual setitimer-prof getitimer-real getitimer-virtual getitimer-prof
 PIPE_BINARIES= $(addsuffix .bin,$(PIPE_ROOTS))
 
@@ -16,6 +16,9 @@ SHELL_SCRIPTS= bash1.sh test-compilation.sh
 BROADWELL_ROOTS= rdrand rdseed
 BROADWELL_BINARIES= $(addsuffix .bin,$(BROADWELL_ROOTS))
 
+RT_ROOTS= timerCreateDefault timerCreateSigalrm timerGettime
+RT_BINARIES= $(addsuffix .bin,$(RT_ROOTS))
+
 DETTRACE=../../bin/dettrace
 DIFF_CMD=diff
 
@@ -25,7 +28,7 @@ CC=clang
 
 run: test
 test: test-binaries test-scripts
-test-binaries: $(patsubst %.bin, %.ok, $(SIMPLE_BINARIES)) $(patsubst %.bin, %.ok, $(PIPE_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES)) $(patsubst %.bin, %.ok, $(BROADWELL_BINARIES))
+test-binaries: $(patsubst %.bin, %.ok, $(SIMPLE_BINARIES)) $(patsubst %.bin, %.ok, $(PIPE_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES)) $(patsubst %.bin, %.ok, $(BROADWELL_BINARIES)) $(patsubst %.bin, %.ok, $(RT_BINARIES))
 test-scripts: $(patsubst %.sh, %.ok, $(SHELL_SCRIPTS))
 
 # compile each sample program binary
@@ -35,6 +38,10 @@ $(SIMPLE_BINARIES): %.bin: %.c
 # HW RNG tests need >=broadwell codegen
 $(BROADWELL_BINARIES): %.bin: %.c
 	$(CC) $< -Wall -g -o $@ -pthread -std=gnu99 -march=broadwell
+
+# timer_create tests need to link with -lrt
+$(RT_BINARIES): %.bin: %.c
+	$(CC) $< -Wall -g -o $@ -std=gnu99 -lrt
 
 # NB: disable special cpu insn tests for now
 rdrand.ok: rdrand.bin

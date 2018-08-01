@@ -19,6 +19,18 @@ using namespace std;
 
 enum sighandler_type { INVALID, CUSTOM_SIGNAL_HANDLER, DEFAULT_HANDLER, SIGNAL_IGNORED };
 
+// for timerCreateTimers map
+typedef uint64_t timerID_t;
+class timerInfo {
+public:
+  /** whether to send a signal upon timer expiration */
+  bool sendSignal = false;
+  /** signal to deliver when timer expires */
+  int signum = -1;
+  /** data to pass to signal handler, only used by timer_create */
+  void* signalHandlerData = nullptr;
+};
+
 // Needed to avoid recursive dependencies between classes.
 class systemCall;
 
@@ -129,6 +141,9 @@ public:
       signal/sigaction. actualSigalrmHandler is updated if the syscall completes
       successfully. */
   enum sighandler_type requestedSigalrmHandler = INVALID;
+
+  /** track timers created via timer_create */
+  unordered_map<timerID_t, timerInfo> timerCreateTimers;
   
   bool rdfsNotNull = false; /**< Indicates whether rdfs is NULL. */
   bool wrfsNotNull = false; /**< Indicates whether wrfs is NULL. */

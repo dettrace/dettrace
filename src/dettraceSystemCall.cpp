@@ -1280,6 +1280,69 @@ void timeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
   return;
 }
 // =======================================================================================
+bool timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "timer_create syscall pre-hook\n");
+  
+  // we support any clockid, but only notification via certain signals delivered to the process
+  class timerInfo ti;
+
+  traceePtr<struct sigevent> sep((struct sigevent*)t.arg2());
+  if (nullptr == sep.ptr) {
+    ti.sendSignal = true;
+    ti.signum = SIGALRM;
+    ti.signalHandlerData = nullptr;
+    
+  } else { // non-default settings, have to read tracee's struct sigevent
+  
+    struct sigevent se = ptracer::readFromTracee(sep, t.getPid());
+
+    switch (se.sigev_notify) {
+    case SIGEV_NONE: // don't send a signal, alarm value will be read via timer_gettime() 
+    case SIGEV_SIGNAL: // send a signal upon timer expiration
+      break;
+    case SIGEV_THREAD:
+      throw runtime_error("dettrace runtime exception: unsupported launching a thread on timer expiration in timer_create()");
+      break;
+    case SIGEV_THREAD_ID:
+      throw runtime_error("dettrace runtime exception: unsupported sending a signal to a specific thread in timer_create()");
+      break;
+    default:
+      throw runtime_error("dettrace runtime exception: unsupported sigev_notify value in timer_create() " +
+                          to_string(se.sigev_notify));
+      break;
+    }
+    
+    if (SIGEV_SIGNAL == se.sigev_notify) {
+      switch (se.sigev_signo) {
+      case SIGALRM: // ok
+        // case SIGVTALRM: // TODO: JLD add these as well for setitimer
+        // case SIGPROF:
+        break;
+      default:
+        throw runtime_error("dettrace runtime exception: unsupported signal "+to_string(se.sigev_signo)+" in timer_create()");
+        break;
+      }
+    }
+
+    ti.sendSignal = (SIGEV_SIGNAL == se.sigev_notify);
+    ti.signum = ti.sendSignal ? se.sigev_signo : -1 ;
+    ti.signalHandlerData = ti.sendSignal ? se.sigev_value.sival_ptr : nullptr ;
+  }
+
+  timerID_t newTID = s.timerCreateTimers.size();
+  s.timerCreateTimers[newTID] = ti;
+  
+  // write timerid into tracee memory
+  ptracer::writeToTracee(traceePtr<timer_t>((timer_t*)t.arg3()), (timer_t)newTID, s.traceePid);
+
+  // TODO: JLD convert timer_create() into nop (i.e., getpid)
+  
+  return false;
+}
+void timer_createSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+}
+
+// =======================================================================================
 void timesSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // Failure nothing for us to do.
   if((int) t.getReturnValue() < 0){
