@@ -465,8 +465,8 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
         tracer.writeRax( 0x00000004 ); // max supported %eax argument. 4 may be too small? For reference, Sandy Bridge has 0xD and Kaby Lake 0x16
         tracer.writeRbx( 0x756e6547 ); // "GenuineIntel" string
         tracer.writeRdx( 0x49656e69 );
-        //tracer.writeRcx( 0x6c65746e );
-        tracer.writeRcx( 0x6c6c6c6c );
+        tracer.writeRcx( 0x6c65746e );
+        //tracer.writeRcx( 0x6c6c6c6c ); // for debugging, returns "GenuineIllll" instead
         break;
       case 0x01: // basic features
         tracer.writeRax( 0x0 );
