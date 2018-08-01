@@ -46,6 +46,7 @@ class accessSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -171,6 +172,7 @@ class execveSystemCall : public systemCall{
   using systemCall::systemCall;
 
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -612,6 +614,18 @@ public:
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
+
+// =======================================================================================
+/**
+ * int arch_prctl(int code, unsigned long addr);
+ * arch-specific thread state - currently we use this for establishing a SIGSEGV on CPUID
+ */
+class arch_prctlSystemCall : public systemCall{
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
 
 // =======================================================================================
 /**

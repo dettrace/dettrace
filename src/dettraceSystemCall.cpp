@@ -24,7 +24,10 @@
 #include <sys/types.h>
 #include <utime.h>
 
-#include<unordered_map>
+#include <asm/prctl.h>
+#include <sys/prctl.h>
+
+#include <unordered_map>
 
 #include "dettraceSystemCall.hpp"
 #include "ptracer.hpp"
@@ -69,7 +72,36 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t,
 // =======================================================================================
 bool accessSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), gs, s);
-  return false;
+  return true;
+}
+void accessSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if (s.needToSetCPUIDTrap) {
+    gs.log.writeToLog(Importance::info, "Injecting prctl call to tracee to intercept CPUID!\n");
+    // Save current register state to restore in fstat.
+    s.regSaver.pushRegisterState(t.getRegs());
+    
+    // Inject fstat system call to perform!
+    s.syscallInjected = true;
+    
+    // Call prctl
+    t.writeArg1(ARCH_SET_CPUID);
+    t.writeArg2(0);
+    replaySystemCall(t, SYS_arch_prctl);
+    
+    gs.log.writeToLog(Importance::info, "prctl(%d, 0)\n", ARCH_SET_CPUID);
+
+    //set faulting for CPUID instructions
+    //prctl(ARCH_SET_CPUID, 0)
+  }
+}
+bool arch_prctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "pre-hook for arch_prctl(%d, 0)\n", t.arg1());
+  return true;
+}
+void arch_prctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "post-hook for arch_prctl, returning %d\n", t.getReturnValue());
+
+  
 }
 // =======================================================================================
 bool chdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -164,8 +196,19 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     gs.log.writeToLog(Importance::extra, msg);
   }
 
-  return false;
+  return true;
 }
+void execveSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "in execve post-hook\n");
+
+  // this will cause us to inject the appropriate prctl incantation on the next
+  // access() system call TODO: this is a huge hack, only checking on access(),
+  // but empirically it seems that access() often happens right after the exec
+  // and this is easier to implement than checking in every system call (I'm not
+  // sure how to plumb things through the superclass).
+  s.needToSetCPUIDTrap = true;
+}
+
 // =======================================================================================
 bool fchownatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg2(), gs, s);

@@ -182,10 +182,6 @@ int main(int argc, char** argv){
 
   doWithCheck(prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0), "Pre-clone prctl error: setting no new privs");
 
-  //set faulting for CPUID instructions
-  doWithCheck(prctl(ARCH_SET_CPUID, 0), "Pre-clone prctl error: Error setting CPUID to fault");
-
-
   pid_t pid = clone(runTracee, child_stack + STACK_SIZE, cloneFlags, (void*) &args);
   if(pid == -1){
     string reason = strerror(errno);

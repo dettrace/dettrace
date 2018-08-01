@@ -466,6 +466,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
   switch(syscallNumber){
   case SYS_access:
     return make_unique<accessSystemCall>(syscallNumber, syscallName);
+  case SYS_arch_prctl:
+    return make_unique<arch_prctlSystemCall>(syscallNumber, syscallName);
   case SYS_chdir:
     return make_unique<chdirSystemCall>(syscallNumber, syscallName);
   case SYS_chown:

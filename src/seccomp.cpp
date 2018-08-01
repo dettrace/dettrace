@@ -23,7 +23,7 @@ seccomp::seccomp(int debugLevel){
 
 void seccomp::loadRules(bool debug){
   // sets architecture-specific process or thread state.
-  noIntercept(SYS_arch_prctl);
+  intercept(SYS_arch_prctl);
   // Change location of the program break.
   noIntercept(SYS_brk);
   // Bind seems safe enough to let though, specially since user is stuck in chroot.

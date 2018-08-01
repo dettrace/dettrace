@@ -130,6 +130,9 @@ public:
   /** Flag to differentiate between our injected timeout into a system call from a user one. */
   bool userDefinedTimeout = false;
 
+  /** Flag to tell us to setup cpuid interception via an injected prctl(). */
+  bool needToSetCPUIDTrap = false;
+  
   /** A register saver used to store the previous register state and retrieve at a later stage */
   registerSaver regSaver;
 
