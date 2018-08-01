@@ -1141,7 +1141,6 @@ void selectSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
     }
   } else {
     bool replayed = replaySyscallIfBlocked(gs, s, t, sched, 0);
-    printf("replaying?: %s\n", replayed ? "true" : "false");
 
     if(replayed){
       if(s.rdfsNotNull){
