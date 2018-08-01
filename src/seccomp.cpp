@@ -31,12 +31,14 @@ void seccomp::loadRules(bool debug){
   // bind mounts wrong and might need to allow for recursive mounting. But it will
   // be obvious.
   noIntercept(SYS_bind);
+  noIntercept(SYS_capget);
   // Change owner of file
   noIntercept(SYS_chown);
   // like chown but does not dereference symbolic links.
   noIntercept(SYS_lchown);
   // Get clock resolution, TODO might be non deterministic.
   noIntercept(SYS_clock_getres);
+  
   // Duplicate file descriptor.
   noIntercept(SYS_dup);
   noIntercept(SYS_dup2);
@@ -46,12 +48,14 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_exit_group);
   // Advise on access patter by program of file.
   noIntercept(SYS_fadvise64);
+  noIntercept(SYS_fallocate);
   // Variants of regular function that use file descriptor instead of char* path.
   noIntercept(SYS_fchdir);
   noIntercept(SYS_fchmod);
   noIntercept(SYS_fchmodat);
   noIntercept(SYS_fchown);
   noIntercept(SYS_fcntl);
+  noIntercept(SYS_fdatasync);
   // TODO Flock may block! In the future this may lead to deadlock.
   // deal with it then :)
   noIntercept(SYS_flock);
@@ -59,6 +63,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_ftruncate);
   // TODO: Add to intercept with debug for path.
   noIntercept(SYS_fsetxattr);
+  noIntercept(SYS_getresuid);
   noIntercept(SYS_getuid);
   noIntercept(SYS_getgid);
   noIntercept(SYS_getegid);
@@ -66,6 +71,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_getgroups);
   noIntercept(SYS_getpgrp);
   noIntercept(SYS_getpid);
+  noIntercept(SYS_getpgid);
   noIntercept(SYS_getppid);
   noIntercept(SYS_gettid);
   noIntercept(SYS_getuid);
@@ -74,10 +80,13 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_mknod);
   noIntercept(SYS_munmap);
   noIntercept(SYS_mmap);
+  noIntercept(SYS_mlock);
   noIntercept(SYS_mprotect);
   noIntercept(SYS_mremap);
+  noIntercept(SYS_msync);
   noIntercept(SYS_lseek);
 
+  noIntercept(SYS_prctl);
   noIntercept(SYS_pread64);
   noIntercept(SYS_rt_sigprocmask);
   intercept(SYS_rt_sigaction);
@@ -93,15 +102,22 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_rt_sigreturn);
   noIntercept(SYS_rt_sigtimedwait);
   noIntercept(SYS_setgid);
+  noIntercept(SYS_setgroups);
   noIntercept(SYS_setrlimit);
-  noIntercept(SYS_setrlimit);
+  noIntercept(SYS_setregid);
+  noIntercept(SYS_setresgid);
+  noIntercept(SYS_setresuid);
+  noIntercept(SYS_setreuid);
+  noIntercept(SYS_setuid);
   // This seems to be, surprisingly, deterministic. The affinity is set/get by
   // us so it should always be the same mask. User cannot actually observe differences.
   noIntercept(SYS_sched_getaffinity);
   noIntercept(SYS_socket);
+  noIntercept(SYS_sync);
   noIntercept(SYS_umask);
 
   noIntercept(SYS_sched_yield);
+  noIntercept(SYS_truncate);
 
   // These system calls must be intercepted as to know when a fork even has happened:
   // We handle forks when see the system call pre exit.
@@ -168,12 +184,9 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_pipe);
   intercept(SYS_pipe2);
   intercept(SYS_pselect6);
-  // TODO not deterministic!
   intercept(SYS_poll);
   intercept(SYS_prlimit64);
   intercept(SYS_read);
-  // TODO
-  intercept(SYS_readv);
   intercept(SYS_readlink, debug);
   intercept(SYS_readlinkat, debug);
   // TODO
@@ -205,7 +218,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_wait4);
   intercept(SYS_write);
   // TODO
-  intercept(SYS_writev);
+  // intercept(SYS_writev);
 }
 
 void seccomp::noIntercept(uint16_t systemCall){
