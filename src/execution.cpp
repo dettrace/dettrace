@@ -452,8 +452,6 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
       auto virtualPid = pidMap.getVirtualValue(traceesPid);
       log.writeToLog(Importance::inter, coloredMsg, virtualPid, regs.rip, regs.rax, regs.rcx);
 
-      fprintf(stderr, "JLD: intercepted cpuid insn!!\n" );
-      
       // step over cpuid insn
       tracer.writeIp((uint64_t) tracer.getRip().ptr + 2);
 
