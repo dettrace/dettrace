@@ -445,18 +445,51 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
       return;
       
     } else if ((curr_insn32 << 16) ==0xA20F0000) {
-      auto msg = "[%d] Tracer: intercepted cpuid instruction.\n";
+      struct user_regs_struct regs = tracer.getRegs();
+      
+      auto msg = "[%d] Tracer: intercepted cpuid instruction at %p. %rax == 0x%p, %rcx == 0x%p\n";
       auto coloredMsg = log.makeTextColored(Color::blue, msg);
       auto virtualPid = pidMap.getVirtualValue(traceesPid);
-      log.writeToLog(Importance::inter, coloredMsg, virtualPid);
+      log.writeToLog(Importance::inter, coloredMsg, virtualPid, regs.rip, regs.rax, regs.rcx);
 
       // step over cpuid insn
-      tracer.writeIp((uint64_t) tracer.getRip().ptr + 2);
+      tracer.writeIp((uint64_t) regs.rip + 2);
 
       // suppress SIGSEGV from reaching the tracee
       states.at(traceesPid).signalToDeliver = 0;
 
-      // TODO: fill in canonical cpuid return value
+      // fill in canonical cpuid return values
+      
+      switch (regs.rax) {
+      case 0x0:
+        tracer.writeRax( 0x00000004 ); // max supported %eax argument. 4 may be too small? For reference, Sandy Bridge has 0xD and Kaby Lake 0x16
+        tracer.writeRbx( 0x756e6547 ); // "GenuineIntel" string
+        tracer.writeRdx( 0x49656e69 );
+        //tracer.writeRcx( 0x6c65746e );
+        tracer.writeRcx( 0x6c6c6c6c );
+        break;
+      case 0x01: // basic features
+        tracer.writeRax( 0x0 );
+        tracer.writeRbx( 0x0 );
+        tracer.writeRdx( 0x0 );
+        tracer.writeRcx( 0x0 );
+        break;
+      case 0x02: // TLB/Cache/Prefetch Information
+        // say that we have no caches, TLBs or prefetchers
+        tracer.writeRax( 0x80000001 );
+        tracer.writeRbx( 0x80000000 );
+        tracer.writeRcx( 0x80000000 );
+        tracer.writeRdx( 0x80000000 );
+        break;
+      case 0x04: // Returns Deterministic Cache Parameters for Each Level
+        tracer.writeRax( 0x0 );
+        tracer.writeRbx( 0x0 );
+        tracer.writeRcx( 0x0 );
+        tracer.writeRdx( 0x0 );
+        break;
+      default:
+        throw runtime_error("unsupported cpuid %eax argument");
+      }
       
       return;
     }

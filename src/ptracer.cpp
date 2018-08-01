@@ -226,6 +226,11 @@ void ptracer::writeRax(uint64_t val) {
   doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
 }
 
+void ptracer::writeRbx(uint64_t val) {
+  regs.rbx = val;
+  doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
+}
+
 void ptracer::writeRdx(uint64_t val) {
   regs.rdx = val;
   doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
