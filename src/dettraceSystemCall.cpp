@@ -76,22 +76,19 @@ bool accessSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 }
 void accessSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if (s.needToSetCPUIDTrap) {
-    gs.log.writeToLog(Importance::info, "Injecting prctl call to tracee to intercept CPUID!\n");
-    // Save current register state to restore in fstat.
+    gs.log.writeToLog(Importance::info, "Injecting arch_prctl call to tracee to intercept CPUID!\n");
+    // Save current register state to restore after arch_prctl
     s.regSaver.pushRegisterState(t.getRegs());
     
-    // Inject fstat system call to perform!
+    // Inject arch_prctl system call
     s.syscallInjected = true;
     
-    // Call prctl
+    // Call arch_prctl
     t.writeArg1(ARCH_SET_CPUID);
     t.writeArg2(0);
     replaySystemCall(t, SYS_arch_prctl);
     
-    gs.log.writeToLog(Importance::info, "prctl(%d, 0)\n", ARCH_SET_CPUID);
-
-    //set faulting for CPUID instructions
-    //prctl(ARCH_SET_CPUID, 0)
+    gs.log.writeToLog(Importance::info, "arch_prctl(%d, 0)\n", ARCH_SET_CPUID);
   }
 }
 bool arch_prctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -101,7 +98,16 @@ bool arch_prctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, s
 void arch_prctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "post-hook for arch_prctl, returning %d\n", t.getReturnValue());
 
-  
+  if (s.needToSetCPUIDTrap) {
+    s.syscallInjected = false;
+    s.needToSetCPUIDTrap = false;
+
+    // restore reg state so it looks to the tracee like access() has returned
+    // I don't believe arch_prctl(ARCH_SET_CPUID) writes to tracee memory at all
+    t.setRegs(s.regSaver.popRegisterState());
+
+    gs.log.writeToLog(Importance::info, "restored register state from access() post-hook\n");
+  }
 }
 // =======================================================================================
 bool chdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){

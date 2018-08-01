@@ -419,7 +419,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
     tracer.updateState(traceesPid);
     uint32_t curr_insn32 = (tracer.readFromTracee(traceePtr<uint32_t> ((uint32_t*)tracer.getRip().ptr), traceesPid));
 
-    if ((curr_insn32 << 16) == 0x310F0000 || (curr_insn32 << 8) == 0xF9010F00) {
+    if ((curr_insn32 << 16) == 0x310F0000 || (curr_insn32 << 8) == 0xF9010F00) { // rdtsc/rdtscp
 
       auto msg = "[%d] Tracer: Received rdtsc: Reading next instruction.\n";
       int ip_step = 2;
@@ -441,10 +441,27 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
       auto coloredMsg = log.makeTextColored(Color::blue, msg);
       auto virtualPid = pidMap.getVirtualValue(traceesPid);
-      log.writeToLog(Importance::inter, coloredMsg, virtualPid, sigNum);
+      log.writeToLog(Importance::inter, coloredMsg, virtualPid);
+      return;
+      
+    } else if ((curr_insn32 << 16) ==0xA20F0000) {
+      auto msg = "[%d] Tracer: intercepted cpuid instruction.\n";
+      auto coloredMsg = log.makeTextColored(Color::blue, msg);
+      auto virtualPid = pidMap.getVirtualValue(traceesPid);
+      log.writeToLog(Importance::inter, coloredMsg, virtualPid);
 
+      // step over cpuid insn
+      tracer.writeIp((uint64_t) tracer.getRip().ptr + 2);
+
+      // suppress SIGSEGV from reaching the tracee
+      states.at(traceesPid).signalToDeliver = 0;
+
+      // TODO: fill in canonical cpuid return value
+      
       return;
     }
+
+    
   }
 
     // Remember to deliver this signal to the tracee for next event! Happens in
