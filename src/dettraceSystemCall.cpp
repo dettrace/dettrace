@@ -92,8 +92,20 @@ void accessSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   }
 }
 bool arch_prctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  gs.log.writeToLog(Importance::info, "pre-hook for arch_prctl(%d, 0)\n", t.arg1());
-  return true;
+  gs.log.writeToLog(Importance::info, "pre-hook for arch_prctl(%d, 0) == ARCH_SET_CPUID? %d\n", t.arg1(), t.arg1() == ARCH_SET_CPUID);
+
+  switch (t.arg1()) {
+  case ARCH_SET_CPUID:
+    return true;
+  case ARCH_SET_FS: // getting/setting these segment registers is reproducible, we don't need to intercept post-hook
+  case ARCH_GET_FS:
+  case ARCH_SET_GS:
+  case ARCH_GET_GS:
+    return false;
+  default:
+    throw runtime_error("unsupported arch_prctl syscall");
+  }
+  return false; // unreachable
 }
 void arch_prctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "post-hook for arch_prctl, returning %d\n", t.getReturnValue());
@@ -208,10 +220,10 @@ void execveSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   gs.log.writeToLog(Importance::info, "in execve post-hook\n");
 
   // this will cause us to inject the appropriate prctl incantation on the next
-  // access() system call TODO: this is a huge hack, only checking on access(),
-  // but empirically it seems that access() often happens right after the exec
-  // and this is easier to implement than checking in every system call (I'm not
-  // sure how to plumb things through the superclass).
+  // access() system call TODO: this is a *HUGE* hack, only checking on
+  // access(), but empirically it seems that access() often happens right after
+  // the exec and this is easier to implement than checking in every system call
+  // (I'm not sure how to plumb things through the superclass).
   s.needToSetCPUIDTrap = true;
 }
 

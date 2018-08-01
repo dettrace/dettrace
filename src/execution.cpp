@@ -441,7 +441,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
       auto coloredMsg = log.makeTextColored(Color::blue, msg);
       auto virtualPid = pidMap.getVirtualValue(traceesPid);
-      log.writeToLog(Importance::inter, coloredMsg, virtualPid);
+      log.writeToLog(Importance::inter, coloredMsg, virtualPid/*, sigNum*/);
       return;
       
     } else if ((curr_insn32 << 16) ==0xA20F0000) {
@@ -452,8 +452,10 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
       auto virtualPid = pidMap.getVirtualValue(traceesPid);
       log.writeToLog(Importance::inter, coloredMsg, virtualPid, regs.rip, regs.rax, regs.rcx);
 
+      fprintf(stderr, "JLD: intercepted cpuid insn!!\n" );
+      
       // step over cpuid insn
-      tracer.writeIp((uint64_t) regs.rip + 2);
+      tracer.writeIp((uint64_t) tracer.getRip().ptr + 2);
 
       // suppress SIGSEGV from reaching the tracee
       states.at(traceesPid).signalToDeliver = 0;

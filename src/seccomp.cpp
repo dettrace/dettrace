@@ -112,7 +112,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_clone);
 
   // These system calls cause an even that is caught by ptrace and determinized:
-  intercept(SYS_access, debug);
+  intercept(SYS_access);
   // Not used, let's figure out who does one!
   // intercept(SYS_alarm);
   intercept(SYS_chdir, debug);
@@ -122,7 +122,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_close);
   // TODO: This system call
   intercept(SYS_connect);
-  intercept(SYS_execve, debug);
+  intercept(SYS_execve);
   intercept(SYS_faccessat, debug);
   intercept(SYS_fgetxattr, debug);
   intercept(SYS_flistxattr, debug);
