@@ -26,10 +26,8 @@ void replaySystemCall(ptracer& t, uint64_t systemCall);
  *
  * unsigned int alarm(unsigned int seconds);
  *
- * alarm()  arranges for a SIGALRM signal to be delivered to the calling process in sec‐
- * onds seconds.
- *
- * TODO: We must allow system call. Maybe deliver signal on next sytem call?
+ * alarm() arranges for a SIGALRM signal to be delivered to the calling process
+ * in a given number of seconds.
  */
 class alarmSystemCall : public systemCall{
 public:
