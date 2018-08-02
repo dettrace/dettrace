@@ -445,13 +445,13 @@ void getpeernameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
 }
 // =======================================================================================
 bool getpidSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  fprintf(stderr, "JLD: getpid pre-hook\n");
+  //fprintf(stderr, "JLD: getpid pre-hook\n");
   return true;
 }
 void getpidSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  fprintf(stderr, "JLD: getpid post-hook\n");
+  //fprintf(stderr, "JLD: getpid post-hook\n");
   if (s.noopSystemCall) {
-    fprintf(stderr, "JLD: getpid noopSystemCall \n");
+    //fprintf(stderr, "JLD: getpid noopSystemCall \n");
     gs.log.writeToLog(Importance::info, "NOOP system call (getpid) setting return value to 0\n");
     s.noopSystemCall = false;
     t.setReturnRegister(0); // pretend like the system call (that we replaced) has succeeded
@@ -1300,7 +1300,7 @@ void timeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
 // =======================================================================================
 bool timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "timer_create syscall pre-hook\n");
-  fprintf(stderr, "JLD: timer_create pre-hook\n");
+  //fprintf(stderr, "JLD: timer_create pre-hook\n");
   
   // we support any clockid, but only notification via certain signals delivered to the process
   class timerInfo ti;
