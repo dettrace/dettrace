@@ -32,6 +32,9 @@
 #include "dettraceSystemCall.hpp"
 #include "ptracer.hpp"
 
+#define ARCH_GET_CPUID		0x1011
+#define ARCH_SET_CPUID		0x1012
+
 using namespace std;
 // =======================================================================================
 // Prototypes for common functions.
