@@ -997,8 +997,18 @@ void rmdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     s.firstTrySystemcall = true;
   }
 }
-
 // =======================================================================================
+// cribbed from strace, as using the standard struct sigaction does not yield
+// correct output. I guess libc internally translates from the new user-facing
+// struct to this older one, and passes the older one to the kernel.
+// https://github.com/strace/strace/blob/v4.23/signal.c#L297
+struct old_sigaction { 
+  /* sa_handler may be a libc #define, need to use another name: */
+  unsigned long sa_handler__;
+  unsigned long sa_mask;
+  unsigned long sa_flags;
+  unsigned long sa_restorer;
+};
 bool rt_sigactionSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "rt_sigaction pre-hook for signal "+to_string(t.arg1())+"\n");
 
@@ -1012,25 +1022,20 @@ bool rt_sigactionSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
   
   s.originalArg1 = t.arg1();
   // figure out what kind of handler the tracee is trying to install
-  struct sigaction sa = ptracer::readFromTracee( traceePtr<struct sigaction>((struct sigaction*)t.arg2()), t.getPid() );
+  struct old_sigaction sa = ptracer::readFromTracee( traceePtr<struct old_sigaction>((struct old_sigaction*)t.arg2()), t.getPid() );
+  gs.log.writeToLog(Importance::info, "struct sigaction*: %p\n", t.arg2());
   gs.log.writeToLog(Importance::info, "sa_flags: "+to_string(sa.sa_flags)+" "+to_string(SA_RESETHAND)+" \n");
-  gs.log.writeToLog(Importance::info, "sa_handler: "+to_string((uint64_t)sa.sa_handler)+"\n");
+  gs.log.writeToLog(Importance::info, "sa_handler: "+to_string((uint64_t)sa.sa_handler__)+"\n");
   
-  // JLD: under dettrace, programs that should generate SA_RESETHAND
-  // (according to strace) don't appear here correctly (sa_flags is often -1,
-  // with every field set, which seems like garbage). Maybe I'm reading the
-  // struct sigaction incorrectly? Or maybe there's one definition in the
-  // program and another one here?
-  
-  //if (sa.sa_flags & SA_RESETHAND) {
+  if (sa.sa_flags & SA_RESETHAND) {
   // SA_RESETHAND flag specified, which restores SIG_DFL after running the custom handler once
   // this is too complicated, so just throw an error
-  //  throw runtime_error("dettrace runtime exception: we don't support rt_sigaction's SA_RESETHAND flag");
-  //}
+    throw runtime_error("dettrace runtime exception: we don't support rt_sigaction's SA_RESETHAND flag");
+  }
     
-  if (SIG_IGN == sa.sa_handler) {
+  if (((unsigned long)SIG_IGN) == sa.sa_handler__) {
     s.requestedSignalHandler = SIGHANDLER_IGNORED;
-  } else if (SIG_DFL == sa.sa_handler) {
+  } else if (((unsigned long)SIG_DFL) == sa.sa_handler__) {
     s.requestedSignalHandler = SIGHANDLER_DEFAULT;
   } else {
     s.requestedSignalHandler = SIGHANDLER_CUSTOM;
@@ -1298,6 +1303,7 @@ bool timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
   gs.log.writeToLog(Importance::extra, "created new timer "+to_string(timerid)+"\n");
   
   // write timerid into tracee memory
+  gs.log.writeToLog(Importance::extra, "writing timerid to %p\n", t.arg3());
   ptracer::writeToTracee(traceePtr<uint64_t>((uint64_t*)t.arg3()), timerid, s.traceePid);
 
   // convert timer_create() into nop
