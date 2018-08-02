@@ -11,6 +11,3 @@ parent spawned
 grandparent attempting to write...!
 grandparent wrote!
 grandparent is waiting
-replaying?: true
-replaying?: false
-replaying?: false
