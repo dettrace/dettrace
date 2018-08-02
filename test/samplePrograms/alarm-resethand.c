@@ -8,6 +8,10 @@
 
 void alarmListener(int signum) {
   printf("alarmListener() invoked\n");
+
+  // this flush is needed to get this test's output to appear. I guess without
+  // it dettrace shuts down the tracee too quickly?
+  fflush(stdout); 
 }
 
 int main() {
@@ -19,10 +23,13 @@ int main() {
   sa.sa_handler = alarmListener;
   printf("&sa: %p\n", &sa);
   int rv = sigaction(SIGALRM, &sa, NULL);
-  
   assert( 0 == rv );
   
-  alarm( 1/*second*/ );
+  alarm( 1/*second*/ ); // calls alarmListener()
 
+  alarm( 1/*second*/ ); // terminates program
+
+  printf("This will never print under DetTrace!\n");
+  
   return 0;
 }

@@ -1,5 +1,5 @@
 # binaries that are simple to build (1 source file, same name as binary)
-SIMPLE_ROOTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat  sigsegv sigill sigabrt kill tgkill alarm-handler alarm-nohandler alarm-ignore alarm-resethand selectWithoutTimeout selectWithTimeout getdents getdents64 pollWithoutTimeout pollWithPositiveTimeout pollWithNegativeTimeout rdtsc rdtscp nanosleep nanosleep-par
+SIMPLE_ROOTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat  sigsegv sigill sigabrt kill tgkill alarm-handler alarm-nohandler alarm-ignore selectWithoutTimeout selectWithTimeout getdents getdents64 pollWithoutTimeout pollWithPositiveTimeout pollWithNegativeTimeout rdtsc rdtscp nanosleep nanosleep-par alarm-resethand
 # cpuid simpleThreads multipleThreads
 SIMPLE_BINARIES= $(addsuffix .bin,$(SIMPLE_ROOTS))
 
@@ -59,7 +59,7 @@ setup:
 # this is used for programs that don't take any arguments or need fancy setup/teardown
 %.ok: %.bin setup	
 	@echo "   Testing $(basename $<)..."
-	@python3 timeout.py 5s $(DETTRACE) ./$< > ActualOutputs/$(basename $<).output 2>&1
+	@python3 timeout.py 5s $(DETTRACE) ./$< > ActualOutputs/$(basename $<).output
 	@$(DIFF_CMD) ActualOutputs/$(basename $<).output ExpectedOutputs/$(basename $<).output
 
 # SHELL_SCRIPTS tests:
@@ -260,19 +260,13 @@ alarm-ignore.ok: alarm-ignore.bin
 #	HACK: check that we time out as expected (247 == -9 means received SIGKILL due to timeout)
 	@python3 timeout.py 2s ../../bin/dettrace ./$< || [ $$? -eq 247 ]
 
-# we expect a dettrace exception
-alarm-resethand.ok: alarm-resethand.bin
-	@echo "   Testing $(basename $<)..."
-	@python3 timeout.py 5s $(DETTRACE) ./$< > ActualOutputs/$(basename $<).output 2>&1 || [ $$? -eq 134 ]
-	@$(DIFF_CMD) ActualOutputs/$(basename $<).output ExpectedOutputs/$(basename $<).output
-
 kill.ok: kill.bin
-	@for s in $$(seq 1 2); do echo "   Testing $(basename $<) $$s..." && (python3 timeout.py 5s $(DETTRACE) ./$< $$s 2> ActualOutputs/$(basename $<)-$$s.output || true) && $(DIFF_CMD) ActualOutputs/$(basename $<)-$$s.output ExpectedOutputs/$(basename $<).output ; done
+	@for s in $$(seq 1 64); do echo "   Testing $(basename $<) $$s..." && (python3 timeout.py 5s $(DETTRACE) ./$< $$s 2> ActualOutputs/$(basename $<)-$$s.output || true) && $(DIFF_CMD) ActualOutputs/$(basename $<)-$$s.output ExpectedOutputs/$(basename $<).output ; done
 
 # NB: we allow SIGABRT to be sent via tgkill, to support abort() calls
 tgkill.ok: tgkill.bin
-#	@for s in 1 2 3 4 5 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64; do echo "   Testing $(basename $<) $$s..." && (python3 timeout.py 5s $(DETTRACE) ./$< $$s 2> ActualOutputs/$(basename $<)-$$s.output || true) && $(DIFF_CMD) ActualOutputs/$(basename $<)-$$s.output ExpectedOutputs/$(basename $<).output ; done
-	@for s in 1 2; do echo "   Testing $(basename $<) $$s..." && (python3 timeout.py 5s $(DETTRACE) ./$< $$s 2> ActualOutputs/$(basename $<)-$$s.output || true) && $(DIFF_CMD) ActualOutputs/$(basename $<)-$$s.output ExpectedOutputs/$(basename $<).output ; done
+	@for s in 1 2 3 4 5 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64; do echo "   Testing $(basename $<) $$s..." && (python3 timeout.py 5s $(DETTRACE) ./$< $$s 2> ActualOutputs/$(basename $<)-$$s.output || true) && $(DIFF_CMD) ActualOutputs/$(basename $<)-$$s.output ExpectedOutputs/$(basename $<).output ; done
+#	@for s in 1 2; do echo "   Testing $(basename $<) $$s..." && (python3 timeout.py 5s $(DETTRACE) ./$< $$s 2> ActualOutputs/$(basename $<)-$$s.output || true) && $(DIFF_CMD) ActualOutputs/$(basename $<)-$$s.output ExpectedOutputs/$(basename $<).output ; done
 
 .PHONY: build setup run clean test
 clean:

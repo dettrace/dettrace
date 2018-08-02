@@ -1020,25 +1020,23 @@ bool rt_sigactionSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
     return false;
   }
   
-  s.originalArg1 = t.arg1();
   // figure out what kind of handler the tracee is trying to install
   struct old_sigaction sa = ptracer::readFromTracee( traceePtr<struct old_sigaction>((struct old_sigaction*)t.arg2()), t.getPid() );
   gs.log.writeToLog(Importance::info, "struct sigaction*: %p\n", t.arg2());
   gs.log.writeToLog(Importance::info, "sa_flags: "+to_string(sa.sa_flags)+" "+to_string(SA_RESETHAND)+" \n");
   gs.log.writeToLog(Importance::info, "sa_handler: "+to_string((uint64_t)sa.sa_handler__)+"\n");
   
-  if (sa.sa_flags & SA_RESETHAND) {
-  // SA_RESETHAND flag specified, which restores SIG_DFL after running the custom handler once
-  // this is too complicated, so just throw an error
-    throw runtime_error("dettrace runtime exception: we don't support rt_sigaction's SA_RESETHAND flag");
-  }
-    
   if (((unsigned long)SIG_IGN) == sa.sa_handler__) {
     s.requestedSignalHandler = SIGHANDLER_IGNORED;
   } else if (((unsigned long)SIG_DFL) == sa.sa_handler__) {
     s.requestedSignalHandler = SIGHANDLER_DEFAULT;
   } else {
-    s.requestedSignalHandler = SIGHANDLER_CUSTOM;
+    if (sa.sa_flags & SA_RESETHAND) {
+      // SA_RESETHAND flag specified, which restores SIG_DFL after running the custom handler once
+      s.requestedSignalHandler = SIGHANDLER_CUSTOM_1SHOT;
+    } else {
+      s.requestedSignalHandler = SIGHANDLER_CUSTOM;
+    }
   }
   gs.log.writeToLog(Importance::info, "signal "+to_string(signum)+" handler requested: " +
                     to_string(s.requestedSignalHandler)+"\n");
@@ -1804,7 +1802,21 @@ static bool sendTraceeSignalNow(int signum, globalState& gs, state& s, ptracer& 
   }
   
   switch (sh) {
-    
+
+  case SIGHANDLER_CUSTOM_1SHOT: {
+    gs.log.writeToLog(Importance::info, "tracee has a custom 1-shot signal "+to_string(signum)+" handler, sending signal to pid %u\n", sched.pidMap.getVirtualValue(t.getPid()));
+
+    // TODO: JLD is this a race? the tracee isn't technically paused yet
+    t.changeSystemCall(SYS_pause);
+    s.signalInjected = true;
+    s.currentSignalHandlers[signum] = SIGHANDLER_DEFAULT; // go back to default next time
+    int retVal = syscall(SYS_tgkill, t.getPid(), t.getPid(), signum);
+    if (0 != retVal) {
+      throw runtime_error("dettrace runtime exception: sending myself signal "+to_string(signum)+" failed, tgkill returned " + to_string(retVal));
+    }
+    return true; // run pause post-hook
+  }
+      
   case SIGHANDLER_CUSTOM: {
     gs.log.writeToLog(Importance::info, "tracee has a custom signal "+to_string(signum)+" handler, sending signal to pid %u\n", sched.pidMap.getVirtualValue(t.getPid()));
 
@@ -1815,8 +1827,8 @@ static bool sendTraceeSignalNow(int signum, globalState& gs, state& s, ptracer& 
     if (0 != retVal) {
       throw runtime_error("dettrace runtime exception: sending myself signal "+to_string(signum)+" failed, tgkill returned " + to_string(retVal));
     }
-  }
     return true; // run pause post-hook
+  }
     
   case SIGHANDLER_DEFAULT: {
     if (SIGALRM != signum && SIGVTALRM != signum && SIGPROF != signum) {

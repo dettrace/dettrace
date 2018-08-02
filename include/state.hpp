@@ -17,7 +17,7 @@
 
 using namespace std;
 
-enum sighandler_type { SIGHANDLER_INVALID, SIGHANDLER_CUSTOM, SIGHANDLER_DEFAULT, SIGHANDLER_IGNORED };
+enum sighandler_type { SIGHANDLER_INVALID, SIGHANDLER_CUSTOM, SIGHANDLER_CUSTOM_1SHOT, SIGHANDLER_DEFAULT, SIGHANDLER_IGNORED };
 
 // for timerCreateTimers map
 typedef uint64_t timerID_t;
@@ -150,7 +150,7 @@ public:
       signal/sigaction. The currentSignalHandlers map is updated iff the syscall
       completes successfully. */
   int requestedSignalToHandle = -1;
-
+  
   /** Track, for each signal, what kind of handler this tracee currently has registered. */
   unordered_map<int, enum sighandler_type> currentSignalHandlers;
   
