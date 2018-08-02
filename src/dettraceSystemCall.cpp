@@ -39,7 +39,8 @@ void printInfoString(uint64_t addressOfCString, globalState& gs, state& s,
                      string postFix = " path: ");
 void injectFstat(globalState& gs, state& s, ptracer& t, int fd);
 void injectPause(globalState& gs, state& s, ptracer& t);
-void replaceSystemCallWithNoop(globalState& gs, state& s, ptracer& t);
+static void replaceSystemCallWithNoop(globalState& gs, state& s, ptracer& t);
+static bool sendTraceeSignal(int signum, globalState& gs, state& s, ptracer& t);
 /**
  *
  * newfstatat is a stat variant with a "at" for using a file descriptor to a directory
@@ -77,38 +78,6 @@ bool accessSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 bool alarmSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "alarm pre-hook, requesting alarm in %u second(s)\n", t.arg1());
 
-  switch (s.actualSigalrmHandler) {
-    
-  case CUSTOM_SIGNAL_HANDLER: {
-    gs.log.writeToLog(Importance::info, "tracee has a custom SIGALRM handler, sending SIGALRM to pid %u\n", t.getPid());
-    // TODO: JLD is this a race? the tracee isn't technically paused yet
-    t.changeSystemCall(SYS_pause);
-    s.signalInjected = true;
-    int retVal = syscall(SYS_tgkill, t.getPid(), t.getPid(), SIGALRM);
-    if (0 != retVal) {
-      throw runtime_error("dettrace runtime exception: injecting a SIGALRM failed, tgkill returned " + to_string(retVal));
-    }
-  }
-    return true; // run pause post-hook
-    
-  case DEFAULT_HANDLER:
-    // if tracee doesn't have a SIGALRM handler, we need to kill the tracee per `man 7 signal`
-    gs.log.writeToLog(Importance::info, "tracee has default SIGALRM handler, injecting exit() for pid %u\n", t.getPid());
-    t.changeSystemCall(SYS_exit);
-    t.writeArg1( 128 + SIGALRM ); // status 
-    return false; // there shouldn't be a post-hook for exit
-    
-  case SIGNAL_IGNORED: // don't do anything
-    replaceSystemCallWithNoop(gs, s, t);
-    gs.log.writeToLog(Importance::info, "tracee is ignoring SIGALRMs, doing nothing\n");
-    return true; // run noop (getpid) post-hook
-    
-  default:
-    throw runtime_error("dettrace runtime exception: invalid state::actualSigalrmHandler " + to_string(s.actualSigalrmHandler));
-  }
-  
-  return true;
-  
   /*
     TODO: JLD: this is stale, update it!!!
     To determine how to handle alarm(), we need to know what kind of SIGALRM
@@ -130,6 +99,9 @@ bool alarmSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
     knows about. If the tracee uses the default handler, then we terminate the
     tracee via SIGKILL per the default SIGALRM behavior.
    */
+  
+  // run post-hook if necessary
+  return sendTraceeSignal(SIGALRM, gs, s, t);
 }
 // void alarmSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
 //   gs.log.writeToLog(Importance::info, "alarm post-hook, previous alarm was due in %u second(s) (should be 0)\n", t.getReturnValue());
@@ -738,7 +710,7 @@ void pauseSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 
     // ick: fake the return value for the call we hijacked.
     // For alarm(), 0 means there was no previously scheduled alarm.
-    // For timer_settime(), 0 means it succeeded
+    // For timer_settime() and setitimer(), 0 means it succeeded
     // TODO: JLD For setitimer(), 0 means it succeeded
     s.signalInjected = false;
     t.setReturnRegister(0);
@@ -1366,10 +1338,19 @@ bool timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
 //}
 bool timer_settimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
 
+  timerID_t timerid = t.arg1();
+  if (!s.timerCreateTimers.count(timerid)) {
+    throw runtime_error("dettrace runtime exception: couldn't find timer "+to_string(timerid));
+  }
+  timerInfo tinfo = s.timerCreateTimers[timerid];
+  if (!tinfo.sendSignal) {
+    replaceSystemCallWithNoop(gs, s, t);
+    return true; // run getpid post-hook
+  } else {
+    // run post-hook if necessary
+    return sendTraceeSignal(tinfo.signum, gs, s, t);
+  }
   
-  
-  
-  // run the post-hook, which is our replacement pause
   return true;
 }
 
@@ -1708,6 +1689,42 @@ void writevSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   //    s.totalBytes = 0;
   //  }
   return;
+}
+// =======================================================================================
+static bool sendTraceeSignal(int signum, globalState& gs, state& s, ptracer& t) {
+
+  // TODO: JLD: look up handler for signum
+  
+  switch (s.actualSigalrmHandler) {
+    
+  case CUSTOM_SIGNAL_HANDLER: {
+    gs.log.writeToLog(Importance::info, "tracee has a custom SIGALRM handler, sending SIGALRM to pid %u\n", t.getPid());
+    // TODO: JLD is this a race? the tracee isn't technically paused yet
+    t.changeSystemCall(SYS_pause);
+    s.signalInjected = true;
+    int retVal = syscall(SYS_tgkill, t.getPid(), t.getPid(), signum);
+    if (0 != retVal) {
+      throw runtime_error("dettrace runtime exception: sending myself signal "+to_string(signum)+" failed, tgkill returned " + to_string(retVal));
+    }
+  }
+    return true; // run pause post-hook
+    
+  case DEFAULT_HANDLER:
+    // if tracee doesn't have a SIGALRM handler, we need to kill the tracee
+    // TODO: JLD: update for different signal semantics
+    gs.log.writeToLog(Importance::info, "tracee has default SIGALRM handler, injecting exit() for pid %u\n", t.getPid());
+    t.changeSystemCall(SYS_exit);
+    t.writeArg1( 128 + SIGALRM ); // status 
+    return false; // there shouldn't be a post-hook for exit
+    
+  case SIGNAL_IGNORED: // don't do anything
+    replaceSystemCallWithNoop(gs, s, t);
+    gs.log.writeToLog(Importance::info, "tracee is ignoring signal "+to_string(signum)+", doing nothing\n");
+    return true; // run noop (getpid) post-hook
+    
+  default:
+    throw runtime_error("dettrace runtime exception: invalid state::actualSigalrmHandler " + to_string(s.actualSigalrmHandler));
+  }
 }
 // =======================================================================================
 bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched, int64_t errornoValue){
