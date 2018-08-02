@@ -1,23 +1,13 @@
 #define _GNU_SOURCE
 
 #include <stdlib.h>
-#include <stdbool.h>
-#include <sys/types.h>
 #include <signal.h>
 #include <stdio.h>
-#include <unistd.h>
+#include <stdbool.h>
+#include <time.h>
 #include <assert.h>
 #include <ucontext.h>
-#include <inttypes.h>
-#include <sys/time.h>
 #include <stdatomic.h>
-
-#ifndef WHICH_ITIMER
-#error WHICH_ITIMER must be #defined on the command-line.
-#endif
-#ifndef SIGNAL_TO_HANDLE
-#error SIGNAL_TO_HANDLE must be #defined on the command-line.
-#endif
 
 atomic_int counter = 0;
 
@@ -55,26 +45,39 @@ static void handle_alarm(int sig, siginfo_t *si, void *ctxt) {
 }
 
 int main() {
+
+  // establish SIGALRM handler
   sigset_t sigset;
   sigemptyset( &sigset );
   struct sigaction sa;
   sa.sa_mask = sigset;
   sa.sa_flags = SA_SIGINFO;
-  sa.sa_sigaction = handle_alarm;  
-  int rv = sigaction(SIGNAL_TO_HANDLE, &sa, NULL);
+  sa.sa_sigaction = handle_alarm;
+  int rv = sigaction(SIGVTALRM, &sa, NULL);  
+  assert( 0 == rv );
   
+  // send our process a SIGVTALRM
+  struct sigevent se;
+  se.sigev_notify = SIGEV_SIGNAL;
+  se.sigev_signo = SIGVTALRM;
+  se.sigev_value.sival_int = 42;
+  
+  timer_t timerid;  
+  rv = timer_create(CLOCK_THREAD_CPUTIME_ID, &se, &timerid);
+  printf("timer_create returned %d\n", rv);
   assert( 0 == rv );
 
-  struct itimerval itv;
-  itv.it_interval.tv_sec = itv.it_interval.tv_usec = 0; // 1-shot timer
-  itv.it_value.tv_sec = 1; // timer expires 1 second from now
-  itv.it_value.tv_usec = 0;
-  rv = setitimer( WHICH_ITIMER, &itv, NULL );
-  assert( 0 == rv );
+  printf("created timerid %p\n", timerid);
   
+  struct itimerspec ts;
+  ts.it_interval.tv_sec = ts.it_interval.tv_nsec = 0; // 1-shot timer
+  ts.it_value.tv_sec = ts.it_value.tv_nsec = 1; // 1 second from now
+  rv = timer_settime(timerid, 0, &ts, NULL);
+  assert( 0 == rv );
+
   while (true) {
     atomic_fetch_add(&counter, 1);
   }
-
+  
   return 0;
 }

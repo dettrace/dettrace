@@ -17,7 +17,7 @@
 
 using namespace std;
 
-enum sighandler_type { INVALID, CUSTOM_SIGNAL_HANDLER, DEFAULT_HANDLER, SIGNAL_IGNORED };
+enum sighandler_type { SIGHANDLER_INVALID, SIGHANDLER_CUSTOM, SIGHANDLER_DEFAULT, SIGHANDLER_IGNORED };
 
 // for timerCreateTimers map
 typedef uint64_t timerID_t;
@@ -142,14 +142,18 @@ public:
   /** Whether we've injected a signal for alarm/timer modeling. */
   bool signalInjected = false;
   
-  /** What kind of SIGALRM handler this tracee has installed. We don't handle
-      everything, in particular sigaction's SA_RESTART semantics */
-  enum sighandler_type actualSigalrmHandler = DEFAULT_HANDLER;
-  /** What kind of SIGALRM handler this tracee has requested via
-      signal/sigaction. actualSigalrmHandler is updated if the syscall completes
-      successfully. */
-  enum sighandler_type requestedSigalrmHandler = INVALID;
+  /** What kind of signal handler this tracee has requested via
+      signal/sigaction. The currentSignalHandlers map is updated iff the syscall
+      completes successfully. */
+  enum sighandler_type requestedSignalHandler = SIGHANDLER_INVALID;
+  /** Which signal this tracee has requested handling of via
+      signal/sigaction. The currentSignalHandlers map is updated iff the syscall
+      completes successfully. */
+  int requestedSignalToHandle = -1;
 
+  /** Track, for each signal, what kind of handler this tracee currently has registered. */
+  unordered_map<int, enum sighandler_type> currentSignalHandlers;
+  
   /** track timers created via timer_create */
   unordered_map<timerID_t, timerInfo> timerCreateTimers;
   

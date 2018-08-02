@@ -999,6 +999,37 @@ public:
   //void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
+/** 
+ * int timer_delete(timer_t timerid);
+ */
+class timer_deleteSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/** 
+ * int timer_getoverrun(timer_t timerid);
+ */
+class timer_getoverrunSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/** 
+ * int timer_gettime(timer_t timerid, struct itimerspec *curr_value);
+ */
+class timer_gettimeSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
+// =======================================================================================
 /**
  * int timer_settime(timer_t timerid, int flags, const struct itimerspec *new_value,
  *                   struct itimerspec *old_value);
@@ -1009,6 +1040,29 @@ public:
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
   //void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
+
+
+// =======================================================================================
+/**
+ * int getitimer(int which, struct itimerval *curr_value);
+ */
+class getitimerSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/**
+ * int setitimer(int which, const struct itimerval *new_value, struct itimerval *old_value);
+ */
+class setitimerSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  //void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
 
 // =======================================================================================
 /**
