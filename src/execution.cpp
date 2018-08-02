@@ -462,7 +462,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
       
       switch (regs.rax) {
       case 0x0:
-        tracer.writeRax( 0x00000004 ); // max supported %eax argument. 4 may be too small? For reference, Sandy Bridge has 0xD and Kaby Lake 0x16
+        tracer.writeRax( 0x00000002 ); // max supported %eax argument. Set to 4 to narrow support (IE Pentium 4).  For reference, Sandy Bridge has 0xD and Kaby Lake 0x16
         tracer.writeRbx( 0x756e6547 ); // "GenuineIntel" string
         tracer.writeRdx( 0x49656e69 );
         tracer.writeRcx( 0x6c65746e );
@@ -481,14 +481,26 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
         tracer.writeRcx( 0x80000000 );
         tracer.writeRdx( 0x80000000 );
         break;
-      case 0x04: // Returns Deterministic Cache Parameters for Each Level
+      case 0x03:
         tracer.writeRax( 0x0 );
         tracer.writeRbx( 0x0 );
-        tracer.writeRcx( 0x0 );
         tracer.writeRdx( 0x0 );
+        tracer.writeRcx( 0x0 );
+        break;
+      case 0x04:
+        tracer.writeRax( 0x0 );
+        tracer.writeRbx( 0x0 );
+        tracer.writeRdx( 0x0 );
+        tracer.writeRcx( 0x0 );
+        break;
+      case 0x80000000:
+        tracer.writeRax( 0x80000000 );
+        tracer.writeRbx( 0x0 );
+        tracer.writeRdx( 0x0 );
+        tracer.writeRcx( 0x0 );
         break;
       default:
-        throw runtime_error("unsupported cpuid %eax argument");
+        throw runtime_error("dettrace runtime exception: CPUID unsupported %eax argument");
       }
       
       return;

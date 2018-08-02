@@ -103,7 +103,7 @@ bool arch_prctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, s
   case ARCH_GET_GS:
     return false;
   default:
-    throw runtime_error("unsupported arch_prctl syscall");
+    throw runtime_error("dettrace runtime exception: unsupported arch_prctl syscall");
   }
   return false; // unreachable
 }

@@ -1,0 +1,13 @@
+
+vendor_id is GenuineIntel
+version is 0x0000
+features are 0x0000
+
+Using cpuid.h:
+Highest supported input: 2
+Result of __get_cpuid(1) eax|ebx|ecx|edx: 00000000 00000000 00000000 00000000
+Result of __get_cpuid(1) eax|ebx|ecx|edx: 00000000 00000000 00000000 00000000
+Result of __get_cpuid(1) eax|ebx|ecx|edx: 00000000 00000000 00000000 00000000
+Result of __get_cpuid(1) eax|ebx|ecx|edx: 00000000 00000000 00000000 00000000
+  supported features:  (extended) 
+  UNsupported features: CMPXCHG8B CMOV MMX FXSAVE SSE SSE2 SSE3 PCLMUL SSSE3 FMA CMPXCHG16B SSE4_1 SSE4_2 MOVBE POPCNT AES XSAVE OSXSAVE AVX F16C RDRND LAHF_LM ABM SSE4a PRFCHW XOP LWP FMA4 TBM MWAITX 
