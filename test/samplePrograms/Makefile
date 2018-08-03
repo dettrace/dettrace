@@ -8,17 +8,18 @@ PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
 LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat # relativeTimeStamps1 relativeTimeStamps2 tars to fix one day.
 
 # tests of random number generator insns, need special build flags
-BROADWELL_BINARIES=rdrand rdseed 
+BROADWELL_BINARIES=rdrand rdseed
 
 CXX_BINARIES=random_device
 
 DIFF_CMD=diff
 
-build: $(SIMPLE_BUILD_BINARIES) $(PIPE_BINARIES) $(BROADWELL_BINARIES)
+build: $(SIMPLE_BUILD_BINARIES) $(PIPE_BINARIES) $(BROADWELL_BINARIES) $(CXX_BINARIES)
 
 CC=clang
+CXX=clang++
 
-run: $(patsubst %, %.ok, $(SIMPLE_BUILD_BINARIES)) $(patsubst %, %.ok, $(PIPE_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES)) $(patsubst %, %.ok, $(BROADWELL_BINARIES))
+run: $(patsubst %, %.ok, $(SIMPLE_BUILD_BINARIES)) $(patsubst %, %.ok, $(PIPE_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES)) $(patsubst %, %.ok, $(BROADWELL_BINARIES)) $(patsubst %, %.ok, $(CXX_BINARIES))
 
 # compile each sample program binary
 $(SIMPLE_BUILD_BINARIES): %: %.c
@@ -29,7 +30,7 @@ $(BROADWELL_BINARIES): %: %.c
 	$(CC) $< -Wall -g -o $@ -pthread -std=gnu99 -march=broadwell
 
 $(CXX_BINARIES): %: %.cpp
-	$(CXX) $< -Wall -g -o $@
+	$(CXX) $< -Wall -g -o $@ -std=gnu++11
 
 # NB: disable special cpu insn tests for now
 rdrand.ok: rdrand
