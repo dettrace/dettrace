@@ -5,7 +5,7 @@ SIMPLE_BUILD_BINARIES=simpleFork inverseFork nestedFork vfork clock_gettime getp
 PIPE_BINARIES=pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR
 
 # built-in Linux utilities, nothing to build
-LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat # relativeTimeStamps1 relativeTimeStamps2 tars to fix one day.
+LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat mktemp # relativeTimeStamps1 relativeTimeStamps2 tars to fix one day.
 
 # tests of random number generator insns, need special build flags
 BROADWELL_BINARIES=rdrand rdseed
@@ -179,6 +179,14 @@ cat.ok:
 	@echo "Sixth" >> catTestFile
 	@python3 timeout.py 5s ../../bin/dettrace cat -ne catTestFile > ActualOutputs/cat.output
 	@$(DIFF_CMD) ActualOutputs/cat.output ExpectedOutputs/cat.output
+
+mktemp.ok:
+	@echo "   Testing mktemp..."
+	@python3 timeout.py 5s ../../bin/dettrace mktemp --dry-run > ActualOutputs/mktemp.output
+	@$(DIFF_CMD) ActualOutputs/mktemp.output ExpectedOutputs/mktemp.output
+	@echo "   Testing mktemp --directory..."
+	@python3 timeout.py 5s ../../bin/dettrace mktemp --directory --dry-run > ActualOutputs/mktemp-directory.output
+	@$(DIFF_CMD) ActualOutputs/mktemp-directory.output ExpectedOutputs/mktemp.output
 
 # Other DetTrace tests, with non-trivial invocation or cleanup
 
