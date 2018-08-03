@@ -13,10 +13,10 @@
 
 pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process);
 // =======================================================================================
-execution::execution(int debugLevel, pid_t startingPid, bool useColor, bool oldKernel):
+execution::execution(int debugLevel, pid_t startingPid, bool useColor, bool oldKernel, string logFile):
   oldKernel {oldKernel},
-  log {stderr, debugLevel, useColor},
-  silentLogger {stderr, 0},
+  log {logFile, debugLevel, useColor},
+  silentLogger {"", 0},
   // Waits for first process to be ready!
   tracer{startingPid},
   // Create our global state once, share across class.
@@ -27,7 +27,7 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor, bool oldK
   },
   pidMap {silentLogger, "pid map", 1},
   myScheduler {startingPid, log, pidMap},
-  debugLevel {debugLevel}{
+  debugLevel {debugLevel}{    
     // Set state for first process.
     pidMap.addRealValue(startingPid);
     states.emplace(startingPid, state {startingPid, debugLevel});

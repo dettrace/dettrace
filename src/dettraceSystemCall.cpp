@@ -171,7 +171,7 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     }
 
     auto msg = "Args: " + gs.log.makeTextColored(Color::green, execveArgs) + "\n";
-    gs.log.writeToLog(Importance::extra, msg);
+    gs.log.writeToLog(Importance::info, msg);
   }
 
   return false;
@@ -210,6 +210,10 @@ void flistxattrSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
   return;
 }
 // =======================================================================================
+bool fstatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "fstat(fd=%d)\n", t.arg1());
+  return true;
+}
 void fstatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
 
   // This isn't a natural call fstat from the tracee we injected this call ourselves!
@@ -221,8 +225,11 @@ void fstatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
                           to_string(t.getReturnValue()) + "\n");
     }
     s.syscallInjected = false;
+    gs.log.writeToLog(Importance::info, "reading struct stat from %p\n", (void*)t.arg2());
     struct stat myStat = ptracer::readFromTracee(traceePtr<struct stat>((struct stat*) t.arg2()), s.traceePid);
 
+    gs.log.writeToLog(Importance::extra, "(device,inode) = (%lu,%lu)\n", myStat.st_dev, myStat.st_ino);
+    
     // Add an entry for this new file to our inode with a newer modified date.
     if( ! gs.mtimeMap.realValueExists(myStat.st_ino) ){
       gs.mtimeMap.addRealValue(myStat.st_ino);
@@ -284,7 +291,7 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   if(futexCmd == FUTEX_WAKE || futexCmd == FUTEX_REQUEUE || futexCmd == FUTEX_CMP_REQUEUE ||
      futexCmd == FUTEX_WAKE_BITSET || futexCmd == FUTEX_WAKE_OP){
     sched.reportProgress(t.getPid());
-    gs.log.writeToLog(Importance::extra, "Waking on address: %p\n", t.arg1());
+    gs.log.writeToLog(Importance::info, "Waking on address: %p\n", t.arg1());
     // No need to go into the post hook.
     return false;
   }
@@ -294,8 +301,8 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
      futexCmd == FUTEX_WAIT_BITSET ||
      futexCmd == FUTEX_WAIT_REQUEUE_PI
      ){
-    gs.log.writeToLog(Importance::extra, "Futex wait on: %p.\n", t.arg1());
-    gs.log.writeToLog(Importance::extra, "On value: " + to_string(futexValue) + "\n");
+    gs.log.writeToLog(Importance::info, "Futex wait on: %p.\n", t.arg1());
+    gs.log.writeToLog(Importance::info, "On value: " + to_string(futexValue) + "\n");
     int actualValue = (int) t.readFromTracee(traceePtr<int>((int*) t.arg1()), t.getPid());
     gs.log.writeToLog(Importance::extra, "Actual value: " + to_string(actualValue) + "\n");
 
@@ -307,7 +314,7 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
     if(timeoutPtr == nullptr){
       // We need somewhere to store timespec. We will write this data below the current
       // stack pointer accounting for the red zone, known to be 128 bytes.
-      gs.log.writeToLog(Importance::extra,
+      gs.log.writeToLog(Importance::info,
                         "timeout null, writing our data below the current stack frame...\n");
 
       uint64_t rsp = (uint64_t) t.getRsp().ptr;
@@ -320,7 +327,7 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
       t.writeArg4((uint64_t) newAddress);
     }else{
       timespec timeout = ptracer::readFromTracee(traceePtr<timespec>(timeoutPtr), t.getPid());
-      gs.log.writeToLog(Importance::extra,
+      gs.log.writeToLog(Importance::info,
                         "Using original timeout value: (s = %d, ns = %d)\n",
                         timeout.tv_sec, timeout.tv_nsec);
       ptracer::writeToTracee(traceePtr<timespec>(timeoutPtr), ourTimeout, s.traceePid);
@@ -576,6 +583,9 @@ void newfstatatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
     if((int) t.getReturnValue() >= 0){
       struct stat* statbufPtr = (struct stat*) t.arg3();
       struct stat statbuf = ptracer::readFromTracee(traceePtr<struct stat>(statbufPtr), s.traceePid);
+
+      gs.log.writeToLog(Importance::extra, "marking (device,inode) = (%lu,%lu) for deletion\n", statbuf.st_dev, statbuf.st_ino);
+      
       s.inodeToDelete = statbuf.st_ino;
     }else{
       gs.log.writeToLog(Importance::info, "No such file, that's okay.\n");
@@ -1298,10 +1308,10 @@ bool timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
   timerID_t timerid = s.timerCreateTimers.size();
   s.timerCreateTimers[timerid] = ti;
 
-  gs.log.writeToLog(Importance::extra, "created new timer "+to_string(timerid)+"\n");
+  gs.log.writeToLog(Importance::info, "created new timer "+to_string(timerid)+"\n");
   
   // write timerid into tracee memory
-  gs.log.writeToLog(Importance::extra, "writing timerid to %p\n", t.arg3());
+  gs.log.writeToLog(Importance::info, "writing timerid to %p\n", t.arg3());
   ptracer::writeToTracee(traceePtr<uint64_t>((uint64_t*)t.arg3()), timerid, s.traceePid);
 
   // convert timer_create() into nop
@@ -1916,6 +1926,7 @@ void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName)
   if(retVal == 0){
     struct stat myStat = ptracer::readFromTracee(traceePtr<struct stat>(statPtr), s.traceePid);
     ino_t inode = myStat.st_ino;
+    gs.log.writeToLog(Importance::extra, "(device,inode) = (%lu,%lu)\n", myStat.st_dev, inode);
     // Use inode to check if we created this file during our run.
     time_t virtualMtime = gs.mtimeMap.realValueExists(inode) ?
       gs.mtimeMap.getVirtualValue(inode) :
@@ -2004,6 +2015,10 @@ void injectFstat(globalState& gs, state& s, ptracer& t, int fd){
   uint64_t rsp = (uint64_t) t.getRsp().ptr;
   struct stat* traceesMem = (struct stat*) (rsp - 128 - sizeof(struct stat));
 
+  // zero out struct stat memory
+  struct stat zeroStat = {0};
+  ptracer::writeToTracee(traceePtr<struct stat>(traceesMem), zeroStat, s.traceePid);
+  
   // Call fstat.
   t.writeArg1(fd); // file descriptor.
   t.writeArg2((uint64_t )traceesMem);

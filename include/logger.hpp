@@ -41,11 +41,11 @@ public:
   /**
    * Constructor.
    * Requires file to write to and debug level to use.
-   * @param myFile: FILE handle to write to.
+   * @param logFile: Path to write log file to. A unique suffix will be appended.
    * @param debugLevel debugging level
    * @param useColor whether to use color in logging (default true)
    */
-  logger(FILE* myFile, int debugLevel, bool useColor = true);
+  logger(string logFile, int debugLevel, bool useColor = true);
 
   /**
    * Logging wrapper for printf.
@@ -101,5 +101,7 @@ private:
 
   bool padding;   /**< Add a 2 space padding to the string to print. Useful for nested messages. */
 
+  uint64_t logEntryID = 0;
+  
 };
 #endif
