@@ -39,7 +39,8 @@ void printInfoString(uint64_t addressOfCString, globalState& gs, state& s,
                      string postFix = " path: ");
 void injectFstat(globalState& gs, state& s, ptracer& t, int fd);
 void injectPause(globalState& gs, state& s, ptracer& t);
-void noopSystemCall(globalState& gs, ptracer& t);
+static void replaceSystemCallWithNoop(globalState& gs, state& s, ptracer& t);
+static bool sendTraceeSignalNow(int signum, globalState& gs, state& s, ptracer& t, scheduler& sched);
 /**
  *
  * newfstatat is a stat variant with a "at" for using a file descriptor to a directory
@@ -76,39 +77,10 @@ bool accessSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 // =======================================================================================
 bool alarmSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "alarm pre-hook, requesting alarm in %u second(s)\n", t.arg1());
-  /*
-    To determine how to handle alarm(), we need to know what kind of SIGALRM
-    handler the tracee has. For this, we trap on rt_sigaction() to observe the
-    addition/removal of SIGALRM handlers or the ignoring of SIGALRM
-    entirely. See state::actualSigalrmHandler.
 
-    We suppress the original alarm() call with an argument of 0, which means
-    don't generate a real SIGALRM signal. We allow this to go to the kernel, and
-    in the alarm post-hook, if SIGALRM is ignored by the tracee, we do nothing
-    as alarm() is effectively a NOP and we are done. 
-
-    If the tracee has a custom or default SIGALRM handler, we inject a pause()
-    syscall. In the pause pre-hook we know the tracee is just about to block, so
-    we send a signal *from the monitor* to the tracee. The tracee then
-    blocks. If the tracee has a custom SIGALRM handler, we send a SIGALRM from
-    the monitor, the handler runs and then pause() returns and in the post-hook
-    we return 0, to model the original alarm() call which is all the tracee
-    knows about. If the tracee uses the default handler, then we terminate the
-    tracee via SIGKILL per the default SIGALRM behavior.
-   */
-  t.writeArg1(0);
-  return true;
+  // run post-hook if necessary
+  return sendTraceeSignalNow(SIGALRM, gs, s, t, sched);
 }
-void alarmSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  gs.log.writeToLog(Importance::info, "alarm post-hook, previous alarm was due in %u second(s) (should be 0)\n", t.getReturnValue());
-  if (0 != t.getReturnValue()) {
-    throw runtime_error("dettrace runtime exception: There should never be a previous alarm!");
-  }
-  if (SIGNAL_IGNORED != s.actualSigalrmHandler) {
-    injectPause(gs, s, t);
-  }
-}
-
 // =======================================================================================
 bool chdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), gs, s);
@@ -412,6 +384,17 @@ void getpeernameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
   return;
 }
 // =======================================================================================
+bool getpidSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+void getpidSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if (s.noopSystemCall) {
+    gs.log.writeToLog(Importance::info, "NOOP system call (getpid) setting return value to 0\n");
+    s.noopSystemCall = false;
+    t.setReturnRegister(0); // pretend like the system call (that we replaced) has succeeded
+  }
+}
+// =======================================================================================
 void getrandomSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // Fill buffer with our own deterministic values.
   char* buf = (char*) t.arg1();
@@ -682,47 +665,18 @@ void openatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
 // =======================================================================================
 bool pauseSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "pause pre-hook\n");
-
-  if (s.syscallInjected) {
-
-    switch (s.actualSigalrmHandler) {
-    case CUSTOM_SIGNAL_HANDLER: {
-      gs.log.writeToLog(Importance::info, "tracee has a custom SIGALRM handler, sending SIGALRM to pid %u\n", t.getPid());
-      int retVal = syscall(SYS_tgkill, t.getPid(), t.getPid(), SIGALRM);
-      if (0 != retVal) {
-        throw runtime_error("dettrace runtime exception: injecting a SIGALRM failed, tgkill returned " + to_string(retVal));
-      }
-    }
-      break;
-    case DEFAULT_HANDLER: {
-      // if tracee doesn't have a SIGALRM handler, we need to kill the tracee per `man 7 signal`
-      gs.log.writeToLog(Importance::info, "tracee has default SIGALRM handler, injecting exit() for pid %u\n", t.getPid());
-      replaySystemCall(t, SYS_exit);
-      t.writeArg1( 128 + SIGALRM ); // status
-      s.syscallInjected = false;
-      return false; // there shouldn't be a post-hook for exit
-    }
-      break;
-    case SIGNAL_IGNORED: // don't do anything
-      gs.log.writeToLog(Importance::info, "tracee is ignoring SIGALRMs, doing nothing\n");
-      break;
-    default:
-      throw runtime_error("dettrace runtime exception: invalid state::actualSigalrmHandler " + to_string(s.actualSigalrmHandler));
-    }
-    return true;
-  }
-  
-  return false;
+  return true;
 }
 void pauseSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "pause post-hook\n");
-  if (s.syscallInjected) {
+  if (s.signalInjected) {
     uint64_t retval = t.getReturnValue();
     gs.log.writeToLog(Importance::info, "pause returned %lld\n", retval);
 
-    // ick: fake the return value for the alarm() call we hijacked. 0 means
-    // there was no previously scheduled alarm.
-    s.syscallInjected = false;
+    // ick: fake the return value for the call we hijacked.
+    // For alarm(), 0 means there was no previously scheduled alarm.
+    // For timer_settime() and setitimer(), 0 means it succeeded
+    s.signalInjected = false;
     t.setReturnRegister(0);
   }
 }
@@ -1043,45 +997,64 @@ void rmdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     s.firstTrySystemcall = true;
   }
 }
-
 // =======================================================================================
+// cribbed from strace, as using the standard struct sigaction does not yield
+// correct output. I guess libc internally translates from the new user-facing
+// struct to this older one, and passes the older one to the kernel.
+// https://github.com/strace/strace/blob/v4.23/signal.c#L297
+struct kernel_sigaction { 
+  /* sa_handler may be a libc #define, need to use another name: */
+  unsigned long sa_handler__;
+  unsigned long sa_mask;
+  unsigned long sa_flags;
+  unsigned long sa_restorer;
+};
 bool rt_sigactionSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "rt_sigaction pre-hook for signal "+to_string(t.arg1())+"\n");
-  if (SIGALRM == t.arg1() && 0 != t.arg2()) {
-    s.originalArg1 = t.arg1();
-    // figure out what kind of SIGALRM handler the tracee is trying to install
-    struct sigaction sa = ptracer::readFromTracee( traceePtr<struct sigaction>((struct sigaction*)t.arg2()), t.getPid() );
-    gs.log.writeToLog(Importance::info, "sa_flags: "+to_string(sa.sa_flags)+" "+to_string(SA_RESETHAND)+" \n");
-    gs.log.writeToLog(Importance::info, "sa_handler: "+to_string((uint64_t)sa.sa_handler)+"\n");
 
-    // JLD: under dettrace, programs that should generate SA_RESETHAND
-    // (according to strace) don't appear here correctly (sa_flags is often -1,
-    // with every field is set, which seems like garbage). Maybe I'm reading the
-    // struct sigaction incorrectly? Or maybe there's one definition in the
-    // program and another one here?
-    
-    //if (sa.sa_flags & SA_RESETHAND) {
-      // SA_RESETHAND flag specified, which restores SIG_DFL after running the custom handler once
-      // this is too complicated, so just throw an error
-    //  throw runtime_error("dettrace runtime exception: we don't support rt_sigaction's SA_RESETHAND flag");
-    //}
-    if (SIG_IGN == sa.sa_handler) {
-      s.requestedSigalrmHandler = SIGNAL_IGNORED;
-    } else if (SIG_DFL == sa.sa_handler) {
-      s.requestedSigalrmHandler = DEFAULT_HANDLER;
-    } else {
-      s.requestedSigalrmHandler = CUSTOM_SIGNAL_HANDLER;
-    }
-    gs.log.writeToLog(Importance::info, "SIGALRM handler requested: "+to_string(s.requestedSigalrmHandler)+"\n");
+  const uint64_t signum = t.arg1();
+  s.requestedSignalToHandle = signum;
+  
+  if (0 == t.arg2()) {
+    // no need to run the post-hook since tracee is not updating signal handlers
+    return false;
   }
+  
+  // figure out what kind of handler the tracee is trying to install
+  struct kernel_sigaction sa = ptracer::readFromTracee( traceePtr<struct kernel_sigaction>((struct kernel_sigaction*)t.arg2()), t.getPid() );
+  gs.log.writeToLog(Importance::info, "struct sigaction*: %p\n", t.arg2());
+  gs.log.writeToLog(Importance::info, "sa_flags: "+to_string(sa.sa_flags)+" "+to_string(SA_RESETHAND)+" \n");
+  gs.log.writeToLog(Importance::info, "sa_handler: "+to_string((uint64_t)sa.sa_handler__)+"\n");
+  
+  if (((unsigned long)SIG_IGN) == sa.sa_handler__) {
+    s.requestedSignalHandler = SIGHANDLER_IGNORED;
+  } else if (((unsigned long)SIG_DFL) == sa.sa_handler__) {
+    s.requestedSignalHandler = SIGHANDLER_DEFAULT;
+  } else {
+    if (sa.sa_flags & SA_RESETHAND) {
+      // SA_RESETHAND flag specified, which restores SIG_DFL after running the custom handler once
+      s.requestedSignalHandler = SIGHANDLER_CUSTOM_1SHOT;
+    } else {
+      s.requestedSignalHandler = SIGHANDLER_CUSTOM;
+    }
+  }
+  gs.log.writeToLog(Importance::info, "signal "+to_string(signum)+" handler requested: " +
+                    to_string(s.requestedSignalHandler)+"\n");
+  
+  // run the post-hook to see if signal handler installation was successful
   return true;
 }
 void rt_sigactionSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "rt_sigaction post-hook\n");
-  if (SIGALRM == s.originalArg1 && 0 == t.getReturnValue()) {
-    s.actualSigalrmHandler = s.requestedSigalrmHandler;
-    gs.log.writeToLog(Importance::info, "requested SIGALRM handler installed: "+to_string(s.actualSigalrmHandler)+"\n");
-    s.requestedSigalrmHandler = INVALID;
+  if (0 == t.getReturnValue()) {
+    // signal handler installation was successful
+    s.currentSignalHandlers[s.requestedSignalToHandle] = s.requestedSignalHandler;
+    
+    gs.log.writeToLog(Importance::info, "signal "+to_string(s.requestedSignalToHandle)+
+                      " handler of type "+to_string(s.requestedSignalHandler)+" installed\n");
+    
+    s.requestedSignalHandler = SIGHANDLER_INVALID;
+    s.requestedSignalToHandle = -1; 
   }
   return;
 }
@@ -1279,6 +1252,181 @@ void timeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
   s.incrementTime();
   return;
 }
+// =======================================================================================
+bool timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "timer_create syscall pre-hook\n");
+  
+  // we support any clockid, but only notification via certain signals delivered to the process
+  class timerInfo ti;
+
+  traceePtr<struct sigevent> sep((struct sigevent*)t.arg2());
+  if (nullptr == sep.ptr) {
+    ti.sendSignal = true;
+    ti.signum = SIGALRM;
+    ti.signalHandlerData = nullptr;
+    
+  } else { // non-default settings, have to read tracee's struct sigevent
+  
+    struct sigevent se = ptracer::readFromTracee(sep, t.getPid());
+
+    switch (se.sigev_notify) {
+    case SIGEV_NONE: // don't send a signal, alarm value will be read via timer_gettime() 
+    case SIGEV_SIGNAL: // send a signal upon timer expiration
+      break;
+    case SIGEV_THREAD:
+      throw runtime_error("dettrace runtime exception: unsupported launching a thread on timer expiration in timer_create()");
+      break;
+    case SIGEV_THREAD_ID:
+      throw runtime_error("dettrace runtime exception: unsupported sending a signal to a specific thread in timer_create()");
+      break;
+    default:
+      throw runtime_error("dettrace runtime exception: unsupported sigev_notify value in timer_create() " +
+                          to_string(se.sigev_notify));
+      break;
+    }
+
+    // NB: we allow any signal in se.sigev_signo, since there's no harm in
+    // creating a timer that's never used. We only support certain signals being
+    // delivered, however, and we catch that error later in timer_settime().
+
+    ti.sendSignal = (SIGEV_SIGNAL == se.sigev_notify);
+    ti.signum = ti.sendSignal ? se.sigev_signo : -1 ;
+    // TODO: JLD: we aren't seting siginfo_t fields si_code and si_value appropriately
+    ti.signalHandlerData = ti.sendSignal ? se.sigev_value.sival_ptr : nullptr ;
+  }
+
+  timerID_t timerid = s.timerCreateTimers.size();
+  s.timerCreateTimers[timerid] = ti;
+
+  gs.log.writeToLog(Importance::extra, "created new timer "+to_string(timerid)+"\n");
+  
+  // write timerid into tracee memory
+  gs.log.writeToLog(Importance::extra, "writing timerid to %p\n", t.arg3());
+  ptracer::writeToTracee(traceePtr<uint64_t>((uint64_t*)t.arg3()), timerid, s.traceePid);
+
+  // convert timer_create() into nop
+  replaceSystemCallWithNoop(gs, s, t);
+  // in getpid post-hook we set return value to 0 so tracee thinks timer_create has succeeded
+
+  // run the post-hook, which will be the getpid cleanup
+  return true;
+}
+bool timer_deleteSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  timerID_t timerid = t.arg1();
+  gs.log.writeToLog(Importance::info, "timer_delete pre-hook for timer "+to_string(timerid)+"\n");
+  if (!s.timerCreateTimers.count(timerid)) {
+    throw runtime_error("dettrace runtime exception: invalid timerid "+to_string(timerid));
+  }
+  return true;
+}
+void timer_deleteSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  t.setReturnRegister(0);
+}
+
+bool timer_getoverrunSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  timerID_t timerid = t.arg1();
+  gs.log.writeToLog(Importance::info, "timer_getoverrun pre-hook for timer "+to_string(timerid)+"\n");
+  if (!s.timerCreateTimers.count(timerid)) {
+    throw runtime_error("dettrace runtime exception: invalid timerid "+to_string(timerid));
+  }
+  return true;
+}
+void timer_getoverrunSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  t.setReturnRegister(0);
+}
+
+bool timer_gettimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  timerID_t timerid = t.arg1();
+  gs.log.writeToLog(Importance::info, "timer_gettime pre-hook for timer "+to_string(timerid)+"\n");
+
+  if (!s.timerCreateTimers.count(timerid)) {
+    throw runtime_error("dettrace runtime exception: invalid timerid "+to_string(timerid));
+  }
+  
+  struct itimerspec *isp = (struct itimerspec*) t.arg2();
+  if (isp != nullptr) {
+    // timer has expired
+    struct itimerspec is;
+    is.it_interval.tv_sec = is.it_interval.tv_nsec = 0;
+    is.it_value.tv_sec = is.it_value.tv_nsec = 0; 
+    ptracer::writeToTracee(traceePtr<struct itimerspec>(isp), is, s.traceePid);
+  }
+
+  // Set invalid arguments so kernel doesn't overwrite our special struct
+  // itimerspec. We fix up the return value in the post-hook so tracee thinks
+  // call succeeded.
+  t.writeArg1(0);
+  t.writeArg2(0);
+  
+  return true;
+}
+void timer_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  t.setReturnRegister(0);
+}
+
+bool timer_settimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+
+  gs.log.writeToLog(Importance::info, "timer_settime pre-hook for timer "+to_string(t.arg1())+"\n");
+  
+  timerID_t timerid = t.arg1();
+
+  if (!s.timerCreateTimers.count(timerid)) {
+    throw runtime_error("dettrace runtime exception: invalid timerid "+to_string(timerid));
+  }
+
+  timerInfo tinfo = s.timerCreateTimers[timerid];
+  if (!tinfo.sendSignal) {
+    replaceSystemCallWithNoop(gs, s, t);
+    return true; // run getpid post-hook
+  } else {
+    // run post-hook if necessary
+    return sendTraceeSignalNow(tinfo.signum, gs, s, t, sched);
+  }
+  
+  return true;
+}
+
+bool getitimerSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  gs.log.writeToLog(Importance::info, "getitimer pre-hook\n");
+  
+  struct itimerval *ivp = (struct itimerval*) t.arg2();
+  if (ivp != nullptr) {
+    // say that timer has expired
+    struct itimerval iv;
+    iv.it_interval.tv_sec = iv.it_interval.tv_usec = 0;
+    iv.it_value.tv_sec = iv.it_value.tv_usec = 0; 
+    ptracer::writeToTracee(traceePtr<struct itimerval>(ivp), iv, s.traceePid);
+  }
+
+  // Set invalid arguments so kernel doesn't overwrite our special struct
+  // itimerval. We fix up the return value in the post-hook so tracee thinks
+  // call succeeded.
+  t.writeArg2(0);
+  
+  return true;
+}
+void getitimerSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  t.setReturnRegister(0);
+}
+
+bool setitimerSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  gs.log.writeToLog(Importance::info, "setitimer pre-hook\n");
+
+  int whichTimer = t.arg1();
+  switch (whichTimer) {
+  case ITIMER_REAL:
+    return sendTraceeSignalNow(SIGALRM, gs, s, t, sched);
+  case ITIMER_VIRTUAL:
+    return sendTraceeSignalNow(SIGVTALRM, gs, s, t, sched);
+  case ITIMER_PROF:
+    return sendTraceeSignalNow(SIGPROF, gs, s, t, sched);
+  default:
+    throw runtime_error("dettrace runtime exception: invalid timer for setitimer "+to_string(whichTimer));
+  }
+
+  return true;
+}
+
 // =======================================================================================
 void timesSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // Failure nothing for us to do.
@@ -1616,6 +1764,94 @@ void writevSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   return;
 }
 // =======================================================================================
+/**
+   This function provides unified handling for timer-based signals stemming from
+   alarm(), setitimer() and timer_create(). 
+
+   The first step is to track a tracee's signal handlers, which can be set via
+   rt_sigaction() -- on cat16 at least, the signal() and sigaction() ultimately
+   resolve to the rt_sigaction() syscall. Any given signal may be ignored, set
+   to its default behavior (usually termination, but it varies by signal), or
+   have a custom handler. These handlers for all signals are tracked in
+   the state::currentSignalHandlers map.
+
+   Then, when a tracee requests a signal be delivered some time in the future,
+   we convert this request into immediate deterministic signal delivery. Let's
+   refer to alarm(), setitimer() and timer_settime() as signal-generated
+   functions (SGFs). 
+
+   If the signal generated by the SGF is being ignored, then we convert the SFG
+   into a NOP: instead of actually having a signal sent and risking some
+   nondeterministic EINTR on some other system call, we don't send the signal in
+   the first place and the tracee shouldn't be able to tell.
+
+   If the signal generated by the SGF is set to cause termination (usually the
+   default behavior), we convert the SGF into an exit() syscall.
+
+   If the signal generated by the SGF invokes a custom handler, then we have to
+   actually send a real signal. We convert the SGF into a pause() syscall and
+   send a real signal from the tracer to the tracee via tgkill(). When the
+   tracee receives the signal, its handler will run and pause() will then
+   return.
+   */
+static bool sendTraceeSignalNow(int signum, globalState& gs, state& s, ptracer& t, scheduler& sched) {
+
+  enum sighandler_type sh = SIGHANDLER_DEFAULT;
+  if (s.currentSignalHandlers.count(signum)) {
+    sh = s.currentSignalHandlers[signum];
+  }
+  
+  switch (sh) {
+
+  case SIGHANDLER_CUSTOM_1SHOT: {
+    gs.log.writeToLog(Importance::info, "tracee has a custom 1-shot signal "+to_string(signum)+" handler, sending signal to pid %u\n", sched.pidMap.getVirtualValue(t.getPid()));
+
+    // TODO: JLD is this a race? the tracee isn't technically paused yet
+    t.changeSystemCall(SYS_pause);
+    s.signalInjected = true;
+    s.currentSignalHandlers[signum] = SIGHANDLER_DEFAULT; // go back to default next time
+    int retVal = syscall(SYS_tgkill, t.getPid(), t.getPid(), signum);
+    if (0 != retVal) {
+      throw runtime_error("dettrace runtime exception: sending myself signal "+to_string(signum)+" failed, tgkill returned " + to_string(retVal));
+    }
+    return true; // run pause post-hook
+  }
+      
+  case SIGHANDLER_CUSTOM: {
+    gs.log.writeToLog(Importance::info, "tracee has a custom signal "+to_string(signum)+" handler, sending signal to pid %u\n", sched.pidMap.getVirtualValue(t.getPid()));
+
+    // TODO: JLD is this a race? the tracee isn't technically paused yet
+    t.changeSystemCall(SYS_pause);
+    s.signalInjected = true;
+    int retVal = syscall(SYS_tgkill, t.getPid(), t.getPid(), signum);
+    if (0 != retVal) {
+      throw runtime_error("dettrace runtime exception: sending myself signal "+to_string(signum)+" failed, tgkill returned " + to_string(retVal));
+    }
+    return true; // run pause post-hook
+  }
+    
+  case SIGHANDLER_DEFAULT: {
+    if (SIGALRM != signum && SIGVTALRM != signum && SIGPROF != signum) {
+      throw runtime_error("dettrace runtime exception: can't send myself a signal "+to_string(signum));
+    }
+    // for SIGALRM, SIGVTALRM, SIGPROF, default handler terminates the tracee
+    gs.log.writeToLog(Importance::info, "tracee has default signal "+to_string(signum)+" handler, injecting exit() for pid %u\n", t.getPid());
+    t.changeSystemCall(SYS_exit);
+    t.writeArg1( 128 + signum ); // status reflects exit due to signal
+    return false; // there shouldn't be a post-hook for exit
+  }
+    
+  case SIGHANDLER_IGNORED: // don't do anything
+    replaceSystemCallWithNoop(gs, s, t);
+    gs.log.writeToLog(Importance::info, "tracee is ignoring signal "+to_string(signum)+", doing nothing\n");
+    return true; // run noop (getpid) post-hook
+    
+  default:
+    throw runtime_error("dettrace runtime exception: invalid handler "+to_string(sh)+
+                        " for signal "+to_string(signum));
+  }
+}
+// =======================================================================================
 bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched, int64_t errornoValue){
   if(- errornoValue == (int64_t) t.getReturnValue()){
     gs.log.writeToLog(Importance::info,
@@ -1839,9 +2075,10 @@ void removeInodeFromMaps(ino_t inode, globalState& gs, ptracer& t){
 // =======================================================================================
 // Turn system call into a noop by changing it into a getpid. This should be called from
 // the pre hook only!
-void noopSystemCall(globalState& gs, ptracer& t){
+void replaceSystemCallWithNoop(globalState& gs, state& s, ptracer& t){
   t.changeSystemCall(SYS_getpid);
   gs.log.writeToLog(Importance::info, "Turning this system call into a NOOP\n");
+  s.noopSystemCall = true;
   return;
 }
 
