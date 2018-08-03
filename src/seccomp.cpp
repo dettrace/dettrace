@@ -67,7 +67,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_geteuid);
   noIntercept(SYS_getgroups);
   noIntercept(SYS_getpgrp);
-  noIntercept(SYS_getpid);
+  intercept(SYS_getpid); // need to intercept for noopSystemCall()
   noIntercept(SYS_getpgid);
   noIntercept(SYS_getppid);
   noIntercept(SYS_gettid);
@@ -87,9 +87,16 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_pread64);
   noIntercept(SYS_rt_sigprocmask);
   intercept(SYS_rt_sigaction);
+  intercept(SYS_timer_create);
+  intercept(SYS_timer_delete);
+  intercept(SYS_timer_getoverrun);
+  intercept(SYS_timer_gettime);
+  intercept(SYS_timer_settime);
+  intercept(SYS_setitimer);
+  intercept(SYS_getitimer);
   intercept(SYS_pause);
-  //intercept(SYS_sigaction);
-  //intercept(SYS_signal);
+  //intercept(SYS_sigaction); // is mapped to SYS_rt_sigaction on cat16
+  //intercept(SYS_signal); // is mapped to SYS_rt_sigaction on cat16
   noIntercept(SYS_rt_sigsuspend);
   noIntercept(SYS_setpgid);
   noIntercept(SYS_set_tid_address);

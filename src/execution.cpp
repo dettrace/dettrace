@@ -13,10 +13,10 @@
 
 pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process);
 // =======================================================================================
-execution::execution(int debugLevel, pid_t startingPid, bool useColor, bool oldKernel):
+execution::execution(int debugLevel, pid_t startingPid, bool useColor, bool oldKernel, string logFile):
   oldKernel {oldKernel},
-  log {stderr, debugLevel, useColor},
-  silentLogger {stderr, 0},
+  log {logFile, debugLevel, useColor},
+  silentLogger {"", 0},
   // Waits for first process to be ready!
   tracer{startingPid},
   // Create our global state once, share across class.
@@ -27,7 +27,7 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor, bool oldK
   },
   pidMap {silentLogger, "pid map", 1},
   myScheduler {startingPid, log, pidMap},
-  debugLevel {debugLevel}{
+  debugLevel {debugLevel}{    
     // Set state for first process.
     pidMap.addRealValue(startingPid);
     states.emplace(startingPid, state {startingPid, debugLevel});
@@ -447,7 +447,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
     // getNextEvent.
     states.at(traceesPid).signalToDeliver = sigNum;
 
-    auto msg = "[%d] Tracer: Received signal: %d. Forwading signal to tracee.\n";
+    auto msg = "[%d] Tracer: Received signal: %d. Forwarding signal to tracee.\n";
     auto coloredMsg = log.makeTextColored(Color::blue, msg);
     auto virtualPid = pidMap.getVirtualValue(traceesPid);
     log.writeToLog(Importance::inter, coloredMsg, virtualPid, sigNum);
@@ -507,6 +507,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<getdentsSystemCall>(syscallNumber, syscallName);
   case SYS_getdents64:
     return make_unique<getdents64SystemCall>(syscallNumber, syscallName);
+  case SYS_getitimer:
+    return make_unique<getitimerSystemCall>(syscallNumber, syscallName);
   case SYS_getpeername:
     return make_unique<getpeernameSystemCall>(syscallNumber, syscallName);
     // Some older systems do not have this  system call.
@@ -578,6 +580,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<sendtoSystemCall>(syscallNumber, syscallName);
   case SYS_select:
     return make_unique<selectSystemCall>(syscallNumber, syscallName);
+  case SYS_setitimer:
+    return make_unique<setitimerSystemCall>(syscallNumber, syscallName);
   case SYS_set_robust_list:
     return make_unique<set_robust_listSystemCall>(syscallNumber, syscallName);
   case SYS_statfs:
@@ -592,6 +596,16 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<tgkillSystemCall>(syscallNumber, syscallName);
   case SYS_time:
     return make_unique<timeSystemCall>(syscallNumber, syscallName);
+  case SYS_timer_create:
+    return make_unique<timer_createSystemCall>(syscallNumber, syscallName);
+  case SYS_timer_delete:
+    return make_unique<timer_deleteSystemCall>(syscallNumber, syscallName);
+  case SYS_timer_getoverrun:
+    return make_unique<timer_getoverrunSystemCall>(syscallNumber, syscallName);
+  case SYS_timer_gettime:
+    return make_unique<timer_gettimeSystemCall>(syscallNumber, syscallName);
+  case SYS_timer_settime:
+    return make_unique<timer_settimeSystemCall>(syscallNumber, syscallName);
   case SYS_times:
     return make_unique<timesSystemCall>(syscallNumber, syscallName);
   case SYS_uname:

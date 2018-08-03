@@ -117,8 +117,9 @@ public:
    * @param startingPid pid of starting process
    * @param useColor Toggles color in logging process
    * @param Using kernel version < 4.8.
+   * @param logFile file to write log messages to, if "" use stderr
    */
-  execution(int debugLevel, pid_t startingPid, bool useColor, bool oldKernel);
+  execution(int debugLevel, pid_t startingPid, bool useColor, bool oldKernel, string logFile);
 
   /**
    * Handles exit from current process.

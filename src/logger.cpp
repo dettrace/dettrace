@@ -8,13 +8,14 @@
 
 #include "logger.hpp"
 #include "util.hpp"
+#include <assert.h>
 
-#include<stdexcept>
+#include <stdexcept>
 
 using namespace std;
 
 /*======================================================================================*/
-logger::logger(FILE* myFile, int debugLevel, bool useColor):
+logger::logger(string logFile, int debugLevel, bool useColor):
   debugLevel(debugLevel),
   useColor(useColor){
   // Check value of debugLevel.
@@ -23,7 +24,22 @@ logger::logger(FILE* myFile, int debugLevel, bool useColor):
     exit(1);
   }
 
-  fin = myFile;
+  if (logFile == "") {
+    fin = stderr;
+  } else {
+    // find a unique name for our log file
+    char buf[1024];
+    for (int i = 0; i < 100; i++) {
+      snprintf(buf, sizeof(buf),  "%s.%02u", logFile.c_str(), i);
+    int rv = access(buf, F_OK);
+    if (0 != rv) break; // file doesn't exist, we can use this name!
+    }
+    FILE* logfile = fopen(buf, "w");
+    assert(nullptr != logfile);
+  
+    fin = logfile;
+  }
+
   padding = false;
 
   return;
@@ -80,6 +96,8 @@ void logger::writeToLog(Importance imp, std::string format, ...){
         fprintf(fin, "[0]ERROR ");
       break;
     }
+    fprintf(fin, "%lx ", logEntryID);
+    logEntryID++;
 
     if(padding){
       fprintf(fin, "  ");

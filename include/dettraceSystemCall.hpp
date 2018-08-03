@@ -26,16 +26,14 @@ void replaySystemCall(ptracer& t, uint64_t systemCall);
  *
  * unsigned int alarm(unsigned int seconds);
  *
- * alarm()  arranges for a SIGALRM signal to be delivered to the calling process in sec‐
- * onds seconds.
- *
- * TODO: We must allow system call. Maybe deliver signal on next sytem call?
+ * alarm() arranges for a SIGALRM signal to be delivered to the calling process
+ * in a given number of seconds.
  */
 class alarmSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  //void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -246,7 +244,7 @@ public:
 class fstatSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
@@ -428,6 +426,8 @@ public:
 class getpidSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 
 // =======================================================================================
@@ -1019,6 +1019,83 @@ public:
 
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
+
+// =======================================================================================
+/**
+ * int timer_create(clockid_t clockid, struct sigevent *sevp, timer_t *timerid);
+ */
+class timer_createSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  //void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/** 
+ * int timer_delete(timer_t timerid);
+ */
+class timer_deleteSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/** 
+ * int timer_getoverrun(timer_t timerid);
+ */
+class timer_getoverrunSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/** 
+ * int timer_gettime(timer_t timerid, struct itimerspec *curr_value);
+ */
+class timer_gettimeSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
+// =======================================================================================
+/**
+ * int timer_settime(timer_t timerid, int flags, const struct itimerspec *new_value,
+ *                   struct itimerspec *old_value);
+ */
+class timer_settimeSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  //void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
+
+// =======================================================================================
+/**
+ * int getitimer(int which, struct itimerval *curr_value);
+ */
+class getitimerSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/**
+ * int setitimer(int which, const struct itimerval *new_value, struct itimerval *old_value);
+ */
+class setitimerSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  //void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
+
 // =======================================================================================
 /**
  * clock_t times(struct tms *buf);
