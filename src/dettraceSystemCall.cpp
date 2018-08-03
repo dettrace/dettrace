@@ -1002,7 +1002,7 @@ void rmdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 // correct output. I guess libc internally translates from the new user-facing
 // struct to this older one, and passes the older one to the kernel.
 // https://github.com/strace/strace/blob/v4.23/signal.c#L297
-struct old_sigaction { 
+struct kernel_sigaction { 
   /* sa_handler may be a libc #define, need to use another name: */
   unsigned long sa_handler__;
   unsigned long sa_mask;
@@ -1021,7 +1021,7 @@ bool rt_sigactionSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
   }
   
   // figure out what kind of handler the tracee is trying to install
-  struct old_sigaction sa = ptracer::readFromTracee( traceePtr<struct old_sigaction>((struct old_sigaction*)t.arg2()), t.getPid() );
+  struct kernel_sigaction sa = ptracer::readFromTracee( traceePtr<struct kernel_sigaction>((struct kernel_sigaction*)t.arg2()), t.getPid() );
   gs.log.writeToLog(Importance::info, "struct sigaction*: %p\n", t.arg2());
   gs.log.writeToLog(Importance::info, "sa_flags: "+to_string(sa.sa_flags)+" "+to_string(SA_RESETHAND)+" \n");
   gs.log.writeToLog(Importance::info, "sa_handler: "+to_string((uint64_t)sa.sa_handler__)+"\n");
