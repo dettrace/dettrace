@@ -477,6 +477,10 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<connectSystemCall>(syscallNumber, syscallName);
   case SYS_creat:
     return make_unique<creatSystemCall>(syscallNumber, syscallName);
+  case SYS_dup:
+    return make_unique<dupSystemCall>(syscallNumber, syscallName);
+  case SYS_dup2:
+    return make_unique<dup2SystemCall>(syscallNumber, syscallName);
   case SYS_execve:
     return make_unique<execveSystemCall>(syscallNumber, syscallName);
   case SYS_faccessat:
@@ -487,6 +491,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<flistxattrSystemCall>(syscallNumber, syscallName);
   case SYS_fchownat:
     return make_unique<fchownatSystemCall>(syscallNumber, syscallName);
+  case SYS_fcntl:
+    return make_unique<fcntlSystemCall>(syscallNumber, syscallName);
   case SYS_fstat:
     return make_unique<fstatSystemCall>(syscallNumber, syscallName);
   case SYS_newfstatat:

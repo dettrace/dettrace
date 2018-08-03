@@ -162,6 +162,22 @@ public:
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
+class dupSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
+// =======================================================================================
+class dup2SystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
+// =======================================================================================
 /**
  * int execve(const char *filename, char *const argv[], char *const envp[]);
  *
@@ -247,6 +263,22 @@ public:
 
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
+// =======================================================================================
+/**
+ * fcntl - manipulate file descriptor
+ *
+ * int fcntl(int fd, int cmd, ... arg );
+
+ * Needed to check if user changed status of file descriptor from blocking to non-blocking.
+ */
+class fcntlSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
+
 // =======================================================================================
 /**
  * int fstatfs(int fd, struct statfs *buf);

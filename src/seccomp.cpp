@@ -38,14 +38,12 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_lchown);
   // Get clock resolution, TODO might be non deterministic.
   noIntercept(SYS_clock_getres);
-  
-  // Duplicate file descriptor.
-  noIntercept(SYS_dup);
-  noIntercept(SYS_dup2);
+
   // End process.
   noIntercept(SYS_exit);
   // End process group.
   noIntercept(SYS_exit_group);
+  noIntercept(SYS_epoll_create1);
   // Advise on access patter by program of file.
   noIntercept(SYS_fadvise64);
   noIntercept(SYS_fallocate);
@@ -54,7 +52,6 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_fchmod);
   noIntercept(SYS_fchmodat);
   noIntercept(SYS_fchown);
-  noIntercept(SYS_fcntl);
   noIntercept(SYS_fdatasync);
   // TODO Flock may block! In the future this may lead to deadlock.
   // deal with it then :)
@@ -112,12 +109,15 @@ void seccomp::loadRules(bool debug){
   // This seems to be, surprisingly, deterministic. The affinity is set/get by
   // us so it should always be the same mask. User cannot actually observe differences.
   noIntercept(SYS_sched_getaffinity);
+  noIntercept(SYS_sched_setaffinity);
   noIntercept(SYS_socket);
   noIntercept(SYS_sync);
   noIntercept(SYS_umask);
 
   noIntercept(SYS_sched_yield);
   noIntercept(SYS_truncate);
+  noIntercept(SYS_eventfd2);
+  noIntercept(SYS_writev);
 
   // These system calls must be intercepted as to know when a fork even has happened:
   // We handle forks when see the system call pre exit.
@@ -141,11 +141,16 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_close);
   // TODO: This system call
   intercept(SYS_connect);
+  // Duplicate file descriptor.
+  intercept(SYS_dup);
+  intercept(SYS_dup2);
+
   intercept(SYS_execve, debug);
   intercept(SYS_faccessat, debug);
   intercept(SYS_fgetxattr, debug);
   intercept(SYS_flistxattr, debug);
   intercept(SYS_fchownat, debug);
+  intercept(SYS_fcntl);
   intercept(SYS_fstat);
   intercept(SYS_fstatfs);
   // TODO

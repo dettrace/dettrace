@@ -19,6 +19,14 @@ using namespace std;
 
 enum sighandler_type { INVALID, CUSTOM_SIGNAL_HANDLER, DEFAULT_HANDLER, SIGNAL_IGNORED };
 
+/**
+ * Keep track of file descriptor, whether it's blocking or non blocking.
+ */
+enum class descriptorType {
+  blocking,     /*< Set to block by user program (default) */
+  nonBlocking,     /*< User used system call pipe2 or fnctl to set as non blocking. */
+};
+
 // Needed to avoid recursive dependencies between classes.
 class systemCall;
 
@@ -49,6 +57,18 @@ public:
   state(pid_t traceePid, int debugLevel);
 
   /**
+   * Keep track of file descriptor status for blocking descriptors, as set by the
+   * user program. Irregardless of what we set it to. These are
+   * set in either pipe (non blocking) or pipe2 (either), or duplicated through,
+   * dup, dup2, or can be set through fnctl. Deleted through close(). We only support
+   * pipes, should be extended with fifo's at some point.
+
+   * When reading/writing we check this status to know whether to block this process,
+   * and replay, or simply preempt as Runnable by the scheduler.
+   */
+  unordered_map<int, descriptorType> fdStatus;
+
+  /**
    * Map from file descriptors to directory entries.
    */
   unordered_map<int, directoryEntries<linux_dirent>> dirEntries;
@@ -57,6 +77,11 @@ public:
    * The pid of the process represented by this state.
    */
   pid_t traceePid;
+
+  /**
+   * Remember whether wait4 was originally blocking or not.
+   */
+  bool wait4Blocking = false;
 
   /*
    * Per process bool to know if this is the pre or post hook event as ptrace does
@@ -129,7 +154,7 @@ public:
       signal/sigaction. actualSigalrmHandler is updated if the syscall completes
       successfully. */
   enum sighandler_type requestedSigalrmHandler = INVALID;
-  
+
   bool rdfsNotNull = false; /**< Indicates whether rdfs is NULL. */
   bool wrfsNotNull = false; /**< Indicates whether wrfs is NULL. */
   bool exfsNotNull = false; /**< Indicates whether exfs is NULL. */

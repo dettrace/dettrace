@@ -40,6 +40,7 @@ void printInfoString(uint64_t addressOfCString, globalState& gs, state& s,
 void injectFstat(globalState& gs, state& s, ptracer& t, int fd);
 void injectPause(globalState& gs, state& s, ptracer& t);
 void noopSystemCall(globalState& gs, ptracer& t);
+pair<int,int> getPipeFds(globalState& gs, state& s, ptracer& t);
 /**
  *
  * newfstatat is a stat variant with a "at" for using a file descriptor to a directory
@@ -67,7 +68,8 @@ void removeInodeFromMaps(ino_t inode, globalState& gs, ptracer& t);
  */
 bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t,
                             scheduler& sched, int64_t errnoValue);
-
+bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
+                      int64_t errornoValue);
 // =======================================================================================
 bool accessSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), gs, s);
@@ -85,7 +87,7 @@ bool alarmSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
     We suppress the original alarm() call with an argument of 0, which means
     don't generate a real SIGALRM signal. We allow this to go to the kernel, and
     in the alarm post-hook, if SIGALRM is ignored by the tracee, we do nothing
-    as alarm() is effectively a NOP and we are done. 
+    as alarm() is effectively a NOP and we are done.
 
     If the tracee has a custom or default SIGALRM handler, we inject a pause()
     syscall. In the pause pre-hook we know the tracee is just about to block, so
@@ -144,12 +146,17 @@ void clock_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& 
 void closeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int fd = (int) t.arg1();
   // Remove entry from our direEntries.
-
   auto result = s.dirEntries.find(fd);
   // Exists.
   if(result != s.dirEntries.end()){
     gs.log.writeToLog(Importance::info, "Removing directory entries for fd: %d!\n", fd);
     s.dirEntries.erase(result);
+  }
+
+  // Remove entry from our fd set for pipes.
+  if(s.fdStatus.count(fd) != 0){
+    gs.log.writeToLog(Importance::info, "Removing pipe fd: %d!\n", fd);
+    s.fdStatus.erase(fd);
   }
 }
 // =======================================================================================
@@ -177,6 +184,38 @@ void creatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   injectFstat(gs, s, t, t.getReturnValue());
   return;
 }
+// =======================================================================================
+void dupSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  int newfd = (int) t.getReturnValue();
+  int fd =  (int) t.arg1();
+  if(newfd < 0){
+    return;
+  }
+
+  // dup succeeded.
+  if(s.fdStatus.count(fd) != 0){ // Only for pipes
+    s.fdStatus[newfd] = s.fdStatus[fd]; // copy over status.
+    gs.log.writeToLog(Importance::info, "%d = dup(%d)\n", newfd, fd);
+  }
+}
+// =======================================================================================
+void dup2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  int newfd = (int) t.getReturnValue();
+  int fd =  (int) t.arg1();
+  if(newfd < 0){
+    return;
+  }
+
+  // dup2 succeeded.
+  if(s.fdStatus.count(fd) != 0){ // Only for pipes
+
+    // Semantics of dup2 say old fd could be closed and overwritten, we do that
+    // implicitly here!
+    s.fdStatus[newfd] = s.fdStatus[fd]; // copy over status.
+    gs.log.writeToLog(Importance::info, "%d = dup2(%d)\n", newfd, fd);
+  }
+}
+
 // =======================================================================================
 bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), gs, s);
@@ -217,6 +256,36 @@ bool fchownatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sch
   return false;
 }
 // =======================================================================================
+void fcntlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  int retval = t.getReturnValue();
+  if(retval != 0){
+    return;
+  }
+
+  int fd = t.arg1();
+  int cmd = t.arg2();
+  int arg = t.arg3();
+  if(cmd == F_DUPFD || cmd == F_DUPFD_CLOEXEC){
+    auto str = "found fcntl(%d, FDUPFD || F_DUPFD_CLOCEXEC) = %d\n";
+    int newfd = retval;
+    gs.log.writeToLog(Importance::info, str, fd, newfd);
+    // Same status as what it was duped from.
+    auto newStatus = s.fdStatus[fd];
+    s.fdStatus[newfd] = newStatus;
+  }
+  // User attempting to change blocked status.
+  if(cmd == F_SETFL && ((arg & O_NONBLOCK) != 0)){
+    auto str = "found fcntl setting %d to non blocking!\n";
+    if(s.fdStatus.count(fd) != 0){
+      gs.log.writeToLog(Importance::info, str, fd);
+      s.fdStatus[fd] = descriptorType::nonBlocking;
+    }else{
+      gs.log.writeToLog(Importance::info, str, fd);
+      gs.log.writeToLog(Importance::info, "But this is not a pipe... ignoring.\n");
+    }
+  }
+}
+  // =======================================================================================
 bool faccessatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                        scheduler& sched){
   printInfoString(t.arg2(), gs, s);
@@ -378,7 +447,6 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
       s.userDefinedTimeout = false;
       return;
     } else {
-      // Restore register state.
       t.writeArg4(s.originalArg4);
       replaySyscallIfBlocked(gs, s, t, sched, ETIMEDOUT);
     }
@@ -711,7 +779,7 @@ bool pauseSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
     }
     return true;
   }
-  
+
   return false;
 }
 void pauseSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -729,9 +797,9 @@ void pauseSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 
 // =======================================================================================
 bool pipeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  gs.log.writeToLog(Importance::info, "Making this pipe non-blocking\n");
-  // Convert pipe call to pipe2 to set O_NONBLOCK.
+  gs.log.writeToLog(Importance::info, "Making this pipe non-blocking via pipe2\n");
   t.changeSystemCall(SYS_pipe2);
+  // Set so we can restore in pipe2 later.
   s.originalArg2 = t.arg2();
   t.writeArg2(O_NONBLOCK);
 
@@ -739,11 +807,18 @@ bool pipeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedul
 }
 
 void pipeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // Restore original registers.
-  t.writeArg2(s.originalArg2);
+  // We should never get here. We always change the call to pipe to a call to pipe2.
+  throw runtime_error("did not expect to arrive a pipe post hook.");
+  // Restore original register state.
+  // t.writeArg2(s.originalArg2);
+  // auto p = getPipeFds(gs, s, t);
+  // s.fdStatus[p.first] = descriptorType::blocking;
+  // s.fdStatus[p.second] = descriptorType::blocking;
 }
 // =======================================================================================
 bool pipe2SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  // We only see this pre-hook if the call was originally a pipe2 and not a pipe that was
+  // converted into a pipe2. That's why it's okay to set s.originalArg2 here.
   gs.log.writeToLog(Importance::info, "Making this pipe2 non-blocking\n");
   // Convert pipe call to pipe2 to set O_NONBLOCK.
   s.originalArg2 = t.arg2();
@@ -755,6 +830,20 @@ bool pipe2SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
 void pipe2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // Restore original registers.
   t.writeArg2(s.originalArg2);
+
+  // Must be checked after resetting state.
+  int flags = (int) t.arg2();
+
+  auto p = getPipeFds(gs, s, t);
+
+  // Check if set as non=blocking.
+  if((flags & O_NONBLOCK) == 0){
+    s.fdStatus[p.first] = descriptorType::nonBlocking;
+    s.fdStatus[p.second] = descriptorType::nonBlocking;
+  }else{
+    s.fdStatus[p.first] = descriptorType::blocking;
+    s.fdStatus[p.second] = descriptorType::blocking;
+  }
 }
 // =======================================================================================
 bool pselect6SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -837,9 +926,35 @@ bool readSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedul
 }
 
 void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  bool replay = replaySyscallIfBlocked(gs, s, t, sched, EAGAIN);
-  if(replay){
-    return;
+  int fd = t.arg1();
+  auto resetState =
+    [&](){
+      // Restore user regs so that it appears as if only one syscall occurred
+      t.setReturnRegister(s.totalBytes);
+      t.writeArg2(s.beforeRetry.rsi);
+      t.writeArg3(s.beforeRetry.rdx);
+
+      // reset for next syscall that we may have to retry
+      s.firstTrySystemcall = true;
+      s.totalBytes = 0;
+    };
+
+  // Pipe exists in our map and it's set to non blocking.
+  if(s.fdStatus.count(fd) != 0 && s.fdStatus[fd] == descriptorType::nonBlocking){
+    gs.log.writeToLog(Importance::info,
+                      "read found with non blocking pipe!\n");
+    bool blocked = preemptIfBlocked(gs, s, t, sched, EAGAIN);
+    // We cannot read more from this polling pipe, we're done. Looping over reads
+    // trying to read more.
+    if(blocked){
+      resetState();
+      return;
+    }
+  }else{
+    bool preemptAndTryLater = replaySyscallIfBlocked(gs, s, t, sched, EAGAIN);
+    if(preemptAndTryLater){
+      return;
+    }
   }
 
   ssize_t bytes_read = t.getReturnValue();
@@ -869,19 +984,11 @@ void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     s.beforeRetry = t.getRegs();
   }
 
+  // EOF, or read returned everything we asked for.
   if(bytes_read == 0  || // EOF
-     s.totalBytes == s.beforeRetry.rdx  // original bytes requested
-     ) {
+     s.totalBytes == s.beforeRetry.rdx){  // original bytes requested
     gs.log.writeToLog(Importance::info, "EOF or read all bytes.\n");
-    // EOF, or read returned everything we asked for.
-    // Restore user regs so that it appears as if only one syscall occurred
-    t.setReturnRegister(s.totalBytes);
-    t.writeArg2(s.beforeRetry.rsi);
-    t.writeArg3(s.beforeRetry.rdx);
-
-    // reset for next syscall that we may have to retry
-    s.firstTrySystemcall = true;
-    s.totalBytes = 0;
+    resetState();
   } else {
     gs.log.writeToLog(Importance::info, "Got less bytes than requested.\n");
     t.writeArg2(t.arg2() + bytes_read);
@@ -1059,7 +1166,7 @@ bool rt_sigactionSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
     // with every field is set, which seems like garbage). Maybe I'm reading the
     // struct sigaction incorrectly? Or maybe there's one definition in the
     // program and another one here?
-    
+
     //if (sa.sa_flags & SA_RESETHAND) {
       // SA_RESETHAND flag specified, which restores SIG_DFL after running the custom handler once
       // this is too complicated, so just throw an error
@@ -1506,9 +1613,40 @@ bool writeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
 }
 
 void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  auto replay = replaySyscallIfBlocked(gs, s, t, sched, EAGAIN);
-  if(replay){
-    return;
+  int fd = t.arg1();
+  bool preemptAndTryLater = false;
+
+  auto resetState = [&](){
+                      // Nothing left to write.
+                      gs.log.writeToLog(Importance::info, "All bytes written.\n");
+                      t.setReturnRegister(s.totalBytes);
+
+                      t.writeArg2(s.beforeRetry.rsi);
+                      t.writeArg3(s.beforeRetry.rdx);
+
+                      s.firstTrySystemcall = true;
+                      s.totalBytes = 0;
+                    };
+
+  // Pipe exists in our map and it's set to non blocking.
+  if(s.fdStatus.count(fd) != 0 && s.fdStatus[fd] == descriptorType::nonBlocking){
+    gs.log.writeToLog(Importance::info,
+                      "read found with non-blocking pipe!\n");
+    preemptAndTryLater = preemptIfBlocked(gs, s, t, sched, EAGAIN);
+    // We have looped, and cannot read any more bytes from the pipe... Return.
+    if(preemptAndTryLater){
+      gs.log.writeToLog(Importance::info,
+                      "All done with non-blocking pipe replay!\n");
+      resetState();
+      return;
+    }
+  }else{
+    preemptAndTryLater = replaySyscallIfBlocked(gs, s, t, sched, EAGAIN);
+    // We have not read all bytes, but pipe has nothing, set ourselves as blocked and we
+    // will retry later.
+    if(preemptAndTryLater){
+      return;
+    }
   }
 
   size_t bytes_written = t.getReturnValue();
@@ -1520,13 +1658,13 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     return;
   }
 
-
-
   s.totalBytes += bytes_written;
   if(s.firstTrySystemcall){
     s.firstTrySystemcall = false;
     s.beforeRetry = t.getRegs();
   }
+  gs.log.writeToLog(Importance::info, "total bytes: %d.\n", bytes_written);
+  gs.log.writeToLog(Importance::info, "before retry rdx: %d.\n", s.beforeRetry.rdx);
 
   // Finally wrote all bytes user wanted.
 
@@ -1535,15 +1673,7 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   // https://stackoverflow.com/questions/41904221/can-write2-return-0-bytes-written-and-what-to-do-if-it-does?utm_medium=organic&utm_source=google_rich_qa&utm_campaign=google_rich_qa
   if(s.totalBytes == s.beforeRetry.rdx ||
      bytes_written == 0){
-    // Nothing left to write.
-    gs.log.writeToLog(Importance::info, "All bytes written.\n");
-    t.setReturnRegister(s.totalBytes);
-
-    t.writeArg2(s.beforeRetry.rsi);
-    t.writeArg3(s.beforeRetry.rdx);
-
-    s.firstTrySystemcall = true;
-    s.totalBytes = 0;
+    resetState();
   }else{
     gs.log.writeToLog(Importance::info, "Not all bytes written: Replaying system call!\n");
     t.writeArg2(t.arg2() + bytes_written);
@@ -1555,6 +1685,7 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 }
 // =======================================================================================
 bool wait4SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  s.wait4Blocking = (t.arg3() & WNOHANG) == 0;
   gs.log.writeToLog(Importance::info, "Making this a non-blocking wait4\n");
 
   // Make this a non blocking hang!
@@ -1563,10 +1694,15 @@ bool wait4SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   return true;
 }
 void wait4SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  bool replayed = replaySyscallIfBlocked(gs, s, t, sched, 0);
-  if(!replayed){
-    t.writeArg3(s.originalArg3);
+  if(s.wait4Blocking){
+    gs.log.writeToLog(Importance::info, "Non-blocking wait4 found\n");
+    replaySyscallIfBlocked(gs, s, t, sched, 0);
+  }else{
+    gs.log.writeToLog(Importance::info, "Blocking wait4 found\n");
+    preemptIfBlocked(gs, s, t, sched, EAGAIN);
   }
+  // Reset.
+  t.writeArg3(s.originalArg3);
 
   return;
 }
@@ -1577,10 +1713,10 @@ bool writevSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 
 void writevSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // TODO: Handle bytes written.
-  int retVal = t.getReturnValue();
-  if (retVal < 0) {
-    throw runtime_error("dettrace runtime exception: Write failed with: " + string{ strerror(- retVal) });
-  }
+  // int retVal = t.getReturnValue();
+  // if (retVal < 0) {
+    // throw runtime_error("dettrace runtime exception: Write failed with: " + string{ strerror(- retVal) });
+  // }
 
   // //uint16_t minus2 = t.readFromTracee((uint16_t*) (t.regs.rip - 2), s.traceePid);
   // uint16_t minus2 = t.readFromTracee((uint16_t*) (t.getRip() - 2), s.traceePid);
@@ -1615,6 +1751,25 @@ void writevSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   //  }
   return;
 }
+// =======================================================================================
+bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
+                            int64_t errornoValue){
+  if(- errornoValue == (int64_t) t.getReturnValue()){
+    gs.log.writeToLog(Importance::info,
+                      s.systemcall->syscallName + " would have blocked!\n");
+
+    sched.preemptAndScheduleNext(s.traceePid, preemptOptions::runnable);
+    return true;
+  }else{
+    // Disambiguiate. Otherwise it's impossible to tell the difference between a
+    // maybeRunnable process that made no progress vs the case where we were on
+    // maybeRunnable and we made progress, and eventually we hit another blocking
+    // system call.
+    sched.reportProgress(s.traceePid);
+    return false;
+  }
+}
+
 // =======================================================================================
 bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched, int64_t errornoValue){
   if(- errornoValue == (int64_t) t.getReturnValue()){
@@ -1844,6 +1999,27 @@ void noopSystemCall(globalState& gs, ptracer& t){
   gs.log.writeToLog(Importance::info, "Turning this system call into a NOOP\n");
   return;
 }
+// =======================================================================================
+pair<int,int> getPipeFds(globalState& gs, state& s, ptracer& t){
+// Get values of both file descriptors.
+  int* pipefdTracee = (int*) t.arg1();
+  traceePtr<int> fdPtr1 = traceePtr<int>(& pipefdTracee[0]);
+  traceePtr<int> fdPtr2 = traceePtr<int>(& pipefdTracee[1]);
 
+  int fd1 = ptracer::readFromTracee(fdPtr1, t.getPid());
+  int fd2 = ptracer::readFromTracee(fdPtr2, t.getPid());
 
+  gs.log.writeToLog(Importance::info, "Got pipe fd1: " + to_string(fd1) + "\n");
+  gs.log.writeToLog(Importance::info, "Got pipe fd2: " + to_string(fd2) + "\n");
+
+  // Track this file descriptor:
+  if(s.fdStatus.count(fd1) != 0){
+    throw runtime_error("dettrace runtime exception: Value already in map (fdStatus).");
+  }
+  if(s.fdStatus.count(fd2) != 0){
+    throw runtime_error("dettrace runtime exception: Value already in map (fdStatus).");
+  }
+
+  return make_pair(fd1, fd2);
+}
 // =======================================================================================

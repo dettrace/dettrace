@@ -33,3 +33,4 @@ test/samplePrograms/shTestFile
 test/samplePrograms/waitOnChild
 test/samplePrograms/multipleThreads
 test/samplePrograms/simpleThreads
+*.bin
