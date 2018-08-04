@@ -66,7 +66,7 @@ int doWithCheck(int returnValue, string errorMessage);
  * @param traceePid tracee process' pid, whose address space is being read
  */
 template <typename T>
-void readVmTracee(traceePtr<T> traceeMemory, T* localMemory, size_t numberOfBytes,
+void readVmTraceeRaw(traceePtr<T> traceeMemory, T* localMemory, size_t numberOfBytes,
                   pid_t traceePid) {
   iovec remoteIoVec = {traceeMemory.ptr, numberOfBytes};
   iovec localIoVec = {localMemory, numberOfBytes };
@@ -86,11 +86,11 @@ void readVmTracee(traceePtr<T> traceeMemory, T* localMemory, size_t numberOfByte
  * is wishing to read/write.
  * @param localMemory starting address in local memory (remote)
  * @param traceeMemory starting address in tracee memory (local)
- * @param numbeOfBytes number of bytes to be read
+ * @param numbeOfBytes number of bytes to be write
  * @param traceepid tracee process' pid, whose address space is being written to
  */
 template <typename T>
-void writeVmTracee(T* localMemory, traceePtr<T> traceeMemory, size_t numberOfBytes,
+void writeVmTraceeRaw(T* localMemory, traceePtr<T> traceeMemory, size_t numberOfBytes,
                    pid_t traceePid) {
   iovec remoteIoVec = {traceeMemory.ptr, numberOfBytes};
   iovec localIoVec = {localMemory, numberOfBytes };
