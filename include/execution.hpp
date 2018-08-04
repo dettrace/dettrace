@@ -50,6 +50,11 @@ private:
   logger silentLogger;
 
   /**
+   * Whether to print statistics to stdout or not.
+   */
+  bool printStatistics;
+
+  /**
    * ptrace wrapper.
    * Class wrapping ptrace system call in a higher level API.
    */
@@ -109,6 +114,29 @@ private:
   */
   uint32_t tscpCounter = 0;
 
+  // Statistic Counters start here!
+
+  /**
+   * Counter for keeping track of total number of system calls events intercepted.
+   * this includes pre-hooks and post-hooks.
+  */
+  uint32_t systemCallsEvents = 0;
+
+  /**
+   * Counter for keeping track of total number of rdtsc instructions.
+  */
+  uint32_t rdtscEvents = 0;
+
+  /**
+   * Counter for keeping track of total number of rdtscp instructions.
+  */
+  uint32_t rdtscpEvents = 0;
+
+  /**
+   * Counter for keeping track process spawns: fork, vfork, clone.
+  */
+  uint32_t processSpawnEvents = 0;
+
 public:
 
   /**
@@ -119,7 +147,8 @@ public:
    * @param Using kernel version < 4.8.
    * @param logFile file to write log messages to, if "" use stderr
    */
-  execution(int debugLevel, pid_t startingPid, bool useColor, bool oldKernel, string logFile);
+  execution(int debugLevel, pid_t startingPid, bool useColor, bool oldKernel,
+            string logFile, bool printStatistics);
 
   /**
    * Handles exit from current process.

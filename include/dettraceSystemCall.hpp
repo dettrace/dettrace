@@ -12,7 +12,7 @@ using namespace std;
  * @param t ptracer
  * @param systemCall system call to replay
  */
-void replaySystemCall(ptracer& t, uint64_t systemCall);
+void replaySystemCall(globalState& gs, ptracer& t, uint64_t systemCall);
 
 /**
  * Hopefully this will server as documentation for all our system calls.
@@ -1358,7 +1358,10 @@ void handleDents(globalState& gs, state& s, ptracer& t, scheduler& sched){
     gs.log.writeToLog(Importance::info, "Returning %d bytes!\n", filledVector.size());
 
     // Write entry back to tracee!
-    writeVmTracee(filledVector.data(), traceeBuffer, filledVector.size(), t.getPid());
+    writeVmTraceeRaw(filledVector.data(), traceeBuffer, filledVector.size(), t.getPid());
+    // Explicitly increase counter.
+    t.readVmCalls++;
+
     // Set return register!
     t.setReturnRegister(filledVector.size());
   }
@@ -1371,14 +1374,17 @@ void handleDents(globalState& gs, state& s, ptracer& t, scheduler& sched){
     // by the kernel into the tracee's buffer.
     size_t bytesToCopy = t.getReturnValue();
     uint8_t localBuffer[bytesToCopy];
-    readVmTracee(traceeBuffer, localBuffer, bytesToCopy, t.getPid());
+    readVmTraceeRaw(traceeBuffer, localBuffer, bytesToCopy, t.getPid());
+    // Explicitly increase counter.
+    t.readVmCalls++;
+
     vector<uint8_t> newChunk { localBuffer, localBuffer + bytesToCopy };
 
     // Copy chunks over to our directory entry for this file descriptor.
     s.dirEntries.at(fd).addChunk(newChunk);
 
     gs.log.writeToLog(Importance::info, "Replaying system call to read more bytes...\n");
-    replaySystemCall(t, t.getSystemCallNumber());
+    replaySystemCall(gs, t, t.getSystemCallNumber());
   }
   return;
 }

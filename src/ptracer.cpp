@@ -138,6 +138,7 @@ string ptracer::readTraceeCString(traceePtr<char> readAddress, pid_t traceePid){
   // Read long-sized chunks of memory at at time.
   while (!done){
     int64_t result = doPtrace(PTRACE_PEEKDATA, traceePid, readAddress.ptr, nullptr);
+    ptracePeeks++;
     const char* p = (const char*) &result;
     const size_t bytesRead = strnlen(p, wordSize);
     if (wordSize != bytesRead) {

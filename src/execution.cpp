@@ -13,9 +13,11 @@
 
 pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process);
 // =======================================================================================
-execution::execution(int debugLevel, pid_t startingPid, bool useColor, bool oldKernel, string logFile):
+execution::execution(int debugLevel, pid_t startingPid, bool useColor,
+                     bool oldKernel, string logFile, bool printStatistics):
   oldKernel {oldKernel},
   log {logFile, debugLevel, useColor},
+  printStatistics{printStatistics},
   silentLogger {"", 0},
   // Waits for first process to be ready!
   tracer{startingPid},
@@ -27,7 +29,7 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor, bool oldK
   },
   pidMap {silentLogger, "pid map", 1},
   myScheduler {startingPid, log, pidMap},
-  debugLevel {debugLevel}{    
+  debugLevel {debugLevel}{
     // Set state for first process.
     pidMap.addRealValue(startingPid);
     states.emplace(startingPid, state {startingPid, debugLevel});
@@ -69,7 +71,7 @@ bool execution::handleExit(const pid_t traceesPid){
 // =======================================================================================
 // Despite what the name will imply, this function is actually called during a
 // ptrace seccomp event. Not a pre-system call event. In newer kernel version there is no
-// need to deal with ptrace pre system call events. So the only reason we refer to it here
+// need to deal with ptrace pre-system call events. So the only reason we refer to it here
 // is for backward compatibility reasons.
 bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   int syscallNum = tracer.getSystemCallNumber();
@@ -102,7 +104,8 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   // https://stackoverflow.com/questions/29997244/
   // occasionally-missing-ptrace-event-vfork-when-running-ptrace
   if(systemCall == "fork" || systemCall == "vfork" || systemCall == "clone"){
-    
+    processSpawnEvents++;
+
     // Threads are not supported!
     if(systemCall == "clone" ){
       unsigned long flags = (unsigned long) tracer.arg1();
@@ -199,6 +202,7 @@ void execution::runProgram(){
 
     // Most common event. We handle the pre-hook for system calls here.
     if(ret == ptraceEvent::seccomp){
+      systemCallsEvents++;
       callPostHook = handleSeccomp(traceesPid);
       continue;
     }
@@ -217,6 +221,8 @@ void execution::runProgram(){
           callPostHook = true;
           currentState.onPreExitEvent = false;
       }else{
+        // Only count here due to comment above (we see this event twice in older kernels).
+        systemCallsEvents++;
         tracer.updateState(traceesPid);
         handlePostSystemCall( currentState );
         // set callPostHook to default value for next iteration.
@@ -315,6 +321,32 @@ void execution::runProgram(){
   auto msg =
     log.makeTextColored(Color::blue, "All processes done. Finished successfully!\n");
   log.writeToLog(Importance::info, msg);
+
+  if(printStatistics){
+    auto printStat =
+      [&](string type, uint32_t value){
+        string preStr = "dettrace Statistic. ";
+        cout << preStr + type + to_string(value) << endl;
+      };
+
+    cout << endl;
+    printStat("System Call Events: ", systemCallsEvents);
+    printStat("rdtsc instructions: ", rdtscEvents);
+    printStat("rdtscp instructions: ", rdtscpEvents);
+    printStat("read retries: ", myGlobalState.readRetryEvents);
+    printStat("write retries: ", myGlobalState.writeRetryEvents);
+    printStat("getRandom() calls: ", myGlobalState.getRandomCalls);
+    printStat("/dev/urandom opens: ", myGlobalState.devUrandomOpens);
+    printStat("/dev/random opens: ", myGlobalState.devRandomOpens);
+    printStat("Time Related Sytem Calls: ", myGlobalState.timeCalls);
+    printStat("Process spawn events: ", processSpawnEvents);
+    printStat("Calls for scheduling next process: ", myScheduler.callsToScheduleNextProcess);
+    printStat("Replays due to blocking system call: ", myGlobalState.replayDueToBlocking);
+    printStat("Total replays: ", myGlobalState.totalReplays);
+    printStat("ptrace peeks: ", tracer.ptracePeeks);
+    printStat("process_vm_reads: ", tracer.readVmCalls);
+    printStat("process_vm_writes: ", tracer.writeVmCalls);
+  }
 }
 // =======================================================================================
 void execution::handleFork(ptraceEvent event, const pid_t traceesPid){
@@ -414,17 +446,19 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
     tracer.updateState(traceesPid);
     uint32_t curr_insn32 = (tracer.readFromTracee(traceePtr<uint32_t> ((uint32_t*)tracer.getRip().ptr), traceesPid));
-    
-    if ((curr_insn32 << 16) == 0x310F0000 || (curr_insn32 << 8) == 0xF9010F00) {
 
+    if ((curr_insn32 << 16) == 0x310F0000 || (curr_insn32 << 8) == 0xF9010F00) {
       auto msg = "[%d] Tracer: Received rdtsc: Reading next instruction.\n";
       int ip_step = 2;
 
       if ((curr_insn32 << 8) == 0xF9010F00) {
+        rdtscpEvents++;
         tracer.writeRcx(tscpCounter);
         tscpCounter++;
         ip_step = 3;
         msg = "[%d] Tracer: Received rdtscp: Reading next instruction.\n";
+      }else{
+        rdtscEvents++;
       }
 
       tracer.writeRax(tscCounter);

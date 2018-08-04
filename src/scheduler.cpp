@@ -94,6 +94,9 @@ void scheduler::addAndScheduleNext(pid_t newProcess){
   processStateMap[newProcess] = processState::runnable;
   nextPid = newProcess;
   // printProcesses();
+
+  // We still want to count this scheduling event :)
+  callsToScheduleNextProcess++;
   return;
 }
 
@@ -146,6 +149,7 @@ bool scheduler::removeAndScheduleNext(pid_t terminatedProcess){
 }
 
 pid_t scheduler::scheduleNextProcess(pid_t currentProcess){
+  callsToScheduleNextProcess++;
   // printProcesses();
   int numberOfProcesses = processQueue.size();
 

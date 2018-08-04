@@ -52,9 +52,11 @@
 
 using namespace std;
 // =======================================================================================
-tuple<int, int, string, bool, bool, bool, string> parseProgramArguments(int argc, char* argv[]);
+tuple<int, int, string, bool, bool, bool, string, bool>
+parseProgramArguments(int argc, char* argv[]);
 int runTracee(void* args);
-void runTracer(int debugLevel, pid_t childPid, bool inSchroot, bool useColor, string logFile);
+void runTracer(int debugLevel, pid_t childPid, bool inSchroot, bool useColor,
+               string logFile, bool printStatistics);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
 bool fileExists(string directory);
@@ -125,8 +127,10 @@ const string usageMsg =
   "    Do not use colored output for log. Useful when piping log to a file.\n"
   "  --log\n"
   "    Path to write log to. Defaults to stderr. If writing to a file, the filename\n"
-  "    has a unique suffix appended.\n";
-
+  "    has a unique suffix appended.\n"
+  "  --print-statistics\n"
+  "    Print metadata about process that just ran including: number of system call events\n"
+  "    read/write retries, rdtsc, rdtscp, cpuid.\n";
 
 /**
  * Given a program through the command line, spawn a child thread, call PTRACEME and exec
@@ -136,10 +140,10 @@ const string usageMsg =
 int main(int argc, char** argv){
   int optIndex, debugLevel;
   string path, logFile;
-  bool useContainer, inSchroot, useColor;
+  bool useContainer, inSchroot, useColor, printStatistics;
 
-  tie(optIndex, debugLevel, path, useContainer, inSchroot, useColor, logFile) =
-    parseProgramArguments(argc, argv);
+  tie(optIndex, debugLevel, path, useContainer, inSchroot, useColor,
+      logFile, printStatistics) = parseProgramArguments(argc, argv);
 
   // Check for debug enviornment variable.
   char* debugEnvvar = secure_getenv("dettraceDebug");
@@ -198,7 +202,7 @@ int main(int argc, char** argv){
   }
 
   // Parent falls through.
-  runTracer(debugLevel, pid, inSchroot, useColor, logFile);
+  runTracer(debugLevel, pid, inSchroot, useColor, logFile, printStatistics);
 
   return 0;
 }
@@ -350,7 +354,8 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
  * sequentially.
  *
  */
-void runTracer(int debugLevel, pid_t startingPid, bool inSchroot, bool useColor, string logFile){
+void runTracer(int debugLevel, pid_t startingPid, bool inSchroot, bool useColor,
+               string logFile, bool printStatistics){
   if(!inSchroot){
     // This is modified code from user_namespaces(7)
     /* Update the UID and GID maps in the child */
@@ -378,7 +383,8 @@ void runTracer(int debugLevel, pid_t startingPid, bool inSchroot, bool useColor,
   }
 
   // Init tracer and execution context.
-  execution exe {debugLevel, startingPid, useColor, usingOldKernel(), logFile};
+  execution exe {debugLevel, startingPid, useColor, usingOldKernel(),
+                   logFile, printStatistics};
   exe.runProgram();
 
   return;
@@ -389,7 +395,7 @@ void runTracer(int debugLevel, pid_t startingPid, bool inSchroot, bool useColor,
  * @param string: Either a user specified chroot path or none.
  * @return (optind, debugLevel, pathToChroot, useContainer, inSchroot, useColor)
  */
-tuple<int, int, string, bool, bool, bool, string> parseProgramArguments(int argc, char* argv[]){
+tuple<int, int, string, bool, bool, bool, string, bool> parseProgramArguments(int argc, char* argv[]){
   int debugLevel = 0;
   string exePlusArgs;
   string pathToChroot = "";
@@ -397,6 +403,7 @@ tuple<int, int, string, bool, bool, bool, string> parseProgramArguments(int argc
   bool inSchroot = false;
   bool useColor = true;
   string logFile = "";
+  bool printStatistics = false;
 
   // Command line options for our program.
   static struct option programOptions[] = {
@@ -407,6 +414,7 @@ tuple<int, int, string, bool, bool, bool, string> parseProgramArguments(int argc
     {"in-schroot", no_argument, 0, 'i'},
     {"no-color", no_argument, 0, 'r'},
     {"log", required_argument, 0, 'l'},
+    {"print-statistics", no_argument, 0, 'p'},
     {0,        0,                  0, 0}    // Last must be filled with 0's.
   };
 
@@ -447,6 +455,9 @@ tuple<int, int, string, bool, bool, bool, string> parseProgramArguments(int argc
     case 'l':
       logFile = string { optarg };
       break;
+    case 'p':
+      printStatistics = true;
+      break;
     case '?':
       throw runtime_error("dettrace runtime exception: Invalid option passed to detTrace!");
     }
@@ -459,7 +470,7 @@ tuple<int, int, string, bool, bool, bool, string> parseProgramArguments(int argc
     exit(1);
   }
 
-  return make_tuple(optind, debugLevel, pathToChroot, useContainer, inSchroot, useColor, logFile);
+  return make_tuple(optind, debugLevel, pathToChroot, useContainer, inSchroot, useColor, logFile, printStatistics);
 }
 // =======================================================================================
 /**
