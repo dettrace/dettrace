@@ -2270,6 +2270,8 @@ bool injectNewfstatatIfNeeded(globalState& gs, state& s, ptracer& t, int dirfd,
   // This is not the first time we see this system call. We have already replayed it.
   // not injecting.
   if(! s.firstTrySystemcall){
+    auto str = "No need to inject newfstatat in tracee, this is not the first time!\n";
+    gs.log.writeToLog(Importance::info, str);
     return false;
   }
 
