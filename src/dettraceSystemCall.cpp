@@ -768,7 +768,6 @@ void openatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   }
 
   int flags = t.arg3();
-
   // Check if this file is modifiable by tracee.
   if(flags & (O_WRONLY | O_RDWR | O_APPEND | O_TRUNC | O_CREAT)){
     injectFstat(gs, s, t, t.getReturnValue());
@@ -797,7 +796,10 @@ void pauseSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 // =======================================================================================
 bool pipeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "Making this pipe non-blocking via pipe2\n");
+
+  s.syscallInjected = true;
   t.changeSystemCall(SYS_pipe2);
+
   // Set so we can restore in pipe2 later.
   s.originalArg2 = t.arg2();
   t.writeArg2(O_NONBLOCK);
@@ -829,19 +831,32 @@ bool pipe2SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
 void pipe2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // Restore original registers.
   t.writeArg2(s.originalArg2);
-
-  // Must be checked after resetting state.
-  int flags = (int) t.arg2();
-
   auto p = getPipeFds(gs, s, t);
 
-  // Check if set as non=blocking.
-  if((flags & O_NONBLOCK) == 0){
-    s.fdStatus[p.first] = descriptorType::nonBlocking;
-    s.fdStatus[p.second] = descriptorType::nonBlocking;
-  }else{
+  // This was a pipe that  got converted to a pipe2.
+  if(s.syscallInjected){
+    s.syscallInjected = false;
+    gs.log.writeToLog(Importance::info, "This used to a pipe()!\n");
+    gs.log.writeToLog(Importance::info, "Set pipe %d as blocking.\n", p.first);
+    gs.log.writeToLog(Importance::info, "Set pipe %d as blocking.\n", p.second);
     s.fdStatus[p.first] = descriptorType::blocking;
     s.fdStatus[p.second] = descriptorType::blocking;
+  }else{
+    // Must be checked after resetting state.
+    int flags = (int) t.arg2();
+
+    // Check if set as non=blocking.
+    if((flags & O_NONBLOCK) == 0){
+      gs.log.writeToLog(Importance::info, "Set pipe %d as blocking.\n", p.first);
+      gs.log.writeToLog(Importance::info, "Set pipe %d as blocking.\n", p.second);
+      s.fdStatus[p.first] = descriptorType::blocking;
+      s.fdStatus[p.second] = descriptorType::blocking;
+    }else{
+      gs.log.writeToLog(Importance::info, "Set pipe %d as non-blocking.\n", p.first);
+      gs.log.writeToLog(Importance::info, "Set pipe %d as non-blocking.\n", p.second);
+      s.fdStatus[p.first] = descriptorType::nonBlocking;
+      s.fdStatus[p.second] = descriptorType::nonBlocking;
+    }
   }
 }
 // =======================================================================================
