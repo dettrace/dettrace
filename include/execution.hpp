@@ -38,7 +38,7 @@ private:
    * Using kernel version < 4.8 . Needed as semantics of ptrace + seccomp have changed.
    * See `man 2 ptrace`
    */
-  bool oldKernel;
+  bool kernelPre4_8;
 
   /** Main log.
    * For writing all messages.
@@ -118,7 +118,7 @@ public:
    * @param useColor Toggles color in logging process
    * @param Using kernel version < 4.8.
    */
-  execution(int debugLevel, pid_t startingPid, bool useColor, bool oldKernel);
+  execution(int debugLevel, pid_t startingPid, bool useColor);
 
   /**
    * Handles exit from current process.

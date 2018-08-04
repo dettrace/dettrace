@@ -6,7 +6,6 @@
 #include <sys/user.h>
 #include <sys/vfs.h>
 #include <sys/wait.h>
-#include <sys/utsname.h>
 #include <string.h>
 #include <getopt.h>
 
@@ -42,7 +41,6 @@
 
 #include <seccomp.h>
 
-#define MAKE_KERNEL_VERSION(x, y, z) ((x) << 16 | (y) << 8 | (z) )
 
 /**
  * Useful link for understanding ptrace as it works with execve.
@@ -76,31 +74,6 @@ struct childArgs{
   bool useContainer;
 };
 // =======================================================================================
-
-// Check if using kernel < 4.8.0. Ptrace + seccomp semantics changed in this version.
-bool usingOldKernel(){
-  struct utsname utsname = {};
-  long x, y, z;
-  char* r = NULL, *rp = NULL;
-
-  doWithCheck(uname(&utsname), "uname");
-
-  r = utsname.release;
-  x = strtoul(r, &rp, 10);
-  if (rp == r){
-    throw runtime_error("Problem parsing uname results.\n");
-  }
-  r = 1 + rp;
-  y = strtoul(r, &rp, 10);
-  if (rp == r){
-    throw runtime_error("Problem parsing uname results.\n");
-  }
-  r = 1 + rp;
-  z = strtoul(r, &rp, 10);
-
-  return (MAKE_KERNEL_VERSION(x, y, z) < MAKE_KERNEL_VERSION(4, 8, 0) ?
-          true : false);
-}
 
 const string usageMsg =
   "  Dettrace\n"
@@ -375,7 +348,7 @@ void runTracer(int debugLevel, pid_t startingPid, bool inSchroot, bool useColor)
   }
 
   // Init tracer and execution context.
-  execution exe {debugLevel, startingPid, useColor, usingOldKernel()};
+  execution exe {debugLevel, startingPid, useColor};
   exe.runProgram();
 
   return;

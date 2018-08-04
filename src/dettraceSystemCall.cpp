@@ -78,19 +78,19 @@ bool accessSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   return true;
 }
 void accessSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if (s.needToSetCPUIDTrap) {
+  if (s.needToSetCPUIDTrap && !gs.kernelPre4_12) {
     gs.log.writeToLog(Importance::info, "Injecting arch_prctl call to tracee to intercept CPUID!\n");
     // Save current register state to restore after arch_prctl
     s.regSaver.pushRegisterState(t.getRegs());
-    
+
     // Inject arch_prctl system call
     s.syscallInjected = true;
-    
+
     // Call arch_prctl
     t.writeArg1(ARCH_SET_CPUID);
     t.writeArg2(0);
     replaySystemCall(t, SYS_arch_prctl);
-    
+
     gs.log.writeToLog(Importance::info, "arch_prctl(%d, 0)\n", ARCH_SET_CPUID);
   }
 }
