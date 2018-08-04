@@ -1059,8 +1059,12 @@ void recvmsgSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
 // =======================================================================================
 bool renameSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                     scheduler& sched){
-  // Turn into a newfstatat system call to see if oldpath existed. If so, we must mark
-  // all path as deleted.
+  gs.log.writeToLog(Importance::info, "rename pre-hook, s.firstTrySystemcall:%d\n", s.firstTrySystemcall);
+  printInfoString(t.arg1(), gs, s, " old path: ");
+  printInfoString(t.arg2(), gs, s, " new path: ");
+
+  // Turn into a newfstatat system call to see if newpath exists. If so, we must mark
+  // newpath as deleted.
   bool ret = injectNewfstatatIfNeeded(gs, s, t, AT_FDCWD, (char*) t.arg2());
   if(ret){
     // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
@@ -1068,8 +1072,6 @@ bool renameSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
     return true;
   }
 
-  printInfoString(t.arg1(), gs, s, t, " renaming-ing path: ");
-  printInfoString(t.arg2(), gs, s, t, " to path: ");
   // We must go into the post hook to delete the inode.
   return true;
 }
@@ -1079,8 +1081,8 @@ void renameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
   if((int) t.getReturnValue() >= 0){
     removeInodeFromMaps(s.inodeToDelete, gs, t);
     s.inodeToDelete = -1;
-    s.firstTrySystemcall = true;
   }
+  s.firstTrySystemcall = true;
 
   return;
 }
@@ -1109,8 +1111,8 @@ void renameatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
   if((int) t.getReturnValue() >= 0){
     removeInodeFromMaps(s.inodeToDelete, gs, t);
     s.inodeToDelete = -1;
-    s.firstTrySystemcall = true;
   }
+  s.firstTrySystemcall = true;
 }
 // =======================================================================================
 bool renameat2SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
@@ -1145,8 +1147,8 @@ void renameat2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
   if((int) t.getReturnValue() >= 0){
     removeInodeFromMaps(s.inodeToDelete, gs, t);
     s.inodeToDelete = -1;
-    s.firstTrySystemcall = true;
   }
+  s.firstTrySystemcall = true;
 }
 // =======================================================================================
 bool rmdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -1171,8 +1173,8 @@ void rmdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   if((int) t.getReturnValue() >= 0){
     removeInodeFromMaps(s.inodeToDelete, gs, t);
     s.inodeToDelete = -1;
-    s.firstTrySystemcall = true;
   }
+  s.firstTrySystemcall = true;
 }
 // =======================================================================================
 // cribbed from strace, as using the standard struct sigaction does not yield
@@ -1688,8 +1690,9 @@ unlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler
    // Not our first time. This is after the real unlink actually happened.
   if((int) t.getReturnValue() >= 0){
     removeInodeFromMaps(s.inodeToDelete, gs, t);
-    s.firstTrySystemcall = true;
+    s.inodeToDelete = -1;
   }
+  s.firstTrySystemcall = true;
 
   return;
 }
@@ -2302,6 +2305,9 @@ bool injectNewfstatatIfNeeded(globalState& gs, state& s, ptracer& t, int dirfd,
  * Only delete if exists, not existing is not an error.
  */
 void removeInodeFromMaps(ino_t inode, globalState& gs, ptracer& t){
+
+  gs.log.writeToLog(Importance::extra, "Attempting to remove inode %d from maps...\n", inode);
+  
   // Nothing to do.
   if(inode == -1){
     return;
