@@ -300,7 +300,7 @@ void fstatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     struct stat myStat = ptracer::readFromTracee(traceePtr<struct stat>((struct stat*) t.arg2()), s.traceePid);
 
     gs.log.writeToLog(Importance::extra, "(device,inode) = (%lu,%lu)\n", myStat.st_dev, myStat.st_ino);
-    
+
     // Add an entry for this new file to our inode with a newer modified date.
     if( ! gs.mtimeMap.realValueExists(myStat.st_ino) ){
       gs.mtimeMap.addRealValue(myStat.st_ino);
@@ -655,7 +655,7 @@ void newfstatatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
       struct stat statbuf = ptracer::readFromTracee(traceePtr<struct stat>(statbufPtr), s.traceePid);
 
       gs.log.writeToLog(Importance::extra, "marking (device,inode) = (%lu,%lu) for deletion\n", statbuf.st_dev, statbuf.st_ino);
-      
+
       s.inodeToDelete = statbuf.st_ino;
     }else{
       gs.log.writeToLog(Importance::info, "No such file, that's okay.\n");
@@ -831,11 +831,20 @@ bool pollSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedul
 }
 
 void pollSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  bool replay = replaySyscallIfBlocked(gs, s, t, sched, 0);
-  // Restore state of argument 3.
-  if(replay){
-    t.writeArg3(s.originalArg3);
+  // Check if user set to timeout to block forever.
+  if((int) s.originalArg3 < 0){
+    gs.log.writeToLog(Importance::info, "Blocking poll found\n");
+    bool replay = replaySyscallIfBlocked(gs, s, t, sched, 0);
+    if(replay){
+      // Restore state of argument 3.
+      t.writeArg3(s.originalArg3);
+    }
+  }else{
+    gs.log.writeToLog(Importance::info, "Non-blocking poll found\n");
+    preemptIfBlocked(gs, s, t, sched, EAGAIN);
   }
+
+
   return;
 }
 // =======================================================================================
@@ -1122,62 +1131,72 @@ void rmdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 // correct output. I guess libc internally translates from the new user-facing
 // struct to this older one, and passes the older one to the kernel.
 // https://github.com/strace/strace/blob/v4.23/signal.c#L297
-struct kernel_sigaction { 
+struct kernel_sigaction {
   /* sa_handler may be a libc #define, need to use another name: */
   unsigned long sa_handler__;
   unsigned long sa_mask;
   unsigned long sa_flags;
   unsigned long sa_restorer;
 };
-bool rt_sigactionSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  gs.log.writeToLog(Importance::info, "rt_sigaction pre-hook for signal "+to_string(t.arg1())+"\n");
+bool rt_sigactionSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
+                                          scheduler& sched){
+  gs.log.writeToLog(Importance::info, "rt_sigaction pre-hook for signal " +
+                    to_string(t.arg1())+"\n");
   const uint64_t signum = t.arg1();
   s.requestedSignalToHandle = signum;
-  
+
   if (0 == t.arg2()) {
     // no need to run the post-hook since tracee is not updating signal handlers
     return false;
   }
-  
+
   // figure out what kind of handler the tracee is trying to install
-  struct kernel_sigaction sa = ptracer::readFromTracee( traceePtr<struct kernel_sigaction>((struct kernel_sigaction*)t.arg2()), t.getPid() );
+  struct kernel_sigaction sa =
+    ptracer::readFromTracee(traceePtr<struct kernel_sigaction>((struct kernel_sigaction*) t.arg2()), t.getPid() );
   gs.log.writeToLog(Importance::info, "struct sigaction*: %p\n", t.arg2());
-  gs.log.writeToLog(Importance::info, "sa_flags: "+to_string(sa.sa_flags)+" "+to_string(SA_RESETHAND)+" \n");
-  gs.log.writeToLog(Importance::info, "sa_handler: "+to_string((uint64_t)sa.sa_handler__)+"\n");
-  
+  gs.log.writeToLog(Importance::info, "sa_flags: " +
+                    to_string(sa.sa_flags) + " " +
+                    to_string(SA_RESETHAND)+" \n");
+  gs.log.writeToLog(Importance::info, "sa_handler: " +
+                    to_string((uint64_t)sa.sa_handler__) +
+                    "\n");
+
   if (((unsigned long)SIG_IGN) == sa.sa_handler__) {
     s.requestedSignalHandler = SIGHANDLER_IGNORED;
   } else if (((unsigned long)SIG_DFL) == sa.sa_handler__) {
     s.requestedSignalHandler = SIGHANDLER_DEFAULT;
   } else {
     if (sa.sa_flags & SA_RESETHAND) {
-      // SA_RESETHAND flag specified, which restores SIG_DFL after running the custom handler once
+      // SA_RESETHAND flag specified, which restores SIG_DFL after running the
+      // custom handler once.
       s.requestedSignalHandler = SIGHANDLER_CUSTOM_1SHOT;
     } else {
       s.requestedSignalHandler = SIGHANDLER_CUSTOM;
     }
   }
-  gs.log.writeToLog(Importance::info, "signal "+to_string(signum)+" handler requested: " +
-                    to_string(s.requestedSignalHandler)+"\n");
-  
+  gs.log.writeToLog(Importance::info, "signal " + to_string(signum) +
+                    " handler requested: " +
+                    to_string(s.requestedSignalHandler) + "\n");
+
   // run the post-hook to see if signal handler installation was successful
   return true;
 }
-void rt_sigactionSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+
+void rt_sigactionSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
+                                           scheduler& sched){
   gs.log.writeToLog(Importance::info, "rt_sigaction post-hook\n");
   if (0 == t.getReturnValue()) {
     // signal handler installation was successful
     s.currentSignalHandlers[s.requestedSignalToHandle] = s.requestedSignalHandler;
-    
+
     gs.log.writeToLog(Importance::info, "signal "+to_string(s.requestedSignalToHandle)+
                       " handler of type "+to_string(s.requestedSignalHandler)+" installed\n");
-    
+
     s.requestedSignalHandler = SIGHANDLER_INVALID;
-    s.requestedSignalToHandle = -1; 
+    s.requestedSignalToHandle = -1;
   }
   return;
 }
-
 // =======================================================================================
 // TODO
 bool sendtoSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -1203,6 +1222,7 @@ bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     s.exfsNotNull = true;
     readVmTracee(traceePtr<void>((void*) t.arg4()), (void*) & s.origExfs, sizeof(fd_set), t.getPid());
   }
+
   // Set the timeout to zero.
   timeval* timeoutPtr = (timeval*) t.arg5();
   s.originalArg5 = (uint64_t) timeoutPtr;
@@ -1374,7 +1394,7 @@ void timeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
 // =======================================================================================
 bool timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "timer_create syscall pre-hook\n");
-  
+
   // we support any clockid, but only notification via certain signals delivered to the process
   class timerInfo ti;
 
@@ -1383,13 +1403,13 @@ bool timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
     ti.sendSignal = true;
     ti.signum = SIGALRM;
     ti.signalHandlerData = nullptr;
-    
+
   } else { // non-default settings, have to read tracee's struct sigevent
-  
+
     struct sigevent se = ptracer::readFromTracee(sep, t.getPid());
 
     switch (se.sigev_notify) {
-    case SIGEV_NONE: // don't send a signal, alarm value will be read via timer_gettime() 
+    case SIGEV_NONE: // don't send a signal, alarm value will be read via timer_gettime()
     case SIGEV_SIGNAL: // send a signal upon timer expiration
       break;
     case SIGEV_THREAD:
@@ -1418,7 +1438,7 @@ bool timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
   s.timerCreateTimers[timerid] = ti;
 
   gs.log.writeToLog(Importance::info, "created new timer "+to_string(timerid)+"\n");
-  
+
   // write timerid into tracee memory
   gs.log.writeToLog(Importance::info, "writing timerid to %p\n", t.arg3());
   ptracer::writeToTracee(traceePtr<uint64_t>((uint64_t*)t.arg3()), timerid, s.traceePid);
@@ -1461,13 +1481,13 @@ bool timer_gettimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t
   if (!s.timerCreateTimers.count(timerid)) {
     throw runtime_error("dettrace runtime exception: invalid timerid "+to_string(timerid));
   }
-  
+
   struct itimerspec *isp = (struct itimerspec*) t.arg2();
   if (isp != nullptr) {
     // timer has expired
     struct itimerspec is;
     is.it_interval.tv_sec = is.it_interval.tv_nsec = 0;
-    is.it_value.tv_sec = is.it_value.tv_nsec = 0; 
+    is.it_value.tv_sec = is.it_value.tv_nsec = 0;
     ptracer::writeToTracee(traceePtr<struct itimerspec>(isp), is, s.traceePid);
   }
 
@@ -1476,7 +1496,7 @@ bool timer_gettimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t
   // call succeeded.
   t.writeArg1(0);
   t.writeArg2(0);
-  
+
   return true;
 }
 void timer_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -1486,7 +1506,7 @@ void timer_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& 
 bool timer_settimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
 
   gs.log.writeToLog(Importance::info, "timer_settime pre-hook for timer "+to_string(t.arg1())+"\n");
-  
+
   timerID_t timerid = t.arg1();
 
   if (!s.timerCreateTimers.count(timerid)) {
@@ -1501,19 +1521,19 @@ bool timer_settimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t
     // run post-hook if necessary
     return sendTraceeSignalNow(tinfo.signum, gs, s, t, sched);
   }
-  
+
   return true;
 }
 
 bool getitimerSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.log.writeToLog(Importance::info, "getitimer pre-hook\n");
-  
+
   struct itimerval *ivp = (struct itimerval*) t.arg2();
   if (ivp != nullptr) {
     // say that timer has expired
     struct itimerval iv;
     iv.it_interval.tv_sec = iv.it_interval.tv_usec = 0;
-    iv.it_value.tv_sec = iv.it_value.tv_usec = 0; 
+    iv.it_value.tv_sec = iv.it_value.tv_usec = 0;
     ptracer::writeToTracee(traceePtr<struct itimerval>(ivp), iv, s.traceePid);
   }
 
@@ -1521,7 +1541,7 @@ bool getitimerSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
   // itimerval. We fix up the return value in the post-hook so tracee thinks
   // call succeeded.
   t.writeArg2(0);
-  
+
   return true;
 }
 void getitimerSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) {
@@ -1933,7 +1953,7 @@ bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
 
 /**
    This function provides unified handling for timer-based signals stemming from
-   alarm(), setitimer() and timer_create(). 
+   alarm(), setitimer() and timer_create().
 
    The first step is to track a tracee's signal handlers, which can be set via
    rt_sigaction() -- on cat16 at least, the signal() and sigaction() ultimately
@@ -1945,7 +1965,7 @@ bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
    Then, when a tracee requests a signal be delivered some time in the future,
    we convert this request into immediate deterministic signal delivery. Let's
    refer to alarm(), setitimer() and timer_settime() as signal-generated
-   functions (SGFs). 
+   functions (SGFs).
 
    If the signal generated by the SGF is being ignored, then we convert the SFG
    into a NOP: instead of actually having a signal sent and risking some
@@ -1967,7 +1987,7 @@ static bool sendTraceeSignalNow(int signum, globalState& gs, state& s, ptracer& 
   if (s.currentSignalHandlers.count(signum)) {
     sh = s.currentSignalHandlers[signum];
   }
-  
+
   switch (sh) {
 
   case SIGHANDLER_CUSTOM_1SHOT: {
@@ -1983,7 +2003,7 @@ static bool sendTraceeSignalNow(int signum, globalState& gs, state& s, ptracer& 
     }
     return true; // run pause post-hook
   }
-      
+
   case SIGHANDLER_CUSTOM: {
     gs.log.writeToLog(Importance::info, "tracee has a custom signal "+to_string(signum)+" handler, sending signal to pid %u\n", sched.pidMap.getVirtualValue(t.getPid()));
 
@@ -1996,7 +2016,7 @@ static bool sendTraceeSignalNow(int signum, globalState& gs, state& s, ptracer& 
     }
     return true; // run pause post-hook
   }
-    
+
   case SIGHANDLER_DEFAULT: {
     if (SIGALRM != signum && SIGVTALRM != signum && SIGPROF != signum) {
       throw runtime_error("dettrace runtime exception: can't send myself a signal "+to_string(signum));
@@ -2007,12 +2027,12 @@ static bool sendTraceeSignalNow(int signum, globalState& gs, state& s, ptracer& 
     t.writeArg1( 128 + signum ); // status reflects exit due to signal
     return false; // there shouldn't be a post-hook for exit
   }
-    
+
   case SIGHANDLER_IGNORED: // don't do anything
     replaceSystemCallWithNoop(gs, s, t);
     gs.log.writeToLog(Importance::info, "tracee is ignoring signal "+to_string(signum)+", doing nothing\n");
     return true; // run noop (getpid) post-hook
-    
+
   default:
     throw runtime_error("dettrace runtime exception: invalid handler "+to_string(sh)+
                         " for signal "+to_string(signum));
@@ -2175,7 +2195,7 @@ void injectFstat(globalState& gs, state& s, ptracer& t, int fd){
   // zero out struct stat memory
   struct stat zeroStat = {0};
   ptracer::writeToTracee(traceePtr<struct stat>(traceesMem), zeroStat, s.traceePid);
-  
+
   // Call fstat.
   t.writeArg1(fd); // file descriptor.
   t.writeArg2((uint64_t )traceesMem);
