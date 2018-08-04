@@ -1060,8 +1060,8 @@ void recvmsgSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
 bool renameSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                     scheduler& sched){
   gs.log.writeToLog(Importance::info, "rename pre-hook, s.firstTrySystemcall:%d\n", s.firstTrySystemcall);
-  printInfoString(t.arg1(), gs, s, " old path: ");
-  printInfoString(t.arg2(), gs, s, " new path: ");
+  printInfoString(t.arg1(), gs, s, t, " old path: ");
+  printInfoString(t.arg2(), gs, s, t, " new path: ");
 
   // Turn into a newfstatat system call to see if newpath exists. If so, we must mark
   // newpath as deleted.
