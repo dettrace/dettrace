@@ -326,10 +326,10 @@ void execution::runProgram(){
     auto printStat =
       [&](string type, uint32_t value){
         string preStr = "dettrace Statistic. ";
-        cout << preStr + type + to_string(value) << endl;
+        cerr << preStr + type + to_string(value) << endl;
       };
 
-    cout << endl;
+    cerr << endl;
     printStat("System Call Events: ", systemCallsEvents);
     printStat("rdtsc instructions: ", rdtscEvents);
     printStat("rdtscp instructions: ", rdtscpEvents);
