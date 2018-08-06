@@ -39,7 +39,9 @@ void seccomp::loadRules(bool debug){
   // Get clock resolution, TODO might be non deterministic.
   noIntercept(SYS_clock_getres);
   noIntercept(SYS_getresgid);
+#ifdef SYS_getresgid32
   noIntercept(SYS_getresgid32);
+#endif
 
   // End process.
   noIntercept(SYS_exit);
