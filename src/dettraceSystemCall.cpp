@@ -30,6 +30,11 @@
 #include "dettraceSystemCall.hpp"
 #include "ptracer.hpp"
 
+// Enable tracee reads that are not strictly necessary for functionality, but
+// are enabled for instrumentation or sanity checking. For example, verify,
+// before system call replay, that RIP points at a valid system call insn.
+#define EXTRANEOUS_TRACEE_READS 0
+
 using namespace std;
 // =======================================================================================
 // Prototypes for common functions.
@@ -200,7 +205,7 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   string execveArgs {};
 
   // Print all arguments to execve!
-  if(argv != nullptr){
+  if(gs.log.getDebugLevel() > 0 && argv != nullptr){
     // Remeber these are addresses in the tracee. We must explicitly read them
     // ourselves!
     for(int i = 0; true; i++){
@@ -326,10 +331,13 @@ void fstatfsSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
     return;
   }
 
-  // Read values written to by system call.
-  struct statfs myStatfs = t.readFromTracee(traceePtr<struct statfs>(statfsPtr), s.traceePid);
-
   if(t.getReturnValue() == 0){
+    // Read values written to by system call.
+
+    // jld: filling in myStatfs from tracee memory does not seem to be used at
+    // all, as zeroOutStatfs() overwrites all its fields.
+    struct statfs myStatfs; //= t.readFromTracee(traceePtr<struct statfs>(statfsPtr), s.traceePid);
+
     // Assume we're using this file sytem?
     zeroOutStatfs(myStatfs);
 
@@ -376,8 +384,10 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
      ){
     gs.log.writeToLog(Importance::info, "Futex wait on: %p.\n", t.arg1());
     gs.log.writeToLog(Importance::info, "On value: " + to_string(futexValue) + "\n");
-    int actualValue = (int) t.readFromTracee(traceePtr<int>((int*) t.arg1()), t.getPid());
-    gs.log.writeToLog(Importance::extra, "Actual value: " + to_string(actualValue) + "\n");
+    if (gs.log.getDebugLevel() > 0) {
+      int actualValue = (int) t.readFromTracee(traceePtr<int>((int*) t.arg1()), t.getPid());
+      gs.log.writeToLog(Importance::extra, "Actual value: " + to_string(actualValue) + "\n");
+    }
 
     // Overwrite the current value with our value. Restore value in post hook.
     s.originalArg4 = (uint64_t) timeoutPtr;
@@ -399,10 +409,12 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
       // Point system call to new address.
       t.writeArg4((uint64_t) newAddress);
     }else{
-      timespec timeout = t.readFromTracee(traceePtr<timespec>(timeoutPtr), t.getPid());
-      gs.log.writeToLog(Importance::info,
-                        "Using original timeout value: (s = %d, ns = %d)\n",
-                        timeout.tv_sec, timeout.tv_nsec);
+      if (gs.log.getDebugLevel() > 0 ) {
+        timespec timeout = t.readFromTracee(traceePtr<timespec>(timeoutPtr), t.getPid());
+        gs.log.writeToLog(Importance::info,
+                          "Using original timeout value: (s = %d, ns = %d)\n",
+                          timeout.tv_sec, timeout.tv_nsec);
+      }
       t.writeToTracee(traceePtr<timespec>(timeoutPtr), ourTimeout, s.traceePid);
       s.userDefinedTimeout = true;
     }
@@ -517,7 +529,9 @@ void getrusageSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
   if(usagePtr == nullptr){
     gs.log.writeToLog(Importance::info, "getrusage pointer null.");
   }else{
-    struct rusage usage = t.readFromTracee(traceePtr<struct rusage>(usagePtr), t.getPid());
+    // jld; initializing usage from tracee memory seems redundant, as all fields
+    // are overwritten below
+    struct rusage usage; // = t.readFromTracee(traceePtr<struct rusage>(usagePtr), t.getPid());
     /* user CPU time used */
     usage.ru_utime = timeval { .tv_sec =  (long) s.getLogicalTime(),
                                .tv_usec = (long )s.getLogicalTime() };
@@ -707,17 +721,19 @@ bool openSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedul
   char* addressOfCString = (char*) t.arg1();
   // Do not use printInfo string, we want the path for checking against certain strings.
   if(addressOfCString != nullptr){
+#ifdef EXTRANEOUS_TRACEE_READS
     auto ptr = traceePtr<char>(addressOfCString);
     string path = t.readTraceeCString(ptr, s.traceePid);
     string coloredPath = gs.log.makeTextColored(Color::green, path);
     string msg = s.systemcall->syscallName + " path:" + coloredPath + "\n";
     gs.log.writeToLog(Importance::info, msg);
-
+    
     if(path == "/dev/random"){
       gs.devRandomOpens++;
     }else if(path == "/dev/urandom"){
       gs.devUrandomOpens++;
     }
+#endif
   }else{
     gs.log.writeToLog(Importance::info, "Null path given to system call.\n");
   }
@@ -743,17 +759,19 @@ bool openatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     char* addressOfCString = (char*) t.arg2();
   // Do not use printInfo string, we want the path for checking against certain strings.
   if(addressOfCString != nullptr){
+#ifdef EXTRANEOUS_TRACEE_READS
     auto ptr = traceePtr<char>(addressOfCString);
     string path = t.readTraceeCString(ptr, s.traceePid);
     string coloredPath = gs.log.makeTextColored(Color::green, path);
     string msg = s.systemcall->syscallName + " path:" + coloredPath + "\n";
     gs.log.writeToLog(Importance::info, msg);
-
+    
     if(path == "/dev/random"){
       gs.devRandomOpens++;
     }else if(path == "/dev/urandom"){
       gs.devUrandomOpens++;
     }
+#endif
   }else{
     gs.log.writeToLog(Importance::info, "Null path given to system call.\n");
   }
@@ -1287,8 +1305,8 @@ bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     t.writeArg5((uint64_t) newAddr);
   }else{
     // Already exists in memory.
-    timeval timeout = t.readFromTracee(traceePtr<timeval>(timeoutPtr), t.getPid());
-    (void) timeout; //suppress unused variable warning
+    // jld: useless read from tracee memory
+    //timeval timeout = t.readFromTracee(traceePtr<timeval>(timeoutPtr), t.getPid());
     t.writeToTracee(traceePtr<timeval>(timeoutPtr), ourTimeout, s.traceePid);
     s.userDefinedTimeout = true;
   }
@@ -1351,9 +1369,11 @@ void statfsSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
     return;
   }
 
-  // Read values written to by system call.
-  struct statfs stats = t.readFromTracee(traceePtr<struct statfs>(statfsPtr), s.traceePid);
   if(t.getReturnValue() == 0){
+    // Read values written to by system call.
+    // jld: useless read from tracee memory
+    struct statfs stats; // = t.readFromTracee(traceePtr<struct statfs>(statfsPtr), s.traceePid);
+
     // Assume we're using this file sytem?
     zeroOutStatfs(stats);
 
@@ -2114,10 +2134,12 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sc
 }
 // =======================================================================================
 void replaySystemCall(globalState& gs, ptracer& t, uint64_t systemCall){
+#ifdef EXTRANEOUS_TRACEE_READS
   uint16_t minus2 = t.readFromTracee(traceePtr<uint16_t>((uint16_t*) ((uint64_t) t.getRip().ptr - 2)), t.getPid());
   if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
     throw runtime_error("dettrace runtime exception: IP does not point to system call instruction!\n");
   }
+#endif
 
   gs.totalReplays++;
   // Replay system call!
@@ -2223,10 +2245,12 @@ void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName)
  */
 void printInfoString(uint64_t addressOfCString, globalState& gs, state& s, ptracer& t, string postFix){
   if((char*) addressOfCString != nullptr){
-    string path = t.readTraceeCString(traceePtr<char>((char*) addressOfCString), s.traceePid);
-    string msg = s.systemcall->syscallName + postFix +
-      gs.log.makeTextColored(Color::green, path) + "\n";
-    gs.log.writeToLog(Importance::info, msg);
+    if(gs.log.getDebugLevel() > 0){
+      string path = t.readTraceeCString(traceePtr<char>((char*) addressOfCString), s.traceePid);
+      string msg = s.systemcall->syscallName + postFix +
+        gs.log.makeTextColored(Color::green, path) + "\n";
+      gs.log.writeToLog(Importance::info, msg);
+    }
   }else{
     gs.log.writeToLog(Importance::info, "Null path given to system call.\n");
   }
