@@ -12,7 +12,7 @@ using namespace std;
  * @param t ptracer
  * @param systemCall system call to replay
  */
-void replaySystemCall(ptracer& t, uint64_t systemCall);
+void replaySystemCall(globalState& gs, ptracer& t, uint64_t systemCall);
 
 /**
  * Hopefully this will server as documentation for all our system calls.
@@ -26,14 +26,14 @@ void replaySystemCall(ptracer& t, uint64_t systemCall);
  *
  * unsigned int alarm(unsigned int seconds);
  *
- * alarm()  arranges for a SIGALRM signal to be delivered to the calling process in sec‐
- * onds seconds.
- *
- * TODO: We must allow system call. Maybe deliver signal on next sytem call?
+ * alarm() arranges for a SIGALRM signal to be delivered to the calling process
+ * in a given number of seconds.
  */
 class alarmSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  //void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -160,6 +160,22 @@ public:
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
+class dupSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
+// =======================================================================================
+class dup2SystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
+// =======================================================================================
 /**
  * int execve(const char *filename, char *const argv[], char *const envp[]);
  *
@@ -228,7 +244,7 @@ public:
 class fstatSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
-
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
@@ -245,6 +261,22 @@ public:
 
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
+// =======================================================================================
+/**
+ * fcntl - manipulate file descriptor
+ *
+ * int fcntl(int fd, int cmd, ... arg );
+
+ * Needed to check if user changed status of file descriptor from blocking to non-blocking.
+ */
+class fcntlSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
+
 // =======================================================================================
 /**
  * int fstatfs(int fd, struct statfs *buf);
@@ -385,6 +417,19 @@ public:
 
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
+// =======================================================================================
+/**
+ * We use getpid to suppress other system calls that we don't want to allow through.
+ * When the debugging flag is on, the post hook is always called for seeing return values
+ * so we add this dummy call for intercepting gettpid.
+ */
+class getpidSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
 // =======================================================================================
 /**
  *
@@ -602,6 +647,19 @@ class openatSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
 
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/**
+ * int pause(void);
+ *
+ * pause() causes the calling process (or thread) to sleep until a signal is delivered that 
+ * either terminates the process or causes the invocation of a signal-catching function.
+ */
+class pauseSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
@@ -863,6 +921,30 @@ public:
 };
 // =======================================================================================
 /**
+ * int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
+ * 
+ * Setup a signal handler. Currently only used for determinizing alarm()
+ */
+class rt_sigactionSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/**
+ * sighandler_t signal(int signum, sighandler_t handler);
+ * 
+ * Setup a signal handler. Currently only used for determinizing alarm()
+ */
+class signalSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/**
  * int stat(const char *pathname, struct stat *statbuf);
  *
  * stat() and retrieve information about the file pointed to by pathname.
@@ -952,6 +1034,83 @@ public:
 
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
+
+// =======================================================================================
+/**
+ * int timer_create(clockid_t clockid, struct sigevent *sevp, timer_t *timerid);
+ */
+class timer_createSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  //void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/** 
+ * int timer_delete(timer_t timerid);
+ */
+class timer_deleteSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/** 
+ * int timer_getoverrun(timer_t timerid);
+ */
+class timer_getoverrunSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/** 
+ * int timer_gettime(timer_t timerid, struct itimerspec *curr_value);
+ */
+class timer_gettimeSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
+// =======================================================================================
+/**
+ * int timer_settime(timer_t timerid, int flags, const struct itimerspec *new_value,
+ *                   struct itimerspec *old_value);
+ */
+class timer_settimeSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  //void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
+
+// =======================================================================================
+/**
+ * int getitimer(int which, struct itimerval *curr_value);
+ */
+class getitimerSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+// =======================================================================================
+/**
+ * int setitimer(int which, const struct itimerval *new_value, struct itimerval *old_value);
+ */
+class setitimerSystemCall : public systemCall{
+public:
+  using systemCall::systemCall;
+  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  //void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+};
+
+
 // =======================================================================================
 /**
  * clock_t times(struct tms *buf);
@@ -1214,7 +1373,10 @@ void handleDents(globalState& gs, state& s, ptracer& t, scheduler& sched){
     gs.log.writeToLog(Importance::info, "Returning %d bytes!\n", filledVector.size());
 
     // Write entry back to tracee!
-    writeVmTracee(filledVector.data(), traceeBuffer, filledVector.size(), t.getPid());
+    writeVmTraceeRaw(filledVector.data(), traceeBuffer, filledVector.size(), t.getPid());
+    // Explicitly increase counter.
+    t.readVmCalls++;
+
     // Set return register!
     t.setReturnRegister(filledVector.size());
   }
@@ -1227,14 +1389,17 @@ void handleDents(globalState& gs, state& s, ptracer& t, scheduler& sched){
     // by the kernel into the tracee's buffer.
     size_t bytesToCopy = t.getReturnValue();
     uint8_t localBuffer[bytesToCopy];
-    readVmTracee(traceeBuffer, localBuffer, bytesToCopy, t.getPid());
+    readVmTraceeRaw(traceeBuffer, localBuffer, bytesToCopy, t.getPid());
+    // Explicitly increase counter.
+    t.readVmCalls++;
+
     vector<uint8_t> newChunk { localBuffer, localBuffer + bytesToCopy };
 
     // Copy chunks over to our directory entry for this file descriptor.
     s.dirEntries.at(fd).addChunk(newChunk);
 
     gs.log.writeToLog(Importance::info, "Replaying system call to read more bytes...\n");
-    replaySystemCall(t, t.getSystemCallNumber());
+    replaySystemCall(gs, t, t.getSystemCallNumber());
   }
   return;
 }

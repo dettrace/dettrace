@@ -30,7 +30,7 @@ ptracer::ptracer(pid_t pid ){
 
   int startingStatus;
   if(-1 == waitpid(pid, &startingStatus, 0)){
-    throw runtime_error("Unable to start first process: " + string { strerror(errno)});
+    throw runtime_error("dettrace runtime exception: Unable to start first process: " + string { strerror(errno)});
   }
 }
 
@@ -69,6 +69,10 @@ traceePtr<void> ptracer::getRip() {
 }
 traceePtr<void> ptracer::getRsp() {
   return traceePtr<void>((void*) regs.rsp);
+}
+
+traceePtr<void> ptracer::getRax() {
+  return traceePtr<void>((void*) regs.rax);
 }
 
 uint64_t ptracer::getEventMessage(){
@@ -134,6 +138,7 @@ string ptracer::readTraceeCString(traceePtr<char> readAddress, pid_t traceePid){
   // Read long-sized chunks of memory at at time.
   while (!done){
     int64_t result = doPtrace(PTRACE_PEEKDATA, traceePid, readAddress.ptr, nullptr);
+    ptracePeeks++;
     const char* p = (const char*) &result;
     const size_t bytesRead = strnlen(p, wordSize);
     if (wordSize != bytesRead) {
@@ -168,10 +173,10 @@ long ptracer::doPtrace(enum __ptrace_request request, pid_t pid, void *addr, voi
 
   if (PTRACE_PEEKTEXT == request || PTRACE_PEEKDATA == request || PTRACE_PEEKUSER == request) {
     if (0 != errno) {
-      throw runtime_error("Ptrace_peek* failed with error: " + string { strerror(errno) } );
+      throw runtime_error("dettrace runtime exception: Ptrace_peek* failed with error: " + string { strerror(errno) } );
     }
   } else if (-1 == val) {
-    throw runtime_error("Ptrace failed with error: " + string { strerror(errno) } );
+    throw runtime_error("dettrace runtime exception: Ptrace failed with error: " + string { strerror(errno) } );
   }
   return val;
 }
@@ -219,5 +224,15 @@ void ptracer::writeIp(uint64_t val) {
 
 void ptracer::writeRax(uint64_t val) {
   regs.rax = val;
+  doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
+}
+
+void ptracer::writeRdx(uint64_t val) {
+  regs.rdx = val;
+  doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
+}
+
+void ptracer::writeRcx(uint64_t val) {
+  regs.rcx = val;
   doPtrace(PTRACE_SETREGS, traceePid, nullptr, &regs);
 }

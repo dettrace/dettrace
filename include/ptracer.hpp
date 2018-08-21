@@ -68,6 +68,21 @@ class ptracer{
 public:
 
   /**
+   * counter to keep track read vm events;
+   */
+  uint32_t readVmCalls = 0;
+
+  /**
+   * counter to keep track write vm events;
+   */
+  uint32_t writeVmCalls = 0;
+
+  /**
+   * counter for peeks, peeks only called through: readTraceeCString.
+   */
+  uint32_t ptracePeeks = 0;
+
+  /**
    * Map of real inodes to virtual inodes.
    */
   map<ino_t,ino_t> real2VirtualMap;
@@ -141,12 +156,18 @@ public:
    * @return Rip register value
    */
   traceePtr<void> getRip();
-  
+
   /**
    * Retrieves value for Rsp register.
    * @return Rsp register value
    */
   traceePtr<void> getRsp();
+
+  /**
+   * Retrieves value for Rax register.
+   * @return Rax register value
+   */
+  traceePtr<void> getRax();
 
   /**
    * Change system call.
@@ -203,6 +224,17 @@ public:
    */
   void writeRax(uint64_t val);
 
+  /**
+   * Write  value to rdx register.
+   * @param val new rdx register value
+   */
+  void writeRdx(uint64_t val);
+
+  /**
+   * Write  value to rcx register.
+   * @param val new rcx register value
+   */
+  void writeRcx(uint64_t val);
   /**
    * All system call return an argument through their rax register.
    * Set state here.
@@ -280,9 +312,10 @@ public:
    * @return the data of type T at the memory address in tracee address space
    */
   template<typename T>
-  static T readFromTracee(traceePtr<T> sourceAddress, pid_t traceePid){
+  T readFromTracee(traceePtr<T> sourceAddress, pid_t traceePid){
+    readVmCalls++;
     T myData;
-    readVmTracee(sourceAddress, &myData, sizeof(T), traceePid);
+    readVmTraceeRaw(sourceAddress, &myData, sizeof(T), traceePid);
     return myData;
   }
 
@@ -295,7 +328,7 @@ public:
    * @param traceePid the pid of the tracee
    * @return cpp string version of readAddress.
    */
-  static string readTraceeCString(traceePtr<char> readAddress, pid_t traceePid);
+  string readTraceeCString(traceePtr<char> readAddress, pid_t traceePid);
 
 
   /**
@@ -305,8 +338,9 @@ public:
    * @param traceePid the pid of the tracee
    */
   template<typename T>
-  static void writeToTracee(traceePtr<T> writeAddress, T valueToCopy, pid_t traceePid){
-    writeVmTracee(&valueToCopy, writeAddress, sizeof(T), traceePid);
+  void writeToTracee(traceePtr<T> writeAddress, T valueToCopy, pid_t traceePid){
+    writeVmCalls++;
+    writeVmTraceeRaw(&valueToCopy, traceePtr<T>(writeAddress), sizeof(T), traceePid);
 
     return;
   }

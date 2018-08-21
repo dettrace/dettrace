@@ -7,25 +7,25 @@
  */
 #define _GNU_SOURCE
 
+#include <dirent.h>
+#include <dlfcn.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <math.h> // ceil.
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <dlfcn.h>
 #include <string.h>
-#include <stdbool.h>
-#include <unistd.h>
-#include <sys/time.h>
-#include <sys/wait.h>
-#include <stdarg.h>
-#include <sys/timex.h>
-#include <sys/times.h>
 #include <sys/stat.h>
-#include <errno.h>
-#include <math.h> // ceil.
-#include <dirent.h>
-#include <limits.h>
-
-#include <stdint.h>
-
+#include <sys/time.h>
+#include <sys/times.h>
+#include <sys/timex.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 /**
  * Our logical time.
@@ -120,4 +120,39 @@ time_t time(time_t* tloc){
   time_t retTime = libdet_clock;
   libdet_clock++;
   return retTime;
+}
+
+static uint32_t mkstempValue = 0;
+// NB: these mk*stemp* implementations heavily rely on sequential execution to
+// provide atomicity.
+
+static int mymktemp(char* template, int suffixlen, int flags) {
+  if (0 == mkstempValue) {
+    mkstempValue = 1 + (getpid() * 2000); // statically allocate a slab of names to each process
+  }
+  
+  char buf[7];
+  snprintf(buf, 7, "%06x", mkstempValue);
+  //fprintf(stderr, "[mymktemp] before: %s\n", template);
+  memcpy(template + strlen(template) - suffixlen - 6, buf, 6);
+  //fprintf(stderr, "[mymktemp] after: %s\n", template);
+  int fd = open(template, O_CREAT | O_RDWR | O_EXCL | flags, S_IRUSR | S_IWUSR);
+  mkstempValue += 1;
+  return fd;
+}
+
+int mkstemp(char *template) {
+  return mymktemp(template, 0, 0);
+}
+
+int mkostemp(char *template, int flags) {
+  return mymktemp(template, 0, flags);
+}
+
+int mkstemps(char *template, int suffixlen) {
+  return mymktemp(template, suffixlen, 0);
+}
+
+int mkostemps(char *template, int suffixlen, int flags) {
+  return mymktemp(template, suffixlen, flags);
 }

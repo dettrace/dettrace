@@ -18,7 +18,9 @@ void clean_string(char* str) {
 
 int main(void) 
 {
-  // (1) Probe using raw assembly
+  printf("Probing with eax=0 for vendor info...");
+  
+  // Method (1) Probe using raw assembly
   // ----------------------------------------
   __asm__ (".intel_syntax;"
            "push    rax;"
@@ -46,21 +48,29 @@ int main(void)
 
   clean_string(vendor_id);
   printf("\nvendor_id is %s", vendor_id);
+
+  printf("Probing with eax=1 for version and features...");
   printf("\nversion is 0x%04X", version);
   printf("\nfeatures are 0x%04X\n\n", features);
   
   #ifdef __RDRND__
   printf("C compiler things RDRAND is on...\n");
+  #else
+  printf("C compiler things RDRAND is OFF...\n");  
   #endif
 
   // (2) Probe using what's provided from cpuid.h
   // --------------------------------------------
   printf("Using cpuid.h:\n");
-  unsigned int sig=0, ext=0;
-  printf("Highest supported input: %d\n",__get_cpuid_max(ext,&sig));
+  unsigned int sig=0;
+  // NOTE: ext=0 for basic, ext=0x80000000 for "extended"
+  unsigned int ext=0;
+  // unsigned int ext=0x80000000;
+  int max_level = __get_cpuid_max(ext,&sig);
+  printf("Highest supported __get_cpuid input (eax value): %d\n",max_level);
 
   unsigned int eax=0,ebx=0,ecx=0,edx=0;
-  for(int i=0; i<4; i++) {
+  for(int i=0; i<1; i++) {
     assert(1 == __get_cpuid(1, &eax,&ebx,&ecx,&edx));
     printf("Result of __get_cpuid(1) eax|ebx|ecx|edx: %08X %08X %08X %08X\n",
            eax,ebx,ecx,edx);
@@ -122,9 +132,8 @@ int main(void)
   if(!(ecx & bit_AVX)) doesnot += sprintf(doesnot, "AVX ");
   if(!(ecx & bit_F16C)) doesnot += sprintf(doesnot, "F16C ");
   if(!(ecx & bit_RDRND)) doesnot += sprintf(doesnot, "RDRND ");
-
   
-  supports += sprintf(supports, " (extended) ");
+  supports += sprintf(supports, " (extended/ecx:) ");
   if(ecx & bit_LAHF_LM) supports += sprintf(supports, "LAHF_LM ");
   if(ecx & bit_ABM) supports += sprintf(supports, "ABM ");
   if(ecx & bit_SSE4a) supports += sprintf(supports, "SSE4a ");
@@ -155,7 +164,7 @@ int main(void)
 
   printf("\n   Extended Features (eax == 7)\n");
   printf(  "   ----------------------------\n");
-  for(int i=0; i<4; i++) {
+  for(int i=0; i<1; i++) {
     assert(1 == __get_cpuid(7, &eax,&ebx,&ecx,&edx));
     printf("Result of __get_cpuid(7) eax|ebx|ecx|edx: %08X %08X %08X %08X\n",
            eax,ebx,ecx,edx);
@@ -224,6 +233,15 @@ int main(void)
   *doesnot  = 0;
   printf("  supported features: %s\n", orig_supports);
   printf("  UNsupported features: %s\n", orig_doesnot);  
+
+  printf("\nNow dumping ALL CPUID results in raw form:\n");
+  for(int level=0; level <= max_level; level++) {
+    assert(1 == __get_cpuid(level, &eax,&ebx,&ecx,&edx));
+    printf("__get_cpuid(%d) eax|ebx|ecx|edx: %08X %08X %08X %08X\n",
+           level,eax,ebx,ecx,edx);
+  }
   
-  //  printf("RDRAND? %d\n", __may_i_use_cpu_feature(_FEATURE_RDRND)); 
+  //  printf("RDRAND? %d\n", __may_i_use_cpu_feature(_FEATURE_RDRND));
+  printf("Exiting successfully.\n");
+  return 0;
 }

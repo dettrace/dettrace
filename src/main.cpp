@@ -24,6 +24,7 @@
 #include <stdarg.h>
 #include <libgen.h>
 #include <sys/mount.h>
+#include <sys/prctl.h>
 
 #include <iostream>
 #include <tuple>
@@ -51,9 +52,11 @@
 
 using namespace std;
 // =======================================================================================
-tuple<int, int, string, bool, bool, bool> parseProgramArguments(int argc, char* argv[]);
+tuple<int, int, string, bool, bool, bool, string, bool>
+parseProgramArguments(int argc, char* argv[]);
 int runTracee(void* args);
-void runTracer(int debugLevel, pid_t childPid, bool inSchroot, bool useColor);
+void runTracer(int debugLevel, pid_t childPid, bool inSchroot, bool useColor,
+               string logFile, bool printStatistics);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
 bool fileExists(string directory);
@@ -87,12 +90,12 @@ bool usingOldKernel(){
   r = utsname.release;
   x = strtoul(r, &rp, 10);
   if (rp == r){
-    throw runtime_error("Problem parsing uname results.\n");
+    throw runtime_error("dettrace runtime exception: Problem parsing uname results.\n");
   }
   r = 1 + rp;
   y = strtoul(r, &rp, 10);
   if (rp == r){
-    throw runtime_error("Problem parsing uname results.\n");
+    throw runtime_error("dettrace runtime exception: Problem parsing uname results.\n");
   }
   r = 1 + rp;
   z = strtoul(r, &rp, 10);
@@ -121,7 +124,13 @@ const string usageMsg =
   "    Use this flag if you're running dettrace inside a schroot. Needed as we're not\n"
   "    allowed to use user namespaces inside a chroot, which is what schroot uses.\n"
   "  --no-color\n"
-  "    Do not use colored output for log. Useful when piping log to a file.\n";
+  "    Do not use colored output for log. Useful when piping log to a file.\n"
+  "  --log\n"
+  "    Path to write log to. Defaults to stderr. If writing to a file, the filename\n"
+  "    has a unique suffix appended.\n"
+  "  --print-statistics\n"
+  "    Print metadata about process that just ran including: number of system call events\n"
+  "    read/write retries, rdtsc, rdtscp, cpuid.\n";
 
 /**
  * Given a program through the command line, spawn a child thread, call PTRACEME and exec
@@ -130,11 +139,11 @@ const string usageMsg =
  */
 int main(int argc, char** argv){
   int optIndex, debugLevel;
-  string path; bool useContainer;
-  bool inSchroot, useColor;
+  string path, logFile;
+  bool useContainer, inSchroot, useColor, printStatistics;
 
-  tie(optIndex, debugLevel, path, useContainer, inSchroot, useColor) =
-    parseProgramArguments(argc, argv);
+  tie(optIndex, debugLevel, path, useContainer, inSchroot, useColor,
+      logFile, printStatistics) = parseProgramArguments(argc, argv);
 
   // Check for debug enviornment variable.
   char* debugEnvvar = secure_getenv("dettraceDebug");
@@ -143,11 +152,11 @@ int main(int argc, char** argv){
     try{
       debugLevel = stoi(str);
     }catch (...){
-      throw runtime_error("Invalid integer: " + str);
+      throw runtime_error("dettrace runtime exception: Invalid integer: " + str);
     }
 
     if(debugLevel < 0 || debugLevel > 5){
-      throw runtime_error("Debug level must be between [0,5].");
+      throw runtime_error("dettrace runtime exception: Debug level must be between [0,5].");
     }
   }
 
@@ -176,6 +185,10 @@ int main(int argc, char** argv){
     cloneFlags &= ~CLONE_NEWUSER;
   }
 
+  doWithCheck(prctl(PR_SET_TSC, PR_TSC_SIGSEGV, 0, 0, 0), "Pre-clone prctl error");
+
+  doWithCheck(prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0), "Pre-clone prctl error: setting no new privs");
+
   pid_t pid = clone(runTracee, child_stack + STACK_SIZE, cloneFlags, (void*) &args);
   if(pid == -1){
     string reason = strerror(errno);
@@ -189,7 +202,7 @@ int main(int argc, char** argv){
   }
 
   // Parent falls through.
-  runTracer(debugLevel, pid, inSchroot, useColor);
+  runTracer(debugLevel, pid, inSchroot, useColor, logFile, printStatistics);
 
   return 0;
 }
@@ -253,6 +266,7 @@ int runTracee(void* voidArgs){
   raise(SIGSTOP);
 
   myFilter.loadFilterToKernel();
+
 
   // execvpe() duplicates the actions of the shell in searching  for  an executable file
   // if the specified filename does not contain a slash (/) character.
@@ -340,7 +354,8 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
  * sequentially.
  *
  */
-void runTracer(int debugLevel, pid_t startingPid, bool inSchroot, bool useColor){
+void runTracer(int debugLevel, pid_t startingPid, bool inSchroot, bool useColor,
+               string logFile, bool printStatistics){
   if(!inSchroot){
     // This is modified code from user_namespaces(7)
     /* Update the UID and GID maps in the child */
@@ -368,7 +383,8 @@ void runTracer(int debugLevel, pid_t startingPid, bool inSchroot, bool useColor)
   }
 
   // Init tracer and execution context.
-  execution exe {debugLevel, startingPid, useColor, usingOldKernel()};
+  execution exe {debugLevel, startingPid, useColor, usingOldKernel(),
+                   logFile, printStatistics};
   exe.runProgram();
 
   return;
@@ -379,13 +395,15 @@ void runTracer(int debugLevel, pid_t startingPid, bool inSchroot, bool useColor)
  * @param string: Either a user specified chroot path or none.
  * @return (optind, debugLevel, pathToChroot, useContainer, inSchroot, useColor)
  */
-tuple<int, int, string, bool, bool, bool> parseProgramArguments(int argc, char* argv[]){
+tuple<int, int, string, bool, bool, bool, string, bool> parseProgramArguments(int argc, char* argv[]){
   int debugLevel = 0;
   string exePlusArgs;
   string pathToChroot = "";
   bool useContainer = true;
   bool inSchroot = false;
   bool useColor = true;
+  string logFile = "";
+  bool printStatistics = false;
 
   // Command line options for our program.
   static struct option programOptions[] = {
@@ -395,6 +413,8 @@ tuple<int, int, string, bool, bool, bool> parseProgramArguments(int argc, char* 
     {"no-container", no_argument, 0, 'n'},
     {"in-schroot", no_argument, 0, 'i'},
     {"no-color", no_argument, 0, 'r'},
+    {"log", required_argument, 0, 'l'},
+    {"print-statistics", no_argument, 0, 'p'},
     {0,        0,                  0, 0}    // Last must be filled with 0's.
   };
 
@@ -415,7 +435,7 @@ tuple<int, int, string, bool, bool, bool> parseProgramArguments(int argc, char* 
     case 'd':
       debugLevel = parseNum(optarg);
       if(debugLevel < 0 || debugLevel > 5){
-        throw runtime_error("Debug level must be between [0,5].");
+        throw runtime_error("dettrace runtime exception: Debug level must be between [0,5].");
       }
       break;
       // Help message.
@@ -432,8 +452,14 @@ tuple<int, int, string, bool, bool, bool> parseProgramArguments(int argc, char* 
     case 'r':
       useColor = false;
       break;
+    case 'l':
+      logFile = string { optarg };
+      break;
+    case 'p':
+      printStatistics = true;
+      break;
     case '?':
-      throw runtime_error("Invalid option passed to detTrace!");
+      throw runtime_error("dettrace runtime exception: Invalid option passed to detTrace!");
     }
   }
 
@@ -444,7 +470,7 @@ tuple<int, int, string, bool, bool, bool> parseProgramArguments(int argc, char* 
     exit(1);
   }
 
-  return make_tuple(optind, debugLevel, pathToChroot, useContainer, inSchroot, useColor);
+  return make_tuple(optind, debugLevel, pathToChroot, useContainer, inSchroot, useColor, logFile, printStatistics);
 }
 // =======================================================================================
 /**
@@ -464,12 +490,12 @@ void mountDir(string source, string target){
 
   /* Check if source path exists*/
   if (!fileExists(source)) {
-    throw runtime_error("Trying to mount source " + source + ". File does not exist.\n");
+    throw runtime_error("dettrace runtime exception: Trying to mount source " + source + ". File does not exist.\n");
   }
 
   /* Check if target path exists*/
   if (!fileExists(target))  {
-    throw runtime_error("Trying to mount target " + target + ". File does not exist.\n");
+    throw runtime_error("dettrace runtime exception: Trying to mount target " + target + ". File does not exist.\n");
   }
 
   doWithCheck(mount(source.c_str(), target.c_str(), nullptr, MS_BIND, nullptr),
@@ -541,7 +567,7 @@ void mkdirIfNotExist(string dir){
       return;
     }else{
       string reason { strerror(errno) };
-      throw runtime_error("Unable to make directory: " + dir + "\nReason: " + reason);
+      throw runtime_error("dettrace runtime exception: Unable to make directory: " + dir + "\nReason: " + reason);
     }
   }
   return;
