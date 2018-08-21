@@ -46,8 +46,8 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor, string lo
   kernelPre4_8 {kernelCheck(4,8,0)},
   // Check if using kernel < 4.8.0. Ptrace + seccomp semantics changed in this version.
   log {logFile, debugLevel, useColor},
-  printStatistics{printStatistics},
   silentLogger {"", 0},
+  printStatistics{printStatistics},
   // Waits for first process to be ready!
   tracer{startingPid},
   // Create our global state once, share across class.
