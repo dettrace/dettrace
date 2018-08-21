@@ -45,8 +45,7 @@ bool kernelCheck(int a, int b, int c){
 execution::execution(int debugLevel, pid_t startingPid, bool useColor, string logFile, bool printStatistics):
   kernelPre4_8 {kernelCheck(4,8,0)},
   // Check if using kernel < 4.8.0. Ptrace + seccomp semantics changed in this version.
-  log {stderr, debugLevel, useColor},
-
+  log {logFile, debugLevel, useColor},
   printStatistics{printStatistics},
   silentLogger {"", 0},
   // Waits for first process to be ready!

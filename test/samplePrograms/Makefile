@@ -1,5 +1,5 @@
 # binaries that are simple to build (1 source file, same name as binary)
-SIMPLE_ROOTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat  sigsegv sigill sigabrt kill tgkill alarm-handler alarm-nohandler alarm-ignore selectWithoutTimeout selectWithTimeout getdents getdents64 pollWithoutTimeout pollWithPositiveTimeout pollWithNegativeTimeout rdtsc rdtscp cpuid nanosleep nanosleep-par alarm-resethand readDevRandom readDevUrandom
+SIMPLE_ROOTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat  sigsegv sigill sigabrt kill tgkill alarm-handler alarm-nohandler alarm-ignore selectWithoutTimeout selectWithTimeout getdents getdents64 pollWithoutTimeout pollWithPositiveTimeout pollWithNegativeTimeout rdtsc rdtscp nanosleep nanosleep-par alarm-resethand readDevRandom readDevUrandom
 
 # cpuid simpleThreads multipleThreads
 SIMPLE_BINARIES= $(addsuffix .bin,$(SIMPLE_ROOTS))
@@ -37,7 +37,6 @@ run: test
 test: test-binaries test-scripts
 test-binaries: $(patsubst %.bin, %.ok, $(SIMPLE_BINARIES)) $(patsubst %.bin, %.ok, $(PARAM_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES)) $(patsubst %.bin, %.ok, $(BROADWELL_BINARIES)) $(patsubst %.bin, %.ok, $(RT_BINARIES) $(patsubst %, %.ok, $(CXX_BINARIES)))
 test-scripts: $(patsubst %.sh, %.ok, $(SHELL_SCRIPTS))
->>>>>>> master
 
 # compile each sample program binary
 $(SIMPLE_BINARIES): %.bin: %.c

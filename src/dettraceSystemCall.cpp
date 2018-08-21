@@ -90,7 +90,7 @@ bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
                       int64_t errornoValue);
 // =======================================================================================
 bool accessSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  printInfoString(t.arg1(), gs, s);
+  printInfoString(t.arg1(), gs, s, t);
   return true;
 }
 void accessSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -105,7 +105,7 @@ void accessSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
     // Call arch_prctl
     t.writeArg1(ARCH_SET_CPUID);
     t.writeArg2(0);
-    replaySystemCall(t, SYS_arch_prctl);
+    replaySystemCall(gs, t, SYS_arch_prctl);
 
     gs.log.writeToLog(Importance::info, "arch_prctl(%d, 0)\n", ARCH_SET_CPUID);
   }
