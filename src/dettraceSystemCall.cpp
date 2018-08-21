@@ -1321,7 +1321,7 @@ bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   if(timeoutPtr == nullptr){
     // Has to be created in memory.
     timeval* newAddr = (timeval*) s.mmapMemory.getAddr().ptr;
-    ptracer::writeToTracee(traceePtr<timeval>(newAddr), ourTimeout, s.traceePid);
+    t.writeToTracee(traceePtr<timeval>(newAddr), ourTimeout, s.traceePid);
 
     t.writeArg5((uint64_t) newAddr);
   }else{
