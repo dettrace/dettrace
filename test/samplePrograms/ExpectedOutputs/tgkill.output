@@ -1,3 +1,3 @@
 terminate called after throwing an instance of 'std::runtime_error'
-  what():  tgkillSystemCall::handleDetPre: tracee trying to send unsupported signal
+  what():  dettrace runtime exception: tgkillSystemCall::handleDetPre: tracee trying to send unsupported signal
 Aborted (core dumped)

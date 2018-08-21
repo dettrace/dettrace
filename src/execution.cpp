@@ -42,11 +42,13 @@ bool kernelCheck(int a, int b, int c){
           true : false);
 }
 // =======================================================================================
-execution::execution(int debugLevel, pid_t startingPid, bool useColor):
+execution::execution(int debugLevel, pid_t startingPid, bool useColor, string logFile, bool printStatistics):
   kernelPre4_8 {kernelCheck(4,8,0)},
   // Check if using kernel < 4.8.0. Ptrace + seccomp semantics changed in this version.
   log {stderr, debugLevel, useColor},
-  silentLogger {stderr, 0},
+
+  printStatistics{printStatistics},
+  silentLogger {"", 0},
   // Waits for first process to be ready!
   tracer{startingPid},
   // Create our global state once, share across class.
@@ -100,14 +102,14 @@ bool execution::handleExit(const pid_t traceesPid){
 // =======================================================================================
 // Despite what the name will imply, this function is actually called during a
 // ptrace seccomp event. Not a pre-system call event. In newer kernel version there is no
-// need to deal with ptrace pre system call events. So the only reason we refer to it here
+// need to deal with ptrace pre-system call events. So the only reason we refer to it here
 // is for backward compatibility reasons.
 bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   int syscallNum = tracer.getSystemCallNumber();
   currState.systemcall = getSystemCall(syscallNum, systemCallMappings[syscallNum]);
 
   if(syscallNum < 0 || syscallNum > SYSTEM_CALL_COUNT){
-    throw runtime_error("Unkown system call number: " + to_string(syscallNum));
+    throw runtime_error("dettrace runtime exception: Unkown system call number: " + to_string(syscallNum));
   }
 
   // Print!
@@ -134,12 +136,14 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   // occasionally-missing-ptrace-event-vfork-when-running-ptrace
   if(systemCall == "fork" || systemCall == "vfork" || systemCall == "clone"){
 
+    processSpawnEvents++;
+
     // Threads are not supported!
     if(systemCall == "clone" ){
       unsigned long flags = (unsigned long) tracer.arg1();
       unsigned long threadBit = flags & CLONE_THREAD;
       if(threadBit != 0){
-        throw runtime_error("Threads not supported!");
+        throw runtime_error("dettrace runtime exception: Threads not supported!");
       }
     }
 
@@ -154,7 +158,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
       // queue so we do that here and simply ignore the event.
       tie(e, newPid, status) = getNextEvent(traceesPid, true);
       if(e != ptraceEvent::syscall){
-        throw runtime_error("Expected pre-system call event after fork.");
+        throw runtime_error("dettrace runtime exception: Expected pre-system call event after fork.");
       }
       // That was the pre-exit event, make sure we set onPreExitEvent to false.
       currState.onPreExitEvent = false;
@@ -190,7 +194,7 @@ void execution::handlePostSystemCall(state& currState){
 
   // No idea what this system call is! error out.
   if(syscallNum < 0 || syscallNum > SYSTEM_CALL_COUNT){
-    throw runtime_error("Unkown system call number: " + to_string(syscallNum));
+    throw runtime_error("dettrace runtime exception: Unkown system call number: " + to_string(syscallNum));
   }
 
   log.writeToLog(Importance::info,"%s value before post-hook: %d\n",
@@ -230,6 +234,7 @@ void execution::runProgram(){
 
     // Most common event. We handle the pre-hook for system calls here.
     if(ret == ptraceEvent::seccomp){
+      systemCallsEvents++;
       callPostHook = handleSeccomp(traceesPid);
       continue;
     }
@@ -248,6 +253,8 @@ void execution::runProgram(){
           callPostHook = true;
           currentState.onPreExitEvent = false;
       }else{
+        // Only count here due to comment above (we see this event twice in older kernels).
+        systemCallsEvents++;
         tracer.updateState(traceesPid);
         handlePostSystemCall( currentState );
         // set callPostHook to default value for next iteration.
@@ -261,7 +268,7 @@ void execution::runProgram(){
     if(ret == ptraceEvent::terminatedBySignal){
       // TODO: A Process terminated by signal might break some of the assumptions I make
       // in handleExit (see function definition above) so we do not support it for now.
-      // throw runtime_error("Process terminated by signal. We currently do not support this.");
+      // throw runtime_error("dettrace runtime exception: Process terminated by signal. We currently do not support this.");
       auto msg =
         log.makeTextColored(Color::blue, "Process [%d] ended by signal %d.\n");
       log.writeToLog(Importance::inter, msg, virtualPid, WTERMSIG(status));
@@ -339,13 +346,39 @@ void execution::runProgram(){
       continue;
     }
 
-    throw runtime_error(to_string(traceesPid) +
+    throw runtime_error("dettrace runtime exception: " + to_string(traceesPid) +
                         " Uknown return value for ptracer::getNextEvent()\n");
   }
 
   auto msg =
     log.makeTextColored(Color::blue, "All processes done. Finished successfully!\n");
   log.writeToLog(Importance::info, msg);
+
+  if(printStatistics){
+    auto printStat =
+      [&](string type, uint32_t value){
+        string preStr = "dettrace Statistic. ";
+        cerr << preStr + type + to_string(value) << endl;
+      };
+
+    cerr << endl;
+    printStat("System Call Events: ", systemCallsEvents);
+    printStat("rdtsc instructions: ", rdtscEvents);
+    printStat("rdtscp instructions: ", rdtscpEvents);
+    printStat("read retries: ", myGlobalState.readRetryEvents);
+    printStat("write retries: ", myGlobalState.writeRetryEvents);
+    printStat("getRandom() calls: ", myGlobalState.getRandomCalls);
+    printStat("/dev/urandom opens: ", myGlobalState.devUrandomOpens);
+    printStat("/dev/random opens: ", myGlobalState.devRandomOpens);
+    printStat("Time Related Sytem Calls: ", myGlobalState.timeCalls);
+    printStat("Process spawn events: ", processSpawnEvents);
+    printStat("Calls for scheduling next process: ", myScheduler.callsToScheduleNextProcess);
+    printStat("Replays due to blocking system call: ", myGlobalState.replayDueToBlocking);
+    printStat("Total replays: ", myGlobalState.totalReplays);
+    printStat("ptrace peeks: ", tracer.ptracePeeks);
+    printStat("process_vm_reads: ", tracer.readVmCalls);
+    printStat("process_vm_writes: ", tracer.writeVmCalls);
+  }
 }
 // =======================================================================================
 void execution::handleFork(ptraceEvent event, const pid_t traceesPid){
@@ -364,13 +397,13 @@ void execution::handleFork(ptraceEvent event, const pid_t traceesPid){
 
     // This should never happen.
     if(retPid != newChildPid){
-      throw runtime_error("wait call return pid does not match new child's pid.");
+      throw runtime_error("dettrace runtime exception: wait call return pid does not match new child's pid.");
     }
     log.writeToLog(Importance::info,
                    log.makeTextColored(Color::blue, "Child ready!\n"));
   }else{
     if(event != ptraceEvent::signal){
-      throw runtime_error("Expected signal after fork/vfork event!");
+      throw runtime_error("dettrace runtime exception: Expected signal after fork/vfork event!");
     }
     // Signal event came first.
     handleForkSignal(traceesPid);
@@ -414,7 +447,7 @@ void execution::handleForkSignal(const pid_t traceesPid){
 
   if(! ptracer::isPtraceEvent(status, PTRACE_EVENT_FORK) &&
      ! ptracer::isPtraceEvent(status, PTRACE_EVENT_VFORK)){
-    throw runtime_error("Expected fork or vfork event!\n");
+    throw runtime_error("dettrace runtime exception: Expected fork or vfork event!\n");
   }
   return;
 }
@@ -428,7 +461,7 @@ bool execution::handleSeccomp(const pid_t traceesPid){
     // Fetch real system call from register.
     tracer.updateState(traceesPid);
     syscallNum = tracer.getSystemCallNumber();
-    throw runtime_error("No filter rule for system call: " +
+    throw runtime_error("dettrace runtime exception: No filter rule for system call: " +
                         systemCallMappings[syscallNum]);
   }
 
@@ -436,30 +469,34 @@ bool execution::handleSeccomp(const pid_t traceesPid){
   // small optimization we might not want to...
   // Get registers from tracee.
   tracer.updateState(traceesPid);
+
+  // ensure mapping exists
+  // we need to update the tracrer since mappedMemory::ensureExistanceOfMapping checks intercepted call
+  states.at(traceesPid).mmapMemory.ensureExistenceOfMapping(myGlobalState, states.at(traceesPid), tracer);
+
   auto callPostHook = handlePreSystemCall( states.at(traceesPid), traceesPid );
   return callPostHook;
 }
 // =======================================================================================
 void execution::handleSignal(int sigNum, const pid_t traceesPid){
-  if(sigNum == SIGALRM){
-    throw runtime_error("SIGALRM found, currently not supported.");
-  }
-
   if(sigNum == SIGSEGV) {
 
     tracer.updateState(traceesPid);
     uint32_t curr_insn32 = (tracer.readFromTracee(traceePtr<uint32_t> ((uint32_t*)tracer.getRip().ptr), traceesPid));
 
-    if ((curr_insn32 << 16) == 0x310F0000 || (curr_insn32 << 8) == 0xF9010F00) { // rdtsc/rdtscp
 
+    if ((curr_insn32 << 16) == 0x310F0000 || (curr_insn32 << 8) == 0xF9010F00) {
       auto msg = "[%d] Tracer: Received rdtsc: Reading next instruction.\n";
       int ip_step = 2;
 
       if ((curr_insn32 << 8) == 0xF9010F00) {
+        rdtscpEvents++;
         tracer.writeRcx(tscpCounter);
         tscpCounter++;
         ip_step = 3;
         msg = "[%d] Tracer: Received rdtscp: Reading next instruction.\n";
+      }else{
+        rdtscEvents++;
       }
 
       tracer.writeRax(tscCounter);
@@ -544,13 +581,10 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
     // getNextEvent.
     states.at(traceesPid).signalToDeliver = sigNum;
 
-    auto msg = "[%d] Tracer: Received signal: %d. Forwading signal to tracee.\n";
+    auto msg = "[%d] Tracer: Received signal: %d. Forwarding signal to tracee.\n";
     auto coloredMsg = log.makeTextColored(Color::blue, msg);
     auto virtualPid = pidMap.getVirtualValue(traceesPid);
     log.writeToLog(Importance::inter, coloredMsg, virtualPid, sigNum);
-
-
-
   return;
 }
 // =======================================================================================
@@ -561,6 +595,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<accessSystemCall>(syscallNumber, syscallName);
   case SYS_arch_prctl:
     return make_unique<arch_prctlSystemCall>(syscallNumber, syscallName);
+  case SYS_alarm:
+    return make_unique<alarmSystemCall>(syscallNumber, syscallName);
   case SYS_chdir:
     return make_unique<chdirSystemCall>(syscallNumber, syscallName);
   case SYS_chown:
@@ -577,6 +613,10 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<connectSystemCall>(syscallNumber, syscallName);
   case SYS_creat:
     return make_unique<creatSystemCall>(syscallNumber, syscallName);
+  case SYS_dup:
+    return make_unique<dupSystemCall>(syscallNumber, syscallName);
+  case SYS_dup2:
+    return make_unique<dup2SystemCall>(syscallNumber, syscallName);
   case SYS_execve:
     return make_unique<execveSystemCall>(syscallNumber, syscallName);
   case SYS_faccessat:
@@ -587,6 +627,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<flistxattrSystemCall>(syscallNumber, syscallName);
   case SYS_fchownat:
     return make_unique<fchownatSystemCall>(syscallNumber, syscallName);
+  case SYS_fcntl:
+    return make_unique<fcntlSystemCall>(syscallNumber, syscallName);
   case SYS_fstat:
     return make_unique<fstatSystemCall>(syscallNumber, syscallName);
   case SYS_newfstatat:
@@ -601,6 +643,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<getdentsSystemCall>(syscallNumber, syscallName);
   case SYS_getdents64:
     return make_unique<getdents64SystemCall>(syscallNumber, syscallName);
+  case SYS_getitimer:
+    return make_unique<getitimerSystemCall>(syscallNumber, syscallName);
   case SYS_getpeername:
     return make_unique<getpeernameSystemCall>(syscallNumber, syscallName);
     // Some older systems do not have this  system call.
@@ -612,6 +656,8 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<getrlimitSystemCall>(syscallNumber, syscallName);
   case SYS_getrusage:
     return make_unique<getrusageSystemCall>(syscallNumber, syscallName);
+  case SYS_getpid:
+    return make_unique<getpidSystemCall>(syscallNumber, syscallName);
   case SYS_gettimeofday:
     return make_unique<gettimeofdaySystemCall>(syscallNumber, syscallName);
   case SYS_ioctl:
@@ -632,10 +678,14 @@ execution::getSystemCall(int syscallNumber, string syscallName){
       return make_unique<linkSystemCall>(syscallNumber, syscallName);
   case SYS_linkat:
     return make_unique<linkatSystemCall>(syscallNumber, syscallName);
+  case SYS_mmap:
+    return make_unique<mmapSystemCall>(syscallNumber, syscallName);
   case SYS_open:
     return make_unique<openSystemCall>(syscallNumber, syscallName);
   case SYS_openat:
     return make_unique<openatSystemCall>(syscallNumber, syscallName);
+  case SYS_pause:
+    return make_unique<pauseSystemCall>(syscallNumber, syscallName);
   case SYS_pipe:
     return make_unique<pipeSystemCall>(syscallNumber, syscallName);
   case SYS_pipe2:
@@ -662,10 +712,14 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<renameat2SystemCall>(syscallNumber, syscallName);
   case SYS_rmdir:
     return make_unique<rmdirSystemCall>(syscallNumber, syscallName);
+  case SYS_rt_sigaction:
+    return make_unique<rt_sigactionSystemCall>(syscallNumber, syscallName);
   case SYS_sendto:
     return make_unique<sendtoSystemCall>(syscallNumber, syscallName);
   case SYS_select:
     return make_unique<selectSystemCall>(syscallNumber, syscallName);
+  case SYS_setitimer:
+    return make_unique<setitimerSystemCall>(syscallNumber, syscallName);
   case SYS_set_robust_list:
     return make_unique<set_robust_listSystemCall>(syscallNumber, syscallName);
   case SYS_statfs:
@@ -680,6 +734,16 @@ execution::getSystemCall(int syscallNumber, string syscallName){
     return make_unique<tgkillSystemCall>(syscallNumber, syscallName);
   case SYS_time:
     return make_unique<timeSystemCall>(syscallNumber, syscallName);
+  case SYS_timer_create:
+    return make_unique<timer_createSystemCall>(syscallNumber, syscallName);
+  case SYS_timer_delete:
+    return make_unique<timer_deleteSystemCall>(syscallNumber, syscallName);
+  case SYS_timer_getoverrun:
+    return make_unique<timer_getoverrunSystemCall>(syscallNumber, syscallName);
+  case SYS_timer_gettime:
+    return make_unique<timer_gettimeSystemCall>(syscallNumber, syscallName);
+  case SYS_timer_settime:
+    return make_unique<timer_settimeSystemCall>(syscallNumber, syscallName);
   case SYS_times:
     return make_unique<timesSystemCall>(syscallNumber, syscallName);
   case SYS_uname:
@@ -705,7 +769,7 @@ execution::getSystemCall(int syscallNumber, string syscallName){
   }
 
   // Generic system call. Throws error.
-  throw runtime_error("Missing case for system call: " + syscallName
+  throw runtime_error("dettrace runtime exception: Missing case for system call: " + syscallName
                       + " this is a bug!");
 }
 // =======================================================================================
@@ -783,7 +847,7 @@ ptraceEvent execution::getPtraceEvent(const int status){
 #ifdef PTRACE_EVENT_STOP
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_STOP) ){
     // log.writeToLog(Importance::extra, "event stop\n");
-    throw runtime_error("Ptrace event stop.\n");
+    throw runtime_error("dettrace runtime exception: Ptrace event stop.\n");
   }
 #endif
 
@@ -823,7 +887,7 @@ ptraceEvent execution::getPtraceEvent(const int status){
     return ptraceEvent::terminatedBySignal;
   }
 
-  throw runtime_error("Uknown event on dettrace::getNextEvent()");
+  throw runtime_error("dettrace runtime exception: Uknown event on dettrace::getNextEvent()");
 }
 // =======================================================================================
 /**

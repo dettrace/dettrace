@@ -16,16 +16,18 @@ void clean_string(char* str) {
   *str = 0; // Null terminate.
 }
 
-int main(void) 
+int main(void)
 {
-  // (1) Probe using raw assembly
+  printf("Probing with eax=0 for vendor info...");
+
+  // Method (1) Probe using raw assembly
   // ----------------------------------------
   __asm__ (".intel_syntax;"
            "push    rax;"
            "push    rbx;"
            "push    rcx;"
            "push    rdx;"
-           // get vendor id 
+           // get vendor id
            "mov     eax,0;"
            "cpuid;"
            "mov     [vendor_id],ebx;"
@@ -37,7 +39,7 @@ int main(void)
            "cpuid;"
            "mov     [version],eax;"
            "mov     [features],edx;"
-                
+
            "pop     rax;"
            "pop     rcx;"
            "pop     rbx;"
@@ -46,33 +48,41 @@ int main(void)
 
   clean_string(vendor_id);
   printf("\nvendor_id is %s", vendor_id);
+
+  printf("Probing with eax=1 for version and features...");
   printf("\nversion is 0x%04X", version);
   printf("\nfeatures are 0x%04X\n\n", features);
-  
+
   #ifdef __RDRND__
   printf("C compiler things RDRAND is on...\n");
+  #else
+  printf("C compiler things RDRAND is OFF...\n");
   #endif
 
   // (2) Probe using what's provided from cpuid.h
   // --------------------------------------------
   printf("Using cpuid.h:\n");
-  unsigned int sig=0, ext=0;
-  printf("Highest supported input: %d\n",__get_cpuid_max(ext,&sig));
+  unsigned int sig=0;
+  // NOTE: ext=0 for basic, ext=0x80000000 for "extended"
+  unsigned int ext=0;
+  // unsigned int ext=0x80000000;
+  int max_level = __get_cpuid_max(ext,&sig);
+  printf("Highest supported __get_cpuid input (eax value): %d\n",max_level);
 
   unsigned int eax=0,ebx=0,ecx=0,edx=0;
-  for(int i=0; i<4; i++) {
+  for(int i=0; i<1; i++) {
     assert(1 == __get_cpuid(1, &eax,&ebx,&ecx,&edx));
     printf("Result of __get_cpuid(1) eax|ebx|ecx|edx: %08X %08X %08X %08X\n",
            eax,ebx,ecx,edx);
   }
 
-  char* orig_supports = malloc(4096);
-  char* orig_doesnot  = malloc(4096);
+  char* orig_supports = (char*)malloc(4096);
+  char* orig_doesnot  = (char*)malloc(4096);
   char* supports = orig_supports;
   char* doesnot  = orig_doesnot;
 
   if(edx & 1) supports += sprintf(supports, "fpu ");
-  
+
   // printf("  supports : %d\n", edx & bit_);
   if(edx & bit_CMPXCHG8B) supports += sprintf(supports, "CMPXCHG8B ");
   if(edx & bit_CMOV) supports += sprintf(supports, "CMOV ");
@@ -88,7 +98,7 @@ int main(void)
   if(!(edx & bit_SSE)) doesnot += sprintf(doesnot, "SSE ");
   if(!(edx & bit_SSE2)) doesnot += sprintf(doesnot, "SSE2 ");
 
-  
+
   if(ecx & bit_SSE3) supports += sprintf(supports, "SSE3 ");
   if(ecx & bit_PCLMUL) supports += sprintf(supports, "PCLMUL ");
   // if(ecx & bit_LZCNT) supports += sprintf(supports, "LZCNT ");
@@ -123,8 +133,7 @@ int main(void)
   if(!(ecx & bit_F16C)) doesnot += sprintf(doesnot, "F16C ");
   if(!(ecx & bit_RDRND)) doesnot += sprintf(doesnot, "RDRND ");
 
-  
-  supports += sprintf(supports, " (extended) ");
+  supports += sprintf(supports, " (extended/ecx:) ");
   if(ecx & bit_LAHF_LM) supports += sprintf(supports, "LAHF_LM ");
   if(ecx & bit_ABM) supports += sprintf(supports, "ABM ");
   if(ecx & bit_SSE4a) supports += sprintf(supports, "SSE4a ");
@@ -149,8 +158,10 @@ int main(void)
   *supports = 0;
   *doesnot  = 0;
   printf("  supported features: %s\n", orig_supports);
-  printf("  UNsupported features: %s\n", orig_doesnot);  
+  printf("  UNsupported features: %s\n", orig_doesnot);
   supports = orig_supports;
   doesnot  = orig_doesnot;
 
+  printf("Exiting successfully.\n");
+  return 0;
 }

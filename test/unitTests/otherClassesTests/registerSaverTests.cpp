@@ -11,13 +11,13 @@ TEST_CASE("registerSaver throws errors when appropriate", "registerSaver"){
   registerSaver rs;
 
   SECTION("empty pop throws error"){
-    REQUIRE_THROWS_WITH( rs.popRegisterState(), "Attempting to pop from an empty registerSaver.\n");
+    REQUIRE_THROWS_WITH( rs.popRegisterState(), "dettrace runtime exception: Attempting to pop from an empty registerSaver.\n");
   }
 
   SECTION("full push throws error"){
     struct user_regs_struct regs;
     rs.pushRegisterState(regs);
-    REQUIRE_THROWS_WITH( rs.pushRegisterState(regs), "Attempting to push to a filed registerSaver.\n");
+    REQUIRE_THROWS_WITH( rs.pushRegisterState(regs), "dettrace runtime exception: Attempting to push to a filed registerSaver.\n");
   }
 
 }

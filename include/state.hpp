@@ -14,11 +14,35 @@
 #include "systemCall.hpp"
 #include "directoryEntries.hpp"
 #include "registerSaver.hpp"
+#include "mappedMemory.hpp"
 
 using namespace std;
 
+enum sighandler_type { SIGHANDLER_INVALID, SIGHANDLER_CUSTOM, SIGHANDLER_CUSTOM_1SHOT, SIGHANDLER_DEFAULT, SIGHANDLER_IGNORED };
+
+// for timerCreateTimers map
+typedef uint64_t timerID_t;
+class timerInfo {
+public:
+  /** whether to send a signal upon timer expiration */
+  bool sendSignal = false;
+  /** signal to deliver when timer expires */
+  int signum = -1;
+  /** data to pass to signal handler, only used by timer_create */
+  void* signalHandlerData = nullptr;
+};
+
+/**
+ * Keep track of file descriptor, whether it's blocking or non blocking.
+ */
+enum class descriptorType {
+  blocking,     /*< Set to block by user program (default) */
+  nonBlocking,     /*< User used system call pipe2 or fnctl to set as non blocking. */
+};
+
 // Needed to avoid recursive dependencies between classes.
 class systemCall;
+class mappedMemory;
 
 /**
  * Class to hold all state that we will need to update in between system calls inside the
@@ -47,6 +71,18 @@ public:
   state(pid_t traceePid, int debugLevel);
 
   /**
+   * Keep track of file descriptor status for blocking descriptors, as set by the
+   * user program. Irregardless of what we set it to. These are
+   * set in either pipe (non blocking) or pipe2 (either), or duplicated through,
+   * dup, dup2, or can be set through fnctl. Deleted through close(). We only support
+   * pipes, should be extended with fifo's at some point.
+
+   * When reading/writing we check this status to know whether to block this process,
+   * and replay, or simply preempt as Runnable by the scheduler.
+   */
+  unordered_map<int, descriptorType> fdStatus;
+
+  /**
    * Map from file descriptors to directory entries.
    */
   unordered_map<int, directoryEntries<linux_dirent>> dirEntries;
@@ -55,6 +91,11 @@ public:
    * The pid of the process represented by this state.
    */
   pid_t traceePid;
+
+  /**
+   * Remember whether wait4 was originally blocking or not.
+   */
+  bool wait4Blocking = false;
 
   /*
    * Per process bool to know if this is the pre or post hook event as ptrace does
@@ -120,6 +161,29 @@ public:
   /** Flag to let us know if the current system call was artifically injected by us. */
   bool syscallInjected = false;
 
+  /** Whether we have injected a noop system call. Return value of the noop
+      (currently, getpid) needs to be fixed up so that tracee doesn't notice
+      the noop. */
+  bool noopSystemCall = false;
+
+  /** Whether we've injected a signal for alarm/timer modeling. */
+  bool signalInjected = false;
+  
+  /** What kind of signal handler this tracee has requested via
+      signal/sigaction. The currentSignalHandlers map is updated iff the syscall
+      completes successfully. */
+  enum sighandler_type requestedSignalHandler = SIGHANDLER_INVALID;
+  /** Which signal this tracee has requested handling of via
+      signal/sigaction. The currentSignalHandlers map is updated iff the syscall
+      completes successfully. */
+  int requestedSignalToHandle = -1;
+  
+  /** Track, for each signal, what kind of handler this tracee currently has registered. */
+  unordered_map<int, enum sighandler_type> currentSignalHandlers;
+  
+  /** track timers created via timer_create */
+  unordered_map<timerID_t, timerInfo> timerCreateTimers;
+  
   bool rdfsNotNull = false; /**< Indicates whether rdfs is NULL. */
   bool wrfsNotNull = false; /**< Indicates whether wrfs is NULL. */
   bool exfsNotNull = false; /**< Indicates whether exfs is NULL. */
@@ -135,6 +199,11 @@ public:
   
   /** A register saver used to store the previous register state and retrieve at a later stage */
   registerSaver regSaver;
+
+  /** An instance of the mappedMemory class which encapsulates the 
+   * logic of ensuring the existance of a memory map.
+   */
+  mappedMemory mmapMemory;
 
   /**
    * Original register arguments before we modified them. We sometimes need to restore them at the
