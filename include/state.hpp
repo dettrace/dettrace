@@ -14,6 +14,7 @@
 #include "systemCall.hpp"
 #include "directoryEntries.hpp"
 #include "registerSaver.hpp"
+#include "mappedMemory.hpp"
 
 using namespace std;
 
@@ -41,6 +42,7 @@ enum class descriptorType {
 
 // Needed to avoid recursive dependencies between classes.
 class systemCall;
+class mappedMemory;
 
 /**
  * Class to hold all state that we will need to update in between system calls inside the
@@ -194,6 +196,11 @@ public:
 
   /** A register saver used to store the previous register state and retrieve at a later stage */
   registerSaver regSaver;
+
+  /** An instance of the mappedMemory class which encapsulates the 
+   * logic of ensuring the existance of a memory map.
+   */
+  mappedMemory mmapMemory;
 
   /**
    * Original register arguments before we modified them. We sometimes need to restore them at the

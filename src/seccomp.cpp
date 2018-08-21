@@ -81,8 +81,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_madvise);
   noIntercept(SYS_mknod);
   noIntercept(SYS_munmap);
-  noIntercept(SYS_mmap);
-  noIntercept(SYS_mlock);
+
   noIntercept(SYS_mprotect);
   noIntercept(SYS_mremap);
   noIntercept(SYS_msync);
@@ -184,6 +183,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_llistxattr);
   // TODO
   intercept(SYS_lgetxattr);
+  intercept(SYS_mmap);  
   intercept(SYS_mkdir, debug);
   intercept(SYS_mkdirat, debug);
   // TODO Nano sleep
