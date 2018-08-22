@@ -3,7 +3,7 @@
 #include <assert.h>
 
 #include <cpuid.h>
-// #include <immintrin.h>
+#include <immintrin.h>
 
 char vendor_id[12];
 unsigned version;

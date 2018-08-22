@@ -9,33 +9,29 @@ PARAM_ROOTS= pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR se
 PARAM_BINARIES= $(addsuffix .bin,$(PARAM_ROOTS))
 
 # built-in Linux utilities, nothing to build
-LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat mktemp # relativeTimeStamps1 relativeTimeStamps2 tars to fix one day.
+LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat # relativeTimeStamps1 relativeTimeStamps2 tars to fix one day.
 
 SHELL_SCRIPTS= bash1.sh test-compilation.sh
 
 # tests of random number generator insns, need special build flags
-
-CXX_BINARIES=random_device
-
 BROADWELL_ROOTS= rdrand rdseed
 BROADWELL_BINARIES= $(addsuffix .bin,$(BROADWELL_ROOTS))
 
 RT_ROOTS= timer_create_default timer_create_sigvtalrm timer_gettime
 RT_BINARIES= $(addsuffix .bin,$(RT_ROOTS))
 
+CXX_BINARIES=random_device
+
 DETTRACE=../../bin/dettrace
 DIFF_CMD=diff
-
 
 build: $(SIMPLE_BINARIES) $(PARAM_BINARIES) $(BROADWELL_BINARIES) $(RT_BINARIES) $(CXX_BINARIES)
 
 CC=clang
-CXX=clang++
-
 
 run: test
 test: test-binaries test-scripts
-test-binaries: $(patsubst %.bin, %.ok, $(SIMPLE_BINARIES)) $(patsubst %.bin, %.ok, $(PARAM_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES)) $(patsubst %.bin, %.ok, $(BROADWELL_BINARIES)) $(patsubst %.bin, %.ok, $(RT_BINARIES) $(patsubst %, %.ok, $(CXX_BINARIES)))
+test-binaries: $(patsubst %.bin, %.ok, $(SIMPLE_BINARIES)) $(patsubst %.bin, %.ok, $(PARAM_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES)) $(patsubst %.bin, %.ok, $(BROADWELL_BINARIES)) $(patsubst %.bin, %.ok, $(RT_BINARIES)) $(patsubst %.bin, %.ok, $(CXX_BINARIES))
 test-scripts: $(patsubst %.sh, %.ok, $(SHELL_SCRIPTS))
 
 # compile each sample program binary
@@ -46,12 +42,12 @@ $(SIMPLE_BINARIES): %.bin: %.c
 $(BROADWELL_BINARIES): %.bin: %.c
 	$(CC) $< -Wall -g -o $@ -pthread -std=gnu99 -march=broadwell
 
-$(CXX_BINARIES): %: %.cpp
-	$(CXX) $< -Wall -g -o $@ -std=gnu++11
-
 # timer_create tests need to link with -lrt
 $(RT_BINARIES): %.bin: %.c
 	$(CC) $< -Wall -g -o $@ -std=gnu99 -lrt
+
+$(CXX_BINARIES): %: %.cpp
+	$(CXX) $< -Wall -g -o $@ -std=gnu++11
 
 # NB: disable special cpu insn tests for now
 rdrand.ok: rdrand.bin
@@ -207,14 +203,6 @@ cat.ok:
 	@echo "Sixth" >> catTestFile
 	@python3 timeout.py 5s $(DETTRACE) cat -ne catTestFile > ActualOutputs/cat.output
 	@$(DIFF_CMD) ActualOutputs/cat.output ExpectedOutputs/cat.output
-
-mktemp.ok:
-	@echo "   Testing mktemp..."
-	@python3 timeout.py 5s ../../bin/dettrace mktemp --dry-run > ActualOutputs/mktemp.output
-	@$(DIFF_CMD) ActualOutputs/mktemp.output ExpectedOutputs/mktemp.output
-	@echo "   Testing mktemp --directory..."
-	@python3 timeout.py 5s ../../bin/dettrace mktemp --directory --dry-run > ActualOutputs/mktemp-directory.output
-	@$(DIFF_CMD) ActualOutputs/mktemp-directory.output ExpectedOutputs/mktemp.output
 
 # Other DetTrace tests, with non-trivial invocation or cleanup
 

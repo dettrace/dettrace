@@ -69,7 +69,7 @@ int clock_gettime(clockid_t clk_id, struct timespec *tp){
 
 // TODO?
 // int getcpu(unsigned *cpu, unsigned *node, struct getcpu_cache *tcache){
-  
+
 // }
 
 /**
@@ -128,9 +128,9 @@ static uint32_t mkstempValue = 0;
 
 static int mymktemp(char* template, int suffixlen, int flags) {
   if (0 == mkstempValue) {
-    mkstempValue = 1 + (getpid() * 2000); // statically allocate a slab of names to each process
+    mkstempValue = 1 + ((uint32_t)getpid() * 2000); // statically allocate a slab of names to each process
   }
-  
+
   char buf[7];
   snprintf(buf, 7, "%06x", mkstempValue);
   //fprintf(stderr, "[mymktemp] before: %s\n", template);
