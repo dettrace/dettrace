@@ -11,11 +11,11 @@ MAKE=make
 TMPDIR=/tmp/test-compilation
 
 function cleanup {
-  rm  -r ${TMPDIR}
+  rm  -rf ${TMPDIR}
 }
 trap cleanup EXIT
 
-mkdir ${TMPDIR}
+mkdir -p ${TMPDIR}
 
 function success {
   printf "%-72s    OK\n" "$1"
