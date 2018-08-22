@@ -335,7 +335,11 @@ void execution::runProgram(){
       log.writeToLog(Importance::inter,
                      log.makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
                      pidMap.getVirtualValue(traceesPid));
-      continue;
+
+      // Execve succeeded, we must remap our memory, our last mapped was wiped out.
+      states.at(traceesPid).mmapMemory.doesExist = false;
+
+    continue;
     }
 
     if(ret == ptraceEvent::signal){
@@ -806,7 +810,7 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
 
   // Wait for next event to intercept.
   traceesPid = doWithCheck(waitpid(pidToContinue, &status, 0), "waitpid");
-  // printf("Tracees pid: %d\n", traceesPid);
+
   return make_tuple(getPtraceEvent(status), traceesPid, status);
 }
 // =======================================================================================

@@ -51,7 +51,6 @@ void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName)
 void printInfoString(uint64_t addressOfCString, globalState& gs, state& s, ptracer& t,
                      string postFix = " path: ");
 void injectFstat(globalState& gs, state& s, ptracer& t, int fd);
-void injectMmap(globalState& gs, state& s, ptracer& t);
 void injectPause(globalState& gs, state& s, ptracer& t);
 
 pair<int,int> getPipeFds(globalState& gs, state& s, ptracer& t);
@@ -698,12 +697,15 @@ void mmapSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     }
     s.syscallInjected = false;
 
+
     // save memory address to be used later
     s.mmapMemory.setAddr(traceePtr<void>((void*) t.getReturnValue()));
 
+    // Inject original system call:
     // Previous state that should have been set by system call that created this fstat
     // injection.
     t.setRegs(s.regSaver.popRegisterState());
+    replaySystemCall(gs, t, t.getSystemCallNumber());
   }
 }
 

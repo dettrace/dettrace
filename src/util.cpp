@@ -78,7 +78,7 @@ int doWithCheck(int returnValue, string errorMessage){
   string reason = strerror(errno);
   if(returnValue == -1){
     cerr << errorMessage + ":\n  " + reason << endl;
-    exit(1);
+    abort();
   }
 
   return returnValue;
