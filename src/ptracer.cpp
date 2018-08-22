@@ -126,7 +126,8 @@ void ptracer::setOptions(pid_t pid){
 	    // assume WIFEXITED will work, see man ptrace 2.
 	    PTRACE_O_TRACEEXIT |
 	    PTRACE_O_TRACESYSGOOD |
-	    PTRACE_O_TRACESECCOMP
+	    PTRACE_O_TRACESECCOMP |
+      PTRACE_O_TRACEEXEC
 	    ));
   return;
 }

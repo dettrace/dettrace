@@ -97,7 +97,7 @@ void writeVmTraceeRaw(T* localMemory, traceePtr<T> traceeMemory, size_t numberOf
   const unsigned long flags = 0;
 
   doWithCheck(process_vm_writev(traceePid, &localIoVec, 1, &remoteIoVec, 1, flags),
-              "process_vm_writev");
+              "writeVmTraceeRaw: Error calling process_vm_writev");
 
   return;
 }

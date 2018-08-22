@@ -63,6 +63,9 @@ public:
     return length;
   }
 
+  /** boolean flag indicating if a mapping already exists. */
+  bool doesExist = false;
+
 private:
   /** pointer to starting address of the mapping in tracee memory. */
   traceePtr<void> mmapAddr = traceePtr<void>((void*) -1);
@@ -77,7 +80,5 @@ private:
   int fd = -1;
   /** offset. not used for anonymous mapping. */
   int offset = 0;
-  /** boolean flag indicating if a mapping already exists. */
-  bool doesExist = false;
 };
 #endif
