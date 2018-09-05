@@ -15,6 +15,9 @@
 #include <stack>
 #include <map>
 
+#define ARCH_GET_CPUID		0x1011
+#define ARCH_SET_CPUID		0x1012
+
 
 /**
  * Execution class.

@@ -168,7 +168,7 @@ public:
 
   /** Whether we've injected a signal for alarm/timer modeling. */
   bool signalInjected = false;
-  
+
   /** What kind of signal handler this tracee has requested via
       signal/sigaction. The currentSignalHandlers map is updated iff the syscall
       completes successfully. */
@@ -177,13 +177,13 @@ public:
       signal/sigaction. The currentSignalHandlers map is updated iff the syscall
       completes successfully. */
   int requestedSignalToHandle = -1;
-  
+
   /** Track, for each signal, what kind of handler this tracee currently has registered. */
   unordered_map<int, enum sighandler_type> currentSignalHandlers;
-  
+
   /** track timers created via timer_create */
   unordered_map<timerID_t, timerInfo> timerCreateTimers;
-  
+
   bool rdfsNotNull = false; /**< Indicates whether rdfs is NULL. */
   bool wrfsNotNull = false; /**< Indicates whether wrfs is NULL. */
   bool exfsNotNull = false; /**< Indicates whether exfs is NULL. */
@@ -195,12 +195,12 @@ public:
   bool userDefinedTimeout = false;
 
   /** Flag to tell us to setup cpuid interception via an injected prctl(). */
-  bool needToSetCPUIDTrap = false;
-  
+  bool CPUIDTrapSet = false;
+
   /** A register saver used to store the previous register state and retrieve at a later stage */
   registerSaver regSaver;
 
-  /** An instance of the mappedMemory class which encapsulates the 
+  /** An instance of the mappedMemory class which encapsulates the
    * logic of ensuring the existance of a memory map.
    */
   mappedMemory mmapMemory;

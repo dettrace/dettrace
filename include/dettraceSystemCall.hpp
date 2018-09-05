@@ -3,6 +3,10 @@
 
 #include "systemCall.hpp"
 #include "util.hpp"
+
+#define ARCH_GET_CPUID		0x1011
+#define ARCH_SET_CPUID		0x1012
+
 using namespace std;
 
 /**
@@ -46,7 +50,6 @@ class accessSystemCall : public systemCall{
 public:
   using systemCall::systemCall;
   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
 /**
@@ -655,7 +658,7 @@ public:
 /**
  * int pause(void);
  *
- * pause() causes the calling process (or thread) to sleep until a signal is delivered that 
+ * pause() causes the calling process (or thread) to sleep until a signal is delivered that
  * either terminates the process or causes the invocation of a signal-catching function.
  */
 class pauseSystemCall : public systemCall{
@@ -935,7 +938,7 @@ public:
 // =======================================================================================
 /**
  * int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
- * 
+ *
  * Setup a signal handler. Currently only used for determinizing alarm()
  */
 class rt_sigactionSystemCall : public systemCall{
@@ -947,7 +950,7 @@ public:
 // =======================================================================================
 /**
  * sighandler_t signal(int signum, sighandler_t handler);
- * 
+ *
  * Setup a signal handler. Currently only used for determinizing alarm()
  */
 class signalSystemCall : public systemCall{
@@ -1059,7 +1062,7 @@ public:
   //void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
-/** 
+/**
  * int timer_delete(timer_t timerid);
  */
 class timer_deleteSystemCall : public systemCall{
@@ -1069,7 +1072,7 @@ public:
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
-/** 
+/**
  * int timer_getoverrun(timer_t timerid);
  */
 class timer_getoverrunSystemCall : public systemCall{
@@ -1079,7 +1082,7 @@ public:
   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
 };
 // =======================================================================================
-/** 
+/**
  * int timer_gettime(timer_t timerid, struct itimerspec *curr_value);
  */
 class timer_gettimeSystemCall : public systemCall{

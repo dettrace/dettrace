@@ -16,6 +16,7 @@
 
 pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process);
 bool kernelCheck(int a, int b, int c);
+void trapCPUID(globalState& gs, state& s, ptracer& t);
 
 
 bool kernelCheck(int a, int b, int c){
@@ -336,6 +337,9 @@ void execution::runProgram(){
                      log.makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
                      pidMap.getVirtualValue(traceesPid));
 
+      //reset CPUID trap flag
+      states.at(traceesPid).CPUIDTrapSet = false;
+
       // Execve succeeded, we must remap our memory, our last mapped was wiped out.
       states.at(traceesPid).mmapMemory.doesExist = false;
 
@@ -473,9 +477,17 @@ bool execution::handleSeccomp(const pid_t traceesPid){
   // Get registers from tracee.
   tracer.updateState(traceesPid);
 
-  // ensure mapping exists
-  // we need to update the tracrer since mappedMemory::ensureExistanceOfMapping checks intercepted call
-  states.at(traceesPid).mmapMemory.ensureExistenceOfMapping(myGlobalState, states.at(traceesPid), tracer);
+  if (!states.at(traceesPid).CPUIDTrapSet && !myGlobalState.kernelPre4_12)
+  {
+    //check if CPUID needs to be set, if it does, set trap
+    trapCPUID(myGlobalState, states.at(traceesPid), tracer);
+  }
+  else
+  {
+    // ensure mapping exists
+    // we need to update the tracrer since mappedMemory::ensureExistanceOfMapping checks intercepted call
+    states.at(traceesPid).mmapMemory.ensureExistenceOfMapping(myGlobalState, states.at(traceesPid), tracer);
+  }
 
   auto callPostHook = handlePreSystemCall( states.at(traceesPid), traceesPid );
   return callPostHook;
@@ -909,3 +921,29 @@ pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process){
   return parent;
 }
 // =======================================================================================
+
+void trapCPUID(globalState& gs, state& s, ptracer& t){
+
+  gs.log.writeToLog(Importance::info, "Injecting arch_prctl call to tracee to intercept CPUID!\n");
+  // Save current register state to restore after arch_prctl
+  s.regSaver.pushRegisterState(t.getRegs());
+
+  // Inject arch_prctl system call
+  s.syscallInjected = true;
+
+  // Call arch_prctl
+  t.writeArg1(ARCH_SET_CPUID);
+  t.writeArg2(0);
+
+  uint16_t minus2 = t.readFromTracee(traceePtr<uint16_t>((uint16_t*) ((uint64_t) t.getRip().ptr - 2)), t.getPid());
+  if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
+    throw runtime_error("dettrace runtime exception: IP does not point to system call instruction!\n");
+  }
+
+
+  gs.totalReplays++;
+  // Replay system call!
+  t.changeSystemCall(SYS_arch_prctl);
+  t.writeIp((uint64_t) t.getRip().ptr - 2);
+  gs.log.writeToLog(Importance::info, "arch_prctl(%d, 0)\n", ARCH_SET_CPUID);
+}
