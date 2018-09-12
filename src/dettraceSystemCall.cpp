@@ -1663,12 +1663,11 @@ bool setitimerSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
 // =======================================================================================
 void timesSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // Failure nothing for us to do.
-  if((int) t.getReturnValue() < 0){
+  if((clock_t) t.getReturnValue() == -1){
     return;
   }
 
   tms* bufPtr = (tms*) t.arg1();
-  gs.log.writeToLog(Importance::info, "times: buf is null.");
   if(bufPtr != nullptr){
     tms myTms = {
       .tms_utime = 0,
@@ -1680,7 +1679,8 @@ void timesSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     t.writeToTracee(traceePtr<tms>(bufPtr), myTms, s.traceePid);
   }
 
-  t.writeRax(0);
+  t.setReturnRegister(s.getLogicalTime());
+  s.incrementTime();
 }
 // =======================================================================================
 void unameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){

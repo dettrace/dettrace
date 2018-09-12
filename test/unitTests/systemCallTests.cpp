@@ -254,7 +254,7 @@ TEST_CASE("times", "times"){
   struct tms buf;
   clock_t time = times(&buf);
   // Nobody.
-  REQUIRE(time == 0);
+  REQUIRE(time == 3);
   REQUIRE(buf.tms_utime == 0);
   REQUIRE(buf.tms_stime == 0);
   REQUIRE(buf.tms_cutime == 0);
