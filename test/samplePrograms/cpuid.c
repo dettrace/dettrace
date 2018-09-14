@@ -54,9 +54,9 @@ int main(void)
   printf("\nfeatures are 0x%04X\n\n", features);
 
   #ifdef __RDRND__
-  printf("C compiler things RDRAND is on...\n");
+  printf("C compiler thinks RDRAND is on...\n");
   #else
-  printf("C compiler things RDRAND is OFF...\n");
+  printf("C compiler thinks RDRAND is OFF...\n");
   #endif
 
   // (2) Probe using what's provided from cpuid.h
@@ -158,7 +158,7 @@ int main(void)
   *supports = 0;
   *doesnot  = 0;
   printf("  supported features: %s\n", orig_supports);
-  printf("  UNsupported features: %s\n", orig_doesnot);
+  printf("  unsupported features: %s\n", orig_doesnot);
   supports = orig_supports;
   doesnot  = orig_doesnot;
 
