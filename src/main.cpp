@@ -220,7 +220,7 @@ int runTracee(void* voidArgs){
   bool useContainer = args.useContainer;
 
   // Find absolute path to our build directory relative to the dettrace binary.
-  char argv0[strlen(argv[0])+1/*NUL*/];
+  char argv0[strlen(argv[0])+1/*NULL*/];
   strcpy(argv0, argv[0]); // Use a copy since dirname may mutate contents.
   string pathToExe{ dirname(argv0) };
 
@@ -250,8 +250,14 @@ int runTracee(void* voidArgs){
 
   string ldpreload {"LD_PRELOAD=/dettrace/lib/libdet.so"};
   if(! useContainer){
-    ldpreload = "LD_PRELOAD=" + pathToExe + "/../lib/libdet.so";
+    // Always use full path when refering to files.
+    auto path = pathToExe + "/../lib/libdet.so";
+    char* fullpath = realpath(path.c_str(), NULL);
+    ldpreload = "LD_PRELOAD=" + string { fullpath };
+
+    free(fullpath);
   }
+
   char *const envs[] = {(char* const)ldpreload.c_str(),
                         (char* const)"PATH=/usr/bin/:/bin",
                         NULL};
