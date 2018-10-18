@@ -206,6 +206,30 @@ int main(int argc, char** argv){
 
   return 0;
 }
+
+static void mayCreateDetPrng(void) {
+  FILE* fp;
+
+  const char* prng = secure_getenv("DET_PRNG");
+  char fill[1024];
+
+  if (!prng) return;
+
+  fp = fopen(prng, "rb");
+  if (fp) {
+    fclose(fp);
+    return;
+  }
+
+  fp = fopen(prng, "wb");
+  memset(fill, '0', sizeof(fill));
+
+  for (int i = 0; i < 10; i++) {
+    fwrite(fill, 1, 1024, fp);
+  }
+  fclose(fp);
+}
+
 // =======================================================================================
 /**
  * Child will become the process the user wishes through call to execvpe.
@@ -253,7 +277,10 @@ int runTracee(void* voidArgs){
     // Always use full path when refering to files.
     auto path = pathToExe + "/../lib/libdet.so";
     char* fullpath = realpath(path.c_str(), NULL);
-    ldpreload = "LD_PRELOAD=" + string { fullpath };
+    if (!fullpath)
+      ldpreload = "LD_PRELOAD=libdet.so";
+    else
+      ldpreload = "LD_PRELOAD=" + string { fullpath };
 
     free(fullpath);
   }
@@ -395,6 +422,19 @@ void runTracer(int debugLevel, pid_t startingPid, bool inSchroot, bool useColor,
 
   return;
 }
+
+static bool isSuffixOf(string& s, string& t) {
+  auto i = s.rbegin();
+  auto j = t.rbegin();
+
+  while (i != s.rend()) {
+    if (*i != *j) return false;
+    ++i;
+    ++j;
+  }
+  return true;
+}
+
 // =======================================================================================
 /**
  * index is the first index in the argv array containing a non option.
@@ -410,6 +450,16 @@ tuple<int, int, string, bool, bool, bool, string, bool> parseProgramArguments(in
   bool useColor = true;
   string logFile = "";
   bool printStatistics = false;
+
+  string cmd(argv[0]);
+  string det("det");
+
+  if (isSuffixOf(det, cmd)) {
+    useContainer = false;
+    inSchroot = true;
+    setenv("DET_PRNG", "/dev/random.det", 1);
+    mayCreateDetPrng();
+  }
 
   // Command line options for our program.
   static struct option programOptions[] = {

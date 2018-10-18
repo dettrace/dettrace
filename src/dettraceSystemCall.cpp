@@ -739,6 +739,27 @@ bool linkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 
   return false;
 }
+
+static unsigned long interceptDevURandom(globalState& gs, state& s, ptracer& t) {
+  const char* prng = secure_getenv("DET_PRNG");
+  if (!prng) return 0;
+
+  size_t n = strlen(prng);
+  size_t i;
+  unsigned long remotePtr = (unsigned long)s.mmapMemory.getAddr().ptr;
+  auto cptr = traceePtr<char>((char*)remotePtr);
+
+  for (i = 0; i <= n; i += sizeof(long)) {
+    unsigned long val = 0;
+    memcpy(&val, &prng[i], std::min(n - i, sizeof(long)));
+    t.writeToTracee(traceePtr<unsigned long>((unsigned long*)(remotePtr + i)), val, s.traceePid);
+  }
+  t.writeToTracee(traceePtr<unsigned long>((unsigned long*)(remotePtr + i)), 0UL, s.traceePid);
+  string pp = t.readTraceeCString(cptr, s.traceePid);
+
+  return remotePtr;
+}
+
 // =======================================================================================
 bool openSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   char* addressOfCString = (char*) t.arg1();
@@ -746,6 +767,7 @@ bool openSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedul
   if(addressOfCString != nullptr){
 #ifdef EXTRANEOUS_TRACEE_READS
     auto ptr = traceePtr<char>(addressOfCString);
+
     string path = t.readTraceeCString(ptr, s.traceePid);
     string coloredPath = gs.log.makeTextColored(Color::green, path);
     string msg = s.systemcall->syscallName + " path:" + coloredPath + "\n";
@@ -753,8 +775,12 @@ bool openSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedul
     
     if(path == "/dev/random"){
       gs.devRandomOpens++;
+      unsigned long rptr = interceptDevURandom(gs, s, t);
+      if (rptr) t.writeArg1(rptr);
     }else if(path == "/dev/urandom"){
       gs.devUrandomOpens++;
+      unsigned long rptr = interceptDevURandom(gs, s, t);
+      if (rptr) t.writeArg1(rptr);
     }
 #endif
   }else{
@@ -777,6 +803,7 @@ void openSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     injectFstat(gs, s, t, t.getReturnValue());
   }
 }
+
 // =======================================================================================
 bool openatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
     char* addressOfCString = (char*) t.arg2();
@@ -791,8 +818,12 @@ bool openatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     
     if(path == "/dev/random"){
       gs.devRandomOpens++;
+      unsigned long rptr = interceptDevURandom(gs, s, t);
+      if (rptr) t.writeArg2(rptr);
     }else if(path == "/dev/urandom"){
       gs.devUrandomOpens++;
+      unsigned long rptr = interceptDevURandom(gs, s, t);
+      if (rptr) t.writeArg2(rptr);
     }
 #endif
   }else{
