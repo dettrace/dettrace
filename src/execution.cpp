@@ -17,8 +17,8 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
                      bool oldKernel, string logFile, bool printStatistics):
   oldKernel {oldKernel},
   log {logFile, debugLevel, useColor},
-  printStatistics{printStatistics},
   silentLogger {"", 0},
+  printStatistics{printStatistics},
   // Waits for first process to be ready!
   tracer{startingPid},
   // Create our global state once, share across class.
