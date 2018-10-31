@@ -27,11 +27,9 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
     ValueMapper<ino_t, ino_t> {log, "inode map", 1},
     ValueMapper<ino_t, time_t> {log, "mtime map", 1}
   },
-  pidMap {silentLogger, "pid map", startingPid},
-  myScheduler {startingPid, log, pidMap},
+  myScheduler {startingPid, log},
   debugLevel {debugLevel}{
     // Set state for first process.
-    pidMap.addRealValue(startingPid);
     states.emplace(startingPid, state {startingPid, debugLevel});
 
     // First process is special and we must set the options ourselves.
@@ -44,7 +42,7 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
 bool execution::handleExit(const pid_t traceesPid){
   auto msg = log.makeTextColored(Color::blue, "Process [%d] has completely  finished."
                                      " (ptrace nonEventExit).\n");
-  log.writeToLog(Importance::inter, msg, pidMap.getVirtualValue(traceesPid));
+  log.writeToLog(Importance::inter, msg, traceesPid);
 
   // We are done. Erase ourselves from our parent's list of children.
   pid_t parent = eraseChildEntry(processTree, traceesPid);
@@ -84,8 +82,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   // Print!
   string systemCall = currState.systemcall->syscallName;
   string redColoredSyscall = log.makeTextColored(Color::red, systemCall);
-  auto virtualPid = pidMap.getVirtualValue(traceesPid);
-  log.writeToLog(Importance::inter,"[Pid %d] Intercepted %s\n", virtualPid,
+  log.writeToLog(Importance::inter,"[Pid %d] Intercepted %s\n", traceesPid,
                  redColoredSyscall.c_str());
   log.setPadding();
 
@@ -198,7 +195,6 @@ void execution::runProgram(){
     pid_t traceesPid;
     ptraceEvent ret;
     tie(ret, traceesPid, status) = getNextEvent(myScheduler.getNext(), callPostHook);
-    auto virtualPid = pidMap.getVirtualValue(traceesPid);
 
     // Most common event. We handle the pre-hook for system calls here.
     if(ret == ptraceEvent::seccomp){
@@ -239,7 +235,7 @@ void execution::runProgram(){
       // throw runtime_error("dettrace runtime exception: Process terminated by signal. We currently do not support this.");
       auto msg =
         log.makeTextColored(Color::blue, "Process [%d] ended by signal %d.\n");
-      log.writeToLog(Importance::inter, msg, virtualPid, WTERMSIG(status));
+      log.writeToLog(Importance::inter, msg, traceesPid, WTERMSIG(status));
       exitLoop = handleExit(traceesPid);
       continue;
     }
@@ -261,7 +257,7 @@ void execution::runProgram(){
     if(ret == ptraceEvent::eventExit){
       auto msg = log.makeTextColored(Color::blue, "Process [%d] has finished. "
                                          "With ptrace exit event.\n");
-      log.writeToLog(Importance::inter, msg, virtualPid);
+      log.writeToLog(Importance::inter, msg, traceesPid);
       callPostHook = false;
 
       // We get only get an exit if we made progress, report this. This covers the case
@@ -296,14 +292,14 @@ void execution::runProgram(){
     if(ret == ptraceEvent::clone){
       log.writeToLog(Importance::inter,
                      log.makeTextColored(Color::blue, "[%d] caught clone event!\n"),
-                     pidMap.getVirtualValue(traceesPid));
+                     traceesPid);
       continue;
     }
 
     if(ret == ptraceEvent::exec){
       log.writeToLog(Importance::inter,
                      log.makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
-                     pidMap.getVirtualValue(traceesPid));
+                     traceesPid);
 
       // Execve succeeded, we must remap our memory, our last mapped was wiped out.
       states.at(traceesPid).mmapMemory.doesExist = false;
@@ -392,11 +388,10 @@ pid_t execution::handleForkEvent(const pid_t traceesPid){
   pid_t newChildPid = tracer.getEventMessage();
 
   // Add this new process to our states.
-  auto virtualPid = pidMap.addRealValue(newChildPid);
   states.emplace(newChildPid, state {newChildPid, debugLevel} );
   log.writeToLog(Importance::info,
                  log.makeTextColored(Color::blue,"Added process [%d] to states map.\n"),
-                 virtualPid);
+                 newChildPid);
 
   // Tracee just had a child! It's a parent!
   myScheduler.addAndScheduleNext(newChildPid);
@@ -479,8 +474,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
       states.at(traceesPid).signalToDeliver = 0;
 
       auto coloredMsg = log.makeTextColored(Color::blue, msg);
-      auto virtualPid = pidMap.getVirtualValue(traceesPid);
-      log.writeToLog(Importance::inter, coloredMsg, virtualPid, sigNum);
+      log.writeToLog(Importance::inter, coloredMsg, traceesPid, sigNum);
 
       return;
     }
@@ -492,8 +486,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
     auto msg = "[%d] Tracer: Received signal: %d. Forwarding signal to tracee.\n";
     auto coloredMsg = log.makeTextColored(Color::blue, msg);
-    auto virtualPid = pidMap.getVirtualValue(traceesPid);
-    log.writeToLog(Importance::inter, coloredMsg, virtualPid, sigNum);
+    log.writeToLog(Importance::inter, coloredMsg, traceesPid, sigNum);
   return;
 }
 // =======================================================================================

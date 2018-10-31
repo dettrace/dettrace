@@ -73,13 +73,6 @@ private:
    * Ensures consistent state among all processes.
    */
   globalState myGlobalState;
-  /**
-   * Virtual<=>real pid map. Ptrace does not know the virtual pids of the tracee
-   * since that's all handled by the kernel, so we keep our own mapping to be
-   * able to deterministically output logging information related to processes,
-   * and support translation between virtual and real pids as necessary.
-   */
-  ValueMapper<pid_t, pid_t> pidMap;
 
   /**
    * Map of parent processes to children.

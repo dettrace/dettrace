@@ -1449,11 +1449,11 @@ bool tgkillSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   gs.log.writeToLog(Importance::info, "tgkill(tgid = %d, tid = %d, signal = %d)\n",
                     tgid, tid, signal);
 
-  if (signal == SIGABRT && tgid == sched.pidMap.getVirtualValue(s.traceePid) &&
+  if (signal == SIGABRT && tgid == s.traceePid &&
       tgid == tid /* TODO: when we support threads, we should also compare against tracee's tid (from gettid) */) {
     // ok
   } else {
-    gs.log.writeToLog(Importance::info, "tgkillSystemCall::handleDetPre: tracee vtgid="+to_string(tgid)+" vtid=" +to_string(tid)+ " ptgid="+to_string(sched.pidMap.getVirtualValue(s.traceePid))+" trying to send unsupported signal="+to_string(signal));
+    gs.log.writeToLog(Importance::info, "tgkillSystemCall::handleDetPre: tracee vtgid="+to_string(tgid)+" vtid=" +to_string(tid)+ " ptgid="+to_string(s.traceePid)+" trying to send unsupported signal="+to_string(signal));
     throw runtime_error("dettrace runtime exception: tgkillSystemCall::handleDetPre: tracee trying to send unsupported signal");
   }
 
@@ -2087,7 +2087,7 @@ static bool sendTraceeSignalNow(int signum, globalState& gs, state& s, ptracer& 
   switch (sh) {
 
   case SIGHANDLER_CUSTOM_1SHOT: {
-    gs.log.writeToLog(Importance::info, "tracee has a custom 1-shot signal "+to_string(signum)+" handler, sending signal to pid %u\n", sched.pidMap.getVirtualValue(t.getPid()));
+    gs.log.writeToLog(Importance::info, "tracee has a custom 1-shot signal "+to_string(signum)+" handler, sending signal to pid %u\n", t.getPid());
 
     // TODO: JLD is this a race? the tracee isn't technically paused yet
     t.changeSystemCall(SYS_pause);
@@ -2101,7 +2101,7 @@ static bool sendTraceeSignalNow(int signum, globalState& gs, state& s, ptracer& 
   }
 
   case SIGHANDLER_CUSTOM: {
-    gs.log.writeToLog(Importance::info, "tracee has a custom signal "+to_string(signum)+" handler, sending signal to pid %u\n", sched.pidMap.getVirtualValue(t.getPid()));
+    gs.log.writeToLog(Importance::info, "tracee has a custom signal "+to_string(signum)+" handler, sending signal to pid %u\n", t.getPid());
 
     // TODO: JLD is this a race? the tracee isn't technically paused yet
     t.changeSystemCall(SYS_pause);
