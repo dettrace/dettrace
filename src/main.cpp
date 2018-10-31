@@ -207,7 +207,10 @@ int main(int argc, char** argv){
     if (WIFEXITED(status)) {
       return WEXITSTATUS(status);
     } else {
-      throw runtime_error("waitpid returned: " + to_string(status));
+      if (debugLevel >= 4) {
+	cout << "[4] INFO waitpid returned: " + to_string(status) << endl;
+      }
+      abort();
     }
   }
   return 0;
