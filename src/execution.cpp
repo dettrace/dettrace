@@ -27,7 +27,7 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
     ValueMapper<ino_t, ino_t> {log, "inode map", 1},
     ValueMapper<ino_t, time_t> {log, "mtime map", 1}
   },
-  pidMap {silentLogger, "pid map", 2},
+  pidMap {silentLogger, "pid map", startingPid},
   myScheduler {startingPid, log, pidMap},
   debugLevel {debugLevel}{
     // Set state for first process.

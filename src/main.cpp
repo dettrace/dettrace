@@ -208,7 +208,7 @@ int main(int argc, char** argv){
       return WEXITSTATUS(status);
     } else {
       if (debugLevel >= 4) {
-	cout << "[4] INFO waitpid returned: " + to_string(status) << endl;
+	cerr << "[4] INFO waitpid returned: " + to_string(status) << endl;
       }
       abort();
     }
