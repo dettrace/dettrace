@@ -183,19 +183,6 @@ public:
   void runProgram();
 
   /**
-   * Handles fork in trace.
-   * Fork is super special. We get two events whenever a fork, vfork, or clone happens.
-   * 1) A signal from the child.
-   * 2) A fork event from the parent.
-   * The problem is that the order of the events is unkown. Therefore we must be able
-   * to receive the events in either order and correctly handle them.
-   * This event also sets scheduling for process by setting nextPid to newChildPid.
-   * @param event event of the ptraceEvent enum found in ptracer.hpp ie syscall, fork, clone etc.
-   * @param traceesPid the pid of the tracee
-   */
-  void handleFork(ptraceEvent event, const pid_t traceesPid);
-
-  /**
    * Handle the fork event part of @handleFork. Pushes parent to our process hierarchy
    * and creates state for child.
    * @param traceesPid the pid of the tracee
@@ -204,18 +191,18 @@ public:
   pid_t handleForkEvent(const pid_t traceesPid);
 
   /**
-   * Handle the signal part of @handleFork.
-   * @param traceesPid the pid of the tracee
-   * @see handleFork.
-   */
-  void handleForkSignal(const pid_t traceesPid);
-
-  /**
    * Handle signal event in trace.
    * @param signum signal number
    * @param traceesPid the pid of the tracee
    */
   void handleSignal(int signum, const pid_t traceesPid);
+
+  /**
+   * Handle the signal part of @handleFork.
+   * @param traceesPid the pid of the tracee
+   * @see handleFork.
+   */
+  void handleExecEvent(pid_t traceesPid);
 
   /**
    * Handle seccomp event.
