@@ -2,10 +2,12 @@ BUILD=debug
 CXX = clang++
 CC= clang
 
+DEFINES=-D_GNU_SOURCE=1 -D_POSIX_C_SOURCE=20181101 -D__USE_XOPEN=1
+
 cxxflags.debug   = -O0 -g
 cxxflags.release = -O3 -g
-CXXFLAGS = ${cxxflags.${BUILD}} -std=c++14 -Wall $(INCLUDE)
-CFLAGS = $(DEBUG) -Wall -Wshadow $(INCLUDE)
+CXXFLAGS = ${cxxflags.${BUILD}} -std=c++14 -Wall $(INCLUDE) $(DEFINES)
+CFLAGS = $(DEBUG) -Wall -Wshadow $(INCLUDE) $(DEFINES)
 LIBS = -pthread -lseccomp -L ../lib/lib64
 
 # Libdet only.

@@ -156,3 +156,15 @@ int mkstemps(char *template, int suffixlen) {
 int mkostemps(char *template, int suffixlen, int flags) {
   return mymktemp(template, suffixlen, flags);
 }
+
+char* tempnam(const char* dir, const char* prefix) {
+  if (0 == mkstempValue) {
+    mkstempValue = 1 + ((unsigned)getpid() * 2000); // statically allocate a slab of names to each process
+  }
+
+  (void)dir;
+  char buf[256];
+  snprintf(buf, 256, "/tmp/%s%06x", prefix?prefix:"file", mkstempValue);
+  mkstempValue += 1;
+  return strdup(buf);
+}
