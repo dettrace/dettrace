@@ -156,7 +156,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_dup);
   intercept(SYS_dup2);
 
-  intercept(SYS_execve, debug);
+  intercept(SYS_execve);
   intercept(SYS_faccessat, debug);
   intercept(SYS_fgetxattr, debug);
   intercept(SYS_flistxattr, debug);
