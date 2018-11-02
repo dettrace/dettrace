@@ -362,6 +362,19 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
   // Disable ASLR for our child
   doWithCheck(personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");
 }
+
+static void initSigHandlers(void) {
+  struct sigaction sa;
+  sigset_t set;
+
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_flags = SA_NOCLDSTOP | SA_NOCLDWAIT | SA_RESTART;
+  sigemptyset(&set);
+  sa.sa_mask = set;
+  sa.sa_handler = SIG_IGN;
+  doWithCheck(sigaction(SIGCHLD, &sa, NULL), "sigaction");
+}
+
 // =======================================================================================
 /**
  * Parent is the tracer. Trace child by intercepting all system call and signals child
@@ -399,6 +412,8 @@ void runTracer(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid, void* vo
   }
 
   assert(getpid() == 1);
+
+  initSigHandlers();
 
   pid_t pid = fork();
   if (pid < 0) {
