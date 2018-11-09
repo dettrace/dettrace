@@ -34,7 +34,7 @@
 // Enable tracee reads that are not strictly necessary for functionality, but
 // are enabled for instrumentation or sanity checking. For example, verify,
 // before system call replay, that RIP points at a valid system call insn.
-#define EXTRANEOUS_TRACEE_READS 0
+// #define EXTRANEOUS_TRACEE_READS 0
 
 using namespace std;
 // =======================================================================================
@@ -2265,6 +2265,7 @@ void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName)
  * else is given.
  */
 void printInfoString(uint64_t addressOfCString, globalState& gs, state& s, ptracer& t, string postFix){
+#ifdef EXTRANEOUS_TRACEE_READS
   if((char*) addressOfCString != nullptr){
     if(gs.log.getDebugLevel() > 0){
       string path = t.readTraceeCString(traceePtr<char>((char*) addressOfCString), s.traceePid);
@@ -2275,7 +2276,7 @@ void printInfoString(uint64_t addressOfCString, globalState& gs, state& s, ptrac
   }else{
     gs.log.writeToLog(Importance::info, "Null path given to system call.\n");
   }
-
+#endif
   return;
 }
 // =======================================================================================

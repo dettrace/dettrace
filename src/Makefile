@@ -4,7 +4,7 @@ CC= clang
 
 cxxflags.debug   = -O0 -g
 cxxflags.release = -O3 -g
-CXXFLAGS = ${cxxflags.${BUILD}} -std=c++14 -Wall $(INCLUDE)
+CXXFLAGS = -O3 -std=c++14 -Wall $(INCLUDE)
 CFLAGS = $(DEBUG) -Wall -Wshadow $(INCLUDE)
 LIBS = -pthread -lseccomp -L ../lib/lib64
 
@@ -32,7 +32,7 @@ dettrace-static: $(obj) $(libs)
 # rule to generate a dep file by using the C preprocessor
 # (see man cpp for details on the -MM and -MT options)
 %.d: %.cpp
-	@$(CXX) $(CXXFLAGS) $< -MM -MT $(@:.d=.o) >$@
+	@g++ $(CXXFLAGS) $< -MM -MT $(@:.d=.o) >$@
 
 
 libdet.so: libdet.c

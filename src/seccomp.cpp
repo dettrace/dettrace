@@ -31,6 +31,8 @@ void seccomp::loadRules(bool debug){
   // bind mounts wrong and might need to allow for recursive mounting. But it will
   // be obvious.
   noIntercept(SYS_bind);
+  noIntercept(SYS_splice);
+  noIntercept(SYS_dup3);
   noIntercept(SYS_capget);
   // Change owner of file
   noIntercept(SYS_chown);
