@@ -316,7 +316,7 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
 
   const vector<string> mountDirs =
     {  "/dettrace", "/dettrace/lib", "/dettrace/bin", "/bin", "/usr", "/lib", "/lib64",
-       "/dev", "/etc", "/proc", "/build" };
+       "/dev", "/etc", "/proc", "/build", "/tmp" };
   for(auto dir : mountDirs){
       mkdirIfNotExist(pathToChroot + dir);
   }
@@ -352,6 +352,10 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
   // Proc is special, we mount a new proc dir.
   doWithCheck(mount("/proc", (pathToChroot + "/proc/").c_str(), "proc", MS_MGC_VAL, nullptr),
 	      "Mounting proc failed");
+
+  // mount /tmp as tempfs
+  doWithCheck(mount("/tmp", (pathToChroot + "/tmp/").c_str(), "tmpfs", 0, nullptr),
+	      "Mounting tmp failed");
 
   // Chroot our process!
   doWithCheck(chroot(pathToChroot.c_str()), "Failed to chroot");
