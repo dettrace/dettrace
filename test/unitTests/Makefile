@@ -23,7 +23,7 @@ run: systemCallTests
 # rule to generate a dep file by using the C preprocessor
 # (see man cpp for details on the -MM and -MT options)
 %.d: %.cpp
-	@$(CXX) $(CXXFLAGS) $< -MM -MT $(@:.d=.o) >$@
+	@g++ $(CXXFLAGS) $< -MM -MT $(@:.d=.o) >$@
 
 .PHONY: clean build
 clean:

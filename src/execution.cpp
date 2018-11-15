@@ -95,12 +95,38 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
     currState.onPreExitEvent = true;
   }
 
-  // Threads are not supported!
-  if(systemCall == "clone" ){
-    unsigned long flags = (unsigned long) tracer.arg1();
-    unsigned long threadBit = flags & CLONE_THREAD;
-    if(threadBit != 0){
-      throw runtime_error("dettrace runtime exception: Threads not supported!");
+  // This is the easiest time to tell a fork even happened. It's not trivial
+  // to check the event as we might get a signal first from the child process.
+  // See:
+  // https://stackoverflow.com/questions/29997244/
+  // occasionally-missing-ptrace-event-vfork-when-running-ptrace
+  if(systemCall == "fork" || systemCall == "vfork" || systemCall == "clone"){
+    processSpawnEvents++;
+
+    // Threads are not supported!
+    if(systemCall == "clone" ){
+      unsigned long flags = (unsigned long) tracer.arg1();
+      unsigned long threadBit = flags & CLONE_THREAD;
+      // if(threadBit != 0){
+        // throw runtime_error("dettrace runtime exception: Threads not supported!");
+      // }
+    }
+
+    int status;
+    ptraceEvent e;
+    pid_t newPid;
+
+    if(oldKernel){
+      // fork/vfork/clone pre system call.
+      // On older version of the kernel, we would need to catch the pre-system call
+      // event to forking system calls. This is event needs to be taken off the ptrace
+      // queue so we do that here and simply ignore the event.
+      tie(e, newPid, status) = getNextEvent(traceesPid, true);
+      if(e != ptraceEvent::syscall){
+        throw runtime_error("dettrace runtime exception: Expected pre-system call event after fork.");
+      }
+      // That was the pre-exit event, make sure we set onPreExitEvent to false.
+      currState.onPreExitEvent = false;
     }
   }
 
