@@ -28,6 +28,7 @@
 
 #include <iostream>
 #include <tuple>
+#include <cassert>
 
 #include "logger.hpp"
 #include "systemCallList.hpp"
@@ -55,7 +56,7 @@ using namespace std;
 tuple<int, int, string, bool, bool, bool, string, bool>
 parseProgramArguments(int argc, char* argv[]);
 int runTracee(void* args);
-void runTracer(int debugLevel, pid_t childPid, bool inSchroot, bool useColor,
+void runTracer(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid, void* voidArgs, bool inSchroot, bool useColor,
                string logFile, bool printStatistics);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
@@ -164,8 +165,6 @@ int main(int argc, char** argv){
   // our own user namespace. Other namepspace commands require CAP_SYS_ADMIN to work.
   // Namespaces must must be done before fork. As changes don't apply until after
   // fork, to all child processes.
-  const int STACK_SIZE (1024 * 1024);
-  static char child_stack[STACK_SIZE];    /* Space for child's stack */
 
   struct childArgs args;
   args.optIndex = optIndex;
@@ -176,7 +175,6 @@ int main(int argc, char** argv){
   args.useContainer = useContainer;
 
   int cloneFlags =
-    SIGCHLD |      // Alert parent of child signals?
     CLONE_NEWUSER | // Our own user namespace.
     CLONE_NEWPID | // Our own pid namespace.
     CLONE_NEWNS;  // Our own mount namespace
@@ -185,27 +183,39 @@ int main(int argc, char** argv){
     cloneFlags &= ~CLONE_NEWUSER;
   }
 
-  doWithCheck(prctl(PR_SET_TSC, PR_TSC_SIGSEGV, 0, 0, 0), "Pre-clone prctl error");
+  /* creds for NS_NEWUSER */
+  int startingPid = getpid();
+  uid_t uid = geteuid();
+  gid_t gid = getegid();
 
-  doWithCheck(prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0), "Pre-clone prctl error: setting no new privs");
+  doWithCheck(unshare(cloneFlags), "unshare");
 
-  pid_t pid = clone(runTracee, child_stack + STACK_SIZE, cloneFlags, (void*) &args);
+  pid_t pid = fork();
   if(pid == -1){
     string reason = strerror(errno);
-    cerr << "clone failed:\n  " + reason << endl;
+    cerr << "fork failed:\n  " + reason << endl;
     if(inSchroot){
       cerr << "You must have CAP_SYS_ADMIN to work inside schroot." << endl;
       return 1;
     }
-
     return 1;
+  } else if (pid == 0) {
+    runTracer(debugLevel, uid, gid, startingPid, &args, inSchroot, useColor, logFile, printStatistics);
+  } else {
+    int status;
+    doWithCheck(waitpid(pid, &status, 0), "waitpid");
+    if (WIFEXITED(status)) {
+      return WEXITSTATUS(status);
+    } else {
+      if (debugLevel >= 4) {
+	cerr << "[4] INFO waitpid returned: " + to_string(status) << endl;
+      }
+      abort();
+    }
   }
-
-  // Parent falls through.
-  runTracer(debugLevel, pid, inSchroot, useColor, logFile, printStatistics);
-
   return 0;
 }
+
 // =======================================================================================
 /**
  * Child will become the process the user wishes through call to execvpe.
@@ -273,7 +283,6 @@ int runTracee(void* voidArgs){
 
   myFilter.loadFilterToKernel();
 
-
   // execvpe() duplicates the actions of the shell in searching  for  an executable file
   // if the specified filename does not contain a slash (/) character.
   int val = execvpe(traceeCommand[0], traceeCommand, envs);
@@ -307,7 +316,7 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
 
   const vector<string> mountDirs =
     {  "/dettrace", "/dettrace/lib", "/dettrace/bin", "/bin", "/usr", "/lib", "/lib64",
-       "/dev", "/etc", "/proc", "/build" };
+       "/dev", "/etc", "/proc", "/build", "/tmp" };
   for(auto dir : mountDirs){
       mkdirIfNotExist(pathToChroot + dir);
   }
@@ -344,6 +353,10 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
   doWithCheck(mount("/proc", (pathToChroot + "/proc/").c_str(), "proc", MS_MGC_VAL, nullptr),
 	      "Mounting proc failed");
 
+  // mount /tmp as tempfs
+  doWithCheck(mount("/tmp", (pathToChroot + "/tmp/").c_str(), "tmpfs", 0, nullptr),
+	      "Mounting tmp failed");
+
   // Chroot our process!
   doWithCheck(chroot(pathToChroot.c_str()), "Failed to chroot");
 
@@ -360,7 +373,7 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
  * sequentially.
  *
  */
-void runTracer(int debugLevel, pid_t startingPid, bool inSchroot, bool useColor,
+void runTracer(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid, void* voidArgs, bool inSchroot, bool useColor,
                string logFile, bool printStatistics){
   if(!inSchroot){
     // This is modified code from user_namespaces(7)
@@ -370,9 +383,10 @@ void runTracer(int debugLevel, pid_t startingPid, bool inSchroot, bool useColor,
     char map_buf[MAP_BUF_SIZE];
     char* uid_map;
     char* gid_map;
+
     snprintf(map_path, PATH_MAX, "/proc/%ld/uid_map", (long) startingPid);
 
-    snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long) getuid());
+    snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long)uid);
     uid_map = map_buf;
 
     update_map(uid_map, map_path);
@@ -382,18 +396,27 @@ void runTracer(int debugLevel, pid_t startingPid, bool inSchroot, bool useColor,
     proc_setgroups_write(startingPid, deny.c_str());
 
     snprintf(map_path, PATH_MAX, "/proc/%ld/gid_map", (long) startingPid);
-    snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long) getgid());
+    snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long)gid);
     gid_map = map_buf;
 
     update_map(gid_map, map_path);
   }
 
-  // Init tracer and execution context.
-  execution exe {debugLevel, startingPid, useColor, usingOldKernel(),
-                   logFile, printStatistics};
-  exe.runProgram();
-
-  return;
+  assert(getpid() == 1);
+  pid_t pid = fork();
+  if (pid < 0) {
+    throw runtime_error("fork() failed.\n");
+    exit(EXIT_FAILURE);
+  } else if(pid > 0) {
+    // Init tracer and execution context.
+    execution exe {debugLevel, pid, useColor, usingOldKernel(),
+	logFile, printStatistics};
+    exe.runProgram();
+  } else if (pid == 0) {
+    doWithCheck(prctl(PR_SET_TSC, PR_TSC_SIGSEGV, 0, 0, 0), "Pre-clone prctl error");
+    doWithCheck(prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0), "Pre-clone prctl error: setting no new privs");
+    runTracee(voidArgs);
+  }
 }
 // =======================================================================================
 /**
@@ -509,7 +532,7 @@ void mountDir(string source, string target){
 }
 // =======================================================================================
 static void update_map(char *mapping, char *map_file){
-  int fd = open(map_file, O_RDWR);
+  int fd = open(map_file, O_WRONLY);
   if (fd == -1) {
     fprintf(stderr, "ERROR: open %s: %s\n", map_file,
 	    strerror(errno));
@@ -540,7 +563,7 @@ static void proc_setgroups_write(pid_t child_pid, const char *str){
   snprintf(setgroups_path, PATH_MAX, "/proc/%ld/setgroups",
 	   (long) child_pid);
 
-  fd = open(setgroups_path, O_RDWR);
+  fd = open(setgroups_path, O_WRONLY);
   if (fd == -1) {
 
     /* We may be on a system that doesn't support

@@ -45,12 +45,7 @@ string to_string(processState p);
  */
 class scheduler{
 public:
-  scheduler(pid_t startingPid, logger& log, ValueMapper<pid_t, pid_t>& pidMap);
-
-  /*
-   * Virtual<=>real pid mapper. Real pids are used for scheduling.
-   */
-  ValueMapper<pid_t, pid_t>& pidMap;
+  scheduler(pid_t startingPid, logger& log);
 
   /**
    * Check if this process has been marked as finished.

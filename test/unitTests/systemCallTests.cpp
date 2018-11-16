@@ -82,7 +82,7 @@ TEST_CASE("fstatfs system call", "statfs"){
 
 TEST_CASE("getpid simple case", "getpid"){
   pid_t p = getpid();
-  REQUIRE(p == (pid_t) 1);
+  REQUIRE(p == (pid_t) 2);
 }
 
 // Verify that starting program breakpoint is always deterministic.

@@ -197,6 +197,118 @@ void dup2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     gs.log.writeToLog(Importance::info, "%d = dup2(%d)\n", newfd, fd);
   }
 }
+template <typename T, typename U> static inline traceePtr<T> plusRemotePtr(traceePtr<T> rptr, U off) {
+  return traceePtr<T>((T*)((unsigned long)rptr.ptr + (long) off));
+}
+
+/* assume @remotePtr has enough space to store all of @s, '\0' included */
+static void writeTraceeCString(ptracer& t, traceePtr<unsigned long>remotePtr, string& s)
+{
+  auto len = s.length();
+  if (len == 0) return;
+  unsigned long val;
+
+  for (auto i = 0; i <= len; i += sizeof(long)) {
+    val = 0;
+    auto p = plusRemotePtr(remotePtr, i);
+    for (int j = i; j < i + sizeof(long); j++) {
+      if (j < len) {
+	val |= ((unsigned long)s[j] & 0xffUL) << 8*(j-i);
+      }
+    }
+    t.writeToTracee(p, val, t.getPid());
+  }
+}
+
+static pair<string, string> parseEnv(string& env) {
+  int i;
+  for (i = 0; i < env.length(); i++) {
+    if (env[i] == '=') {
+      break;
+    }
+  }
+  return make_pair(env.substr(0, i), env.substr(i+1));
+}
+
+static unordered_map<string, string> getTraceeEnv(ptracer& t) {
+  unordered_map<string, string> envvars;
+
+  unsigned long envpVal = (unsigned long)t.arg3();
+
+  for (int i = 0; ; i++) {
+    auto pp = traceePtr<unsigned long>((unsigned long*)(envpVal + i * sizeof(void*)));
+    unsigned long envp = t.readFromTracee(pp, t.getPid());
+    if (!envp) break;
+    auto z = t.readTraceeCString(traceePtr<char>((char*)envp), t.getPid());
+    if (z.empty()) {
+      break;
+    }
+
+    envvars.insert(parseEnv(z));
+  }
+
+  return envvars;
+}
+
+/* copy trace envs, caller to ensure @rptr has enough space */
+static void copyTraceeEnv(ptracer& t, unordered_map<string, string>& envs, traceePtr<char*> rptr, traceePtr<char> strSection) {
+  unsigned long newEnvpVal = (unsigned long)rptr.ptr;
+  auto newCString = traceePtr<unsigned long>((unsigned long*)(strSection.ptr));
+  int envpCount = 0;
+  string env;
+
+  for (auto it = envs.cbegin(); it != envs.cend(); ++it, ++envpCount) {
+    auto newpp = traceePtr<unsigned long>((unsigned long*)(newEnvpVal + envpCount * sizeof(void*)));
+    // update env string and pointer
+    env = it->first + "=" + it->second;
+    writeTraceeCString(t, newCString, env);
+    t.writeToTracee(newpp, (unsigned long)newCString.ptr, t.getPid());
+    newCString = plusRemotePtr(newCString, (1+env.length())); // point to next env string
+  }
+  // null terminate envp
+  auto newpp = traceePtr<unsigned long>((unsigned long*)(newEnvpVal + envpCount * sizeof(void*)));
+  t.writeToTracee(newpp, 0UL, t.getPid());
+}
+
+static void appendEnvpLdPreload(globalState& gs, state& s, ptracer& t) {
+  auto preloadedLibdet = true;
+  auto envs = getTraceeEnv(t);
+
+  if (!s.mmapMemory.doesExist) {
+    for (auto it = envs.cbegin(); it != envs.cend(); ++it) {
+      if (it->first == "LD_PRELOAD") {
+	setenv("TRACEE_LDPRELOAD", it->second.c_str(), 1);
+      }
+    }
+    return;
+  }
+
+  unsigned stroff = 0x1000;
+  unsigned long newEnvpVal = (unsigned long)s.mmapMemory.getAddr().ptr;
+  auto newCString = traceePtr<unsigned long>((unsigned long*)((unsigned long)newEnvpVal + stroff));
+
+  string preloadKey("LD_PRELOAD");
+
+  if (envs.find(preloadKey) == envs.end()) {  /* insert LD_PRELOAD if needed */
+    envs[preloadKey] = secure_getenv("TRACEE_LDPRELOAD");
+    preloadedLibdet = false;
+  } else {
+    auto preload = envs[preloadKey];
+    string libdet(secure_getenv("TRACEE_LDPRELOAD"));
+    /* LD_PRELOAD but no libdet.so */
+    if (preload.find(libdet) == string::npos) {
+      envs[preloadKey] = libdet + ":" + preload;
+      preloadedLibdet = false;
+    }
+  }
+
+  if (!preloadedLibdet) {
+    string msg("append LD_PRELOAD=");
+    gs.log.writeToLog(Importance::info, msg + secure_getenv("TRACEE_LDPRELOAD") + " to envp\n");
+    copyTraceeEnv(t, envs, traceePtr<char*>((char**)newEnvpVal), traceePtr<char>((char*)newCString.ptr));
+    t.writeArg3(newEnvpVal);
+  }
+}
 
 // =======================================================================================
 bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -204,6 +316,8 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 
   char** argv = (char**) t.arg2();
   string execveArgs {};
+
+  appendEnvpLdPreload(gs, s, t);
 
   // Print all arguments to execve!
   if(gs.log.getDebugLevel() > 0 && argv != nullptr){
@@ -1449,11 +1563,11 @@ bool tgkillSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   gs.log.writeToLog(Importance::info, "tgkill(tgid = %d, tid = %d, signal = %d)\n",
                     tgid, tid, signal);
 
-  if (signal == SIGABRT && tgid == sched.pidMap.getVirtualValue(s.traceePid) &&
+  if (signal == SIGABRT && tgid == s.traceePid &&
       tgid == tid /* TODO: when we support threads, we should also compare against tracee's tid (from gettid) */) {
     // ok
   } else {
-    gs.log.writeToLog(Importance::info, "tgkillSystemCall::handleDetPre: tracee vtgid="+to_string(tgid)+" vtid=" +to_string(tid)+ " ptgid="+to_string(sched.pidMap.getVirtualValue(s.traceePid))+" trying to send unsupported signal="+to_string(signal));
+    gs.log.writeToLog(Importance::info, "tgkillSystemCall::handleDetPre: tracee vtgid="+to_string(tgid)+" vtid=" +to_string(tid)+ " ptgid="+to_string(s.traceePid)+" trying to send unsupported signal="+to_string(signal));
     throw runtime_error("dettrace runtime exception: tgkillSystemCall::handleDetPre: tracee trying to send unsupported signal");
   }
 
@@ -2087,7 +2201,7 @@ static bool sendTraceeSignalNow(int signum, globalState& gs, state& s, ptracer& 
   switch (sh) {
 
   case SIGHANDLER_CUSTOM_1SHOT: {
-    gs.log.writeToLog(Importance::info, "tracee has a custom 1-shot signal "+to_string(signum)+" handler, sending signal to pid %u\n", sched.pidMap.getVirtualValue(t.getPid()));
+    gs.log.writeToLog(Importance::info, "tracee has a custom 1-shot signal "+to_string(signum)+" handler, sending signal to pid %u\n", t.getPid());
 
     // TODO: JLD is this a race? the tracee isn't technically paused yet
     t.changeSystemCall(SYS_pause);
@@ -2101,7 +2215,7 @@ static bool sendTraceeSignalNow(int signum, globalState& gs, state& s, ptracer& 
   }
 
   case SIGHANDLER_CUSTOM: {
-    gs.log.writeToLog(Importance::info, "tracee has a custom signal "+to_string(signum)+" handler, sending signal to pid %u\n", sched.pidMap.getVirtualValue(t.getPid()));
+    gs.log.writeToLog(Importance::info, "tracee has a custom signal "+to_string(signum)+" handler, sending signal to pid %u\n", t.getPid());
 
     // TODO: JLD is this a race? the tracee isn't technically paused yet
     t.changeSystemCall(SYS_pause);

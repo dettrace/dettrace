@@ -139,8 +139,8 @@ void seccomp::loadRules(bool debug){
   // See:
   // https://stackoverflow.com/questions/29997244/
   // occasionally-missing-ptrace-event-vfork-when-running-ptrace
-  intercept(SYS_fork);
-  intercept(SYS_vfork);
+  noIntercept(SYS_fork);
+  noIntercept(SYS_vfork);
   intercept(SYS_clone);
 
   // These system calls cause an even that is caught by ptrace and determinized:
@@ -158,7 +158,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_dup);
   intercept(SYS_dup2);
 
-  intercept(SYS_execve, debug);
+  intercept(SYS_execve);
   intercept(SYS_faccessat, debug);
   intercept(SYS_fgetxattr, debug);
   intercept(SYS_flistxattr, debug);
@@ -185,7 +185,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_llistxattr);
   // TODO
   intercept(SYS_lgetxattr);
-  intercept(SYS_mmap);  
+  noIntercept(SYS_mmap);
   intercept(SYS_mkdir, debug);
   intercept(SYS_mkdirat, debug);
   // TODO Nano sleep
