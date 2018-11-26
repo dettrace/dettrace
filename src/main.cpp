@@ -192,6 +192,9 @@ int main(int argc, char** argv){
 
   doWithCheck(unshare(cloneFlags), "unshare");
 
+  // required because of CLONE_NEWNS
+  doWithCheck(mount("none", "/", NULL, MS_SLAVE | MS_REC, 0), "mount slave");
+
   pid_t pid = fork();
   if(pid == -1){
     string reason = strerror(errno);
@@ -482,10 +485,6 @@ static void setUpContainer(string pathToExe, string pathToChroot , bool userDefi
   // Proc is special, we mount a new proc dir.
   doWithCheck(mount("/proc", (pathToChroot + "/proc/").c_str(), "proc", MS_MGC_VAL, nullptr),
 	      "Mounting proc failed");
-
-  // mount /tmp as tempfs
-  doWithCheck(mount("none", (pathToChroot + "/tmp/").c_str(), "tmpfs", 0, nullptr),
-	      "Mounting tmp failed");
 
   // Chroot our process!
   if (!userDefinedChroot) {
