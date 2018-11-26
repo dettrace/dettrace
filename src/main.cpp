@@ -25,9 +25,11 @@
 #include <libgen.h>
 #include <sys/mount.h>
 #include <sys/prctl.h>
+#include <archive.h>
 
 #include <iostream>
 #include <tuple>
+#include <vector>
 #include <cassert>
 
 #include "logger.hpp"
@@ -60,11 +62,11 @@ void runTracer(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid, void* vo
                string logFile, bool printStatistics);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
-bool fileExists(string directory);
-void mountDir(string source, string target);
-void setUpContainer(string pathToExe, string pathToChroot, bool userDefinedChroot);
-void mkdirIfNotExist(string dir);
-void createFileIfNotExist(string path);
+static bool fileExists(string directory);
+static void mountDir(string source, string target);
+static void setUpContainer(string pathToExe, string pathToChroot, bool userDefinedChroot);
+static void mkdirIfNotExist(string dir);
+static void createFileIfNotExist(string path);
 
 // See user_namespaces(7)
 static void update_map(char* mapping, char* map_file);
@@ -244,6 +246,9 @@ int runTracee(void* voidArgs){
     }
   }
 
+  doWithCheck(prctl(PR_SET_TSC, PR_TSC_SIGSEGV, 0, 0, 0), "Pre-clone prctl error");
+  doWithCheck(prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0), "Pre-clone prctl error: setting no new privs");
+
   // Perform execve based on user command.
   ptracer::doPtrace(PTRACE_TRACEME, 0, NULL, NULL);
 
@@ -305,18 +310,143 @@ int runTracee(void* voidArgs){
 
   return 0;
 }
+
+static int
+copy_data(struct archive *ar, struct archive *aw)
+{
+  int r;
+  const void *buff;
+  size_t size;
+#if ARCHIVE_VERSION_NUMBER >= 3000000
+  int64_t offset;
+#else
+  off_t offset;
+#endif
+
+  for (;;) {
+    r = archive_read_data_block(ar, &buff, &size, &offset);
+    if (r == ARCHIVE_EOF)
+      return (ARCHIVE_OK);
+    if (r != ARCHIVE_OK)
+      return (r);
+    r = archive_write_data_block(aw, buff, size, offset);
+    if (r != ARCHIVE_OK) {
+      printf("archive_write_data_block(): %s",
+	   archive_error_string(aw));
+      return (r);
+    }
+  }
+}
+
+static void
+extract(const char *filename, int do_extract, int flags)
+{
+  struct archive *a;
+  struct archive *ext;
+  struct archive_entry *entry;
+  int r;
+
+  a = archive_read_new();
+  ext = archive_write_disk_new();
+  archive_write_disk_set_options(ext, flags);
+  /*
+   * Note: archive_write_disk_set_standard_lookup() is useful
+   * here, but it requires library routines that can add 500k or
+   * more to a static executable.
+   */
+  archive_read_support_format_cpio(a);
+  /*
+   * On my system, enabling other archive formats adds 20k-30k
+   * each.  Enabling gzip decompression adds about 20k.
+   * Enabling bzip2 is more expensive because the libbz2 library
+   * isn't very well factored.
+   */
+  if (filename != NULL && strcmp(filename, "-") == 0)
+    filename = NULL;
+  if ((r = archive_read_open_filename(a, filename, 10240))) {
+    fprintf(stderr, "archive_read_open_filename(): %s %d",
+	    archive_error_string(a), r);
+    exit(1);
+  }
+  for (;;) {
+    r = archive_read_next_header(a, &entry);
+    if (r == ARCHIVE_EOF)
+      break;
+    if (r != ARCHIVE_OK) {
+      fprintf(stderr, "archive_read_next_header(): %s %d",
+	      archive_error_string(a), 1);
+      exit(1);
+    }
+    if (do_extract) {
+      r = archive_write_header(ext, entry);
+      if (r != ARCHIVE_OK)
+	printf("archive_write_header(): %s",
+	       archive_error_string(ext));
+      else {
+	copy_data(a, ext);
+	r = archive_write_finish_entry(ext);
+	if (r != ARCHIVE_OK) {
+	  fprintf(stderr, "archive_write_finish_entry(): %s %d",
+	       archive_error_string(ext), 1);
+	  exit(1);
+	}
+      }
+
+    }
+  }
+  archive_read_close(a);
+  archive_read_free(a);
+
+  archive_write_close(ext);
+  archive_write_free(ext);
+}
+
+// =======================================================================================
+/**
+ *
+ * populate initramfs into @path
+ *
+ */
+static void populateInitramfs(const char* initramfs, const char* path)
+{
+  string errmsg = "Failed to change direcotry to ";
+  char* oldcwd = get_current_dir_name();
+  doWithCheck(chdir(path), errmsg + path);
+  extract(initramfs, 1, 0);
+  doWithCheck(chdir(oldcwd), errmsg + oldcwd);
+  free(oldcwd);
+}
+ 
 // =======================================================================================
 /**
  *
  * Jail our container under chootPath.
  *
  */
-void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChroot){
-  string buildDir = pathToChroot + "/build/";
-
+static void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChroot){
   const vector<string> mountDirs =
     {  "/dettrace", "/dettrace/lib", "/dettrace/bin", "/bin", "/usr", "/lib", "/lib64",
-       "/dev", "/etc", "/proc", "/build", "/tmp" };
+       "/dev", "/etc", "/proc", "/build", "/tmp", "/root" };
+
+  if (!userDefinedChroot) {
+    string cpio;
+    char buf[256];
+    snprintf(buf, 256, "%s", "/tmp/dtroot.XXXXXX");
+    char* tmpdir = mkdtemp(buf);
+    doWithCheck(mount("none", tmpdir, "tmpfs", 0, NULL), "mount initramfs");
+    cpio = pathToExe + "/../initramfs.cpio";
+    char* cpioReal = realpath(cpio.c_str(), NULL);
+    if (!cpioReal) {
+      fprintf(stderr, "unable to find initramfs: %s\n", cpio.c_str());
+      exit(1);
+    }
+    populateInitramfs(cpioReal, tmpdir);
+    free(cpioReal);
+    pathToChroot = tmpdir;
+  }
+
+  string buildDir = pathToChroot + "/build/";
+
   for(auto dir : mountDirs){
       mkdirIfNotExist(pathToChroot + dir);
   }
@@ -354,12 +484,16 @@ void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChro
 	      "Mounting proc failed");
 
   // mount /tmp as tempfs
-  doWithCheck(mount("/tmp", (pathToChroot + "/tmp/").c_str(), "tmpfs", 0, nullptr),
+  doWithCheck(mount("none", (pathToChroot + "/tmp/").c_str(), "tmpfs", 0, nullptr),
 	      "Mounting tmp failed");
 
   // Chroot our process!
-  doWithCheck(chroot(pathToChroot.c_str()), "Failed to chroot");
-
+  if (!userDefinedChroot) {
+    auto putOld = pathToChroot + "/root/";
+    doWithCheck(syscall(SYS_pivot_root, pathToChroot.c_str(), putOld.c_str()), "Failed to chroot");
+  } else {
+    doWithCheck(chroot(pathToChroot.c_str()), "Failed to chroot");
+  }
   // set working directory to buildDir
   doWithCheck(chdir("/build/"), "Failed to set working directory to " + buildDir);
 
@@ -413,8 +547,6 @@ void runTracer(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid, void* vo
 	logFile, printStatistics};
     exe.runProgram();
   } else if (pid == 0) {
-    doWithCheck(prctl(PR_SET_TSC, PR_TSC_SIGSEGV, 0, 0, 0), "Pre-clone prctl error");
-    doWithCheck(prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0), "Pre-clone prctl error: setting no new privs");
     runTracee(voidArgs);
   }
 }
@@ -506,7 +638,7 @@ tuple<int, int, string, bool, bool, bool, string, bool> parseProgramArguments(in
  * Use stat to check if file/directory exists to mount.
  * @return boolean if file exists
  */
-bool fileExists(string file) {
+static bool fileExists(string file) {
   struct stat sb;
 
   return (stat(file.c_str(), &sb) == 0);
@@ -515,7 +647,7 @@ bool fileExists(string file) {
 /**
  * Wrapper around mount with strings.
  */
-void mountDir(string source, string target){
+static void mountDir(string source, string target){
 
   /* Check if source path exists*/
   if (!fileExists(source)) {
@@ -527,7 +659,7 @@ void mountDir(string source, string target){
     throw runtime_error("dettrace runtime exception: Trying to mount target " + target + ". File does not exist.\n");
   }
 
-  doWithCheck(mount(source.c_str(), target.c_str(), nullptr, MS_BIND, nullptr),
+  doWithCheck(mount(source.c_str(), target.c_str(), nullptr, MS_BIND | MS_PRIVATE, nullptr),
 	      "Unable to bind mount: " + source + " to " + target);
 }
 // =======================================================================================
@@ -588,7 +720,7 @@ static void proc_setgroups_write(pid_t child_pid, const char *str){
   close(fd);
 }
 // =======================================================================================
-void mkdirIfNotExist(string dir){
+static void mkdirIfNotExist(string dir){
   int result = mkdir(dir.c_str(), ACCESSPERMS);
   if(result == -1){
     // That's okay :)
@@ -603,7 +735,7 @@ void mkdirIfNotExist(string dir){
 }
 // =======================================================================================
 // Create a blank file with sensible permissions.
-void createFileIfNotExist(string path){
+static void createFileIfNotExist(string path){
   if(fileExists(path)){
     return;
   }

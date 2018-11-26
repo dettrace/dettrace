@@ -5,7 +5,7 @@ DEFINES=-D_GNU_SOURCE=1 -D_POSIX_C_SOURCE=20181101 -D__USE_XOPEN=1
 
 CXXFLAGS = -O2 -std=c++1z -Wall $(INCLUDE) $(DEFINES)
 CFLAGS = -O2 -Wall -Wshadow $(INCLUDE) $(DEFINES)
-LIBS = -pthread -lseccomp -L ../lib/lib64
+LIBS = -pthread -lseccomp -larchive -L ../lib/lib64
 
 # Libdet only.
 LIBDETFLAGS= -g -O2 -Wall -Wextra -Wconversion -fPIC -shared -Wl,--no-as-needed -std=c99

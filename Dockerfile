@@ -8,6 +8,9 @@ RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
 RUN apt-get update -y
 RUN apt-get install -y software-properties-common clang-6.0 clang++-6.0 lldb-6.0 lld-6.0
 
+RUN apt-get update -y
+RUN apt-get install -y libarchive-dev
+
 RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-6.0 60 \
 		--slave /usr/bin/clang++ clang++ /usr/bin/clang++-6.0 \
 		--slave /usr/bin/clang-cpp clang-cpp /usr/bin/clang-cpp-6.0 \
