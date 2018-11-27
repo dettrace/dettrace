@@ -10,6 +10,7 @@ then
 fi
 
 # Download chroot
+# Yes, buildd should have the extra 'd'
 debootstrap --variant=buildd wheezy ./wheezy http://deb.debian.org/debian/
 
 # Install dettrace inside chroot...
@@ -17,4 +18,6 @@ mkdir -p ./wheezy/dettrace/
 
 # Go inside chroot!
 cp scripts/installInsideChroot.sh ./wheezy/
-chroot ./wheezy /installInsideChroot.sh
+
+# Create a new mount namespace so we don't polute the read enviornment
+unshare -m chroot ./wheezy /installInsideChroot.sh

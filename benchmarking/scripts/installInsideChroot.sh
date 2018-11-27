@@ -1,5 +1,8 @@
 #!/bin/bash -ex
 
+### This script should NOT be called directly by you! It is meant to be called inside
+### the chroot set up by ./createChroot.sh
+
 # Mount!
 mount proc /proc -t proc
 mount devpts /dev/pts -t devpts
@@ -22,5 +25,8 @@ for package in xdelta sl whiff xdelta3 xdg-utils xdiskusage; do
     cd ../
 done
 
+# Even if script fails before we unmount here, the mount namespace will make sure
+# this is cleaned up
 umount /proc
 umount /dev/pts
+umount /sys
