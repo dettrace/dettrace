@@ -21,4 +21,3 @@ for package in xdelta sl whiff xdelta3 xdg-utils xdiskusage; do
 done
 
 more *.time
-

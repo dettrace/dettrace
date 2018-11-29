@@ -4,6 +4,7 @@
 ### This only has to be done once!
 ### This script must be run as sudo... I'm sorry.
 ### This will only work from a ubuntu/debian enviornment.
+
 if [ -f "./wheezy" ]
 then
 	  echo "./wheezy chroot already exists! Exiting..."
@@ -21,3 +22,7 @@ cp scripts/installInsideChroot.sh ./wheezy/
 
 # Create a new mount namespace so we don't polute the read enviornment
 unshare -m chroot ./wheezy /installInsideChroot.sh
+
+# Set permissions so user can write to any directory in their chroot.
+chgrp -R $USER wheezy/
+chown -R $USER wheezy/
