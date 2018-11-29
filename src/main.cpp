@@ -55,7 +55,7 @@
 
 using namespace std;
 // =======================================================================================
-tuple<int, int, string, bool, bool, bool, string, bool>
+tuple<int, int, string, bool, bool, bool, string, bool, string>
 parseProgramArguments(int argc, char* argv[]);
 int runTracee(void* args);
 void runTracer(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid, void* voidArgs, bool inSchroot, bool useColor,
@@ -64,7 +64,7 @@ ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
 static bool fileExists(string directory);
 static void mountDir(string source, string target);
-static void setUpContainer(string pathToExe, string pathToChroot, bool userDefinedChroot);
+static void setUpContainer(string pathToExe, string pathToChroot, string workingDir, bool userDefinedChroot);
 static void mkdirIfNotExist(string dir);
 static void createFileIfNotExist(string path);
 
@@ -79,6 +79,7 @@ struct childArgs{
   int debugLevel;
   string path;
   bool useContainer;
+  string workingDir;
 };
 // =======================================================================================
 
@@ -119,6 +120,9 @@ const string usageMsg =
   "  Optional Arguments:\n"
   "  --debug <debugLevel>\n"
   "    Prints log information based on verbosity, useful to debug dettrace errors.\n"
+  "  --working-dir\n"
+  "     Specify the working directory that dettrace should use to build, by default\n"
+  "     it is the current working directory."
   "  --chroot <pathToRoot>\n"
   "    Specify root to use for chroot (such as one created by debootstrap).\n"
   "  --no-container\n"
@@ -142,11 +146,11 @@ const string usageMsg =
  */
 int main(int argc, char** argv){
   int optIndex, debugLevel;
-  string path, logFile;
+  string path, logFile, workingDir;
   bool useContainer, inSchroot, useColor, printStatistics;
 
   tie(optIndex, debugLevel, path, useContainer, inSchroot, useColor,
-      logFile, printStatistics) = parseProgramArguments(argc, argv);
+      logFile, printStatistics, workingDir) = parseProgramArguments(argc, argv);
 
   // Check for debug enviornment variable.
   char* debugEnvvar = secure_getenv("dettraceDebug");
@@ -175,6 +179,7 @@ int main(int argc, char** argv){
   args.debugLevel = debugLevel;
   args.path = path;
   args.useContainer = useContainer;
+  args.workingDir = workingDir;
 
   int cloneFlags =
     CLONE_NEWUSER | // Our own user namespace.
@@ -233,6 +238,7 @@ int runTracee(void* voidArgs){
   int debugLevel = args.debugLevel;
   string path = args.path;
   bool useContainer = args.useContainer;
+  string workingDir = args.workingDir;
 
   // Find absolute path to our build directory relative to the dettrace binary.
   char argv0[strlen(argv[0])+1/*NULL*/];
@@ -242,10 +248,10 @@ int runTracee(void* voidArgs){
   if(useContainer){
     // "" is our poor man's option type since we're using C++14.
     if(path != ""){
-      setUpContainer(pathToExe, path, true);
+      setUpContainer(pathToExe, path, workingDir, true);
     }else{
       const string defaultRoot = "/../root/";
-      setUpContainer(pathToExe, pathToExe + defaultRoot, false);
+      setUpContainer(pathToExe, pathToExe + defaultRoot, workingDir, false);
     }
   }
 
@@ -421,12 +427,51 @@ static void populateInitramfs(const char* initramfs, const char* path)
 }
  
 // =======================================================================================
+// pathToChroot must exist and be located inside the chroot if the user defined their own chroot!
+static void checkPaths(string pathToChroot, string workingDir){
+    if( !fileExists(workingDir)){
+      throw runtime_error("dettrace runtime exception: workingDir: " + workingDir + " does not exits!");
+    }
+
+    // Check it is "inside" the userDefinedChroot:
+    char* trueChrootC = realpath(pathToChroot.c_str(), nullptr);
+    char* trueWorkingDirC = realpath(workingDir.c_str(), nullptr);
+
+    if(trueChrootC == nullptr){
+      runtimeError("Unable to realpath for pathToChroot: " + pathToChroot);
+    }
+    if(trueWorkingDirC == nullptr){
+      runtimeError("Unable to realpath for WorkingDir: " + workingDir);
+    }
+
+    string trueChroot = string{ trueChrootC };
+    string trueWorkingDir = string{ trueWorkingDirC };
+
+    // Check if one string is a prefix of the other, the c++ way.
+
+    // mismatch function: "The behavior is undefined if the second range is shorter than the first range."
+    // I <3 C++
+    if(trueWorkingDir.length() < trueChroot.length()){
+      runtimeError("Working directory specified is not in the specified chroot!");
+    }
+
+    auto res = std::mismatch(trueChroot.begin(), trueChroot.end(), trueWorkingDir.begin());
+    if (res.first != trueChroot.end()){
+      runtimeError("Working directory specified is not in the specified chroot!");
+    }
+
+    free(trueChrootC);
+    free(trueWorkingDirC);
+}
 /**
- *
  * Jail our container under chootPath.
- *
+ * This directory must exist and be located inside the chroot if the user defined their own chroot!
  */
-static void setUpContainer(string pathToExe, string pathToChroot , bool userDefinedChroot){
+static void setUpContainer(string pathToExe, string pathToChroot, string workingDir, bool userDefinedChroot){
+  if(userDefinedChroot && workingDir != ""){
+    checkPaths(pathToChroot, workingDir);
+  }
+
   const vector<string> mountDirs =
     {  "/dettrace", "/dettrace/lib", "/dettrace/bin", "/bin", "/usr", "/lib", "/lib64",
        "/dev", "/etc", "/proc", "/build", "/tmp", "/root" };
@@ -454,10 +499,17 @@ static void setUpContainer(string pathToExe, string pathToChroot , bool userDefi
       mkdirIfNotExist(pathToChroot + dir);
   }
 
-  // First we mount our current working directory in our /build/ directory.
-  char* cwdPtr = get_current_dir_name();
-  mountDir(string { cwdPtr }, buildDir);
-  free(cwdPtr);
+  if(workingDir == "") {
+    // We mount our current working directory in our /build/ directory.
+    char* cwdPtr = get_current_dir_name();
+    mountDir(string { cwdPtr }, buildDir);
+    free(cwdPtr);
+  }else{
+    // User specified working directory besides cwd, use this instead!
+    // This directory must exist and be located inside the chroot if the
+    // user defined their own chroot!
+    mountDir(workingDir, buildDir);
+  }
 
   // Mount our dettrace/bin and dettrace/lib folders.
   mountDir(pathToExe + "/../bin/", pathToChroot + "/dettrace/bin/");
@@ -555,7 +607,7 @@ void runTracer(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid, void* vo
  * @param string: Either a user specified chroot path or none.
  * @return (optind, debugLevel, pathToChroot, useContainer, inSchroot, useColor)
  */
-tuple<int, int, string, bool, bool, bool, string, bool> parseProgramArguments(int argc, char* argv[]){
+tuple<int, int, string, bool, bool, bool, string, bool, string> parseProgramArguments(int argc, char* argv[]){
   int debugLevel = 0;
   string exePlusArgs;
   string pathToChroot = "";
@@ -564,6 +616,7 @@ tuple<int, int, string, bool, bool, bool, string, bool> parseProgramArguments(in
   bool useColor = true;
   string logFile = "";
   bool printStatistics = false;
+  string workingDir = "";
 
   // Command line options for our program.
   static struct option programOptions[] = {
@@ -575,6 +628,7 @@ tuple<int, int, string, bool, bool, bool, string, bool> parseProgramArguments(in
     {"no-color", no_argument, 0, 'r'},
     {"log", required_argument, 0, 'l'},
     {"print-statistics", no_argument, 0, 'p'},
+    {"working-dir", required_argument, 0, 'w'},
     {0,        0,                  0, 0}    // Last must be filled with 0's.
   };
 
@@ -618,6 +672,9 @@ tuple<int, int, string, bool, bool, bool, string, bool> parseProgramArguments(in
     case 'p':
       printStatistics = true;
       break;
+    case 'w':
+      workingDir = string { optarg };
+      break;
     case '?':
       throw runtime_error("dettrace runtime exception: Invalid option passed to detTrace!");
     }
@@ -630,7 +687,7 @@ tuple<int, int, string, bool, bool, bool, string, bool> parseProgramArguments(in
     exit(1);
   }
 
-  return make_tuple(optind, debugLevel, pathToChroot, useContainer, inSchroot, useColor, logFile, printStatistics);
+  return make_tuple(optind, debugLevel, pathToChroot, useContainer, inSchroot, useColor, logFile, printStatistics, workingDir);
 }
 // =======================================================================================
 /**

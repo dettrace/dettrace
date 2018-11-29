@@ -40,6 +40,11 @@ unordered_map<int, string> futexNames = {
   { FUTEX_CMP_REQUEUE_PI_PRIVATE, " FUTEX_CMP_REQUEUE_PI_PRIVATE"}};
 
 /*======================================================================================*/
+void runtimeError(string error){
+  throw runtime_error("dettrace runtime exception: " + error);
+}
+
+/*======================================================================================*/
 char* getEnvVar(char* var, bool dieIfNotSet){
   char* tempResult = getenv(var);
 

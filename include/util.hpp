@@ -19,6 +19,12 @@
 
 using namespace std;
 
+/**
+ * Throws erro with dettrace tag for easy grepping. Use instead of explicit
+ * throw runtime_error
+ */
+void runtimeError(string error);
+
 extern unordered_map<int, string> futexNames; /**< map of futex words (32-bits) to string representations */
 
 /**
