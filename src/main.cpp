@@ -34,7 +34,6 @@
 
 #include "logger.hpp"
 #include "systemCallList.hpp"
-#include "systemCall.hpp"
 #include "dettraceSystemCall.hpp"
 #include "util.hpp"
 #include "state.hpp"
@@ -61,7 +60,7 @@ int runTracee(void* args);
 void runTracer(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid, void* voidArgs, bool inSchroot, bool useColor,
                string logFile, bool printStatistics);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
-unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
+
 static bool fileExists(string directory);
 static void mountDir(string source, string target);
 static void setUpContainer(string pathToExe, string pathToChroot, string workingDir, bool userDefinedChroot);
@@ -255,7 +254,7 @@ int runTracee(void* voidArgs){
     }
   }
 
-  doWithCheck(prctl(PR_SET_TSC, PR_TSC_SIGSEGV, 0, 0, 0), "Pre-clone prctl error");
+  // doWithCheck(prctl(PR_SET_TSC, PR_TSC_SIGSEGV, 0, 0, 0), "Pre-clone prctl error");
   doWithCheck(prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0), "Pre-clone prctl error: setting no new privs");
 
   // Perform execve based on user command.

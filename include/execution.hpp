@@ -3,7 +3,6 @@
 
 #include "logger.hpp"
 #include "systemCallList.hpp"
-#include "systemCall.hpp"
 #include "dettraceSystemCall.hpp"
 #include "util.hpp"
 #include "state.hpp"
@@ -220,13 +219,16 @@ public:
   bool handleSeccomp();
 
   /**
-   * Return the system call we currently caught from the tracer.
-   * Notice we are forced to use a pointer to get virtual dispatch.
+   * Call system call handler based on system call number, if number is not a system call
+   * an runtime_error will be thrown.
    * @param syscallNumber
    * @param syscallName
-   * @return unique pointer for system call
    */
-  static unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
+  bool callPreHook(int syscallNumber, globalState& gs, state& s, ptracer& t,
+                   scheduler& sched);
+
+  void callPostHook(int syscallNumber, globalState& gs, state& s, ptracer& t,
+                   scheduler& sched);
 
   /**
    * Catch next event from any process that we are tracing. Return the event type as well

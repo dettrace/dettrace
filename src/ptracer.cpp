@@ -75,15 +75,11 @@ traceePtr<void> ptracer::getRax() {
   return traceePtr<void>((void*) regs.rax);
 }
 
-uint64_t ptracer::getEventMessage(){
+uint64_t ptracer::getEventMessage(pid_t traceePid){
   long event;
   doPtrace(PTRACE_GETEVENTMSG, traceePid, nullptr, &event);
 
   return event;
-}
-
-bool ptracer::isPtraceEvent(int status, enum __ptrace_eventcodes event){
-  return (status >> 8) == (SIGTRAP | (event << 8));
 }
 
 uint64_t ptracer::getReturnValue(){
@@ -93,7 +89,6 @@ uint64_t ptracer::getReturnValue(){
 uint64_t ptracer::getSystemCallNumber(){
   return regs.orig_rax;
 }
-
 
 void ptracer::setReturnRegister(uint64_t retVal){
   regs.rax = retVal;

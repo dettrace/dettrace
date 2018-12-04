@@ -85,11 +85,19 @@ bool accessSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   printInfoString(t.arg1(), gs, s, t);
   return false;
 }
+
+void accessSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return;
+}
 // =======================================================================================
 bool alarmSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "alarm pre-hook, requesting alarm in %u second(s)\n", t.arg1());
   // run post-hook if necessary
   return sendTraceeSignalNow(SIGALRM, gs, s, t, sched);
+}
+
+void alarmSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return;
 }
 // =======================================================================================
 bool chdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -97,17 +105,33 @@ bool chdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
 
   return false;
 }
+
+void chdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return;
+}
 // =======================================================================================
 bool chmodSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), gs, s, t);
   return false;
+}
+
+void chmodSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return;
 }
 // =======================================================================================
 bool chownSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), gs, s, t);
   return false;
 }
+
+void chownSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return;
+}
 // =======================================================================================
+bool clock_gettimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+
 void clock_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.timeCalls++;
   struct timespec* tp = (struct timespec*) t.arg2();
@@ -125,6 +149,10 @@ void clock_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& 
   return;
 }
 // =======================================================================================
+bool closeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+
 void closeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int fd = (int) t.arg1();
   // Remove entry from our direEntries.
@@ -167,6 +195,10 @@ void creatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   return;
 }
 // =======================================================================================
+bool dupSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+
 void dupSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int newfd = (int) t.getReturnValue();
   int fd =  (int) t.arg1();
@@ -181,6 +213,10 @@ void dupSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedul
   }
 }
 // =======================================================================================
+bool dup2SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+
 void dup2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int newfd = (int) t.getReturnValue();
   int fd =  (int) t.arg1();
@@ -197,148 +233,36 @@ void dup2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     gs.log.writeToLog(Importance::info, "%d = dup2(%d)\n", newfd, fd);
   }
 }
-template <typename T, typename U> static inline traceePtr<T> plusRemotePtr(traceePtr<T> rptr, U off) {
-  return traceePtr<T>((T*)((unsigned long)rptr.ptr + (long) off));
-}
-
-/* assume @remotePtr has enough space to store all of @s, '\0' included */
-static void writeTraceeCString(ptracer& t, traceePtr<unsigned long>remotePtr, string& s)
-{
-  auto len = s.length();
-  if (len == 0) return;
-  unsigned long val;
-
-  for (auto i = 0; i <= len; i += sizeof(long)) {
-    val = 0;
-    auto p = plusRemotePtr(remotePtr, i);
-    for (int j = i; j < i + sizeof(long); j++) {
-      if (j < len) {
-	val |= ((unsigned long)s[j] & 0xffUL) << 8*(j-i);
-      }
-    }
-    t.writeToTracee(p, val, t.getPid());
-  }
-}
-
-static pair<string, string> parseEnv(string& env) {
-  int i;
-  for (i = 0; i < env.length(); i++) {
-    if (env[i] == '=') {
-      break;
-    }
-  }
-  return make_pair(env.substr(0, i), env.substr(i+1));
-}
-
-static unordered_map<string, string> getTraceeEnv(ptracer& t) {
-  unordered_map<string, string> envvars;
-
-  unsigned long envpVal = (unsigned long)t.arg3();
-
-  for (int i = 0; ; i++) {
-    auto pp = traceePtr<unsigned long>((unsigned long*)(envpVal + i * sizeof(void*)));
-    unsigned long envp = t.readFromTracee(pp, t.getPid());
-    if (!envp) break;
-    auto z = t.readTraceeCString(traceePtr<char>((char*)envp), t.getPid());
-    if (z.empty()) {
-      break;
-    }
-
-    envvars.insert(parseEnv(z));
-  }
-
-  return envvars;
-}
-
-/* copy trace envs, caller to ensure @rptr has enough space */
-static void copyTraceeEnv(ptracer& t, unordered_map<string, string>& envs, traceePtr<char*> rptr, traceePtr<char> strSection) {
-  unsigned long newEnvpVal = (unsigned long)rptr.ptr;
-  auto newCString = traceePtr<unsigned long>((unsigned long*)(strSection.ptr));
-  int envpCount = 0;
-  string env;
-
-  for (auto it = envs.cbegin(); it != envs.cend(); ++it, ++envpCount) {
-    auto newpp = traceePtr<unsigned long>((unsigned long*)(newEnvpVal + envpCount * sizeof(void*)));
-    // update env string and pointer
-    env = it->first + "=" + it->second;
-    writeTraceeCString(t, newCString, env);
-    t.writeToTracee(newpp, (unsigned long)newCString.ptr, t.getPid());
-    newCString = plusRemotePtr(newCString, (1+env.length())); // point to next env string
-  }
-  // null terminate envp
-  auto newpp = traceePtr<unsigned long>((unsigned long*)(newEnvpVal + envpCount * sizeof(void*)));
-  t.writeToTracee(newpp, 0UL, t.getPid());
-}
-
-static void appendEnvpLdPreload(globalState& gs, state& s, ptracer& t) {
-  auto preloadedLibdet = true;
-  auto envs = getTraceeEnv(t);
-
-  if (!s.mmapMemory.doesExist) {
-    for (auto it = envs.cbegin(); it != envs.cend(); ++it) {
-      if (it->first == "LD_PRELOAD") {
-	setenv("TRACEE_LDPRELOAD", it->second.c_str(), 1);
-      }
-    }
-    return;
-  }
-
-  unsigned stroff = 0x1000;
-  unsigned long newEnvpVal = (unsigned long)s.mmapMemory.getAddr().ptr;
-  auto newCString = traceePtr<unsigned long>((unsigned long*)((unsigned long)newEnvpVal + stroff));
-
-  string preloadKey("LD_PRELOAD");
-
-  if (envs.find(preloadKey) == envs.end()) {  /* insert LD_PRELOAD if needed */
-    envs[preloadKey] = secure_getenv("TRACEE_LDPRELOAD");
-    preloadedLibdet = false;
-  } else {
-    auto preload = envs[preloadKey];
-    string libdet(secure_getenv("TRACEE_LDPRELOAD"));
-    /* LD_PRELOAD but no libdet.so */
-    if (preload.find(libdet) == string::npos) {
-      envs[preloadKey] = libdet + ":" + preload;
-      preloadedLibdet = false;
-    }
-  }
-
-  if (!preloadedLibdet) {
-    string msg("append LD_PRELOAD=");
-    gs.log.writeToLog(Importance::info, msg + secure_getenv("TRACEE_LDPRELOAD") + " to envp\n");
-    copyTraceeEnv(t, envs, traceePtr<char*>((char**)newEnvpVal), traceePtr<char>((char*)newCString.ptr));
-    t.writeArg3(newEnvpVal);
-  }
-}
 
 // =======================================================================================
-bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  printInfoString(t.arg1(), gs, s, t);
+// bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+//   printInfoString(t.arg1(), gs, s, t);
 
-  char** argv = (char**) t.arg2();
-  string execveArgs {};
+//   char** argv = (char**) t.arg2();
+//   string execveArgs {};
 
-  appendEnvpLdPreload(gs, s, t);
+//   appendEnvpLdPreload(gs, s, t);
 
-  // Print all arguments to execve!
-  if(gs.log.getDebugLevel() > 0 && argv != nullptr){
-    // Remeber these are addresses in the tracee. We must explicitly read them
-    // ourselves!
-    for(int i = 0; true; i++){
-      // Make sure it's non null before reading to string.
-      char* address = t.readFromTracee(traceePtr<char*>(&(argv[i])), t.getPid());
-      if(address == nullptr){
-        break;
-      }
+//   // Print all arguments to execve!
+//   if(gs.log.getDebugLevel() > 0 && argv != nullptr){
+//     // Remeber these are addresses in the tracee. We must explicitly read them
+//     // ourselves!
+//     for(int i = 0; true; i++){
+//       // Make sure it's non null before reading to string.
+//       char* address = t.readFromTracee(traceePtr<char*>(&(argv[i])), t.getPid());
+//       if(address == nullptr){
+//         break;
+//       }
 
-      execveArgs += " \"" + t.readTraceeCString(traceePtr<char>(address), t.getPid()) + "\" ";
-    }
+//       execveArgs += " \"" + t.readTraceeCString(traceePtr<char>(address), t.getPid()) + "\" ";
+//     }
 
-    auto msg = "Args: " + gs.log.makeTextColored(Color::green, execveArgs) + "\n";
-    gs.log.writeToLog(Importance::info, msg);
-  }
+//     auto msg = "Args: " + gs.log.makeTextColored(Color::green, execveArgs) + "\n";
+//     gs.log.writeToLog(Importance::info, msg);
+//   }
 
-  return false;
-}
+//   return false;
+// }
 // =======================================================================================
 bool fchownatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg2(), gs, s, t);
@@ -351,7 +275,16 @@ bool fchownatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sch
   // s.log.writeToLog(Importance::extra, fchowatStr, dirfd, owner, group, flags);
   return false;
 }
+
+void fchownatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  throw runtime_error("fchownat post hook shold never be called.");
+  return;
+}
 // =======================================================================================
+bool fcntlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+
 void fcntlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int retval = t.getReturnValue();
   if(retval != 0){
@@ -388,7 +321,17 @@ bool faccessatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
 
   return false;
 }
+
+void faccessatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  throw runtime_error("faccessat post hook shold never be called.");
+  return;
+}
 // =======================================================================================
+bool fgetxattrSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
+                                        scheduler& sched){
+  return true;
+}
+
 void fgetxattrSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                         scheduler& sched){
   printInfoString(t.arg2(), gs, s, t);
@@ -396,6 +339,11 @@ void fgetxattrSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
   return;
 }
 // =======================================================================================
+bool flistxattrSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
+                                        scheduler& sched){
+  return true;
+}
+
 void flistxattrSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                          scheduler& sched){
   printInfoString(t.arg2(), gs, s, t);
@@ -438,6 +386,10 @@ void fstatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   return;
 }
 // =======================================================================================
+bool fstatfsSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+
 void fstatfsSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   struct statfs* statfsPtr = (struct statfs*) t.arg2();
 
@@ -564,6 +516,10 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   return;
 }
 // =======================================================================================
+bool getcwdSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
+                                     scheduler& sched){
+  return true;
+}
 void getcwdSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                      scheduler& sched){
   printInfoString(t.arg1(), gs, s, t);
@@ -571,16 +527,25 @@ void getcwdSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
   return;
 }
 // =======================================================================================
+bool getdentsSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
 void getdentsSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   handleDents<linux_dirent>(gs, s, t, sched);
   return;
 }
 // =======================================================================================
+bool getdents64SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
 void getdents64SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   handleDents<linux_dirent64>(gs, s, t, sched);
   return;
 }
 // =======================================================================================
+bool getpeernameSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
 void getpeernameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int ret = t.getReturnValue();
   if(ret == 0){
@@ -589,17 +554,11 @@ void getpeernameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
   return;
 }
 // =======================================================================================
-bool getpidSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool getrandomSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
+                                        scheduler& sched){
   return true;
 }
-void getpidSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if (s.noopSystemCall) {
-    gs.log.writeToLog(Importance::info, "NOOP system call (getpid) setting return value to 0\n");
-    s.noopSystemCall = false;
-    t.setReturnRegister(0); // pretend like the system call (that we replaced) has succeeded
-  }
-}
-// =======================================================================================
+
 void getrandomSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.getRandomCalls++;
   // Fill buffer with our own deterministic values.
@@ -622,6 +581,11 @@ void getrandomSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
   return;
 }
 // =======================================================================================
+bool getrlimitSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
+                                        scheduler& sched){
+  return true;
+}
+
 void getrlimitSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   struct rlimit* rp = (struct rlimit*) t.arg2();
   if (rp != nullptr) {
@@ -636,6 +600,9 @@ void getrlimitSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
   return;
 }
 // =======================================================================================
+bool getrusageSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
 void getrusageSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.timeCalls++;
   struct rusage* usagePtr = (struct rusage*) t.arg2();
@@ -674,7 +641,14 @@ void getrusageSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
   return;
 }
 // =======================================================================================
-void gettimeofdaySystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool gettimeofdaySystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
+                                           scheduler& sched){
+  return true;
+}
+
+void gettimeofdaySystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
+                                           scheduler& sched){
+  gs.log.writeToLog(Importance::info, "Inside gettimeOfday Post hook!\n");
   gs.timeCalls++;
   struct timeval* tp = (struct timeval*) t.arg1();
   if (nullptr != tp) {
@@ -685,10 +659,13 @@ void gettimeofdaySystemCall::handleDetPost(globalState& gs, state& s, ptracer& t
     t.writeToTracee(traceePtr<struct timeval>(tp), myTv, t.getPid());
     s.incrementTime();
   }
-  
+
   return;
 }
 // =======================================================================================
+bool ioctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
 void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int fd = t.arg1();
   const uint64_t request = t.arg2();
@@ -726,15 +703,26 @@ void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 }
 // =======================================================================================
 // TODO
+bool llistxattrSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
 void llistxattrSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
 
 }
 // =======================================================================================
 // TODO
+bool lgetxattrSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+
 void lgetxattrSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
 
 }
 // =======================================================================================
+bool mmapSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+
 void mmapSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // This isn't a natural call mmap from the tracee we injected this call ourselves!
   if(s.syscallInjected){
@@ -761,11 +749,7 @@ void mmapSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
 // =======================================================================================
 bool
 nanosleepSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // noopSystemCall(gs, t);
-  // sched.reportProgress(s.traceePid);
-  // sched.preemptAndScheduleNext(s.traceePid, preemptOptions::runnable);
-
-  // Write zero seconds to time required to skip waiting.
+  // Write 0 seconds to time. Required to skip waiting at all.
   struct timespec *req = (struct timespec *) t.arg1();
   if(req != nullptr){
     uint64_t rsp = (uint64_t) t.getRsp().ptr;
@@ -777,12 +761,22 @@ nanosleepSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedul
   }
   return false;
 }
+
+void
+nanosleepSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  throw runtime_error("Error: nanosleep post-hook should never be called.");
+}
 // =======================================================================================
 bool mkdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                    scheduler& sched){
   printInfoString(t.arg1(), gs, s, t);
 
   return false;
+}
+
+void mkdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
+                                     scheduler& sched){
+  throw runtime_error("Error: mkdirat post-hook should never be called.");
 }
 // =======================================================================================
 bool mkdiratSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
@@ -791,7 +785,17 @@ bool mkdiratSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
 
   return false;
 }
+
+void mkdiratSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
+                                     scheduler& sched){
+  throw runtime_error("Error: mkdirat post-hook should never be called.");
+}
 // =======================================================================================
+bool newfstatatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
+                                         scheduler& sched){
+  return true;
+}
+
 void newfstatatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                          scheduler& sched){
   printInfoString(t.arg2(), gs, s, t);
@@ -845,6 +849,11 @@ bool linkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedul
 
   return false;
 }
+
+void linkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
+                                     scheduler& sched){
+  throw runtime_error("Error: link post-hook should never be called.");
+}
 // =======================================================================================
 bool linkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
 
@@ -852,6 +861,11 @@ bool linkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   printInfoString(t.arg2(), gs, s, t, " to path: ");
 
   return false;
+}
+
+void linkatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
+                                     scheduler& sched){
+  throw runtime_error("Error: mkdirat post-hook should never be called.");
 }
 // =======================================================================================
 bool openSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -1193,12 +1207,22 @@ bool readlinkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
 
   return false;
 }
+
+void
+readlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  throw runtime_error("Error: readlink post-hook should never be called.");
+}
 // =======================================================================================
 bool readlinkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                       scheduler& sched){
   printInfoString(t.arg2(), gs, s, t);
 
   return false;
+}
+
+void
+readlinkatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  throw runtime_error("Error: readlinkat post-hook should never be called.");
 }
 // =======================================================================================
 bool recvmsgSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
@@ -1499,6 +1523,10 @@ void statSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
   return;
 }
 // =======================================================================================
+bool statfsSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+
 void statfsSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   struct statfs* statfsPtr = (struct statfs*) t.arg2();
   if(statfsPtr == nullptr){
@@ -1521,6 +1549,10 @@ void statfsSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   return;
 }
 // =======================================================================================
+bool sysinfoSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+
 void sysinfoSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   struct sysinfo* infoPtr = (struct sysinfo *) t.arg1();
   if(infoPtr == nullptr){
@@ -1555,6 +1587,10 @@ bool symlinkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sche
   printInfoString(t.arg2(), gs, s, t, " linkpath: ");
   return false;
 }
+
+void symlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  throw runtime_error("symlink post hook shold never be called.");
+}
 // =======================================================================================
 bool tgkillSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int tgid = (int) t.arg1();
@@ -1578,32 +1614,47 @@ void tgkillSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   return;
 }
 // =======================================================================================
+bool timeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+
 void timeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  gs.timeCalls++;
-  int retVal = (int) t.getReturnValue();
-  if(retVal < 0){
-    gs.log.writeToLog(Importance::info,
-                      "Time call failed: \n" + string { strerror(- retVal)});
-    return;
+  if (s.noopSystemCall) {
+    gs.log.writeToLog(Importance::info, "NOOP system call (getpid) setting return value to 0\n");
+    s.noopSystemCall = false;
+    t.setReturnRegister(0); // pretend like the system call (that we replaced) has succeeded
   }
+  // This should be rare this is a vdso system call. It is unlikely someone will call it
+  // directly.
+  else{
+    gs.timeCalls++;
+    int retVal = (int) t.getReturnValue();
+    if(retVal < 0){
+      gs.log.writeToLog(Importance::info,
+                        "Time call failed: \n" + string { strerror(- retVal)});
+      return;
+    }
 
-  time_t* timePtr = (time_t*) t.arg1();
-  gs.log.writeToLog(Importance::info, "time: tloc is null.");
-  t.writeRax(s.getLogicalTime());
-  if(timePtr == nullptr){
-    return;
+    time_t* timePtr = (time_t*) t.arg1();
+    gs.log.writeToLog(Importance::info, "time: tloc is null.");
+    t.writeRax(s.getLogicalTime());
+    if(timePtr == nullptr){
+      return;
+    }
+
+    t.writeToTracee(traceePtr<time_t>(timePtr), (time_t) s.getLogicalTime(), s.traceePid);
+    // Tick up time.
+    s.incrementTime();
   }
-
-  t.writeToTracee(traceePtr<time_t>(timePtr), (time_t) s.getLogicalTime(), s.traceePid);
-  // Tick up time.
-  s.incrementTime();
   return;
 }
 // =======================================================================================
-bool timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool
+timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "timer_create syscall pre-hook\n");
 
-  // we support any clockid, but only notification via certain signals delivered to the process
+  // we support any clockid, but only notification via certain signals
+  // delivered to the process
   class timerInfo ti;
 
   traceePtr<struct sigevent> sep((struct sigevent*)t.arg2());
@@ -1658,18 +1709,29 @@ bool timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
   // run the post-hook, which will be the getpid cleanup
   return true;
 }
-bool timer_deleteSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+
+void timer_createSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
+                                      scheduler& sched){
+  throw runtime_error("Error: timer_create post-hook should never be called.");
+}
+// =======================================================================================
+bool timer_deleteSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
+                                          scheduler& sched){
   timerID_t timerid = t.arg1();
-  gs.log.writeToLog(Importance::info, "timer_delete pre-hook for timer "+to_string(timerid)+"\n");
-  if (!s.timerCreateTimers.count(timerid)) {
+  gs.log.writeToLog(Importance::info, "timer_delete pre-hook for timer " +
+                    to_string(timerid) + "\n");
+
+  if(!s.timerCreateTimers.count(timerid)){
     throw runtime_error("dettrace runtime exception: invalid timerid "+to_string(timerid));
   }
   return true;
 }
-void timer_deleteSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+
+void timer_deleteSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
+                                           scheduler& sched){
   t.setReturnRegister(0);
 }
-
+// =======================================================================================
 bool timer_getoverrunSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   timerID_t timerid = t.arg1();
   gs.log.writeToLog(Importance::info, "timer_getoverrun pre-hook for timer "+to_string(timerid)+"\n");
@@ -1678,10 +1740,12 @@ bool timer_getoverrunSystemCall::handleDetPre(globalState& gs, state& s, ptracer
   }
   return true;
 }
+
 void timer_getoverrunSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   t.setReturnRegister(0);
 }
 
+// =======================================================================================
 bool timer_gettimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   timerID_t timerid = t.arg1();
   gs.log.writeToLog(Importance::info, "timer_gettime pre-hook for timer "+to_string(timerid)+"\n");
@@ -1707,10 +1771,12 @@ bool timer_gettimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t
 
   return true;
 }
+
+
 void timer_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   t.setReturnRegister(0);
 }
-
+// =======================================================================================
 bool timer_settimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
 
   gs.log.writeToLog(Importance::info, "timer_settime pre-hook for timer "+to_string(t.arg1())+"\n");
@@ -1733,6 +1799,10 @@ bool timer_settimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t
   return true;
 }
 
+void timer_settimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+
+}
+// =======================================================================================
 bool getitimerSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.log.writeToLog(Importance::info, "getitimer pre-hook\n");
 
@@ -1752,10 +1822,11 @@ bool getitimerSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
 
   return true;
 }
+
 void getitimerSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) {
   t.setReturnRegister(0);
 }
-
+// =======================================================================================
 bool setitimerSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.log.writeToLog(Importance::info, "setitimer pre-hook\n");
 
@@ -1774,7 +1845,12 @@ bool setitimerSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
   return true;
 }
 
+void setitimerSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) {
+}
 // =======================================================================================
+bool timesSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
 void timesSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // Failure nothing for us to do.
   if((clock_t) t.getReturnValue() == -1){
@@ -1797,6 +1873,9 @@ void timesSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   s.incrementTime();
 }
 // =======================================================================================
+bool unameSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
 void unameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // Populate the utsname struct with our own generic data.
   struct utsname* utsnamePtr = (struct utsname*) t.arg1();
@@ -2103,51 +2182,14 @@ bool writevSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 
 void writevSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // TODO: Handle bytes written.
-  // int retVal = t.getReturnValue();
-  // if (retVal < 0) {
-    // throw runtime_error("dettrace runtime exception: Write failed with: " + string{ strerror(- retVal) });
-  // }
-
-  // //uint16_t minus2 = t.readFromTracee((uint16_t*) (t.regs.rip - 2), s.traceePid);
-  // uint16_t minus2 = t.readFromTracee((uint16_t*) (t.getRip() - 2), s.traceePid);
-  // if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
-  //   throw runtime_error("dettrace runtime exception: Write failed with: non syscall insn");
-  // }
-  // ssize_t bytes_written = retVal;
-  // s.totalBytes += bytes_written;
-  // //ssize_t bytes_requested = t.arg3();
-
-  // if (s.firstTrySystemcall) {
-  //   s.firstTrySystemcall = false;
-  //   //s.beforeRetry = t.regs;
-  //   s.beforeRetry = t.getRegs();
-  // }
-
-  // // 0 indicates nothing was written.
-  // if (bytes_written != 0) {
-  //   t.writeArg2(t.arg2() + bytes_written);
-  //   t.writeArg3(t.arg3() - bytes_written);
-  //   //t.regs.rax = t.getSystemCallNumber();
-  //   t.writeRax(t.getSystemCallNumber());
-  //   //t.writeIp(t.regs.rip - 2);
-  //   t.writeIp(t.getRip() - 2);
-  //  } else { // Nothing left to write.
-  //    t.setReturnRegister(s.totalBytes);
-  //    t.writeArg1(s.beforeRetry.rdi);
-  //    t.writeArg2(s.beforeRetry.rsi);
-  //    t.writeArg3(s.beforeRetry.rdx);
-  //    s.firstTrySystemcall = true;
-  //    s.totalBytes = 0;
-  //  }
   return;
 }
 // =======================================================================================
 
 bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
-                            int64_t errornoValue){
+                      int64_t errornoValue){
   if(- errornoValue == (int64_t) t.getReturnValue()){
-    gs.log.writeToLog(Importance::info,
-                      s.systemcall->syscallName + " would have blocked!\n");
+    gs.log.writeToLog(Importance::info, "Syscall would have blocked!\n");
 
     sched.preemptAndScheduleNext(s.traceePid, preemptOptions::runnable);
     return true;
@@ -2191,8 +2233,8 @@ bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
    tracee receives the signal, its handler will run and pause() will then
    return.
    */
-static bool sendTraceeSignalNow(int signum, globalState& gs, state& s, ptracer& t, scheduler& sched) {
-
+static bool sendTraceeSignalNow(int signum, globalState& gs,
+                                state& s, ptracer& t, scheduler& sched) {
   enum sighandler_type sh = SIGHANDLER_DEFAULT;
   if (s.currentSignalHandlers.count(signum)) {
     sh = s.currentSignalHandlers[signum];
@@ -2249,10 +2291,10 @@ static bool sendTraceeSignalNow(int signum, globalState& gs, state& s, ptracer& 
   }
 }
 // =======================================================================================
-bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched, int64_t errornoValue){
+bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
+                            int64_t errornoValue){
   if(- errornoValue == (int64_t) t.getReturnValue()){
-    gs.log.writeToLog(Importance::info,
-                      s.systemcall->syscallName + " would have blocked!\n");
+    gs.log.writeToLog(Importance::info, "System call would have blocked!\n");
 
     gs.replayDueToBlocking++;
     sched.preemptAndScheduleNext(s.traceePid, preemptOptions::markAsBlocked);
@@ -2486,10 +2528,12 @@ void removeInodeFromMaps(ino_t inode, globalState& gs, ptracer& t){
   return;
 }
 // =======================================================================================
-// Turn system call into a noop by changing it into a getpid. This should be called from
-// the pre hook only!
+// Turn system call into a noop by changing it into a time. This should be called from
+// the pre hook only! We use time (a vdso system call), since we don't expect it to be
+// called often, unlike getpid, which is expensive to use as a noop since it is called a
+// lot.
 void replaceSystemCallWithNoop(globalState& gs, state& s, ptracer& t){
-  t.changeSystemCall(SYS_getpid);
+  t.changeSystemCall(SYS_time);
   gs.log.writeToLog(Importance::info, "Turning this system call into a NOOP\n");
   s.noopSystemCall = true;
   return;
@@ -2518,3 +2562,115 @@ pair<int,int> getPipeFds(globalState& gs, state& s, ptracer& t){
   return make_pair(fd1, fd2);
 }
 // =======================================================================================
+template <typename T, typename U> static inline traceePtr<T> plusRemotePtr(traceePtr<T> rptr, U off) {
+  return traceePtr<T>((T*)((unsigned long)rptr.ptr + (long) off));
+}
+
+/* assume @remotePtr has enough space to store all of @s, '\0' included */
+static void writeTraceeCString(ptracer& t, traceePtr<unsigned long>remotePtr, string& s)
+{
+  auto len = s.length();
+  if (len == 0) return;
+  unsigned long val;
+
+  for (auto i = 0; i <= len; i += sizeof(long)) {
+    val = 0;
+    auto p = plusRemotePtr(remotePtr, i);
+    for (int j = i; j < i + sizeof(long); j++) {
+      if (j < len) {
+	val |= ((unsigned long)s[j] & 0xffUL) << 8*(j-i);
+      }
+    }
+    t.writeToTracee(p, val, t.getPid());
+  }
+}
+
+static pair<string, string> parseEnv(string& env) {
+  int i;
+  for (i = 0; i < env.length(); i++) {
+    if (env[i] == '=') {
+      break;
+    }
+  }
+  return make_pair(env.substr(0, i), env.substr(i+1));
+}
+
+static unordered_map<string, string> getTraceeEnv(ptracer& t) {
+  unordered_map<string, string> envvars;
+
+  unsigned long envpVal = (unsigned long)t.arg3();
+
+  for (int i = 0; ; i++) {
+    auto pp = traceePtr<unsigned long>((unsigned long*)(envpVal + i * sizeof(void*)));
+    unsigned long envp = t.readFromTracee(pp, t.getPid());
+    if (!envp) break;
+    auto z = t.readTraceeCString(traceePtr<char>((char*)envp), t.getPid());
+    if (z.empty()) {
+      break;
+    }
+
+    envvars.insert(parseEnv(z));
+  }
+
+  return envvars;
+}
+// =======================================================================================
+/* copy trace envs, caller to ensure @rptr has enough space */
+static void copyTraceeEnv(ptracer& t, unordered_map<string, string>& envs, traceePtr<char*> rptr, traceePtr<char> strSection) {
+  unsigned long newEnvpVal = (unsigned long)rptr.ptr;
+  auto newCString = traceePtr<unsigned long>((unsigned long*)(strSection.ptr));
+  int envpCount = 0;
+  string env;
+
+  for (auto it = envs.cbegin(); it != envs.cend(); ++it, ++envpCount) {
+    auto newpp = traceePtr<unsigned long>((unsigned long*)(newEnvpVal + envpCount * sizeof(void*)));
+    // update env string and pointer
+    env = it->first + "=" + it->second;
+    writeTraceeCString(t, newCString, env);
+    t.writeToTracee(newpp, (unsigned long)newCString.ptr, t.getPid());
+    newCString = plusRemotePtr(newCString, (1+env.length())); // point to next env string
+  }
+  // null terminate envp
+  auto newpp = traceePtr<unsigned long>((unsigned long*)(newEnvpVal + envpCount * sizeof(void*)));
+  t.writeToTracee(newpp, 0UL, t.getPid());
+}
+
+static void appendEnvpLdPreload(globalState& gs, state& s, ptracer& t) {
+  auto preloadedLibdet = true;
+  auto envs = getTraceeEnv(t);
+
+  if (!s.mmapMemory.doesExist) {
+    for (auto it = envs.cbegin(); it != envs.cend(); ++it) {
+      if (it->first == "LD_PRELOAD") {
+	setenv("TRACEE_LDPRELOAD", it->second.c_str(), 1);
+      }
+    }
+    return;
+  }
+
+  unsigned stroff = 0x1000;
+  unsigned long newEnvpVal = (unsigned long)s.mmapMemory.getAddr().ptr;
+  auto newCString = traceePtr<unsigned long>((unsigned long*)((unsigned long)newEnvpVal + stroff));
+
+  string preloadKey("LD_PRELOAD");
+
+  if (envs.find(preloadKey) == envs.end()) {  /* insert LD_PRELOAD if needed */
+    envs[preloadKey] = secure_getenv("TRACEE_LDPRELOAD");
+    preloadedLibdet = false;
+  } else {
+    auto preload = envs[preloadKey];
+    string libdet(secure_getenv("TRACEE_LDPRELOAD"));
+    /* LD_PRELOAD but no libdet.so */
+    if (preload.find(libdet) == string::npos) {
+      envs[preloadKey] = libdet + ":" + preload;
+      preloadedLibdet = false;
+    }
+  }
+
+  if (!preloadedLibdet) {
+    string msg("append LD_PRELOAD=");
+    gs.log.writeToLog(Importance::info, msg + secure_getenv("TRACEE_LDPRELOAD") + " to envp\n");
+    copyTraceeEnv(t, envs, traceePtr<char*>((char**)newEnvpVal), traceePtr<char>((char*)newCString.ptr));
+    t.writeArg3(newEnvpVal);
+  }
+}

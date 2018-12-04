@@ -16,7 +16,6 @@ using namespace std;
  * Options to pass to libDetLog() for importance of message.
  */
 enum class Importance {
-  error,     /*< This is a fatal error. */
   inter,     /*< We intercepted this system call */
   info,      /*< Less important information */
   extra,     /*< Extra information not useful most of the time. */

@@ -260,7 +260,7 @@ public:
    * Wrapper around PTRACE_GETEVENTMSG for our current tracee.
    * @return Event message
    */
-  uint64_t getEventMessage();
+  static uint64_t getEventMessage(pid_t traceePid);
 
   /**
    * Compare status returned from waitpid to ptrace event.
@@ -268,7 +268,9 @@ public:
    * @param event
    * @return
    */
-  static bool isPtraceEvent(int status, enum __ptrace_eventcodes event);
+  inline static bool isPtraceEvent(int status, enum __ptrace_eventcodes event){
+    return (status >> 8) == (SIGTRAP | (event << 8));
+  }
 
   /**
    * Update registers to the state of the passed pid. This is now the new pid.

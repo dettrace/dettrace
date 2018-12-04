@@ -74,7 +74,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_geteuid);
   noIntercept(SYS_getgroups);
   noIntercept(SYS_getpgrp);
-  intercept(SYS_getpid); // need to intercept for noopSystemCall()
+  noIntercept(SYS_getpid);
   noIntercept(SYS_getpgid);
   noIntercept(SYS_getppid);
   noIntercept(SYS_gettid);
@@ -92,15 +92,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_prctl);
   noIntercept(SYS_pread64);
   noIntercept(SYS_rt_sigprocmask);
-  intercept(SYS_rt_sigaction);
-  intercept(SYS_timer_create);
-  intercept(SYS_timer_delete);
-  intercept(SYS_timer_getoverrun);
-  intercept(SYS_timer_gettime);
-  intercept(SYS_timer_settime);
-  intercept(SYS_setitimer);
-  intercept(SYS_getitimer);
-  intercept(SYS_pause);
+
   //intercept(SYS_sigaction); // is mapped to SYS_rt_sigaction on cat16
   //intercept(SYS_signal); // is mapped to SYS_rt_sigaction on cat16
   noIntercept(SYS_rt_sigsuspend);
@@ -141,7 +133,22 @@ void seccomp::loadRules(bool debug){
   // occasionally-missing-ptrace-event-vfork-when-running-ptrace
   noIntercept(SYS_fork);
   noIntercept(SYS_vfork);
-  intercept(SYS_clone);
+
+  // Clone should be intercepted if you want to throw an error since we don't support
+  // threads!
+  // intercept(SYS_clone);
+  noIntercept(SYS_clone);
+
+
+  intercept(SYS_rt_sigaction);
+  intercept(SYS_timer_create);
+  intercept(SYS_timer_delete);
+  intercept(SYS_timer_getoverrun);
+  intercept(SYS_timer_gettime);
+  intercept(SYS_timer_settime);
+  intercept(SYS_setitimer);
+  intercept(SYS_getitimer);
+  intercept(SYS_pause);
 
   // These system calls cause an even that is caught by ptrace and determinized:
   intercept(SYS_access, debug);
@@ -158,7 +165,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_dup);
   intercept(SYS_dup2);
 
-  intercept(SYS_execve);
+  noIntercept(SYS_execve);
   intercept(SYS_faccessat, debug);
   intercept(SYS_fgetxattr, debug);
   intercept(SYS_flistxattr, debug);

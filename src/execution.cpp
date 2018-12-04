@@ -1,6 +1,5 @@
 #include "logger.hpp"
 #include "systemCallList.hpp"
-#include "systemCall.hpp"
 #include "dettraceSystemCall.hpp"
 #include "util.hpp"
 #include "state.hpp"
@@ -73,21 +72,20 @@ bool execution::handleExit(const pid_t traceesPid){
 // is for backward compatibility reasons.
 bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   int syscallNum = tracer.getSystemCallNumber();
-  currState.systemcall = getSystemCall(syscallNum, systemCallMappings[syscallNum]);
 
   if(syscallNum < 0 || syscallNum > SYSTEM_CALL_COUNT){
-    throw runtime_error("dettrace runtime exception: Unkown system call number: " + to_string(syscallNum));
+    throw runtime_error("dettrace runtime exception: Unkown system call number: " +
+                        to_string(syscallNum));
   }
 
   // Print!
-  string systemCall = currState.systemcall->syscallName;
+  string systemCall = systemCallMappings[syscallNum];
   string redColoredSyscall = log.makeTextColored(Color::red, systemCall);
   log.writeToLog(Importance::inter,"[Pid %d] Intercepted %s\n", traceesPid,
                  redColoredSyscall.c_str());
   log.setPadding();
 
-  bool callPostHook =
-    currState.systemcall->handleDetPre(myGlobalState, currState, tracer, myScheduler);
+  bool callPostHook = callPreHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
 
   if(oldKernel){
     // Next event will be a sytem call pre-exit event as older kernels make us catch the
@@ -141,25 +139,23 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
 }
 // =======================================================================================
 void execution::handlePostSystemCall(state& currState){
-  // Sometimes, we change the system call midway. That is, at the prehook of a system call
-  // we insert a new system call. So we must fetch the system call object again.
   int syscallNum = tracer.getSystemCallNumber();
-  currState.systemcall = getSystemCall(syscallNum, systemCallMappings[syscallNum]);
 
   // No idea what this system call is! error out.
   if(syscallNum < 0 || syscallNum > SYSTEM_CALL_COUNT){
-    throw runtime_error("dettrace runtime exception: Unkown system call number: " + to_string(syscallNum));
+    throw runtime_error("dettrace runtime exception: Unkown system call number: " +
+                        to_string(syscallNum));
   }
 
-  log.writeToLog(Importance::info,"%s value before post-hook: %d\n",
-                 currState.systemcall->syscallName.c_str(),
+  string syscallName = systemCallMappings[syscallNum];
+  log.writeToLog(Importance::info,"Calling post hook for: " + syscallName + "\n");
+
+  log.writeToLog(Importance::info,"Value before handler: %d\n",
                  tracer.getReturnValue());
 
-  currState.systemcall->
-    handleDetPost(myGlobalState, currState, tracer, myScheduler);
+  callPostHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
 
-  log.writeToLog(Importance::info,"%s returned with value: %d\n",
-                 currState.systemcall->syscallName.c_str(),
+  log.writeToLog(Importance::info,"Value after handler: %d\n",
                  tracer.getReturnValue());
 
   log.unsetPadding();
@@ -270,14 +266,17 @@ void execution::runProgram(){
     // We have encountered a call to fork, vfork, clone.
     if (ret == ptraceEvent::fork || ret == ptraceEvent::vfork || ret == ptraceEvent::clone) {
       string msg;
-      if (ret == ptraceEvent::fork)
-	msg = "fork";
-      else if (ret == ptraceEvent::vfork)
-	msg = "vfork";
-      else if (ret == ptraceEvent::clone)
-	msg = "clone";
+      if (ret == ptraceEvent::fork){
+        msg = "fork";
+      }
+      else if (ret == ptraceEvent::vfork){
+        msg = "vfork";
+      }
+      else if (ret == ptraceEvent::clone){
+        msg = "clone";
+      }
       log.writeToLog(Importance::inter,
-		     log.makeTextColored(Color::blue, "[%d] caught %s event!\n"),
+                     log.makeTextColored(Color::blue, "[%d] caught %s event!\n"),
                      traceesPid, msg.c_str());
       handleForkEvent(traceesPid);
       callPostHook = false;
@@ -337,11 +336,11 @@ void execution::runProgram(){
 // =======================================================================================
 pid_t execution::handleForkEvent(const pid_t traceesPid){
   log.writeToLog(Importance::inter, log.makeTextColored(Color::blue,
-                 "Fork event came before signal!\n"));
+                 "Fork event came!\n"));
 
   processSpawnEvents++;
 
-  pid_t newChildPid = tracer.getEventMessage();
+  pid_t newChildPid = ptracer::getEventMessage(traceesPid);
 
   // Add this new process to our states.
   states.emplace(newChildPid, state {newChildPid, debugLevel} );
@@ -442,6 +441,7 @@ bool execution::handleSeccomp(const pid_t traceesPid){
   long syscallNum;
   ptracer::doPtrace(PTRACE_GETEVENTMSG, traceesPid, nullptr, &syscallNum);
 
+  // TODO This might be totally unnecessary
   // INT16_MAX is sent by seccomp by convention as for system calls with no rules.
   if(syscallNum == INT16_MAX){
     // Fetch real system call from register.
@@ -504,187 +504,529 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
   return;
 }
 // =======================================================================================
-unique_ptr<systemCall>
-execution::getSystemCall(int syscallNumber, string syscallName){
+bool execution::callPreHook(int syscallNumber, globalState& gs,
+                            state& s, ptracer& t, scheduler& sched){
   switch(syscallNumber){
   case SYS_access:
-    return make_unique<accessSystemCall>(syscallNumber, syscallName);
+    return accessSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_alarm:
-    return make_unique<alarmSystemCall>(syscallNumber, syscallName);
+    return alarmSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_chdir:
-    return make_unique<chdirSystemCall>(syscallNumber, syscallName);
+    return chdirSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_chown:
-    return make_unique<chownSystemCall>(syscallNumber, syscallName);
+    return chownSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_chmod:
-    return make_unique<chmodSystemCall>(syscallNumber, syscallName);
+    return chmodSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_clock_gettime:
-    return make_unique<clock_gettimeSystemCall>(syscallNumber, syscallName);
+    return clock_gettimeSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_close:
-    return make_unique<closeSystemCall>(syscallNumber, syscallName);
-  case SYS_clone:
-    return make_unique<cloneSystemCall>(syscallNumber, syscallName);
+    return closeSystemCall::handleDetPre(gs, s, t, sched);
+
+  // case SYS_clone:
+    // return cloneSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_connect:
-    return make_unique<connectSystemCall>(syscallNumber, syscallName);
+    return connectSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_creat:
-    return make_unique<creatSystemCall>(syscallNumber, syscallName);
+    return creatSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_dup:
-    return make_unique<dupSystemCall>(syscallNumber, syscallName);
+    return dupSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_dup2:
-    return make_unique<dup2SystemCall>(syscallNumber, syscallName);
-  case SYS_execve:
-    return make_unique<execveSystemCall>(syscallNumber, syscallName);
+    return dup2SystemCall::handleDetPre(gs, s, t, sched);
+
+    // TODO
+  // case SYS_execve:
+    // return execveSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_faccessat:
-    return make_unique<faccessatSystemCall>(syscallNumber, syscallName);
+    return faccessatSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_fgetxattr:
-    return make_unique<fgetxattrSystemCall>(syscallNumber, syscallName);
+    return fgetxattrSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_flistxattr:
-    return make_unique<flistxattrSystemCall>(syscallNumber, syscallName);
+    return flistxattrSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_fchownat:
-    return make_unique<fchownatSystemCall>(syscallNumber, syscallName);
+    return fchownatSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_fcntl:
-    return make_unique<fcntlSystemCall>(syscallNumber, syscallName);
+    return fcntlSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_fstat:
-    return make_unique<fstatSystemCall>(syscallNumber, syscallName);
+    return fstatSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_newfstatat:
-    return make_unique<newfstatatSystemCall>(syscallNumber, syscallName);
+    return newfstatatSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_fstatfs:
-    return make_unique<fstatfsSystemCall>(syscallNumber, syscallName);
+    return fstatfsSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_futex:
-    return make_unique<futexSystemCall>(syscallNumber, syscallName);
+    return futexSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_getcwd:
-    return make_unique<getcwdSystemCall>(syscallNumber, syscallName);
+    return getcwdSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_getdents:
-    return make_unique<getdentsSystemCall>(syscallNumber, syscallName);
+    return getdentsSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_getdents64:
-    return make_unique<getdents64SystemCall>(syscallNumber, syscallName);
+    return getdents64SystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_getitimer:
-    return make_unique<getitimerSystemCall>(syscallNumber, syscallName);
+    return getitimerSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_getpeername:
-    return make_unique<getpeernameSystemCall>(syscallNumber, syscallName);
+    return getpeernameSystemCall::handleDetPre(gs, s, t, sched);
+
     // Some older systems do not have this  system call.
 #ifdef SYS_getrandom
   case SYS_getrandom:
-    return make_unique<getrandomSystemCall>(syscallNumber, syscallName);
+    return getrandomSystemCall::handleDetPre(gs, s, t, sched);
 #endif
+
   case SYS_getrlimit:
-    return make_unique<getrlimitSystemCall>(syscallNumber, syscallName);
+    return getrlimitSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_getrusage:
-    return make_unique<getrusageSystemCall>(syscallNumber, syscallName);
-  case SYS_getpid:
-    return make_unique<getpidSystemCall>(syscallNumber, syscallName);
+    return getrusageSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_gettimeofday:
-    return make_unique<gettimeofdaySystemCall>(syscallNumber, syscallName);
+    return gettimeofdaySystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_ioctl:
-    return make_unique<ioctlSystemCall>(syscallNumber, syscallName);
+    return ioctlSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_llistxattr:
-    return make_unique<llistxattrSystemCall>(syscallNumber, syscallName);
+    return llistxattrSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_lgetxattr:
-    return make_unique<lgetxattrSystemCall>(syscallNumber, syscallName);
+    return lgetxattrSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_nanosleep:
-    return make_unique<nanosleepSystemCall>(syscallNumber, syscallName);
+    return nanosleepSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_mkdir:
-    return make_unique<mkdirSystemCall>(syscallNumber, syscallName);
+    return mkdirSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_mkdirat:
-    return make_unique<mkdiratSystemCall>(syscallNumber, syscallName);
+    return mkdiratSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_lstat:
-    return make_unique<lstatSystemCall>(syscallNumber, syscallName);
+    return lstatSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_link:
-      return make_unique<linkSystemCall>(syscallNumber, syscallName);
+    return linkSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_linkat:
-    return make_unique<linkatSystemCall>(syscallNumber, syscallName);
+    return linkatSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_mmap:
-    return make_unique<mmapSystemCall>(syscallNumber, syscallName);
+    return mmapSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_open:
-    return make_unique<openSystemCall>(syscallNumber, syscallName);
+    return openSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_openat:
-    return make_unique<openatSystemCall>(syscallNumber, syscallName);
+    return openatSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_pause:
-    return make_unique<pauseSystemCall>(syscallNumber, syscallName);
+    return pauseSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_pipe:
-    return make_unique<pipeSystemCall>(syscallNumber, syscallName);
+    return pipeSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_pipe2:
-    return make_unique<pipe2SystemCall>(syscallNumber, syscallName);
+    return pipe2SystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_pselect6:
-    return make_unique<pselect6SystemCall>(syscallNumber, syscallName);
+    return pselect6SystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_poll:
-    return make_unique<pollSystemCall>(syscallNumber, syscallName);
+    return pollSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_prlimit64:
-    return make_unique<prlimit64SystemCall>(syscallNumber, syscallName);
+    return prlimit64SystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_read:
-    return make_unique<readSystemCall>(syscallNumber, syscallName);
+    return readSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_readlink:
-    return make_unique<readlinkSystemCall>(syscallNumber, syscallName);
+    return readlinkSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_readlinkat:
-    return make_unique<readlinkatSystemCall>(syscallNumber, syscallName);
+    return readlinkatSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_recvmsg:
-    return make_unique<recvmsgSystemCall>(syscallNumber, syscallName);
+    return recvmsgSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_rename:
-    return make_unique<renameSystemCall>(syscallNumber, syscallName);
+    return renameSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_renameat:
-    return make_unique<renameatSystemCall>(syscallNumber, syscallName);
+    return renameatSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_renameat2:
-    return make_unique<renameat2SystemCall>(syscallNumber, syscallName);
+    return renameat2SystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_rmdir:
-    return make_unique<rmdirSystemCall>(syscallNumber, syscallName);
+    return rmdirSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_rt_sigaction:
-    return make_unique<rt_sigactionSystemCall>(syscallNumber, syscallName);
+    return rt_sigactionSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_sendto:
-    return make_unique<sendtoSystemCall>(syscallNumber, syscallName);
+    return sendtoSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_select:
-    return make_unique<selectSystemCall>(syscallNumber, syscallName);
+    return selectSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_setitimer:
-    return make_unique<setitimerSystemCall>(syscallNumber, syscallName);
+    return setitimerSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_set_robust_list:
-    return make_unique<set_robust_listSystemCall>(syscallNumber, syscallName);
+    return set_robust_listSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_statfs:
-    return make_unique<statfsSystemCall>(syscallNumber, syscallName);
+    return statfsSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_stat:
-    return make_unique<statSystemCall>(syscallNumber, syscallName);
+    return statSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_sysinfo:
-    return make_unique<sysinfoSystemCall>(syscallNumber, syscallName);
+    return sysinfoSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_symlink:
-    return make_unique<symlinkSystemCall>(syscallNumber, syscallName);
+    return symlinkSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_tgkill:
-    return make_unique<tgkillSystemCall>(syscallNumber, syscallName);
+    return tgkillSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_time:
-    return make_unique<timeSystemCall>(syscallNumber, syscallName);
+    return timeSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_timer_create:
-    return make_unique<timer_createSystemCall>(syscallNumber, syscallName);
+    return timer_createSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_timer_delete:
-    return make_unique<timer_deleteSystemCall>(syscallNumber, syscallName);
+    return timer_deleteSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_timer_getoverrun:
-    return make_unique<timer_getoverrunSystemCall>(syscallNumber, syscallName);
+    return timer_getoverrunSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_timer_gettime:
-    return make_unique<timer_gettimeSystemCall>(syscallNumber, syscallName);
+    return timer_gettimeSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_timer_settime:
-    return make_unique<timer_settimeSystemCall>(syscallNumber, syscallName);
+    return timer_settimeSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_times:
-    return make_unique<timesSystemCall>(syscallNumber, syscallName);
+    return timesSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_uname:
-    return make_unique<unameSystemCall>(syscallNumber, syscallName);
+    return unameSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_unlink:
-    return make_unique<unlinkSystemCall>(syscallNumber, syscallName);
+    return unlinkSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_unlinkat:
-    return make_unique<unlinkatSystemCall>(syscallNumber, syscallName);
+    return unlinkatSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_utime:
-      return make_unique<utimeSystemCall>(syscallNumber, syscallName);
+    return utimeSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_utimes:
-    return make_unique<utimesSystemCall>(syscallNumber, syscallName);
+    return utimesSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_utimensat:
-    return make_unique<utimensatSystemCall>(syscallNumber, syscallName);
-  case SYS_vfork:
-    return make_unique<vforkSystemCall>(syscallNumber, syscallName);
+    return utimensatSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_wait4:
-    return make_unique<wait4SystemCall>(syscallNumber, syscallName);
+    return wait4SystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_write:
-    return make_unique<writeSystemCall>(syscallNumber, syscallName);
+    return writeSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_writev:
-    return make_unique<writevSystemCall>(syscallNumber, syscallName);
+   return writevSystemCall::handleDetPre(gs, s, t, sched);
   }
 
   // Generic system call. Throws error.
-  throw runtime_error("dettrace runtime exception: Missing case for system call: " + syscallName
-                      + " this is a bug!");
+  throw runtime_error("dettrace runtime exception: Missing case for system call: " +
+                      to_string(syscallNumber));
+}
+// =======================================================================================
+void execution::callPostHook(int syscallNumber, globalState& gs,
+                            state& s, ptracer& t, scheduler& sched){
+  switch(syscallNumber){
+  case SYS_access:
+    return accessSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_alarm:
+    return alarmSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_chdir:
+    return chdirSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_chown:
+    return chownSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_chmod:
+    return chmodSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_clock_gettime:
+    return clock_gettimeSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_close:
+    return closeSystemCall::handleDetPost(gs, s, t, sched);
+
+  // case SYS_clone:
+  //   return cloneSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_connect:
+    return connectSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_creat:
+    return creatSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_dup:
+    return dupSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_dup2:
+    return dup2SystemCall::handleDetPost(gs, s, t, sched);
+
+    // TODO
+  // case SYS_execve:
+    // return execveSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_faccessat:
+    return faccessatSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_fgetxattr:
+    return fgetxattrSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_flistxattr:
+    return flistxattrSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_fchownat:
+    return fchownatSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_fcntl:
+    return fcntlSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_fstat:
+    return fstatSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_newfstatat:
+    return newfstatatSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_fstatfs:
+    return fstatfsSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_futex:
+    return futexSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_getcwd:
+    return getcwdSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_getdents:
+    return getdentsSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_getdents64:
+    return getdents64SystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_getitimer:
+    return getitimerSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_getpeername:
+    return getpeernameSystemCall::handleDetPost(gs, s, t, sched);
+
+    // Some older systems do not have this  system call.
+#ifdef SYS_getrandom
+  case SYS_getrandom:
+    return getrandomSystemCall::handleDetPost(gs, s, t, sched);
+#endif
+
+  case SYS_getrlimit:
+    return getrlimitSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_getrusage:
+    return getrusageSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_gettimeofday:
+    return gettimeofdaySystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_ioctl:
+    return ioctlSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_llistxattr:
+    return llistxattrSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_lgetxattr:
+    return lgetxattrSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_nanosleep:
+    return nanosleepSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_mkdir:
+    return mkdirSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_mkdirat:
+    return mkdiratSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_lstat:
+    return lstatSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_link:
+    return linkSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_linkat:
+    return linkatSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_mmap:
+    return mmapSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_open:
+    return openSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_openat:
+    return openatSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_pause:
+    return pauseSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_pipe:
+    return pipeSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_pipe2:
+    return pipe2SystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_pselect6:
+    return pselect6SystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_poll:
+    return pollSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_prlimit64:
+    return prlimit64SystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_read:
+    return readSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_readlink:
+    return readlinkSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_readlinkat:
+    return readlinkatSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_recvmsg:
+    return recvmsgSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_rename:
+    return renameSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_renameat:
+    return renameatSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_renameat2:
+    return renameat2SystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_rmdir:
+    return rmdirSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_rt_sigaction:
+    return rt_sigactionSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_sendto:
+    return sendtoSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_select:
+    return selectSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_setitimer:
+    return setitimerSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_set_robust_list:
+    return set_robust_listSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_statfs:
+    return statfsSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_stat:
+    return statSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_sysinfo:
+    return sysinfoSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_symlink:
+    return symlinkSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_tgkill:
+    return tgkillSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_time:
+    return timeSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_timer_create:
+    return timer_createSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_timer_delete:
+    return timer_deleteSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_timer_getoverrun:
+    return timer_getoverrunSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_timer_gettime:
+    return timer_gettimeSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_timer_settime:
+    return timer_settimeSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_times:
+    return timesSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_uname:
+    return unameSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_unlink:
+    return unlinkSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_unlinkat:
+    return unlinkatSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_utime:
+    return utimeSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_utimes:
+    return utimesSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_utimensat:
+    return utimensatSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_wait4:
+    return wait4SystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_write:
+    return writeSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_writev:
+   return writevSystemCall::handleDetPost(gs, s, t, sched);
+  }
+
+  // Generic system call. Throws error.
+  throw runtime_error("dettrace runtime exception: Missing case for system call: " +
+                      to_string(syscallNumber));
+
 }
 // =======================================================================================
 tuple<ptraceEvent, pid_t, int>
@@ -725,7 +1067,20 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
   return make_tuple(getPtraceEvent(status), traceesPid, status);
 }
 // =======================================================================================
+
 ptraceEvent execution::getPtraceEvent(const int status){
+  // Events ordered in order of likely hood.
+
+  if( ptracer::isPtraceEvent(status, PTRACE_EVENT_SECCOMP) ){
+    return ptraceEvent::seccomp;
+  }
+
+  // This is a stop caused by a system call exit-post.
+  // All pre events are caught by seccomp.
+  if(WIFSTOPPED(status) && (WSTOPSIG(status) == (SIGTRAP | 0x80)) ){
+    return ptraceEvent::syscall;
+  }
+
   // Check if tracee has exited.
   if (WIFEXITED(status)){
     // log.writeToLog(Importance::extra, "nonEventExit\n");
@@ -766,38 +1121,17 @@ ptraceEvent execution::getPtraceEvent(const int status){
 #endif
 
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_EXIT) ){
-    // log.writeToLog(Importance::extra, "event exit\n");
     return ptraceEvent::eventExit;
   }
 
-  if( ptracer::isPtraceEvent(status, PTRACE_EVENT_SECCOMP) ){
-    // log.writeToLog(Importance::extra, "event seccomp\n");
-    return ptraceEvent::seccomp;
-  }
-
-  if( ptracer::isPtraceEvent(status, PTRACE_EVENT_SECCOMP) ){
-    return ptraceEvent::seccomp;
-  }
-
-  // This is a stop caused by a system call exit-pre/exit-post.
-  // Check if WIFSTOPPED return true,
-  // if yes, compare signal number to SIGTRAP | 0x80 (see ptrace(2)).
-  if(WIFSTOPPED(status) && (WSTOPSIG(status) == (SIGTRAP | 0x80)) ){
-    // log.writeToLog(Importance::extra, "event syscall\n");
-    return ptraceEvent::syscall;
-  }
-
   // Check if we intercepted a signal before it was delivered to the child.
-  // TODO: Currently this is working as a sink for all signals.
   if(WIFSTOPPED(status)){
-    // log.writeToLog(Importance::extra, "event signal\n");
     return ptraceEvent::signal;
   }
 
   // Check if the child was terminated by a signal. This can happen after when we,
   //the tracer, intercept a signal of the tracee and deliver it.
   if(WIFSIGNALED(status)){
-    // log.writeToLog(Importance::extra, "terminated by signal\n");
     return ptraceEvent::terminatedBySignal;
   }
 
