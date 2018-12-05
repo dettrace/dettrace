@@ -50,6 +50,7 @@ pair<int,int> getPipeFds(globalState& gs, state& s, ptracer& t);
 
 static void replaceSystemCallWithNoop(globalState& gs, state& s, ptracer& t);
 static bool sendTraceeSignalNow(int signum, globalState& gs, state& s, ptracer& t, scheduler& sched);
+static void appendEnvpLdPreload(globalState& gs, state& s, ptracer& t);
 
 /**
  *
@@ -235,34 +236,34 @@ void dup2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
 }
 
 // =======================================================================================
-// bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-//   printInfoString(t.arg1(), gs, s, t);
+bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  printInfoString(t.arg1(), gs, s, t);
 
-//   char** argv = (char**) t.arg2();
-//   string execveArgs {};
+  char** argv = (char**) t.arg2();
+  string execveArgs {};
 
-//   appendEnvpLdPreload(gs, s, t);
+  appendEnvpLdPreload(gs, s, t);
 
-//   // Print all arguments to execve!
-//   if(gs.log.getDebugLevel() > 0 && argv != nullptr){
-//     // Remeber these are addresses in the tracee. We must explicitly read them
-//     // ourselves!
-//     for(int i = 0; true; i++){
-//       // Make sure it's non null before reading to string.
-//       char* address = t.readFromTracee(traceePtr<char*>(&(argv[i])), t.getPid());
-//       if(address == nullptr){
-//         break;
-//       }
+  // Print all arguments to execve!
+  if(gs.log.getDebugLevel() > 0 && argv != nullptr){
+    // Remeber these are addresses in the tracee. We must explicitly read them
+    // ourselves!
+    for(int i = 0; true; i++){
+      // Make sure it's non null before reading to string.
+      char* address = t.readFromTracee(traceePtr<char*>(&(argv[i])), t.getPid());
+      if(address == nullptr){
+        break;
+      }
 
-//       execveArgs += " \"" + t.readTraceeCString(traceePtr<char>(address), t.getPid()) + "\" ";
-//     }
+      execveArgs += " \"" + t.readTraceeCString(traceePtr<char>(address), t.getPid()) + "\" ";
+    }
 
-//     auto msg = "Args: " + gs.log.makeTextColored(Color::green, execveArgs) + "\n";
-//     gs.log.writeToLog(Importance::info, msg);
-//   }
+    auto msg = "Args: " + gs.log.makeTextColored(Color::green, execveArgs) + "\n";
+    gs.log.writeToLog(Importance::info, msg);
+  }
 
-//   return false;
-// }
+  return false;
+}
 // =======================================================================================
 bool fchownatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg2(), gs, s, t);

@@ -140,6 +140,8 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_clone);
 
 
+  intercept(SYS_execve);
+
   intercept(SYS_rt_sigaction);
   intercept(SYS_timer_create);
   intercept(SYS_timer_delete);
@@ -165,7 +167,6 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_dup);
   intercept(SYS_dup2);
 
-  noIntercept(SYS_execve);
   intercept(SYS_faccessat, debug);
   intercept(SYS_fgetxattr, debug);
   intercept(SYS_flistxattr, debug);
@@ -195,7 +196,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_mmap);
   intercept(SYS_mkdir, debug);
   intercept(SYS_mkdirat, debug);
-  // TODO Nano sleep
+
   intercept(SYS_nanosleep);
   intercept(SYS_newfstatat);
   intercept(SYS_lstat);

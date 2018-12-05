@@ -1368,6 +1368,21 @@ public:
 };
 // =======================================================================================
 /**
+ * We intercept exceve since we need to append our LD_PRELOAD enviornment to and pass in,
+ * as the last argument.
+ *
+ */
+class execveSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_execve;
+  const string syscallName = "execve";
+};
+
+// =======================================================================================
+/**
  * pid_t vfork(void);
  *
  * The vfork() function has the same effect as fork(2), except that the

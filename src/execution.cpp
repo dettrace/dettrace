@@ -528,9 +528,6 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_close:
     return closeSystemCall::handleDetPre(gs, s, t, sched);
 
-  // case SYS_clone:
-    // return cloneSystemCall::handleDetPre(gs, s, t, sched);
-
   case SYS_connect:
     return connectSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -543,9 +540,8 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_dup2:
     return dup2SystemCall::handleDetPre(gs, s, t, sched);
 
-    // TODO
-  // case SYS_execve:
-    // return execveSystemCall::handleDetPre(gs, s, t, sched);
+  case SYS_execve:
+    return execveSystemCall::handleDetPre(gs, s, t, sched);
 
   case SYS_faccessat:
     return faccessatSystemCall::handleDetPre(gs, s, t, sched);
