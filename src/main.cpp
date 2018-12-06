@@ -54,11 +54,11 @@
 
 using namespace std;
 // =======================================================================================
-tuple<int, int, string, bool, bool, bool, string, bool, string>
+tuple<int, int, string, bool, bool, string, bool, string>
 parseProgramArguments(int argc, char* argv[]);
 int runTracee(void* args);
-void runTracer(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid, void* voidArgs, bool inSchroot, bool useColor,
-               string logFile, bool printStatistics);
+void runTracer(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid, void* voidArgs,
+               bool useColor, string logFile, bool printStatistics);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 
 static bool fileExists(string directory);
@@ -126,9 +126,6 @@ const string usageMsg =
   "    Specify root to use for chroot (such as one created by debootstrap).\n"
   "  --no-container\n"
   "    Do not use any sort of containerization (May not be deterministic!).\n"
-  "  --in-schroot\n"
-  "    Use this flag if you're running dettrace inside a schroot. Needed as we're not\n"
-  "    allowed to use user namespaces inside a chroot, which is what schroot uses.\n"
   "  --no-color\n"
   "    Do not use colored output for log. Useful when piping log to a file.\n"
   "  --log\n"
@@ -146,9 +143,9 @@ const string usageMsg =
 int main(int argc, char** argv){
   int optIndex, debugLevel;
   string path, logFile, workingDir;
-  bool useContainer, inSchroot, useColor, printStatistics;
+  bool useContainer, useColor, printStatistics;
 
-  tie(optIndex, debugLevel, path, useContainer, inSchroot, useColor,
+  tie(optIndex, debugLevel, path, useContainer, useColor,
       logFile, printStatistics, workingDir) = parseProgramArguments(argc, argv);
 
   // Check for debug enviornment variable.
@@ -184,10 +181,6 @@ int main(int argc, char** argv){
     CLONE_NEWUSER | // Our own user namespace.
     CLONE_NEWPID | // Our own pid namespace.
     CLONE_NEWNS;  // Our own mount namespace
-  // user namespaces do not work inside chroot!
-  if(inSchroot){
-    cloneFlags &= ~CLONE_NEWUSER;
-  }
 
   /* creds for NS_NEWUSER */
   int startingPid = getpid();
@@ -203,13 +196,9 @@ int main(int argc, char** argv){
   if(pid == -1){
     string reason = strerror(errno);
     cerr << "fork failed:\n  " + reason << endl;
-    if(inSchroot){
-      cerr << "You must have CAP_SYS_ADMIN to work inside schroot." << endl;
-      return 1;
-    }
     return 1;
   } else if (pid == 0) {
-    runTracer(debugLevel, uid, gid, startingPid, &args, inSchroot, useColor, logFile, printStatistics);
+    runTracer(debugLevel, uid, gid, startingPid, &args, useColor, logFile, printStatistics);
   } else {
     int status;
     doWithCheck(waitpid(pid, &status, 0), "waitpid");
@@ -557,34 +546,32 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
  * sequentially.
  *
  */
-void runTracer(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid, void* voidArgs, bool inSchroot, bool useColor,
-               string logFile, bool printStatistics){
-  if(!inSchroot){
-    // This is modified code from user_namespaces(7)
-    /* Update the UID and GID maps in the child */
-    char map_path[PATH_MAX];
-    const int MAP_BUF_SIZE = 100;
-    char map_buf[MAP_BUF_SIZE];
-    char* uid_map;
-    char* gid_map;
+void runTracer(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid, void* voidArgs,
+               bool useColor, string logFile, bool printStatistics){
+  // This is modified code from user_namespaces(7)
+  /* Update the UID and GID maps in the child */
+  char map_path[PATH_MAX];
+  const int MAP_BUF_SIZE = 100;
+  char map_buf[MAP_BUF_SIZE];
+  char* uid_map;
+  char* gid_map;
 
-    snprintf(map_path, PATH_MAX, "/proc/%ld/uid_map", (long) startingPid);
+  snprintf(map_path, PATH_MAX, "/proc/%ld/uid_map", (long) startingPid);
 
-    snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long)uid);
-    uid_map = map_buf;
+  snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long)uid);
+  uid_map = map_buf;
 
-    update_map(uid_map, map_path);
+  update_map(uid_map, map_path);
 
-    // Set GID Map
-    string deny = "deny";
-    proc_setgroups_write(startingPid, deny.c_str());
+  // Set GID Map
+  string deny = "deny";
+  proc_setgroups_write(startingPid, deny.c_str());
 
-    snprintf(map_path, PATH_MAX, "/proc/%ld/gid_map", (long) startingPid);
-    snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long)gid);
-    gid_map = map_buf;
+  snprintf(map_path, PATH_MAX, "/proc/%ld/gid_map", (long) startingPid);
+  snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long)gid);
+  gid_map = map_buf;
 
-    update_map(gid_map, map_path);
-  }
+  update_map(gid_map, map_path);
 
   assert(getpid() == 1);
   pid_t pid = fork();
@@ -606,12 +593,11 @@ void runTracer(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid, void* vo
  * @param string: Either a user specified chroot path or none.
  * @return (optind, debugLevel, pathToChroot, useContainer, inSchroot, useColor)
  */
-tuple<int, int, string, bool, bool, bool, string, bool, string> parseProgramArguments(int argc, char* argv[]){
+tuple<int, int, string, bool, bool, string, bool, string> parseProgramArguments(int argc, char* argv[]){
   int debugLevel = 0;
   string exePlusArgs;
   string pathToChroot = "";
   bool useContainer = true;
-  bool inSchroot = false;
   bool useColor = true;
   string logFile = "";
   bool printStatistics = false;
@@ -623,7 +609,6 @@ tuple<int, int, string, bool, bool, bool, string, bool, string> parseProgramArgu
     {"help"  , no_argument,        0, 'h'},
     {"chroot", required_argument,  0, 'c'},
     {"no-container", no_argument, 0, 'n'},
-    {"in-schroot", no_argument, 0, 'i'},
     {"no-color", no_argument, 0, 'r'},
     {"log", required_argument, 0, 'l'},
     {"print-statistics", no_argument, 0, 'p'},
@@ -659,9 +644,6 @@ tuple<int, int, string, bool, bool, bool, string, bool, string> parseProgramArgu
     case 'n':
       useContainer = false;
       break;
-    case 'i':
-      inSchroot = true;
-      break;
     case 'r':
       useColor = false;
       break;
@@ -686,7 +668,7 @@ tuple<int, int, string, bool, bool, bool, string, bool, string> parseProgramArgu
     exit(1);
   }
 
-  return make_tuple(optind, debugLevel, pathToChroot, useContainer, inSchroot, useColor, logFile, printStatistics, workingDir);
+  return make_tuple(optind, debugLevel, pathToChroot, useContainer, useColor, logFile, printStatistics, workingDir);
 }
 // =======================================================================================
 /**
