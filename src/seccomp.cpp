@@ -139,7 +139,6 @@ void seccomp::loadRules(bool debug){
   // intercept(SYS_clone);
   noIntercept(SYS_clone);
 
-
   intercept(SYS_execve);
 
   intercept(SYS_rt_sigaction);
