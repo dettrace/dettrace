@@ -1,5 +1,5 @@
 counter=0
 Received signal 27
  siginfo_t fields: signo:27 errno:0 code:-6 pid:1 uid:0 status:0 utime:0 stime:0 value:(nil) int:0 ptr:(nil) overrun:0 timerid:1 addr:0x1 band:1 fd:0 addr_lsb:0 lower:(nil) upper:(nil) call_addr:0x1 syscall:0 uarch:0
-context: R8:0, R9:0, R10:33e, R11:202, R12:4005f0, R13:7fffffffee00, R14:0, R15:0
- RDI:2, RSI:7fffffffebd8, RBP:7fffffffed20, RBX:0, RDX:0, RAX:0, RCX:7ffff78ca637, RSP:7fffffffeb98, RIP:7ffff78ca637
+context: R8:0, R9:80, R10:6, R11:202, R12:4005c0, R13:7fffffffee00, R14:0, R15:0
+ RDI:2, RSI:7fffffffebd8, RBP:7fffffffed20, RBX:0, RDX:0, RAX:0, RCX:7ffff78b7e57, RSP:7fffffffeb98, RIP:7ffff78b7e57

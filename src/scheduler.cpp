@@ -1,6 +1,5 @@
 #include "logger.hpp"
 #include "systemCallList.hpp"
-#include "systemCall.hpp"
 #include "dettraceSystemCall.hpp"
 #include "util.hpp"
 #include "state.hpp"

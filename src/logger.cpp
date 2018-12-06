@@ -18,6 +18,7 @@ using namespace std;
 logger::logger(string logFile, int debugLevel, bool useColor):
   debugLevel(debugLevel),
   useColor(useColor){
+
   // Check value of debugLevel.
   if(debugLevel > 5 || debugLevel < 0){
     fprintf(stderr, "The debug level must be between [0, 5].\n");
@@ -46,6 +47,11 @@ logger::logger(string logFile, int debugLevel, bool useColor):
 }
 
 void logger::writeToLog(Importance imp, std::string format, ...){
+  // Don't bother, we're not printing anything.
+  if (debugLevel == 0){
+    return;
+  }
+
   va_list args;
   bool print = false;
 
@@ -54,27 +60,22 @@ void logger::writeToLog(Importance imp, std::string format, ...){
     /* Most verbose, print all messages. Also does extraI. */
   case 5:
     print = true;
+    break;
   case 4:
-    if(imp == Importance::error || imp == Importance::inter || imp == Importance::info){
+    if(imp == Importance::inter || imp == Importance::info){
       print = true;
     }
     break;
     /* Ignore informatory messages. */
   case 3:
   case 2:
-    if(imp == Importance::error || imp == Importance::inter){
+    if(imp == Importance::inter){
       print = true;
     }
     break;
   case 1:
-    if(imp == Importance::error){
-      print = true;
-    }
     break;
   case 0:
-    if(imp == Importance::error){
-      print = true;
-    }
     break;
   default:
     fprintf(fin, "  Warning Unknown DEBUG level %d.\n", debugLevel);
@@ -91,9 +92,6 @@ void logger::writeToLog(Importance imp, std::string format, ...){
       break;
       case Importance::inter:
         fprintf(fin, "[3]INTER ");
-      break;
-      case Importance::error:
-        fprintf(fin, "[0]ERROR ");
       break;
     }
     fprintf(fin, "%lx ", logEntryID);

@@ -11,7 +11,6 @@
 
 #include "ptracer.hpp"
 #include "ValueMapper.hpp"
-#include "systemCall.hpp"
 #include "directoryEntries.hpp"
 #include "registerSaver.hpp"
 #include "mappedMemory.hpp"
@@ -41,7 +40,6 @@ enum class descriptorType {
 };
 
 // Needed to avoid recursive dependencies between classes.
-class systemCall;
 class mappedMemory;
 
 /**
@@ -222,24 +220,6 @@ public:
    * Bytes to allocate for our directory entries. We use the standard size used in glibc.
    */
   const size_t dirEntriesBytes = 32768;
-
-  /*
-   * Smart pointer to the system call being processed.
-   * We need to know what system call was/is that we are not. This is important in
-   * cases like clone:
-   * 1) Parent performs clone.
-   * 2) We receive a pre-exit for clone.
-   * 3) The process is switched to the child.
-   * 4) Child does an arbitrary number of system calls before exiting.
-   * 5) Without this variable the fact we were doing a clone is lost.
-
-   * Basically, we cannot guarantee we will always be able to do system calls in a
-   * pre-post pairs. As we extend to multi processes, this will become more useful.
-
-   * We use a a pointer since we rely on dynamic dispatch for the right subclass for
-   * the methods to work properly.
-   */
-  unique_ptr<systemCall> systemcall;
 
   /**
    * Function to increase value of internal logical clock.

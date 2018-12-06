@@ -1,9 +1,40 @@
 #ifndef DETTRACE_SYSTEM_CALL_H
 #define DETTRACE_SYSTEM_CALL_H
 
-#include "systemCall.hpp"
 #include "util.hpp"
+#include "globalState.hpp"
+#include "state.hpp"
+#include "scheduler.hpp"
+
+#include <signal.h>
+#include <sys/syscall.h>   /* For SYS_xxx definitions */
+
 using namespace std;
+
+
+// template<typename Sys>
+// class SystemCall<Sys>{
+//   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+//     return true;
+//   }
+//   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+//     return;
+//   }
+
+//   const int syscallNumber;
+//   const string syscallName;
+// };
+
+// class Access {};
+// template<>
+// class SystemCall<Access>{
+//   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+//     return false;
+//   }
+//   const int syscallNumber = SYS_ACCESS;
+//   const string syscallName = "access";
+// };
+
 
 /**
  * Replay system call passed in.
@@ -29,11 +60,13 @@ void replaySystemCall(globalState& gs, ptracer& t, uint64_t systemCall);
  * alarm() arranges for a SIGALRM signal to be delivered to the calling process
  * in a given number of seconds.
  */
-class alarmSystemCall : public systemCall{
+class alarmSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  //void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched);
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched);
+
+  const int syscallNumber = SYS_alarm;
+  const string syscallName = "alarm";
 };
 // =======================================================================================
 /**
@@ -42,10 +75,13 @@ public:
  * access()  checks  whether the calling process can access the file pathname.  If path‐
  * name is a symbolic link, it is dereferenced.
  */
-class accessSystemCall : public systemCall{
+class accessSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched);
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched);
+
+  const int syscallNumber = SYS_access;
+  const string syscallName = "access";
 };
 // =======================================================================================
 /**
@@ -59,10 +95,13 @@ public:
  * path for debugging!
  *
  */
-class chdirSystemCall : public systemCall{
+class chdirSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched);
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched);
+
+  const int syscallNumber = SYS_chdir;
+  const string syscallName = "chdir";
 };
 // =======================================================================================
 /**
@@ -71,16 +110,22 @@ public:
  * This is deterministic and jailed thanks to our jail. We keep it here to print it's
  * path for debugging!
  */
-class chmodSystemCall : public systemCall{
+class chmodSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched);
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched);
+
+  const int syscallNumber = SYS_chmod;
+  const string syscallName = "chmod";
 };
 // =======================================================================================
-class chownSystemCall : public systemCall{
+class chownSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched);
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched);
+
+  const int syscallNumber = SYS_chown;
+  const string syscallName = "chown";
 };
 // =======================================================================================
 /**
@@ -88,11 +133,13 @@ public:
 * int clock_gettime(clockid_t clk_id, struct timespec *tp);
 *
 */
-class clock_gettimeSystemCall : public systemCall{
+class clock_gettimeSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched);
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched);
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_clock_gettime;
+  const string syscallName = "clock_gettime";
 };
 // =======================================================================================
 /**
@@ -100,30 +147,14 @@ public:
 * int close(int fd);
 *
 */
-class closeSystemCall : public systemCall{
+class closeSystemCall {
 public:
-  using systemCall::systemCall;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-};
-// =======================================================================================
-/**
- * long clone(unsigned long flags,
- *       void *child_stack,
- *       int *ptid,
- *       int *ctid,
- *       unsigned long newtls);
- *
- * Underlying implementation for both creating threads and new processes.
- * Modern day fork() does a clone under the hood.
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched);
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
- * No need to do anything. We just need the signal from seccomp so tracer knows to
- * handle a forking event via @handleFork().
- */
-class cloneSystemCall : public systemCall{
-public:
-  using systemCall::systemCall;
-
+  const int syscallNumber = SYS_close;
+  const string syscallName = "close";
 };
 // =======================================================================================
 /**
@@ -137,12 +168,14 @@ public:
  * TODO
  *
  */
-class connectSystemCall : public systemCall{
+class connectSystemCall {
 public:
-  using systemCall::systemCall;
 
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_connect;
+  const string syscallName = "connect";
 };
 // =======================================================================================
 /**
@@ -152,41 +185,33 @@ public:
  * A call to creat() is equivalent to calling open() with flags equal to
  * O_CREAT|O_WRONLY|O_TRUNC.
  */
-class creatSystemCall : public systemCall{
+class creatSystemCall {
 public:
-  using systemCall::systemCall;
 
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_creat;
+  const string syscallName = "creat";
 };
 // =======================================================================================
-class dupSystemCall : public systemCall{
+class dupSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-};
-
-// =======================================================================================
-class dup2SystemCall : public systemCall{
-public:
-  using systemCall::systemCall;
-
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_dup;
+  const string syscallName = "dup";
 };
 
 // =======================================================================================
-/**
- * int execve(const char *filename, char *const argv[], char *const envp[]);
- *
- * execve()  executes  the  program  pointed  to by filename.
- *
- * Deterministic. We print the path for debugging purposes here.
- */
-class execveSystemCall : public systemCall{
-  using systemCall::systemCall;
+class dup2SystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_dup2;
+  const string syscallName = "dup2";
 };
 // =======================================================================================
 /**
@@ -194,22 +219,28 @@ class execveSystemCall : public systemCall{
  *
  * Variant of access with f and at. See access.
  */
-class faccessatSystemCall : public systemCall{
+class faccessatSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_faccessat;
+  const string syscallName = "faccessat";
 };
 // =======================================================================================
 
 /**
- * ssize_t fgetxattr(int fd, const char *name, void *value, size_t size);
+ * ssize_t fgetxattr(int fd, const char *name, static void *value, size_t size);
  *
  * Get extended attribute for file for value.
  */
-class fgetxattrSystemCall : public systemCall{
+class fgetxattrSystemCall {
 public:
-  using systemCall::systemCall;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_fgetxattr;
+  const string syscallName = "fgetxattr";
 };
 
 // =======================================================================================
@@ -218,10 +249,13 @@ public:
  *
  * List exted attributes for file descriptor.
  */
-class flistxattrSystemCall : public systemCall{
+class flistxattrSystemCall {
 public:
-  using systemCall::systemCall;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_flistxattr;
+  const string syscallName = "flistxattr";
 };
 // =======================================================================================
 /**
@@ -241,11 +275,13 @@ public:
  * FILESYSTEM RELATED.
  * Notice we do the exact same thing for lstat, stat, and fstat.
  */
-class fstatSystemCall : public systemCall{
+class fstatSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_fstat;
+  const string syscallName = "fstat";
 };
 // =======================================================================================
 /**
@@ -255,11 +291,13 @@ public:
  * container.
  *
  */
-class fchownatSystemCall : public systemCall{
+class fchownatSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_fchownat;
+  const string syscallName = "fchownat";
 };
 // =======================================================================================
 /**
@@ -269,14 +307,14 @@ public:
 
  * Needed to check if user changed status of file descriptor from blocking to non-blocking.
  */
-class fcntlSystemCall : public systemCall{
+class fcntlSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_fcntl;
+  const string syscallName = "fcntl";
 };
-
-
 // =======================================================================================
 /**
  * int fstatfs(int fd, struct statfs *buf);
@@ -286,11 +324,13 @@ public:
  *
  * Very similar to statfs, except it takes a file descriptor instead of a file path.
  */
-class fstatfsSystemCall : public systemCall{
+class fstatfsSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_fstatfs;
+  const string syscallName = "fstatfs";
 };
 // =======================================================================================
 /**
@@ -300,11 +340,13 @@ public:
  * Fast mutex.
  * TODO: Understand what these guys even do.
  */
-class futexSystemCall : public systemCall{
+class futexSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_futex;
+  const string syscallName = "futex";
 };
 // =======================================================================================
 /**
@@ -314,11 +356,13 @@ public:
  * Deterministic. We print the path for debugging purposes here.
  *
  */
-class getcwdSystemCall : public systemCall{
+class getcwdSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_getcwd;
+  const string syscallName = "getcwd";
 };
 // =======================================================================================
 /**
@@ -331,11 +375,13 @@ public:
  *
  * TODO: Contains linux_dirent struct with inode that we could virtualize.
  */
-class getdentsSystemCall : public systemCall{
+class getdentsSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_getdents;
+  const string syscallName = "getdents";
 };
 // =======================================================================================
 
@@ -349,11 +395,13 @@ public:
  *
  * TODO: Contains linux_dirent struct with inode that we could virtualize.
  */
-class getdents64SystemCall : public systemCall{
+class getdents64SystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_getdents64;
+  const string syscallName = "getdents64";
 };
 // =======================================================================================
 /**
@@ -367,11 +415,13 @@ public:
  * this happens on non-interactive bash mode. We might come back later if needed.
  *
  */
-class getpeernameSystemCall : public systemCall{
+class getpeernameSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_getpeername;
+  const string syscallName = "getpeername";
 };
 // =======================================================================================
 /**
@@ -382,11 +432,13 @@ public:
  * Nondeterministic. We fill the buffer with n deterministic bytes for the user :)
  *
  */
-class getrandomSystemCall : public systemCall{
+class getrandomSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_getrandom;
+  const string syscallName = "getrandom";
 };
 // =======================================================================================
 /**
@@ -397,11 +449,13 @@ public:
  *        limit, as defined by the rlimit structure.
  *
  */
-class getrlimitSystemCall : public systemCall{
+class getrlimitSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_getrlimit;
+  const string syscallName = "getrlimit";
 };
 // =======================================================================================
 /**
@@ -411,25 +465,14 @@ public:
  * returns resource usage measures for who.
  *
  */
-class getrusageSystemCall : public systemCall{
+class getrusageSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_getrusage;
+  const string syscallName = "getrusage";
 };
-// =======================================================================================
-/**
- * We use getpid to suppress other system calls that we don't want to allow through.
- * When the debugging flag is on, the post hook is always called for seeing return values
- * so we add this dummy call for intercepting gettpid.
- */
-class getpidSystemCall : public systemCall{
-public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-};
-
 // =======================================================================================
 /**
  *
@@ -438,11 +481,15 @@ public:
  * gives the number of seconds and microseconds since the Epoch
  *
  */
-class gettimeofdaySystemCall : public systemCall{
+class gettimeofdaySystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_gettimeofday;
+  const string syscallName = "gettimeofday";
+
+  
 };
 // =======================================================================================
 /**
@@ -455,11 +502,13 @@ public:
  * Definitely not deterministic but I don't think there is much we can do about it.
  *
  */
-class ioctlSystemCall : public systemCall{
+class ioctlSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_ioctl;
+  const string syscallName = "ioctl";
 };
 // =======================================================================================
 /*
@@ -470,11 +519,13 @@ public:
  * associated with all inodes in the system.
  * TODO
  */
-class llistxattrSystemCall : public systemCall{
+class llistxattrSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_llistxattr;
+  const string syscallName = "llistxattr";
 };
 // =======================================================================================
 /*
@@ -485,13 +536,14 @@ public:
  * associated with all inodes in the system.
  * TODO
  */
-class lgetxattrSystemCall : public systemCall{
+class lgetxattrSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_lgetxattr;
+  const string syscallName = "lgetxattr";
 };
-
 
 // =======================================================================================
 /*
@@ -499,13 +551,14 @@ public:
  *
  * TODO: This is currently implemented to handle injected calls only
  */
-class mmapSystemCall : public systemCall{
+class mmapSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_mmap;
+  const string syscallName = "mmap";
 };
-
 
 // =======================================================================================
 /**
@@ -519,11 +572,13 @@ public:
  *
  * Actual name of underlying system call is newfstatat.
  */
-class newfstatatSystemCall : public systemCall{
+class newfstatatSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_newfstatat;
+  const string syscallName = "newfstatat";
 };
 // =======================================================================================
 /**
@@ -536,10 +591,13 @@ public:
  * Surprisingly, I think this sytem was is deterministic for our purposes if we have a
  * handle on signals.
  */
-class nanosleepSystemCall : public systemCall{
+class nanosleepSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_nanosleep;
+  const string syscallName = "nanosleep";
 };
 // =======================================================================================
 /**
@@ -550,21 +608,27 @@ public:
  *
  * Deterministic thanks to our container.
  */
-class mkdirSystemCall : public systemCall{
+class mkdirSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_mkdir;
+  const string syscallName = "mkdir";
 };
 // =======================================================================================
 /**
  * int mkdirat(int dirfd, const char *pathname, mode_t mode);
  *
- * "at" variat of mkdir. Same things apply.
+ * "" variat of mkdir. Same things apply.
  */
-class mkdiratSystemCall : public systemCall{
+class mkdiratSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_mkdirat;
+  const string syscallName = "mkdirat";
 };
 // =======================================================================================
 /**
@@ -576,11 +640,13 @@ public:
  * FILESYSTEM RELATED.
  * Notice we do the exact same thing for lstat, stat, and fstat.
  */
-class lstatSystemCall : public systemCall{
+class lstatSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_lstat;
+  const string syscallName = "lstat";
 };
 // =======================================================================================
 /**
@@ -588,12 +654,14 @@ public:
  *
  * Creates hardlink.
  */
-class linkSystemCall : public systemCall{
+class linkSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-};
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
+  const int syscallNumber = SYS_link;
+  const string syscallName = "link";
+};
 // =======================================================================================
 /**
  * int linkat(int olddirfd, const char *oldpath,
@@ -601,12 +669,14 @@ public:
  *
  * Creates hardlink.
  */
-class linkatSystemCall : public systemCall{
+class linkatSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-};
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
+  const int syscallNumber = SYS_linkat;
+  const string syscallName = "linkat";
+};
 // =======================================================================================
 /**
  * int open(const char *pathname, int flags);
@@ -617,12 +687,13 @@ public:
  * file descriptor not currently open for the process.
  *
  */
-class openSystemCall : public systemCall{
+class openSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_open;
+  const string syscallName = "open";
 };
 // =======================================================================================
 /**
@@ -643,25 +714,28 @@ public:
  *
  * If pathname is absolute, then dirfd is ignored.
  */
-class openatSystemCall : public systemCall{
+class openatSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_openat;
+  const string syscallName = "openat";
 };
 // =======================================================================================
 /**
  * int pause(void);
  *
- * pause() causes the calling process (or thread) to sleep until a signal is delivered that 
+ * pause() causes the calling process (or thread) to sleep until a signal is delivered that
  * either terminates the process or causes the invocation of a signal-catching function.
  */
-class pauseSystemCall : public systemCall{
+class pauseSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_pause;
+  const string syscallName = "pause";
 };
 // =======================================================================================
 /**
@@ -669,23 +743,26 @@ public:
  *
  * Create a pipe communication channel.
  */
-class pipeSystemCall : public systemCall{
+class pipeSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_pipe;
+  const string syscallName = "pipe";
 };
 // =======================================================================================
 /**
  * int pipe2(int pipefd[2], int flags);
  */
-class pipe2SystemCall : public systemCall{
+class pipe2SystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-};
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
+  const int syscallNumber = SYS_pipe2;
+  const string syscallName = "pipe2";
+};
 // =======================================================================================
 /**
  * The  Linux  pselect6() system call modifies its timeout argument.  However, the glibc
@@ -709,11 +786,13 @@ public:
  * Create a pipe communication channel.
  * TODO
  */
-class pselect6SystemCall : public systemCall{
+class pselect6SystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_pselect6;
+  const string syscallName = "pselect6";
 };
 // =======================================================================================
 /**
@@ -727,11 +806,13 @@ public:
  * come back to this process.
  *
  */
-class pollSystemCall : public systemCall{
+class pollSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_poll;
+  const string syscallName = "poll";
 };
 // =======================================================================================
 /**
@@ -749,11 +830,13 @@ public:
  * if this becomes an issue).
  *
  */
-class prlimit64SystemCall : public systemCall{
+class prlimit64SystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_prlimit64;
+  const string syscallName = "prlimit64";
 };
 // =======================================================================================
 /**
@@ -762,11 +845,13 @@ public:
  * TODO
  * FILESYSTEM RELATED.
  */
-class readSystemCall : public systemCall{
+class readSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_read;
+  const string syscallName = "read";
 };
 // =======================================================================================
 /**
@@ -778,11 +863,13 @@ public:
  *
  * TODO
  */
-class readvSystemCall : public systemCall{
+class readvSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched);
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched);
+
+  const int syscallNumber = SYS_readv;
+  const string syscallName = "readv";
 };
 // =======================================================================================
 /**
@@ -792,10 +879,13 @@ public:
  * Deterministic thanks to our jail. Intercepted merely for debugging purposes.
  *
  */
-class readlinkSystemCall : public systemCall{
+class readlinkSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_readlink;
+  const string syscallName = "readlink";
 };
 // =======================================================================================
 /**
@@ -805,12 +895,14 @@ public:
  * Deterministic thanks to our jail. Intercepted merely for debugging purposes.
  *
  */
-class readlinkatSystemCall : public systemCall{
+class readlinkatSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-};
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
+  const int syscallNumber = SYS_readlinkat;
+  const string syscallName = "readlinkat";
+};
 // =======================================================================================
 /**
  * ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags);
@@ -818,11 +910,13 @@ public:
  * recvmsg() call is used to receive messages from a socket and amy be used to receive
  * data on a socket whether or not it is connection-oriented.
  */
-class recvmsgSystemCall : public systemCall{
+class recvmsgSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_recvmsg;
+  const string syscallName = "recvmsg";
 };
 // =======================================================================================
 /**
@@ -830,46 +924,51 @@ public:
  *
  * Must be intercepted as this changes the inode for newpath if newpath exists.
  */
-class renameSystemCall : public systemCall{
+class renameSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_rename;
+  const string syscallName = "rename";
 };
 // =======================================================================================
 /**
  *  int renameat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath);
  */
-class renameatSystemCall : public systemCall{
+class renameatSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_renameat;
+  const string syscallName = "renameat";
 };
 // =======================================================================================
 /**
  *  int renameat2(int olddirfd, const char *oldpath, int newdirfd,
  *                 const char *newpath, unsigned int flags);
  */
-class renameat2SystemCall : public systemCall{
+class renameat2SystemCall{
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-};
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
+  const int syscallNumber = SYS_renameat2;
+  const string syscallName = "renameat2";
+};
 // =======================================================================================
 /**
  * int rmdir(const char *pathname);
  */
-class rmdirSystemCall : public systemCall{
+class rmdirSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_rmdir;
+  const string syscallName = "rmdir";
 };
-
-
 // =======================================================================================
 /**
  *  ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
@@ -883,11 +982,13 @@ public:
  * of the target is given by msg.msg_name, with msg.msg_namelen specifying its size.
  *
  */
-class sendtoSystemCall : public systemCall{
+class sendtoSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_sendto;
+  const string syscallName = "sendto";
 };
 // =======================================================================================
 /**
@@ -900,48 +1001,38 @@ public:
  *
  * TODO! Super non deterministic, the most non-deterministic of them all!
  */
-class selectSystemCall : public systemCall{
+class selectSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_select;
+  const string syscallName = "select";
 };
 // =======================================================================================
 /**
- * int setpgid(pid_t pid, pid_t pgid);
- *
- * Set a process's PGID.
- * TODO
  */
-class set_robust_listSystemCall : public systemCall{
+class set_robust_listSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_set_robust_list;
+  const string syscallName = "set_robust_list";
 };
 // =======================================================================================
 /**
  * int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
- * 
+ *
  * Setup a signal handler. Currently only used for determinizing alarm()
  */
-class rt_sigactionSystemCall : public systemCall{
+class rt_sigactionSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-};
-// =======================================================================================
-/**
- * sighandler_t signal(int signum, sighandler_t handler);
- * 
- * Setup a signal handler. Currently only used for determinizing alarm()
- */
-class signalSystemCall : public systemCall{
-public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_rt_sigaction;
+  const string syscallName = "rt_sigaction";
 };
 // =======================================================================================
 /**
@@ -953,11 +1044,13 @@ public:
  * TODO: Figure out semantics of all fields in struct stat* statbuf.
  * Notice we do the exact same thing for lstat, stat, and fstat.
  */
-class statSystemCall : public systemCall{
+class statSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_stat;
+  const string syscallName = "stat";
 };
 // =======================================================================================
 /**
@@ -965,11 +1058,13 @@ public:
  * Implement various fields.
  * FILESYSTEM RELATED.
  */
-class statfsSystemCall : public systemCall{
+class statfsSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_statfs;
+  const string syscallName = "statfs";
 };
 // =======================================================================================
 /**
@@ -979,11 +1074,13 @@ public:
  *
  * Deterministic thanks to our container :)
  */
-class symlinkSystemCall : public systemCall{
+class symlinkSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_symlink;
+  const string syscallName = "symlink";
 };
 // =======================================================================================
 /**
@@ -993,11 +1090,13 @@ public:
  * average.
  *
  */
-class sysinfoSystemCall : public systemCall{
+class sysinfoSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_sysinfo;
+  const string syscallName = "sysinfo";
 };
 // =======================================================================================
 /**
@@ -1014,11 +1113,13 @@ public:
  * may take arbitrarily long to be delivered.
  * TODO
  */
-class tgkillSystemCall : public systemCall{
+class tgkillSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_tgkill;
+  const string syscallName = "tgkill";
 };
 // =======================================================================================
 /**
@@ -1028,89 +1129,99 @@ public:
  * TODO: Add logical clock for rt_sigprocmask.
  * Return results from our logical clock.
  */
-class timeSystemCall : public systemCall{
+class timeSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_time;
+  const string syscallName = "time";
 };
-
 // =======================================================================================
 /**
  * int timer_create(clockid_t clockid, struct sigevent *sevp, timer_t *timerid);
  */
-class timer_createSystemCall : public systemCall{
+class timer_createSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  //void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_timer_create;
+  const string syscallName = "timer_create";
 };
 // =======================================================================================
-/** 
+/**
  * int timer_delete(timer_t timerid);
  */
-class timer_deleteSystemCall : public systemCall{
+class timer_deleteSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_timer_delete;
+  const string syscallName = "timer_delete";
 };
 // =======================================================================================
-/** 
+/**
  * int timer_getoverrun(timer_t timerid);
  */
-class timer_getoverrunSystemCall : public systemCall{
+class timer_getoverrunSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_timer_getoverrun;
+  const string syscallName = "timer_getoverrun";
 };
 // =======================================================================================
-/** 
+/**
  * int timer_gettime(timer_t timerid, struct itimerspec *curr_value);
  */
-class timer_gettimeSystemCall : public systemCall{
+class timer_gettimeSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-};
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
+  const int syscallNumber = SYS_timer_gettime;
+  const string syscallName = "timer_gettime";
+};
 // =======================================================================================
 /**
  * int timer_settime(timer_t timerid, int flags, const struct itimerspec *new_value,
  *                   struct itimerspec *old_value);
  */
-class timer_settimeSystemCall : public systemCall{
+class timer_settimeSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  //void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_timer_settime;
+  const string syscallName = "timer_settime";
 };
-
-
 // =======================================================================================
 /**
  * int getitimer(int which, struct itimerval *curr_value);
  */
-class getitimerSystemCall : public systemCall{
+class getitimerSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_getitimer;
+  const string syscallName = "getitimer";
 };
 // =======================================================================================
 /**
  * int setitimer(int which, const struct itimerval *new_value, struct itimerval *old_value);
  */
-class setitimerSystemCall : public systemCall{
+class setitimerSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  //void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_setitimer;
+  const string syscallName = "setitimer";
 };
-
-
 // =======================================================================================
 /**
  * clock_t times(struct tms *buf);
@@ -1125,13 +1236,14 @@ public:
  *             clock_t tms_cstime; // system time of children
  *         };
  *
- * We simply zero out everything for now :3
  */
-class timesSystemCall : public systemCall{
+class timesSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_times;
+  const string syscallName = "times";
 };
 // =======================================================================================
 /**
@@ -1142,11 +1254,13 @@ public:
  *
  *
  */
-class unameSystemCall : public systemCall{
+class unameSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  const int syscallNumber = SYS_uname;
+  const string syscallName = "uname";
 };
 // =======================================================================================
 /**
@@ -1160,11 +1274,13 @@ public:
  * should be deterministic.
  * We keep it here to print it's path.
  */
-class unlinkSystemCall : public systemCall{
+class unlinkSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_unlink;
+  const string syscallName = "unlink";
 };
 // =======================================================================================
 /**
@@ -1187,12 +1303,14 @@ public:
  *
  * Seems deterministic enough :)
  */
-class unlinkatSystemCall : public systemCall{
+class unlinkatSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
- };
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_unlinkat;
+  const string syscallName = "unlinkat";
+};
 // =======================================================================================
 /**
  * int utime(const char *filename, const struct utimbuf *times);
@@ -1203,13 +1321,14 @@ public:
  * The time the user uses should be determinitic. We only have to watch out for the zero
  * case when the user sets his own time.
  */
-class utimeSystemCall : public systemCall{
+class utimeSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-};
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
+  const int syscallNumber = SYS_utime;
+  const string syscallName = "utime";
+};
 // =======================================================================================
 /**
  * int utimes(const char *filename, const struct timeval times[2]);
@@ -1220,11 +1339,13 @@ public:
  * The time the user uses should be determinitic. We only have to watch out for the zero
  * case when the user sets his own time.
  */
-class utimesSystemCall : public systemCall{
+class utimesSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_utimes;
+  const string syscallName = "utimes";
 };
 // =======================================================================================
 /**
@@ -1237,12 +1358,29 @@ public:
  * This is an issue for the case where both times entries are null. From utimensat(2):
  * > If times is NULL, then both timestamps are set to the current time.
  */
-class utimensatSystemCall : public systemCall{
+class utimensatSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_utimensat;
+  const string syscallName = "utimensat";
 };
+// =======================================================================================
+/**
+ * We intercept exceve since we need to append our LD_PRELOAD enviornment to and pass in,
+ * as the last argument.
+ *
+ */
+class execveSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_execve;
+  const string syscallName = "execve";
+};
+
 // =======================================================================================
 /**
  * pid_t vfork(void);
@@ -1262,17 +1400,22 @@ public:
  * before letting the parent run, notice this is not the exact behavior of vfork, as if
  * the child execve's then the parent will no longer be suspended.
  */
-class vforkSystemCall : public systemCall{
+class vforkSystemCall {
 public:
-  using systemCall::systemCall;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
+  const int syscallNumber = SYS_vfork;
+  const string syscallName = "vfork";
 };
 // =======================================================================================
-class wait4SystemCall : public systemCall{
+class wait4SystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_wait4;
+  const string syscallName = "wait4";
 };
 // =======================================================================================
 /**
@@ -1285,11 +1428,13 @@ public:
  * Same problem as regular writes.
  *
  */
-class writevSystemCall : public systemCall{
+class writevSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_writev;
+  const string syscallName = "writev";
 };
 // =======================================================================================
 /**
@@ -1304,13 +1449,14 @@ public:
  * TODO: Check number of bytes written, and continue writting until _count_ bytes are
  * written. This may cause blocking issues in some cases.
  */
-class writeSystemCall : public systemCall{
+class writeSystemCall {
 public:
-  using systemCall::systemCall;
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) override;
-};
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
+  const int syscallNumber = SYS_write;
+  const string syscallName = "write";
+};
 // =======================================================================================
 // Iterate through our vector of entries, which represent the binary memory for linux_dirents
 // or linux_dirent64. We virtualize the inodes and add entries to our inodeMap.
