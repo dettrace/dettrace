@@ -11,6 +11,9 @@ RUN apt-get install -y software-properties-common clang-6.0 clang++-6.0 lldb-6.0
 RUN apt-get update -y
 RUN apt-get install -y pkg-config libarchive-dev libacl1-dev liblzo2-dev liblzma-dev liblz4-dev libbz2-dev libxml2-dev
 
+RUN apt-get update -y
+RUN apt-get install cpio
+
 RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-6.0 60 \
 		--slave /usr/bin/clang++ clang++ /usr/bin/clang++-6.0 \
 		--slave /usr/bin/clang-cpp clang-cpp /usr/bin/clang-cpp-6.0 \
