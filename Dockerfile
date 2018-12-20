@@ -1,10 +1,10 @@
-FROM ubuntu:16.04
+FROM ubuntu:18.04
 
 # Icky nondeterminism:
 RUN apt-get update -y && \
     apt-get install -y g++ make strace python3 libseccomp-dev openssh-server fuse libfuse-dev less valgrind
 
-RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
+# RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
 RUN apt-get update -y
 RUN apt-get install -y software-properties-common clang-6.0 clang++-6.0 lldb-6.0 lld-6.0
 
