@@ -10,11 +10,15 @@ LIBS = -pthread -lseccomp -L ../lib/lib64
 LIBARCHIVE=$(shell pkg-config --libs libarchive)
 LIBARCHIVE_STATIC=$(shell pkg-config --static --libs libarchive)
 
+LIBELFIN=$(shell pkg-config --libs libelf++)
+LIBELFIN=$(shell pkg-config --static --libs libelf++)
+
 # Libdet only.
 LIBDETFLAGS= -g -O2 -Wall -Wextra -Wconversion -fPIC -shared -Wl,--no-as-needed -std=c99
 LIBDETLIBS=-ldl -lm
 
-INCLUDE = -I ../include/ -I ../lib/include
+LIBELFIN_CFLAGS = $(shell pkg-config --cflags libelf++)
+INCLUDE = -I ../include/ -I ../lib/include $(LIBELFIN_CFLAGS)
 
 src = $(wildcard *.cpp)
 obj = $(src:.cpp=.o)
@@ -24,10 +28,10 @@ all: dettrace libdet.so
 all-static: dettrace-static libdet.so
 
 dettrace: $(obj) $(libs)
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS) $(LIBARCHIVE)
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS) $(LIBARCHIVE) $(LIBELFIN)
 
 dettrace-static: $(obj) $(libs)
-	$(CXX) $(CXXFLAGS) -static $^ -o $@ $(LIBS) $(LIBARCHIVE_STATIC)
+	$(CXX) $(CXXFLAGS) -static $^ -o $@ $(LIBS) $(LIBARCHIVE_STATIC) $(LIBELFIN_STATIC)
 
 -include $(dep)
 

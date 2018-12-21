@@ -41,6 +41,7 @@
 #include "execution.hpp"
 #include "ptracer.hpp"
 #include "seccomp.hpp"
+#include "vdso.hpp"
 
 #include <seccomp.h>
 
@@ -573,6 +574,7 @@ void runTracer(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid, void* vo
 
   update_map(gid_map, map_path);
 
+  auto syms = vdsoGetSymbols(startingPid);
   assert(getpid() == 1);
   pid_t pid = fork();
   if (pid < 0) {
@@ -581,7 +583,7 @@ void runTracer(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid, void* vo
   } else if(pid > 0) {
     // Init tracer and execution context.
     execution exe {debugLevel, pid, useColor, usingOldKernel(),
-	logFile, printStatistics};
+	logFile, printStatistics, syms};
     exe.runProgram();
   } else if (pid == 0) {
     runTracee(voidArgs);

@@ -6,6 +6,7 @@
 #include "ptracer.hpp"
 #include "execution.hpp"
 #include "scheduler.hpp"
+#include "vdso.hpp"
 
 #include <stack>
 #include <cassert>
@@ -13,7 +14,8 @@
 pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process);
 // =======================================================================================
 execution::execution(int debugLevel, pid_t startingPid, bool useColor,
-                     bool oldKernel, string logFile, bool printStatistics):
+                     bool oldKernel, string logFile, bool printStatistics,
+		     std::map<std::string, std::pair<unsigned long, unsigned long>> vdsoFuncs):
   oldKernel {oldKernel},
   log {logFile, debugLevel, useColor},
   silentLogger {"", 0},
@@ -27,7 +29,8 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
     ValueMapper<ino_t, time_t> {log, "mtime map", 1}
   },
   myScheduler {startingPid, log},
-  debugLevel {debugLevel}{
+  debugLevel {debugLevel},
+  vdsoFuncs(vdsoFuncs) {
     // Set state for first process.
     states.emplace(startingPid, state {startingPid, debugLevel});
 
@@ -375,6 +378,37 @@ pid_t execution::handleForkEvent(const pid_t traceesPid){
   return newChildPid;
 }
 
+static unsigned long traceeDoMprotect(pid_t pid, ptracer& t, unsigned long base, unsigned long size, int prot) {
+  struct user_regs_struct regs;
+  unsigned long ret;
+
+  t.doPtrace(PTRACE_GETREGS, pid, 0, &regs);
+  auto oldRegs = regs;
+
+  regs.orig_rax = SYS_mprotect;
+  regs.rax = SYS_mprotect;
+  regs.rdi = base;
+  regs.rsi = size;
+  regs.rdx = prot;
+
+  int status;
+  t.doPtrace(PTRACE_SETREGS, pid, 0, &regs);
+  t.doPtrace(PTRACE_CONT, pid, 0, 0);
+  assert(waitpid(pid, &status, 0) == pid);
+  assert(WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP);
+  t.doPtrace(PTRACE_GETREGS, pid, 0, &regs);
+  if ((long)regs.rax < 0) {
+    string err = "unable to inject mprotect, error: \n";
+    throw runtime_error(err + strerror((long)-regs.rax));
+  }
+  ret = regs.rax;
+  oldRegs.rip = regs.rip-3; /* 0xcc, syscall, 0xcc = 4 bytes */
+  memcpy(&regs, &oldRegs, sizeof(regs));
+  t.doPtrace(PTRACE_SETREGS, pid, 0, &regs);
+
+  return ret;
+}
+
 static unsigned long traceePreinitMmap(pid_t pid, ptracer& t) {
   struct user_regs_struct regs;
   unsigned long ret;
@@ -402,14 +436,35 @@ static unsigned long traceePreinitMmap(pid_t pid, ptracer& t) {
     throw runtime_error(err + strerror((long)-regs.rax));
   }
   ret = regs.rax;
-  oldRegs.rip = regs.rip-4; /* 0xcc, syscall, 0xcc = 4 bytes */
+  oldRegs.rip = regs.rip-3; /* 0xcc, syscall, 0xcc = 4 bytes */
   memcpy(&regs, &oldRegs, sizeof(regs));
   t.doPtrace(PTRACE_SETREGS, pid, 0, &regs);
 
   return ret;
 }
+
+static inline int fromPerms(long perms)
+{
+  int prot = 0;
+
+  if (perms & ProcMapPermRead)
+    prot |= PROT_READ;
+  if (perms & ProcMapPermWrite)
+    prot |= PROT_WRITE;
+  if (perms & ProcMapPermExec)
+    prot |= PROT_EXEC;
+  return prot;
+}
+
+static inline unsigned long alignUp(unsigned long size, int align)
+{
+  return (size + align - 1) & ~(align -1);
+}
+
 void execution::handleExecEvent(pid_t pid) {
   struct user_regs_struct regs;
+
+  auto vdsoMap = vdsoGetMapEntry(pid);
 
   tracer.doPtrace(PTRACE_GETREGS, pid, 0, &regs);
   auto rip = regs.rip;
@@ -426,7 +481,34 @@ void execution::handleExecEvent(pid_t pid) {
   assert(WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP);
 
   unsigned long mmapAddr = traceePreinitMmap(pid, tracer);
+
+  // vdso is enabled by kernel command line.
+  if (vdsoMap.has_value()) {
+    auto ent = vdsoMap.value();
+    auto data = vdsoGetCandidateData();
+    traceeDoMprotect(pid, tracer, ent.procMapBase, ent.procMapSize, fromPerms(ent.procMapPerms) | PROT_WRITE);
+
+    for (auto func: vdsoFuncs) {
+      unsigned long target  = ent.procMapBase + func.second.first;
+      unsigned long nbUpper = alignUp(func.second.second, 0x20);
+      unsigned long nb      = alignUp(data[func.first].size(), 0x20);
+      assert(nb <= nbUpper);
+
+      for (auto i = 0; i < nb / sizeof(long); i++) {
+	uint64_t val;
+	const unsigned char* z = data[func.first].c_str();
+	unsigned long to = target + 8*i;
+	memcpy(&val, &z[8*i], sizeof(val));
+	tracer.doPtrace(PTRACE_POKETEXT, pid, (void*)to, (void*)val);
+      }
+    }
+
+    traceeDoMprotect(pid, tracer, ent.procMapBase, ent.procMapSize, fromPerms(ent.procMapPerms));
+  }
+
   tracer.doPtrace(PTRACE_GETREGS, pid, 0, &regs);
+  regs.rip -= 1; // first 0xcc
+  tracer.doPtrace(PTRACE_SETREGS, pid, 0, &regs);
 
   if (states.find(pid) == states.end())
       states.emplace(pid, state {pid, debugLevel} );
