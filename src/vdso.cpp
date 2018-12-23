@@ -153,7 +153,7 @@ std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid)
     if (nb < 0) {
       if (errno == EINTR) continue;
       close(fd);
-      free(buffer);
+      delete [] buffer;
       return {};
     } else if (nb == 0) {
       break;
@@ -166,6 +166,7 @@ std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid)
 
   std::istringstream f(buffer);
   std::string line;
+  delete [] buffer;
 
   while (std::getline(f, line)) {
     auto parsed = parseProcMapEntry(line);
@@ -173,7 +174,6 @@ std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid)
       res.push_back(parsed.value());
   }
 
-  free(buffer);
   return res;
 }
 
