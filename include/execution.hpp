@@ -129,7 +129,7 @@ private:
   */
   uint32_t processSpawnEvents = 0;
 
-  std::map<std::string, std::pair<unsigned long, unsigned long>> vdsoFuncs;
+  map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs;
 
 public:
 
@@ -142,7 +142,7 @@ public:
    * @param logFile file to write log messages to, if "" use stderr
    */
   execution(int debugLevel, pid_t startingPid, bool useColor, bool oldKernel,
-            string logFile, bool printStatistics, std::map<std::string, std::pair<unsigned long, unsigned long>> vdsoFuncs);
+            string logFile, bool printStatistics, map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs);
 
   /**
    * Handles exit from current process.

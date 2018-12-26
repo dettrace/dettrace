@@ -13,14 +13,22 @@
 #include <stdexcept>
 #include <cstring>
 #include <vector>
+#include <tuple>
 #include <cstdlib>
 #include <cstdio>
+#include <cassert>
 #include <map>
 
 #include <elf/elf++.hh>
 
 #include "vdso.hpp"
 
+/*
+ * byte code for the new psudo vdso functions
+ * which do the actual syscalls.
+ * NB: the byte code must be 8 bytes
+ * aligned
+ */
 static const unsigned char __vdso_time[] = {
     0xb8, 0xc9, 0x0, 0x0, 0x0                     // mov %SYS_time, %eax
   , 0x0f, 0x05                                    // syscall
@@ -53,24 +61,23 @@ static const unsigned char __vdso_gettimeofday[] = {
   , 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00     // nopl 0x0(%rax, %rax, 1)
   , 0x00 };
 
-static const std::pair<std::string, std::basic_string<unsigned char>> __vdso_funcs[] = {
-  {"__vdso_time", __vdso_time},
-  {"__vdso_clock_gettime", __vdso_clock_gettime},
-  {"__vdso_getcpu", __vdso_getcpu},
-  {"__vdso_gettimeofday", __vdso_gettimeofday},
-};
-
 std::map<std::string, std::basic_string<unsigned char>> vdsoGetCandidateData(void) {
   std::map<std::string, std::basic_string<unsigned char>> res;
 
-  std::basic_string<unsigned char> t1(__vdso_time, sizeof(__vdso_time));
-  res["__vdso_time"]          = t1;
-  std::basic_string<unsigned char> t2(__vdso_clock_gettime, sizeof(__vdso_clock_gettime));
-  res["__vdso_clock_gettime"] = t2;
-  std::basic_string<unsigned char> t3(__vdso_getcpu, sizeof(__vdso_getcpu));
-  res["__vdso_getcpu"]        = t3;
-  std::basic_string<unsigned char> t4(__vdso_gettimeofday, sizeof(__vdso_gettimeofday));
-  res["__vdso_gettimeofday"]  = t4;
+  std::basic_string<unsigned char> vdso_time(__vdso_time, sizeof(__vdso_time));
+  std::basic_string<unsigned char> vdso_clock_gettime(__vdso_clock_gettime, sizeof(__vdso_clock_gettime));
+  std::basic_string<unsigned char> vdso_getcpu(__vdso_getcpu, sizeof(__vdso_getcpu));
+  std::basic_string<unsigned char> vdso_gettimeofday(__vdso_gettimeofday, sizeof(__vdso_gettimeofday));
+
+  assert( (vdso_time.size() & 0xf) == 0);
+  assert( (vdso_clock_gettime.size() & 0xf) == 0);
+  assert( (vdso_getcpu.size() & 0xf) == 0);
+  assert( (vdso_gettimeofday.size() & 0xf) == 0);
+
+  res["__vdso_time"]          = vdso_time;
+  res["__vdso_clock_gettime"] = vdso_clock_gettime;
+  res["__vdso_getcpu"]        = vdso_getcpu;
+  res["__vdso_gettimeofday"]  = vdso_gettimeofday;
 
   return res;
 }
@@ -222,9 +229,13 @@ std::vector<std::string> vdsoGetFuncNames(void)
   return res;
 }
 
-std::map<std::string, std::pair<unsigned long, unsigned long>> vdsoGetSymbols(pid_t pid)
+/**
+ * vdsoGetSymbols: get vdso symbols information
+ * return as std::tuple<symbol_address, symbol_size, symbol/section_alignment>
+ */
+std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>> vdsoGetSymbols(pid_t pid)
 {
-  std::map<std::string, std::pair<unsigned long, unsigned long>> res;
+  std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>> res;
 
   auto vdsoMapEntry_ = vdsoGetMapEntry(pid);
   if (!vdsoMapEntry_.has_value()) {
@@ -242,7 +253,9 @@ std::map<std::string, std::pair<unsigned long, unsigned long>> vdsoGetSymbols(pi
       auto &d = sym.get_data();
       if ( (d.binding() == elf::stb::global) &&
 	   (d.type() == elf::stt::func) ) {
-	res[sym.get_name()] = std::make_pair(d.value, d.size);
+	assert(d.shnxd >= 0 && d.shnxd < elf.sections().size());
+	auto alignment = elf.sections()[d.shnxd].get_hdr().addralign;
+	res[sym.get_name()] = std::tie(d.value, d.size, alignment);
       }
     }    
   }

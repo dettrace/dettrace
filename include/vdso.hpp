@@ -27,6 +27,6 @@ std::ostream& operator<< (std::ostream &out, ProcMapEntry const& e);
 
 std::optional<ProcMapEntry> vdsoGetMapEntry(pid_t pid);
 std::map<std::string, std::basic_string<unsigned char>> vdsoGetCandidateData(void);
-std::map<std::string, std::pair<unsigned long, unsigned long>> vdsoGetSymbols(pid_t pid);
+std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>> vdsoGetSymbols(pid_t pid);
 
 #endif

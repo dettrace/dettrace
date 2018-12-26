@@ -9,13 +9,14 @@
 #include "vdso.hpp"
 
 #include <stack>
+#include <tuple>
 #include <cassert>
 
 pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process);
 // =======================================================================================
 execution::execution(int debugLevel, pid_t startingPid, bool useColor,
                      bool oldKernel, string logFile, bool printStatistics,
-		     std::map<std::string, std::pair<unsigned long, unsigned long>> vdsoFuncs):
+		     map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs):
   oldKernel {oldKernel},
   log {logFile, debugLevel, useColor},
   silentLogger {"", 0},
@@ -489,9 +490,11 @@ void execution::handleExecEvent(pid_t pid) {
     traceeDoMprotect(pid, tracer, ent.procMapBase, ent.procMapSize, fromPerms(ent.procMapPerms) | PROT_WRITE);
 
     for (auto func: vdsoFuncs) {
-      unsigned long target  = ent.procMapBase + func.second.first;
-      unsigned long nbUpper = alignUp(func.second.second, 0x20);
-      unsigned long nb      = alignUp(data[func.first].size(), 0x20);
+      unsigned long offset, oldVdsoSize, vdsoAlignment;
+      tie(offset, oldVdsoSize, vdsoAlignment) = func.second;
+      unsigned long target  = ent.procMapBase + offset;
+      unsigned long nbUpper = alignUp(oldVdsoSize, vdsoAlignment);
+      unsigned long nb      = alignUp(data[func.first].size(), vdsoAlignment);
       assert(nb <= nbUpper);
 
       for (auto i = 0; i < nb / sizeof(long); i++) {
