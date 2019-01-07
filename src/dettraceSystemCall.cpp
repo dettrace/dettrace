@@ -439,7 +439,6 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   // Handle wake operations by notifying scheduler of progress.
   if(futexCmd == FUTEX_WAKE || futexCmd == FUTEX_REQUEUE || futexCmd == FUTEX_CMP_REQUEUE ||
      futexCmd == FUTEX_WAKE_BITSET || futexCmd == FUTEX_WAKE_OP){
-    sched.reportProgress(t.getPid());
     gs.log.writeToLog(Importance::info, "Waking on address: %p\n", t.arg1());
     // No need to go into the post hook.
     return false;
@@ -503,7 +502,7 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     if(s.userDefinedTimeout){
       // Only preempt if we would have timeout out. Othewise let if continue running!
       if((int) t.getReturnValue() == -ETIMEDOUT){
-        sched.preemptAndScheduleNext(s.traceePid, preemptOptions::runnable);
+        sched.preemptAndScheduleNext(preemptOptions::runnable);
       }
 
       s.userDefinedTimeout = false;
@@ -1479,7 +1478,7 @@ bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 void selectSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(s.userDefinedTimeout){
     if(t.getReturnValue() == 0){
-      sched.preemptAndScheduleNext(s.traceePid, preemptOptions::runnable);
+      sched.preemptAndScheduleNext(preemptOptions::runnable);
     }
   } else {
     bool replayed = replaySyscallIfBlocked(gs, s, t, sched, 0);
@@ -2192,14 +2191,13 @@ bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
   if(- errornoValue == (int64_t) t.getReturnValue()){
     gs.log.writeToLog(Importance::info, "Syscall would have blocked!\n");
 
-    sched.preemptAndScheduleNext(s.traceePid, preemptOptions::runnable);
+    sched.preemptAndScheduleNext(preemptOptions::runnable);
     return true;
   }else{
     // Disambiguiate. Otherwise it's impossible to tell the difference between a
     // maybeRunnable process that made no progress vs the case where we were on
     // maybeRunnable and we made progress, and eventually we hit another blocking
     // system call.
-    sched.reportProgress(s.traceePid);
     return false;
   }
 }
@@ -2298,7 +2296,7 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sc
     gs.log.writeToLog(Importance::info, "System call would have blocked!\n");
 
     gs.replayDueToBlocking++;
-    sched.preemptAndScheduleNext(s.traceePid, preemptOptions::markAsBlocked);
+    sched.preemptAndScheduleNext(preemptOptions::markAsBlocked);
     replaySystemCall(gs, t, t.getSystemCallNumber());
     return true;
   }else{
@@ -2306,7 +2304,6 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sc
     // maybeRunnable process that made no progress vs the case where we were on
     // maybeRunnable and we made progress, and eventually we hit another blocking
     // system call.
-    sched.reportProgress(s.traceePid);
     return false;
   }
 }

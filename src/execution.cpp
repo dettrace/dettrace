@@ -50,13 +50,13 @@ bool execution::handleExit(const pid_t traceesPid){
      myScheduler.isFinished(parent) &&       // Check if our parent is marked as finished.
      processTree.count(parent) == 0){        // Parent has no children left.
 
-    myScheduler.removeAndScheduleParent(traceesPid, parent);
+    myScheduler.removeAndScheduleParent(parent);
     return false;
   }
   // Generic case, should happen most of the time.
   else{
     // Process done, schedule next process to run.
-    bool empty = myScheduler.removeAndScheduleNext(traceesPid);
+    bool empty = myScheduler.removeAndScheduleNext();
     if(empty){
       // All processes have finished! We're done
       return true;
@@ -244,10 +244,6 @@ void execution::runProgram(){
       log.writeToLog(Importance::inter, msg, traceesPid);
       callPostHook = false;
 
-      // We get only get an exit if we made progress, report this. This covers the case
-      // where we had no blocking system calls in our execution path.
-      myScheduler.reportProgress(traceesPid);
-
       // We have children still, we cannot exit.
       if(processTree.count(traceesPid) != 0){
         myScheduler.markFinishedAndScheduleNext(traceesPid);
@@ -295,7 +291,6 @@ void execution::runProgram(){
     if(ret == ptraceEvent::signal){
       int signalNum = WSTOPSIG(status);
       handleSignal(signalNum, traceesPid);
-      myScheduler.reportProgress(traceesPid);
       continue;
     }
 

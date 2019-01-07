@@ -6,21 +6,22 @@
 #include "ptracer.hpp"
 #include "scheduler.hpp"
 
-#include <deque>
+//#include <deque>
+#include <queue>
+#include <set>
 
 scheduler::scheduler(pid_t startingPid, logger& log):
   log(log),
   nextPid(startingPid){
-  processQueue.push_front(startingPid);
   // Processes are always spawned as runnable.
-  processStateMap[startingPid] = processState::runnable;
+  runnableHeap.push(startingPid);
 }
 
 pid_t scheduler::getNext(){
   return nextPid;
 }
 
-void scheduler::removeAndScheduleParent(pid_t terminatedProcess, pid_t parent){
+void scheduler::removeAndScheduleParent(pid_t parent){
   if(! isFinished(parent)){
     throw runtime_error("dettrace runtime exception: scheduleThisProcess: Parent : " + to_string(parent) +
                         " was not marked as finished!");
@@ -28,49 +29,42 @@ void scheduler::removeAndScheduleParent(pid_t terminatedProcess, pid_t parent){
 
   auto msg = log.makeTextColored(Color::blue, "Parent [%d] scheduled for exit.\n");
   log.writeToLog(Importance::info, msg, parent);
-
-  remove(terminatedProcess);
+  remove();
   nextPid = parent;
 }
 
 bool scheduler::isFinished(pid_t process){
-  return processStateMap[process] == processState::finished;
+  const bool finished = finishedProcesses.find(process) != finishedProcesses.end();
+  return finished;
 }
 
 void scheduler::markFinishedAndScheduleNext(pid_t process){
   auto msg = log.makeTextColored(Color::blue, "Process [%d] marked as finished!\n");
   log.writeToLog(Importance::info, msg , process);
-
-  changeToMaybeRunnable();
-
-  processStateMap[process] = processState::finished;
-  nextPid = scheduleNextProcess(process);
+  
+  // Add the process to the set of finished processes.
+  finishedProcesses.insert(process);
+  nextPid = scheduleNextProcess();
 }
 
-void scheduler::reportProgress(pid_t process){
-  auto msg = log.makeTextColored(Color::blue, "Process [%d] made progress!\n");
-  log.writeToLog(Importance::info, msg , process);
-  madeProgress = true;
-}
-
-void scheduler::preemptAndScheduleNext(pid_t process, preemptOptions p){
+void scheduler::preemptAndScheduleNext(preemptOptions p){
+  pid_t curr = runnableHeap.top();
   auto msg = log.makeTextColored(Color::blue, "Preempting process: [%d]\n");
-  log.writeToLog(Importance::info, msg , process);
-
-  changeToMaybeRunnable();
+  log.writeToLog(Importance::info, msg, curr);
 
   // We're now blocked.
   if(p == preemptOptions::markAsBlocked){
-    processStateMap[process] = processState::blocked;
-    log.writeToLog(Importance::extra, "Process marked as blocked.\n" , process);
+    runnableHeap.pop();
+    blockedHeap.push(curr);
+    log.writeToLog(Importance::extra, "Process marked as blocked.\n", curr);
   }else if(p == preemptOptions::runnable){
-    log.writeToLog(Importance::extra, "Process still runnable.\n" , process);
-    processStateMap[process] = processState::runnable;
+    // If the process is still runnable we don't need to do anything.
+    log.writeToLog(Importance::extra, "Process still runnable.\n", curr);
   }else{
-    throw runtime_error("dettrace runtime exception: Uknown preemptOption!\n");
+    throw runtime_error("dettrace runtime exception: Unknown preemptOption!\n");
   }
 
-  nextPid = scheduleNextProcess(process);
+  nextPid = scheduleNextProcess();
 }
 
 
@@ -81,79 +75,65 @@ void scheduler::addAndScheduleNext(pid_t newProcess){
   msg = log.makeTextColored(Color::blue, "[%d] scheduled as next.\n");
   log.writeToLog(Importance::info, msg , newProcess);
 
-  // New process always capable of running, and should! Save the work of calling
-  // scheduleNextProcess by putting this process in the back and setting nextPid ourselves.
-  processQueue.push_back(newProcess);
-  processStateMap[newProcess] = processState::runnable;
+  // Add the process to the runnableHeap, and set nextPid ourselves.
+  // (This is because the new process is always capable of running.)
+  runnableHeap.push(newProcess);
   nextPid = newProcess;
-  // printProcesses();
 
   // We still want to count this scheduling event :)
   callsToScheduleNextProcess++;
   return;
 }
 
-void scheduler::remove(pid_t terminatedProcess){
-  auto msg =
-    log.makeTextColored(Color::blue,"Removing process from scheduler: [%d]\n");
-  log.writeToLog(Importance::info, msg, terminatedProcess);
-
-    // After loop, i will hold index of process to delete from deque.
-  size_t indexOfProc = 0;
-  // Find index of our process based on their pid.
-  for(auto currProcess : processQueue){
-    if(currProcess == terminatedProcess){
-      break;
-    }
-    indexOfProc++;
-  }
-
-  if(indexOfProc == processQueue.size()){
-    string err = "scheduler::removeAndSchedulNext:"
-      " No such element to delete from scheduler.";
+void scheduler::remove(){
+  // Pop the top element of the runnableHeap.
+  // Then, add the element to the finishedProcesses set.
+  
+  // Sanity check that there is at least one process available.
+  if (runnableHeap.empty() && blockedHeap.empty()){
+    string err = "scheduler::remove: No such element to delete from scheduler.";
     throw runtime_error("dettrace runtime exception: " + err);
   }
 
-  msg = log.makeTextColored(Color::blue, "Process found at index [%d]. Deleting...\n");
-  log.writeToLog(Importance::info, msg, indexOfProc);
-
-  processQueue.erase(processQueue.begin() + indexOfProc);
-  processStateMap.erase(terminatedProcess);
+  pid_t terminatedProcess = runnableHeap.top();
+  runnableHeap.pop();
+  finishedProcesses.insert(terminatedProcess);
+  auto msg =
+    log.makeTextColored(Color::blue,"Removing process from scheduler: [%d]\n");
+  log.writeToLog(Importance::info, msg, terminatedProcess);
   return;
 }
 
-bool scheduler::removeAndScheduleNext(pid_t terminatedProcess){
-  changeToMaybeRunnable();
-  remove(terminatedProcess);
-
-  if(processQueue.empty()){
+bool scheduler::removeAndScheduleNext(){
+  // Remove the process. If both heaps are empty, we are done.
+  // Otherwise, schedule the next process to run.
+  remove();
+  if(runnableHeap.empty() && blockedHeap.empty()){
     return true;
   }else{
-    nextPid = scheduleNextProcess(terminatedProcess);
-
+    nextPid = scheduleNextProcess();
     auto msg = log.makeTextColored(Color::blue, "Next process scheduled: [%d]\n");
     log.writeToLog(Importance::info, msg, nextPid);
-
     return false;
   }
-
 }
 
-pid_t scheduler::scheduleNextProcess(pid_t currentProcess){
+pid_t scheduler::scheduleNextProcess(){
   callsToScheduleNextProcess++;
-  // printProcesses();
-  int numberOfProcesses = processQueue.size();
-
-  for(int i = 0; i < numberOfProcesses; i++){
-    // pop element and stick in back.
-    pid_t p = processQueue.front();
-    processQueue.pop_front();
-    processQueue.push_back(p);
-
-    if(processStateMap[p] == processState::runnable ||
-       processStateMap[p] == processState::maybeRunnable){
-
-      auto msg = log.makeTextColored(Color::blue, "[%d] chosen to run next.\n");
+  // We try all processes in the runnable heap. If there are none in the runnable
+  // heap, we try those in the blocked heap.
+  if (!runnableHeap.empty()){ 
+    pid_t p = runnableHeap.top();      
+    auto msg = log.makeTextColored(Color::blue, "[%d] chosen to run next from runnable heap. \n");
+    log.writeToLog(Importance::info, msg, p);
+    return p;
+  }else{
+    priority_queue<pid_t> temp = runnableHeap;
+    runnableHeap = blockedHeap;
+    blockedHeap = temp;
+    if (runnableHeap.size() > 0){
+      pid_t p = runnableHeap.top();
+      auto msg = log.makeTextColored(Color::blue, "[%d] chosen to run next. Heaps were swapped. \n");
       log.writeToLog(Importance::info, msg, p);
       return p;
     }
@@ -163,49 +143,23 @@ pid_t scheduler::scheduleNextProcess(pid_t currentProcess){
   throw runtime_error("dettrace runtime exception: No runnable processes left in scheduler!\n");
 }
 
-void scheduler::changeToMaybeRunnable(){
-  // No progress was made, if were blocked before, we still are.
-  if(! madeProgress){
-    return;
-  }
-
-  madeProgress = false;
-
-  for(auto curr : processStateMap){
-    auto proc = curr.first;
-    auto status = curr.second;
-    if(status == processState::blocked){
-      processStateMap[proc] = processState::maybeRunnable;
-    }
-  }
-  return;
-}
-
 void scheduler::printProcesses(){
-  for(auto curr : processQueue){
-    auto status = processStateMap.at(curr);
-    log.writeToLog(Importance::extra, "Pid [%d], Status %s\n", curr,
-		   to_string(status).c_str());
+  log.writeToLog(Importance::extra, "Printing runnable processes");
+  // Print the runnableHeap.
+  priority_queue<pid_t> runnableCopy = runnableHeap;
+  while(!runnableCopy.empty()){
+    pid_t curr = runnableCopy.top();
+    runnableCopy.pop();
+    log.writeToLog(Importance::extra, "Pid [%d], runnable", curr);
+  }
+ 
+  log.writeToLog(Importance::extra, "Printing blocked processes");
+  // Print the blockedHeap.
+  priority_queue<pid_t> blockedCopy = blockedHeap;
+  while(!blockedCopy.empty()){
+    pid_t curr = blockedCopy.top();
+    blockedCopy.pop();
+    log.writeToLog(Importance::extra, "Pid [%d], blocked", curr);
   }
   return;
-}
-
-string to_string(processState p){
-  string str = "uknown";
-  switch(p){
-  case processState::runnable:
-    str = "runnable";
-    break;
-  case processState::maybeRunnable:
-    str = "maybeRunnable";
-    break;
-  case processState::blocked:
-    str = "blocked";
-    break;
-  case processState::finished:
-    str = "finished";
-    break;
-  }
-
-  return str;
 }
