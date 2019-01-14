@@ -44,12 +44,14 @@ bool execution::handleExit(const pid_t traceesPid){
   log.writeToLog(Importance::inter, msg, traceesPid);
 
   // We are done. Erase ourselves from our parent's list of children.
+  // Also do this for the scheduler's process tree.
   pid_t parent = eraseChildEntry(processTree, traceesPid);
+  myScheduler.eraseSchedChild(traceesPid);
 
   if(parent != -1                   &&       // We have no parent, we're root.
      myScheduler.isFinished(parent) &&       // Check if our parent is marked as finished.
      processTree.count(parent) == 0){        // Parent has no children left.
-
+    
     myScheduler.removeAndScheduleParent(parent);
     return false;
   }
@@ -254,7 +256,11 @@ void execution::runProgram(){
     // Current process is finally truly done (unlike eventExit).
     if(ret == ptraceEvent::nonEventExit){
       callPostHook = false;
-      exitLoop = handleExit(traceesPid);
+      if(processTree.count(traceesPid) != 0){
+        myScheduler.markFinishedAndScheduleNext(traceesPid);
+      }else{
+        exitLoop = handleExit(traceesPid);
+      }
       continue;
     }
 
@@ -353,8 +359,10 @@ pid_t execution::handleForkEvent(const pid_t traceesPid){
   states.at(newChildPid).mmapMemory.setAddr(states.at(traceesPid).mmapMemory.getAddr());
 
   // This is where we add new children to our process tree.
+  // Also add it to the scheduler's process tree.
   auto pair = make_pair(traceesPid, newChildPid);
   processTree.insert(pair);
+  myScheduler.insertSchedChild(traceesPid, newChildPid);
 
   // Wait for child to be ready.
   log.writeToLog(Importance::info, log.makeTextColored(Color::blue,
@@ -1141,7 +1149,7 @@ pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process){
       break;
     }
   }
-
+  
   return parent;
 }
 // =======================================================================================

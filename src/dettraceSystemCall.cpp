@@ -1478,7 +1478,9 @@ bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 void selectSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(s.userDefinedTimeout){
     if(t.getReturnValue() == 0){
-      sched.preemptAndScheduleNext(preemptOptions::runnable);
+      // Mark this is blocked because we don't want it to keep being picked to 
+      // run off the runnableHeap. It will eventually get to run when the heaps switch.
+      sched.preemptAndScheduleNext(preemptOptions::markAsBlocked);
     }
   } else {
     bool replayed = replaySyscallIfBlocked(gs, s, t, sched, 0);

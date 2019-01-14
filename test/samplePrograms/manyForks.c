@@ -22,53 +22,54 @@ int main(){
   int readEnd = pipefd[0];
   int writeEnd = pipefd[1];
 
-  // P1 forks P2
-  printf("P1 forks P2!\n");
+  // PIDs printed out are based on how dettrace will number the processes.
+  // P2 forks P3
+  printf("P2 forks P3!\n");
   pid_t pid = doWithCheck(fork(), "fork");
 
-  // P2
+  // P3
   if(pid == 0){
-    // P2 forks P3
-    printf("P2 forking P3!\n");
-    pid_t p3_pid = doWithCheck(fork(), "fork");
-    // P3
-    if(p3_pid == 0){
-        char p3_buf[bytesToRead];
-        printf("P3 is reading from pipe!\n");
-        int bytes = doWithCheck(read(readEnd, p3_buf, bytesToRead), "read");
-        if(bytesToRead != bytes){
-            fprintf(stderr, "Read less bytes than expected...");
-            exit(1);
-        }
-        printf("P3 done!\n");
-        return 0;
-    }
-
-    // P2 forks P4
-    printf("P2 forking P4!\n");
+    // P3 forks P4
+    printf("P3 forking P4!\n");
     pid_t p4_pid = doWithCheck(fork(), "fork");
     // P4
     if(p4_pid == 0){
-        char p4_buf[bytesToWrite];
-        printf("P4 is writing to the pipe!\n");
-        int bytes = doWithCheck(write(writeEnd, p4_buf, bytesToWrite), "write");
-        if(bytesToWrite != bytes){
-            fprintf(stderr, "Wrote less bytes than expected...");
+        char p4_buf[bytesToRead];
+        printf("P4 is reading from pipe!\n");
+        int bytes = doWithCheck(read(readEnd, p4_buf, bytesToRead), "read");
+        if(bytesToRead != bytes){
+            fprintf(stderr, "Read less bytes than expected...");
             exit(1);
         }
         printf("P4 done!\n");
         return 0;
     }
+
+    // P3 forks P5
+    printf("P3 forking P5!\n");
+    pid_t p5_pid = doWithCheck(fork(), "fork");
+    // P5
+    if(p5_pid == 0){
+        char p5_buf[bytesToWrite];
+        printf("P5 is writing to the pipe!\n");
+        int bytes = doWithCheck(write(writeEnd, p5_buf, bytesToWrite), "write");
+        if(bytesToWrite != bytes){
+            fprintf(stderr, "Wrote less bytes than expected...");
+            exit(1);
+        }
+        printf("P5 done!\n");
+        return 0;
+    }
     pid_t wpid2;
     int status2 = 0;
     while ((wpid2 = wait(&status2)) > 0);
-    printf("P2 done!\n");
+    printf("P3 done!\n");
     return 0;
   }
 
-  // P1
+  // P2
   char buffer[bytesToRead];
-  printf("P1 is reading from pipe!\n");
+  printf("P2 is reading from pipe!\n");
   int bytes = doWithCheck(read(readEnd, buffer, bytesToRead), "read");
   if(bytesToRead != bytes){
       fprintf(stderr, "Read less bytes than expected...");
@@ -78,7 +79,7 @@ int main(){
   pid_t wpid;
   int status = 0;
   while((wpid = wait(&status)) > 0);
-  printf("P1 done!\n");
+  printf("P2 done!\n");
   return 0;
 }
 
