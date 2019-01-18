@@ -4,20 +4,12 @@
 #include "logger.hpp"
 #include "state.hpp"
 
-#include <deque>
-#include <unordered_map>
+#include <queue>
+#include <set>
+#include <map>
 
 using namespace std;
 
-/**
- * Enum class describing current process state.
- */
-enum class processState{
-  runnable,       /**< runnable: We know for a fact ths process is able to make progress. */
-  maybeRunnable,  /**< maybeRunnable: Another process has just finished making progress, we were blocked. Possibly can now make progress. */
-  blocked,        /**< blocked:  We cannot make progress from ptrace until all the children are done first. May take awhile.*/
-  finished        /**< finished: This process has finished. This process will not receive a "nonEventExit" */
-};
 
 /**
  * Options for process being preempted.
@@ -26,23 +18,17 @@ enum class processState{
 enum class preemptOptions { runnable, markAsBlocked };
 
 /**
- * Creates printable string for enum class processState.
- */
-string to_string(processState p);
-
-/**
  * Stateful class to keep track of all currently running processes in our process tree.
  * Returns which process should run next based on our scheduling policy. Keeps track
  * of blocked/runnable processes.
 
  * Detects deadlocks in program and throws error, if this ever happens.
 
- * We never really need the user to pass in the process to remove or preempt. It should
- * only ever be the currently running process. But this adds an extra safety check. Throws
- * error if it ever doesn't match.
-
- * Current Scheduling policy: Round Robin.
+ * Current Scheduling policy: 2 Priority Queues: runnableHeap and blockedHeap.
+ * Runs all runnable processes in order of highest PID first.
+ * Then tries the blocked processes (and swaps the heaps).
  */
+
 class scheduler{
 public:
   scheduler(pid_t startingPid, logger& log);
@@ -72,10 +58,10 @@ public:
   /**
    * Preempt current process and get pid of process that ptrace should run next.
    * Throws exception if empty.
-   * @param pid of current process
    * @param p: Options for process we're preempting.
+   * (No need to pass PID in.)
    */
-  void preemptAndScheduleNext(pid_t process, preemptOptions p);
+  void preemptAndScheduleNext(preemptOptions p);
 
   /**
    * Adds new process to scheduler.
@@ -85,32 +71,48 @@ public:
   void addAndScheduleNext(pid_t newProcess);
 
   /**
-   * Removes specified process and schedule new process to run.
-   * @param terminatedProcess pid of process to remove
+   * Removes process at the top of the heap and schedules new process to run.
    * @return return true if we're all done with all processes in the scheduler.
-   * this marks the end of the program.
+   * This marks the end of the program.
    */
-  bool removeAndScheduleNext(pid_t terminatedProcess);
+  bool removeAndScheduleNext();
 
   /**
    * Removes specified process, let our parent run to completion.
    * Should only be called by the last child of parent, when parent has already
    * been marked as finished.
-   * @param terminatedProcess pid of terminated process to remove
    * @param parent pid of parent process
    */
-  void removeAndScheduleParent(pid_t terminatedProcess, pid_t parent);
+  void removeAndScheduleParent(pid_t parent);
 
   /**
-   * Reports progress for maybe runnable processes.
-   * In order to differenitate between the case where a maybeRunnable proces made progress
-   * vs. no progress. We must report progress (change our status to runnable).
-   * @param process pid of process to report on
+   * Find and erase process from scheduler's process tree.
+   * @param pid of process to find and erase.
+   */ 
+  void eraseSchedChild(pid_t process);
+  
+  /**
+   * Insert parent and child pair into scheduler's process tree.
+   * @param pid of parent process
+   * @param pid of child process
    */
-  void reportProgress(pid_t process);
+  void insertSchedChild(pid_t parent, pid_t child);
+
+  /**
+   * Check for circular dependency between tops of the two heaps (runnableHeap and blockedHeap).
+   * @return bool for whether there is a circular dependency.
+   */
+  bool circularDependency();
+
+  /**
+   * Remove dependencies from the scheduler's dependency tree
+   * when a process is removed from the scheduler.
+   */
+  void removeDependencies();
 
   // Keep track of how many times scheduleNextProcess was called:
   uint32_t callsToScheduleNextProcess = 0;
+
 private:
   logger& log; /**< log file wrapper */
 
@@ -120,53 +122,51 @@ private:
   pid_t nextPid = -1;
 
   /**
-   * Progress marker.
-   * We report progess due to several events. It would be expensive to iterate through
-   * all our scheduled process' and mark all as maybeBlocked everytime. So instead, we
-   * check if current process was set to runnable, this marks that we made progress.
+   * Two max heaps: runnableHeap and blockedHeap.
+   * Processes with higher PIDs go first.
+   * Run all runnable processes. When we run out of these, switch the names of the heaps,
+   * and continue.
    */
-  bool madeProgress;
+  priority_queue<pid_t> runnableHeap;
+  priority_queue<pid_t> blockedHeap;  
 
   /**
-   * Double ended queue to keep track of which process to schedule next.
-   * The ordering of the queue defines our priority.
-   * That is, we try to run processes at the front first.
-   * Notice we also push processes to the front.
-   * We believe newer childs are more likely to finish before older processes.
+   * Set of finished processes.
    */
-  deque<pid_t> processQueue;
+  set<pid_t> finishedProcesses; 
+  
+  /**
+   * Keep track of parent processes and their children on the scheduler side.
+   */  
+  multimap<pid_t, pid_t> schedulerTree;
 
   /**
-   * Fast access hastable for updating states.
-   * This must be fast as unfortunately we
-   * must update the process state using reportProgress after every blocking system call.
+   * Keep track of circular dependencies between processes to detect deadlock.
    */
-  unordered_map<pid_t, processState> processStateMap;
+  map<pid_t, pid_t> preemptMap; 
 
   /** Remove process from scheduler.
    * Calls deleteProcess, used to share code between
    * removeAndScheduleNext and removeAndScheduleParent.
-   * @param terminatedProcess oid of process to be removd
    * @see deleteProcess
-   * @see removeAndSchedulNext
+   * @see removeAndScheduleNext
    * @see removeAndScheduleParent
    */
-  void remove(pid_t terminatedProcess);
+  void remove();
 
   /**
-   * Get next process based on which is runnable/maybeRunnable in order of our deque.
-   * @param currentProcess Process that just got preempted. This is needed to avoid repicking ourselves.
-   * @return next process to schedule
-  */
-  pid_t scheduleNextProcess(pid_t currentProcess);
+   * Get next process based on whether the runnableHeap is empty.
+   * If the runnableHeap is empty, swap the heaps, and continue. 
+   * @return next process to schedule.
+   */
+  pid_t scheduleNextProcess();
 
   /**
-   *Iterate through all blocked process' and change their status to maybeBlocked.
-   * This is needed as we consider both maybeRunnable processes for running, but never
-   * blocked.
-  */
-  void changeToMaybeRunnable();
-
+   * Return the next process that is not waiting on a child.
+   * @param bool saying whether the heaps have been swapped.
+   * @return next non-waiting process to schedule.
+   */
+  pid_t findNextNotWaiting(bool swapped);
 
   void printProcesses();   /**< Debug function to print all data about processes. */
 };
