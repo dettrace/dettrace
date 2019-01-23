@@ -189,7 +189,9 @@ int main(int argc, char** argv){
 
   doWithCheck(unshare(cloneFlags), "unshare");
 
-  // required because of CLONE_NEWNS
+  // Properly set up propegation rules for mounts created by dettrace, that is
+  // make this a slave mount (and all mounts underneath this one) so that changes inside
+  // this mount are not propegated to the parent mount.
   doWithCheck(mount("none", "/", NULL, MS_SLAVE | MS_REC, 0), "mount slave");
 
   pid_t pid = fork();
@@ -696,7 +698,20 @@ static void mountDir(string source, string target){
     throw runtime_error("dettrace runtime exception: Trying to mount target " + target + ". File does not exist.\n");
   }
 
-  doWithCheck(mount(source.c_str(), target.c_str(), nullptr, MS_BIND | MS_PRIVATE, nullptr),
+  // TODO: Marking it as private here shouldn't be necessary since we already unshared the entire namespace as private?
+  // Notice that we want a bind mount, so MS_BIND is necessary. MS_REC is also necessary to
+  // properly work when mounting dirs that are themselves bind mounts, otherwise you will get
+  // an error EINVAL as per `man 2 mount`:
+  // EINVAL In an unprivileged mount namespace (i.e., a mount namespace owned by  a  user
+  //             namespace  that  was created by an unprivileged user), a bind mount operation
+  //             (MS_BIND)  was  attempted  without  specifying  (MS_REC),  which  would  have
+  //             revealed the filesystem tree underneath one of the submounts of the directory
+  //             being bound.
+
+  // Note this line causes spurious false positives when running under valgrind. It's okay
+  // that these areguments are nullptr.
+  doWithCheck(mount(source.c_str(), target.c_str(), nullptr,
+                    MS_BIND | MS_PRIVATE | MS_REC, nullptr),
 	      "Unable to bind mount: " + source + " to " + target);
 }
 // =======================================================================================
