@@ -187,7 +187,7 @@ public:
    * @param traceesPid the pid of the tracee
    * @see handleFork.
    */
-  pid_t handleForkEvent(const pid_t traceesPid);
+  pid_t handleForkEvent(const pid_t traceesPid, bool thread);
 
   /**
    * Handle signal event in trace.

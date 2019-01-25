@@ -41,6 +41,21 @@ public:
   bool isFinished(pid_t process);
 
   /**
+   * Erase thread from threadTree.
+   */
+  void eraseThread(pid_t thread);
+
+  /**
+   * Insert (process, thread) into threadTree.
+   */
+  void insertThreadTree(pid_t parent, pid_t thread);
+
+  /**
+   * Get count of threads associated with a process.
+   */
+  int countThreads(pid_t parent);
+
+  /**
    * Mark this process as exited. Let other's run. We need our children to run
    * and finish before we get a ptrace nonEventExit. We actually remove the process
    * when our last child has itself ended.
@@ -148,6 +163,12 @@ private:
    * Keep track of parent processes and their children on the scheduler side.
    */  
   multimap<pid_t, pid_t> schedulerTree;
+
+
+  /**
+   * Keep track of processes and the threads they spawned.
+   */
+  multimap<pid_t, pid_t> threadTree;
 
   /**
    * Keep track of circular dependencies between processes to detect deadlock.

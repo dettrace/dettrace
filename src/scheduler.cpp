@@ -337,9 +337,26 @@ void scheduler::eraseSchedChild(pid_t process){
   }
 }
 
+void scheduler::eraseThread(pid_t thread){
+  for(auto iter = threadTree.begin(); iter != threadTree.end(); iter++){
+    if(iter->second == thread){
+      threadTree.erase(iter);
+      break;
+    }
+  }
+}
+
+int scheduler::countThreads(pid_t parent){
+  return threadTree.count(parent);
+}
 void scheduler::insertSchedChild(pid_t parent, pid_t child){
   auto pair = make_pair(parent, child);
   schedulerTree.insert(pair);
+}
+
+void scheduler::insertThreadTree(pid_t parent, pid_t thread){
+  auto pair = make_pair(parent, thread);
+  threadTree.insert(pair);
 }
 
 void scheduler::printProcesses(){

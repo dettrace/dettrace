@@ -46,11 +46,13 @@ bool execution::handleExit(const pid_t traceesPid){
   // We are done. Erase ourselves from our parent's list of children.
   // Also do this for the scheduler's process tree.
   pid_t parent = eraseChildEntry(processTree, traceesPid);
+  myScheduler.eraseThread(traceesPid);
   myScheduler.eraseSchedChild(traceesPid);
 
   if(parent != -1                   &&       // We have no parent, we're root.
      myScheduler.isFinished(parent) &&       // Check if our parent is marked as finished.
-     processTree.count(parent) == 0){        // Parent has no children left.
+     processTree.count(parent) == 0 &&
+     myScheduler.countThreads(traceesPid) == 0){        // Parent has no children left.
     
     myScheduler.removeAndScheduleParent(traceesPid, parent);
     return false;
@@ -247,7 +249,7 @@ void execution::runProgram(){
       callPostHook = false;
 
       // We have children still, we cannot exit.
-      if(processTree.count(traceesPid) != 0){
+      if(processTree.count(traceesPid) != 0 || myScheduler.countThreads(traceesPid) != 0){
         myScheduler.markFinishedAndScheduleNext(traceesPid);
       }
       continue;
@@ -256,7 +258,7 @@ void execution::runProgram(){
     // Current process is finally truly done (unlike eventExit).
     if(ret == ptraceEvent::nonEventExit){
       callPostHook = false;
-      if(processTree.count(traceesPid) != 0){
+      if(processTree.count(traceesPid) != 0 || myScheduler.countThreads(traceesPid) != 0){
         myScheduler.markFinishedAndScheduleNext(traceesPid);
       }else{
         exitLoop = handleExit(traceesPid);
@@ -268,6 +270,7 @@ void execution::runProgram(){
     // We have encountered a call to fork, vfork, clone.
     if (ret == ptraceEvent::fork || ret == ptraceEvent::vfork || ret == ptraceEvent::clone) {
       string msg;
+      bool thread = false;
       if (ret == ptraceEvent::fork){
         msg = "fork";
       }
@@ -276,11 +279,17 @@ void execution::runProgram(){
       }
       else if (ret == ptraceEvent::clone){
         msg = "clone";
+        unsigned long flags = (unsigned long) tracer.arg1();
+        unsigned long threadBit = flags & CLONE_THREAD;
+        if(threadBit != 0){
+          thread = true;
+        }
       }
       log.writeToLog(Importance::inter,
                      log.makeTextColored(Color::blue, "[%d] caught %s event!\n"),
                      traceesPid, msg.c_str());
-      handleForkEvent(traceesPid);
+
+      handleForkEvent(traceesPid, thread);
       callPostHook = false;
       continue;
     }
@@ -335,7 +344,7 @@ void execution::runProgram(){
   }
 }
 // =======================================================================================
-pid_t execution::handleForkEvent(const pid_t traceesPid){
+pid_t execution::handleForkEvent(const pid_t traceesPid, bool thread){
   log.writeToLog(Importance::inter, log.makeTextColored(Color::blue,
                  "Fork event came!\n"));
 
@@ -360,9 +369,13 @@ pid_t execution::handleForkEvent(const pid_t traceesPid){
 
   // This is where we add new children to our process tree.
   // Also add it to the scheduler's process tree.
-  auto pair = make_pair(traceesPid, newChildPid);
-  processTree.insert(pair);
-  myScheduler.insertSchedChild(traceesPid, newChildPid);
+  if(thread){
+    myScheduler.insertThreadTree(traceesPid, newChildPid);
+  }else{
+    auto pair = make_pair(traceesPid, newChildPid);
+    processTree.insert(pair);
+    myScheduler.insertSchedChild(traceesPid, newChildPid);
+  }
 
   // Wait for child to be ready.
   log.writeToLog(Importance::info, log.makeTextColored(Color::blue,
