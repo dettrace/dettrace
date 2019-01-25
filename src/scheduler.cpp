@@ -271,6 +271,7 @@ pid_t scheduler::findNextNotWaiting(bool swapped){
 
 pid_t scheduler::scheduleNextProcess(){
   callsToScheduleNextProcess++;
+  printProcesses();
   bool swapped = false;
   // We try all processes in the runnable heap. If there are none in the runnable
   // heap, we try those in the blocked heap.
@@ -344,6 +345,15 @@ void scheduler::eraseThread(pid_t thread){
       break;
     }
   }
+}
+
+bool scheduler::isThread(pid_t pid){
+  for(auto iter = threadTree.begin(); iter != threadTree.end(); iter++){
+    if(iter->second == pid){
+      return true;
+    }
+  }
+  return false;
 }
 
 int scheduler::countThreads(pid_t parent){

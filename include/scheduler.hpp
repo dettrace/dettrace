@@ -41,6 +41,11 @@ public:
   bool isFinished(pid_t process);
 
   /**
+   *
+   */
+  bool isThread(pid_t pid);
+
+  /**
    * Erase thread from threadTree.
    */
   void eraseThread(pid_t thread);
@@ -164,12 +169,11 @@ private:
    */  
   multimap<pid_t, pid_t> schedulerTree;
 
-
   /**
    * Keep track of processes and the threads they spawned.
    */
   multimap<pid_t, pid_t> threadTree;
-
+  
   /**
    * Keep track of circular dependencies between processes to detect deadlock.
    */

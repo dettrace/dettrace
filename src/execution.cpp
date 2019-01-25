@@ -48,11 +48,11 @@ bool execution::handleExit(const pid_t traceesPid){
   pid_t parent = eraseChildEntry(processTree, traceesPid);
   myScheduler.eraseThread(traceesPid);
   myScheduler.eraseSchedChild(traceesPid);
-
+  bool thr = myScheduler.isThread(parent);
   if(parent != -1                   &&       // We have no parent, we're root.
      myScheduler.isFinished(parent) &&       // Check if our parent is marked as finished.
      processTree.count(parent) == 0 &&
-     myScheduler.countThreads(traceesPid) == 0){        // Parent has no children left.
+     ((myScheduler.countThreads(traceesPid) == 0) && !thr)){       // Parent has no children left.
     
     myScheduler.removeAndScheduleParent(traceesPid, parent);
     return false;
@@ -249,7 +249,8 @@ void execution::runProgram(){
       callPostHook = false;
 
       // We have children still, we cannot exit.
-      if(processTree.count(traceesPid) != 0 || myScheduler.countThreads(traceesPid) != 0){
+      bool isThr = myScheduler.isThread(traceesPid);
+      if((processTree.count(traceesPid) != 0 || myScheduler.countThreads(traceesPid) != 0) && !isThr){
         myScheduler.markFinishedAndScheduleNext(traceesPid);
       }
       continue;
@@ -258,7 +259,8 @@ void execution::runProgram(){
     // Current process is finally truly done (unlike eventExit).
     if(ret == ptraceEvent::nonEventExit){
       callPostHook = false;
-      if(processTree.count(traceesPid) != 0 || myScheduler.countThreads(traceesPid) != 0){
+      bool isThr = myScheduler.isThread(traceesPid);
+      if((processTree.count(traceesPid) != 0 || myScheduler.countThreads(traceesPid) != 0) && !isThr){
         myScheduler.markFinishedAndScheduleNext(traceesPid);
       }else{
         exitLoop = handleExit(traceesPid);
@@ -278,9 +280,12 @@ void execution::runProgram(){
         msg = "vfork";
       }
       else if (ret == ptraceEvent::clone){
+        printf("This is a clone event.\n");
         msg = "clone";
         unsigned long flags = (unsigned long) tracer.arg1();
+        cout << "flags: " << flags << endl;
         unsigned long threadBit = flags & CLONE_THREAD;
+        cout << "thread bit: " << threadBit << endl;
         if(threadBit != 0){
           thread = true;
         }
@@ -348,6 +353,11 @@ pid_t execution::handleForkEvent(const pid_t traceesPid, bool thread){
   log.writeToLog(Importance::inter, log.makeTextColored(Color::blue,
                  "Fork event came!\n"));
 
+  if(thread){
+    printf("Woo we found a thread.\n");
+  }else{
+    printf("Woo it's a process.\n");
+  }
   processSpawnEvents++;
 
   pid_t newChildPid = ptracer::getEventMessage(traceesPid);
