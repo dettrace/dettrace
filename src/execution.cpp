@@ -7,6 +7,8 @@
 #include "execution.hpp"
 #include "scheduler.hpp"
 
+#include <sys/types.h>
+#include <unistd.h>
 #include <stack>
 #include <cassert>
 
@@ -275,6 +277,7 @@ void execution::runProgram(){
       bool thread = false;
       if (ret == ptraceEvent::fork){
         msg = "fork";
+        printf("This is a fork event.\n");
       }
       else if (ret == ptraceEvent::vfork){
         msg = "vfork";
@@ -282,9 +285,11 @@ void execution::runProgram(){
       else if (ret == ptraceEvent::clone){
         printf("This is a clone event.\n");
         msg = "clone";
-        unsigned long flags = (unsigned long) tracer.arg1();
+       // unsigned long flags = (unsigned long) tracer.arg1();
+        unsigned long flags = (unsigned long) tracer.arg3();
         cout << "flags: " << flags << endl;
-        unsigned long threadBit = flags & CLONE_THREAD;
+        cout << "cloned thread: " << CLONE_THREAD << endl;
+        unsigned long threadBit = flags | CLONE_THREAD;
         cout << "thread bit: " << threadBit << endl;
         if(threadBit != 0){
           thread = true;
@@ -352,15 +357,9 @@ void execution::runProgram(){
 pid_t execution::handleForkEvent(const pid_t traceesPid, bool thread){
   log.writeToLog(Importance::inter, log.makeTextColored(Color::blue,
                  "Fork event came!\n"));
-
-  if(thread){
-    printf("Woo we found a thread.\n");
-  }else{
-    printf("Woo it's a process.\n");
-  }
   processSpawnEvents++;
-
   pid_t newChildPid = ptracer::getEventMessage(traceesPid);
+
 
   // Add this new process to our states.
   states.emplace(newChildPid, state {newChildPid, debugLevel} );
@@ -380,6 +379,7 @@ pid_t execution::handleForkEvent(const pid_t traceesPid, bool thread){
   // This is where we add new children to our process tree.
   // Also add it to the scheduler's process tree.
   if(thread){
+    cout << "thread being added to the tree." << endl;
     myScheduler.insertThreadTree(traceesPid, newChildPid);
   }else{
     auto pair = make_pair(traceesPid, newChildPid);

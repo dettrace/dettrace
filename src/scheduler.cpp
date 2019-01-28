@@ -207,15 +207,17 @@ bool scheduler::removeAndScheduleNext(pid_t process){
 pid_t scheduler::findNextNotWaiting(bool swapped){
   vector<pid_t> processes;
   pid_t p = 0;  
-  bool waiting = false; 
+  bool waitingOnChild = false;
+  bool waitingOnThread = false;
   bool done = false;
   // We find a process that is not waiting on a child by iterating through the
   // priority queue and checking the scheduler's process tree.
   while(!runnableHeap.empty()){
     p = runnableHeap.top();
-    waiting = schedulerTree.find(p) != schedulerTree.end();
+    waitingOnChild = schedulerTree.find(p) != schedulerTree.end();
+    waitingOnThread = threadTree.find(p) != threadTree.end();
     done = isFinished(p);
-    if(!waiting && !done){
+    if(!waitingOnChild && !waitingOnThread && !done){
       break;
     }else{
       processes.push_back(p);
@@ -226,8 +228,9 @@ pid_t scheduler::findNextNotWaiting(bool swapped){
     runnableHeap.push(processes[i]);
   }
   processes.clear();
-  if(waiting && !done){
-    // We went through the entire given heap and could not find a process not waiting on a child.
+  if((waitingOnChild || waitingOnThread) && !done){
+    // We went through the entire given heap and could not find a process not waiting on a child
+    // or a thread.
     // So we just schedule the top of the heap to run, because it is okay to run because
     // it has not finished yet.
     // (Example: The child is waiting for the parent to write to a pipe.)
@@ -240,9 +243,10 @@ pid_t scheduler::findNextNotWaiting(bool swapped){
       log.writeToLog(Importance::info, msg, p);
     }
     return p;
-  }else if(waiting && done){
+  }else if((waitingOnChild || waitingOnThread) && done){
     // We went through the runnable heap and could not find a process not waiting on a child
-    // that is also not finished. So we must look to the blocked heap for a process to schedule.
+    // or thread that is also not finished. 
+    // So we must look to the blocked heap for a process to schedule.
     if(!blockedHeap.empty()){
       p = blockedHeap.top();
       bool topDone = isFinished(p);
@@ -255,7 +259,7 @@ pid_t scheduler::findNextNotWaiting(bool swapped){
       }
     }
   }
-  // We found a process not waiting on a child.
+  // We found a process not waiting on a child or a thread.
   // Process was set to "p" in the above while loop.
   // We schedule this process next.
   if(!swapped){
