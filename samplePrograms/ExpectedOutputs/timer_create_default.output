@@ -1,0 +1,7 @@
+timer_create returned 0
+created timerid 0x603260
+counter=0
+Received signal 14
+ siginfo_t fields: signo:14 errno:0 code:-6 pid:1 uid:0 status:0 utime:0 stime:0 value:(nil) int:0 ptr:(nil) overrun:0 timerid:1 addr:0x1 band:1 fd:0 addr_lsb:0 lower:(nil) upper:(nil) call_addr:0x1 syscall:0 uarch:0
+context: R8:0, R9:0, R10:0, R11:206, R12:400650, R13:7fffffffedf0, R14:0, R15:0
+ RDI:0, RSI:0, RBP:7fffffffed10, RBX:0, RDX:7fffffffebc0, RAX:0, RCX:7ffff79cf77d, RSP:7fffffffeb78, RIP:7ffff79cf77d
