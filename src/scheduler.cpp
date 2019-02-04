@@ -204,20 +204,29 @@ bool scheduler::removeAndScheduleNext(pid_t process){
   }
 }
 
+bool scheduler::waitingOnThread(pid_t process){
+  for(auto iter = threadTree.begin(); iter != threadTree.end(); iter++){
+    if(iter->second == process){
+      return true;
+    }
+  }
+  return false;
+}
+
 pid_t scheduler::findNextNotWaiting(bool swapped){
   vector<pid_t> processes;
   pid_t p = 0;  
-  bool waitingOnChild = false;
-  bool waitingOnThread = false;
+  bool waitingChild = false;
+  bool waitingThread = false;
   bool done = false;
   // We find a process that is not waiting on a child by iterating through the
   // priority queue and checking the scheduler's process tree.
   while(!runnableHeap.empty()){
     p = runnableHeap.top();
-    waitingOnChild = schedulerTree.find(p) != schedulerTree.end();
-    waitingOnThread = threadTree.find(p) != threadTree.end();
+    waitingChild = schedulerTree.find(p) != schedulerTree.end();
+    waitingThread = waitingOnThread(p); 
     done = isFinished(p);
-    if(!waitingOnChild && !waitingOnThread && !done){
+    if(!waitingChild && !waitingThread && !done){
       break;
     }else{
       processes.push_back(p);
@@ -228,7 +237,7 @@ pid_t scheduler::findNextNotWaiting(bool swapped){
     runnableHeap.push(processes[i]);
   }
   processes.clear();
-  if((waitingOnChild || waitingOnThread) && !done){
+  if((waitingChild || waitingThread) && !done){
     // We went through the entire given heap and could not find a process not waiting on a child
     // or a thread.
     // So we just schedule the top of the heap to run, because it is okay to run because
@@ -243,7 +252,7 @@ pid_t scheduler::findNextNotWaiting(bool swapped){
       log.writeToLog(Importance::info, msg, p);
     }
     return p;
-  }else if((waitingOnChild || waitingOnThread) && done){
+  }else if((waitingChild || waitingThread) && done){
     // We went through the runnable heap and could not find a process not waiting on a child
     // or thread that is also not finished. 
     // So we must look to the blocked heap for a process to schedule.
@@ -275,7 +284,6 @@ pid_t scheduler::findNextNotWaiting(bool swapped){
 
 pid_t scheduler::scheduleNextProcess(){
   callsToScheduleNextProcess++;
-  printProcesses();
   bool swapped = false;
   // We try all processes in the runnable heap. If there are none in the runnable
   // heap, we try those in the blocked heap.
@@ -343,34 +351,38 @@ void scheduler::eraseSchedChild(pid_t process){
 }
 
 void scheduler::eraseThread(pid_t thread){
-  for(auto iter = threadTree.begin(); iter != threadTree.end(); iter++){
-    if(iter->second == thread){
-      threadTree.erase(iter);
-      break;
-    }
-  }
+  threadTree.erase(thread);
 }
 
 bool scheduler::isThread(pid_t pid){
-  for(auto iter = threadTree.begin(); iter != threadTree.end(); iter++){
-    if(iter->second == pid){
-      return true;
-    }
-  }
-  return false;
+  const bool thr = threadSet.find(pid) != threadSet.end();
+  return thr;
 }
 
-int scheduler::countThreads(pid_t parent){
-  return threadTree.count(parent);
+void scheduler::insertThreadSet(pid_t pid){
+  threadSet.insert(pid);
 }
+
 void scheduler::insertSchedChild(pid_t parent, pid_t child){
   auto pair = make_pair(parent, child);
   schedulerTree.insert(pair);
 }
 
 void scheduler::insertThreadTree(pid_t parent, pid_t thread){
-  auto pair = make_pair(parent, thread);
-  threadTree.insert(pair);
+  bool isThr = isThread(parent);
+  if(isThr){
+    // The "parent" is actually a thread.
+    // Need to get parent's true parent.
+    // And insert: thread -> true parent
+    pid_t trueParent = threadTree.at(parent);
+    auto pair = make_pair(thread, trueParent);
+    threadTree.insert(pair);
+  }else{
+    // The parent is indeed a process. Simple case.
+    // Just insert: thread -> parent
+    auto pair = make_pair(thread, parent);
+    threadTree.insert(pair);
+  }
 }
 
 void scheduler::printProcesses(){
@@ -392,4 +404,12 @@ void scheduler::printProcesses(){
     log.writeToLog(Importance::extra, "Pid [%d], blocked\n", curr);
   }
   return;
+}
+
+void scheduler::printThreadTree(){
+  cout << "Printing thread tree." << endl;
+  for(auto iter = threadTree.begin(); iter != threadTree.end(); iter++){
+    cout << "Thread: " << iter->first << endl;
+    cout << "Parent process: " << iter->second << endl;
+  }
 }

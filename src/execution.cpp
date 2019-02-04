@@ -51,10 +51,12 @@ bool execution::handleExit(const pid_t traceesPid){
   myScheduler.eraseThread(traceesPid);
   myScheduler.eraseSchedChild(traceesPid);
   bool thr = myScheduler.isThread(parent);
+  bool waitThreads = myScheduler.waitingOnThread(parent);
   if(parent != -1                   &&       // We have no parent, we're root.
      myScheduler.isFinished(parent) &&       // Check if our parent is marked as finished.
-     processTree.count(parent) == 0 &&
-     ((myScheduler.countThreads(traceesPid) == 0) && !thr)){       // Parent has no children left.
+     processTree.count(parent) == 0 &&       // Parent has no children left.
+     !waitThreads                   &&       // Parent is not waiting on threads.
+     !thr){                                  // Parent has not a thread.
     
     myScheduler.removeAndScheduleParent(traceesPid, parent);
     return false;
@@ -252,7 +254,10 @@ void execution::runProgram(){
 
       // We have children still, we cannot exit.
       bool isThr = myScheduler.isThread(traceesPid);
-      if((processTree.count(traceesPid) != 0 || myScheduler.countThreads(traceesPid) != 0) && !isThr){
+      bool waitOnChild = processTree.count(traceesPid) != 0;
+      bool waitOnThreads = myScheduler.waitingOnThread(traceesPid);
+      
+      if((waitOnChild || waitOnThreads) && !isThr){
         myScheduler.markFinishedAndScheduleNext(traceesPid);
       }
       continue;
@@ -262,11 +267,15 @@ void execution::runProgram(){
     if(ret == ptraceEvent::nonEventExit){
       callPostHook = false;
       bool isThr = myScheduler.isThread(traceesPid);
-      if((processTree.count(traceesPid) != 0 || myScheduler.countThreads(traceesPid) != 0) && !isThr){
+      bool waitOnChild = processTree.count(traceesPid) != 0;
+      bool waitOnThreads = myScheduler.waitingOnThread(traceesPid);
+      
+      if((waitOnChild || waitOnThreads) && !isThr){
         myScheduler.markFinishedAndScheduleNext(traceesPid);
       }else{
         exitLoop = handleExit(traceesPid);
       }
+      exitLoop = handleExit(traceesPid);
       continue;
     }
 
@@ -277,20 +286,14 @@ void execution::runProgram(){
       bool thread = false;
       if (ret == ptraceEvent::fork){
         msg = "fork";
-        printf("This is a fork event.\n");
       }
       else if (ret == ptraceEvent::vfork){
         msg = "vfork";
       }
       else if (ret == ptraceEvent::clone){
-        printf("This is a clone event.\n");
         msg = "clone";
-       // unsigned long flags = (unsigned long) tracer.arg1();
         unsigned long flags = (unsigned long) tracer.arg3();
-        cout << "flags: " << flags << endl;
-        cout << "cloned thread: " << CLONE_THREAD << endl;
         unsigned long threadBit = flags | CLONE_THREAD;
-        cout << "thread bit: " << threadBit << endl;
         if(threadBit != 0){
           thread = true;
         }
@@ -379,7 +382,7 @@ pid_t execution::handleForkEvent(const pid_t traceesPid, bool thread){
   // This is where we add new children to our process tree.
   // Also add it to the scheduler's process tree.
   if(thread){
-    cout << "thread being added to the tree." << endl;
+    myScheduler.insertThreadSet(newChildPid);
     myScheduler.insertThreadTree(traceesPid, newChildPid);
   }else{
     auto pair = make_pair(traceesPid, newChildPid);

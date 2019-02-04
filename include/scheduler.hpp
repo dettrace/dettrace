@@ -41,9 +41,19 @@ public:
   bool isFinished(pid_t process);
 
   /**
-   *
+   * Check if it's a thread.
    */
   bool isThread(pid_t pid);
+
+  /**
+   * Check if a process is waiting on a thread.
+   */ 
+  bool waitingOnThread(pid_t process);
+
+  /**
+   * Just prints out the thread tree for debugging purposes.
+   */ 
+  void printThreadTree();
 
   /**
    * Erase thread from threadTree.
@@ -51,14 +61,14 @@ public:
   void eraseThread(pid_t thread);
 
   /**
+   * Insert thread into set of threads.
+   */
+  void insertThreadSet(pid_t thread);
+  
+  /**
    * Insert (process, thread) into threadTree.
    */
   void insertThreadTree(pid_t parent, pid_t thread);
-
-  /**
-   * Get count of threads associated with a process.
-   */
-  int countThreads(pid_t parent);
 
   /**
    * Mark this process as exited. Let other's run. We need our children to run
@@ -172,7 +182,12 @@ private:
   /**
    * Keep track of processes and the threads they spawned.
    */
-  multimap<pid_t, pid_t> threadTree;
+  map<pid_t, pid_t> threadTree;
+
+  /**
+   * Just a list of threads.
+   */
+  set<pid_t> threadSet;
   
   /**
    * Keep track of circular dependencies between processes to detect deadlock.
