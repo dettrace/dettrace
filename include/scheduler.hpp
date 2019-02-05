@@ -71,19 +71,28 @@ public:
   void addAndScheduleNext(pid_t newProcess);
 
   /**
-   * Removes process at the top of the heap and schedules new process to run.
+   * Remove a process from the scheduler when it is not at the top of the 
+   * runnableHeap or the blockedHeap.
+   * @param process pid of process to be removed
+   */ 
+  void removeNotTop(pid_t process);
+
+  /**
+   * Removes process and schedules new process to run.
+   * @param process to remove
    * @return return true if we're all done with all processes in the scheduler.
    * This marks the end of the program.
    */
-  bool removeAndScheduleNext();
+  bool removeAndScheduleNext(pid_t process);
 
   /**
    * Removes specified process, let our parent run to completion.
    * Should only be called by the last child of parent, when parent has already
    * been marked as finished.
-   * @param parent pid of parent process
+   * @param pid of process to remove from scheduler
+   * @param pid of parent process
    */
-  void removeAndScheduleParent(pid_t parent);
+  void removeAndScheduleParent(pid_t child, pid_t parent);
 
   /**
    * Find and erase process from scheduler's process tree.
@@ -151,8 +160,9 @@ private:
    * @see deleteProcess
    * @see removeAndScheduleNext
    * @see removeAndScheduleParent
+   * @param process to remove from scheduler
    */
-  void remove();
+  void remove(pid_t process);
 
   /**
    * Get next process based on whether the runnableHeap is empty.

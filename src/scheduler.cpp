@@ -22,7 +22,9 @@ pid_t scheduler::getNext(){
   return nextPid;
 }
 
-void scheduler::removeAndScheduleParent(pid_t parent){
+void scheduler::removeAndScheduleParent(pid_t child, pid_t parent){
+  // Error if the parent of the proces has not finished.
+  // Else, remove the process, and schedule its parent to run next.
   if(! isFinished(parent)){
     throw runtime_error("dettrace runtime exception: scheduleThisProcess: Parent : " + to_string(parent) +
                         " was not marked as finished!");
@@ -30,7 +32,7 @@ void scheduler::removeAndScheduleParent(pid_t parent){
 
   auto msg = log.makeTextColored(Color::blue, "Parent [%d] scheduled for exit.\n");
   log.writeToLog(Importance::info, msg, parent);
-  remove();
+  remove(child);
   nextPid = parent;
 }
 
@@ -88,32 +90,110 @@ void scheduler::addAndScheduleNext(pid_t newProcess){
   return;
 }
 
-void scheduler::remove(){
+void scheduler::removeNotTop(pid_t process){
+  vector<pid_t> runnableProcesses;
+  vector<pid_t> blockedProcesses;
+  pid_t p = 0;
+  bool foundInRunnable = false;
+
+  // Go through the runnableHeap, try to find the process.
+  // If found, remove it, and break out of the loop.
+  while(!runnableHeap.empty()){
+    p = runnableHeap.top();
+    if(process == p){
+      runnableHeap.pop();
+      finishedProcesses.insert(p);
+      foundInRunnable = true;
+      break;
+    }else{
+      runnableProcesses.push_back(p);
+      runnableHeap.pop();
+    }
+  }
+
+  if(foundInRunnable){
+    // We found our process in the runnable heap.
+    // Just re-add processes to the runnable heap,
+    // clear the vector, and return.
+    for(int i = 0; i < runnableProcesses.size(); i++){
+      runnableHeap.push(runnableProcesses[i]);
+    }
+    runnableProcesses.clear();
+    return;
+  }else{
+    // We have to look in the blocked heap for the process
+    // we want to remove.
+    // Find it and remove it.
+    while(!blockedHeap.empty()){
+      p = blockedHeap.top();
+      if(process == p){
+        blockedHeap.pop();
+        finishedProcesses.insert(p);
+        break;
+      }else{
+        blockedProcesses.push_back(p);
+        blockedHeap.pop();
+      }
+    }
+    
+    // Then re-add the processes we examined to the blocked heap.
+    for(int j = 0; j < blockedProcesses.size(); j++){
+      blockedHeap.push(blockedProcesses[j]);
+    }
+    blockedProcesses.clear();
+    return;
+  }
+}
+
+void scheduler::remove(pid_t process){
   // Remove dependencies in the scheduler's dependency tree.
   removeDependencies(); 
-  
+
   // Sanity check that there is at least one process available.
   if (runnableHeap.empty() && blockedHeap.empty()){
     string err = "scheduler::remove: No such element to delete from scheduler.";
     throw runtime_error("dettrace runtime exception: " + err);
   }
 
-  // If the process to be removed is from the runnableHeap:
-  // Pop the top element of the runnableHeap.
-  // Then, add the element to the finishedProcesses set.
-  pid_t terminatedProcess = runnableHeap.top();
-  runnableHeap.pop();
-  finishedProcesses.insert(terminatedProcess);
+  // Sanity check: can't call top() on a priority queue
+  // unless its nonempty (on an empty one it will error). 
+  pid_t runnableTop = -1;
+  pid_t blockedTop = -1;
+  if(runnableHeap.size() > 0){
+    runnableTop = runnableHeap.top();
+  } 
+  if(blockedHeap.size() > 0){
+    blockedTop = blockedHeap.top();
+  }
+
+  if(process == runnableTop){
+    // Easy case: the process we want to remove is at the top of the runnable heap.
+    // Pop the top of the runnableHeap, and insert it into the list of finished processes.
+    runnableHeap.pop();
+    finishedProcesses.insert(runnableTop);
+  }else if(process == blockedTop){
+    // Easy case: process is at the top of the blocked heap.
+    // Pop the top of the blockedHeap, and insert it into the list of finished processes.
+    blockedHeap.pop();
+    finishedProcesses.insert(blockedTop);
+  }else{
+    // Harder case: the process we want to remove is not at the top of the runnable
+    // heap or the blocked heap.
+    // Logic to remove a process that is not at the top of the heap is handled 
+    // by the removeNotTop() function.
+    removeNotTop(process);
+  }
+  
   auto msg =
     log.makeTextColored(Color::blue,"Removing process from scheduler: [%d]\n");
-  log.writeToLog(Importance::info, msg, terminatedProcess);
+  log.writeToLog(Importance::info, msg, process);
   return;
 }
 
-bool scheduler::removeAndScheduleNext(){
+bool scheduler::removeAndScheduleNext(pid_t process){
   // Remove the process. If both heaps are empty, we are done.
   // Otherwise, schedule the next process to run.
-  remove();
+  remove(process);
   if(runnableHeap.empty() && blockedHeap.empty()){
     return true;
   }else{
@@ -203,7 +283,7 @@ pid_t scheduler::scheduleNextProcess(){
   }
 
   if(deadlock){
-    throw runtime_error("dettrace runtime exception: No runnable processes left in scheduler!\n");
+    throw runtime_error("dettrace runtime exception: Deadlock detected!\n");
   }else if(!runnableHeap.empty()){ 
     pid_t nextProcess = findNextNotWaiting(swapped);
     return nextProcess;

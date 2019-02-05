@@ -52,13 +52,13 @@ bool execution::handleExit(const pid_t traceesPid){
      myScheduler.isFinished(parent) &&       // Check if our parent is marked as finished.
      processTree.count(parent) == 0){        // Parent has no children left.
     
-    myScheduler.removeAndScheduleParent(parent);
+    myScheduler.removeAndScheduleParent(traceesPid, parent);
     return false;
   }
   // Generic case, should happen most of the time.
   else{
     // Process done, schedule next process to run.
-    bool empty = myScheduler.removeAndScheduleNext();
+    bool empty = myScheduler.removeAndScheduleNext(traceesPid);
     if(empty){
       // All processes have finished! We're done
       return true;

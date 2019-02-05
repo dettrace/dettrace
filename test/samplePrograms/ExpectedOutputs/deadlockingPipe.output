@@ -1,4 +1,4 @@
 terminate called after throwing an instance of 'std::runtime_error'
-  what():  dettrace runtime exception: No runnable processes left in scheduler!
+  what():  dettrace runtime exception: Deadlock detected!
 
 Aborted (core dumped)
