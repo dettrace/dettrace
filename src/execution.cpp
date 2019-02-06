@@ -56,7 +56,7 @@ bool execution::handleExit(const pid_t traceesPid){
      myScheduler.isFinished(parent) &&       // Check if our parent is marked as finished.
      processTree.count(parent) == 0 &&       // Parent has no children left.
      !waitThreads                   &&       // Parent is not waiting on threads.
-     !thr){                                  // Parent has not a thread.
+     !thr){                                  // Parent is not a thread.
     
     myScheduler.removeAndScheduleParent(traceesPid, parent);
     return false;

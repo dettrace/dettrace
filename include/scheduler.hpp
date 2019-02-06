@@ -105,7 +105,7 @@ public:
    * runnableHeap or the blockedHeap.
    * @param process pid of process to be removed
    */ 
-  void removeNotTop(pid_t process);
+  bool removeNotTop(pid_t process);
 
   /**
    * Removes process and schedules new process to run.
@@ -173,7 +173,11 @@ private:
    * Set of finished processes.
    */
   set<pid_t> finishedProcesses; 
-  
+ 
+  /**
+   * Set of removed processes.
+   */
+  set<pid_t> removedProcesses; 
   /**
    * Keep track of parent processes and their children on the scheduler side.
    */  
@@ -202,7 +206,7 @@ private:
    * @see removeAndScheduleParent
    * @param process to remove from scheduler
    */
-  void remove(pid_t process);
+  bool remove(pid_t process);
 
   /**
    * Get next process based on whether the runnableHeap is empty.
