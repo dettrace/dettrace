@@ -156,7 +156,6 @@ bool scheduler::remove(pid_t process){
   // Remove dependencies in the scheduler's dependency tree.
   removeDependencies(); 
 
-  cout << "Want to remove: " << process << endl;
   printProcesses();
   // Sanity check that there is at least one process available.
   //if (runnableHeap.empty() && blockedHeap.empty()){
@@ -186,14 +185,12 @@ bool scheduler::remove(pid_t process){
   if(process == runnableTop){
     // Easy case: the process we want to remove is at the top of the runnable heap.
     // Pop the top of the runnableHeap, and insert it into the list of finished processes.
-    cout << "removing top of runnable" << endl;
     runnableHeap.pop();
     finishedProcesses.insert(runnableTop);
     return true;
   }else if(process == blockedTop){
     // Easy case: process is at the top of the blocked heap.
     // Pop the top of the blockedHeap, and insert it into the list of finished processes.
-    cout << "removing top of blocked" << endl;
     blockedHeap.pop();
     finishedProcesses.insert(blockedTop);
     return true;
@@ -202,7 +199,6 @@ bool scheduler::remove(pid_t process){
     // heap or the blocked heap.
     // Logic to remove a process that is not at the top of the heap is handled 
     // by the removeNotTop() function.
-    cout << "removing not top" << endl;
     bool removed = removeNotTop(process);
     return removed;
   }

@@ -502,7 +502,8 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     if(s.userDefinedTimeout){
       // Only preempt if we would have timeout out. Othewise let if continue running!
       if((int) t.getReturnValue() == -ETIMEDOUT){
-        sched.preemptAndScheduleNext(preemptOptions::runnable);
+        //sched.preemptAndScheduleNext(preemptOptions::runnable);
+        sched.preemptAndScheduleNext(preemptOptions::markAsBlocked);
       }
 
       s.userDefinedTimeout = false;
