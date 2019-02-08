@@ -5,7 +5,7 @@ SIMPLE_ROOTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname 
 SIMPLE_BINARIES= $(addsuffix .bin,$(SIMPLE_ROOTS))
 
 # binaries with parameterized builds
-PARAM_ROOTS= pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR setitimer-real setitimer-virtual setitimer-prof getitimer-real getitimer-virtual getitimer-prof
+PARAM_ROOTS= pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR setitimer-real setitimer-virtual setitimer-prof getitimer-real getitimer-virtual getitimer-prof mq mq-nb
 PARAM_BINARIES= $(addsuffix .bin,$(PARAM_ROOTS))
 
 # built-in Linux utilities, nothing to build
@@ -240,6 +240,12 @@ pipe-cWpcR.bin: pipe-rw.c
 	$(CC) $^ -Wall -g -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
 pipe-pcWpcR.bin: pipe-rw.c
 	$(CC) $^ -Wall -g -DPARENT_WRITE=true -DCHILD_WRITE=true -DPARENT_READ=true -DCHILD_READ=true -o $@
+
+mq-nb.bin: mq-nb.c
+	$(CC) $^ -o $@ -Wall -g -O2 -lrt
+
+mq.bin: mq.c
+	$(CC) $^ -o $@ -Wall -g -O2 -lrt
 
 # parameterized getitimer/setitimer tests
 

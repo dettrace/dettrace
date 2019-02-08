@@ -63,7 +63,7 @@ int main(void) {
     assert(0 == rv);
 
     int bytesRead;
-    char readbuffer[79]; // prime, to encourage partial results from read()
+    unsigned char readbuffer[79]; // prime, to encourage partial results from read()
 
     do {
       bytesRead = read(fd[0], readbuffer, sizeof(readbuffer));
@@ -71,7 +71,7 @@ int main(void) {
       // NB: bytesRead is often partial but not EOF
       //assert(bytesRead == sizeof(readbuffer) || bytesRead == 0);
       for (int i = 0; i < bytesRead; i++) {
-        printf("%04hx", (unsigned short)readbuffer[i]);
+        printf("%02x", readbuffer[i]);
       }
       printf("\n");
     } while (0 != bytesRead); // EOF

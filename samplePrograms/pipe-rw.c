@@ -76,7 +76,7 @@ int main(void) {
   if ((amChild && CHILD_READ) || (!amChild && PARENT_READ)) {
 
     int bytesRead;
-    char readbuffer[79]; // prime, to encourage partial results from read()
+    unsigned char readbuffer[79]; // prime, to encourage partial results from read()
 
     do {
       bytesRead = read(fd[0], readbuffer, sizeof(readbuffer));
