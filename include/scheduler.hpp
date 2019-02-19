@@ -41,12 +41,19 @@ public:
   bool isFinished(pid_t process);
 
   /**
-   * Check if it's a thread.
+   * Check if this process is no longer in our schedulerTree.
+   * @param process pid of process to check
+   * @return whether the process appears in the schedulerTree
+   */ 
+  bool hasFullyExited(pid_t process);
+
+  /**
+   * Check if it's a thread by seeing if it is in the threadTree.
    */
   bool isThread(pid_t pid);
 
   /**
-   * Check if a process is waiting on a thread.
+   * Check if a process is waiting on a thread by looking in the threadTree.
    */ 
   bool waitingOnThread(pid_t process);
 
@@ -59,11 +66,6 @@ public:
    * Erase thread from threadTree.
    */
   void eraseThread(pid_t thread);
-
-  /**
-   * Insert thread into set of threads.
-   */
-  void insertThreadSet(pid_t thread);
   
   /**
    * Insert (process, thread) into threadTree.
@@ -121,8 +123,9 @@ public:
    * been marked as finished.
    * @param pid of process to remove from scheduler
    * @param pid of parent process
+   * @return return true if we're all done with all processes in the scheduler.
    */
-  void removeAndScheduleParent(pid_t child, pid_t parent);
+  bool removeAndScheduleParent(pid_t child, pid_t parent);
 
   /**
    * Find and erase process from scheduler's process tree.
@@ -146,8 +149,9 @@ public:
   /**
    * Remove dependencies from the scheduler's dependency tree
    * when a process is removed from the scheduler.
+   * @param pid of process whose dependencies we want to remove
    */
-  void removeDependencies();
+  void removeDependencies(pid_t process);
 
   // Keep track of how many times scheduleNextProcess was called:
   uint32_t callsToScheduleNextProcess = 0;
@@ -188,11 +192,6 @@ private:
    */
   map<pid_t, pid_t> threadTree;
 
-  /**
-   * Just a list of threads.
-   */
-  set<pid_t> threadSet;
-  
   /**
    * Keep track of circular dependencies between processes to detect deadlock.
    */

@@ -46,9 +46,9 @@ void seccomp::loadRules(bool debug){
 #endif
 
   // End process.
-  noIntercept(SYS_exit);
+  // noIntercept(SYS_exit);
   // End process group.
-  noIntercept(SYS_exit_group);
+  //noIntercept(SYS_exit_group);
   noIntercept(SYS_epoll_create1);
   noIntercept(SYS_epoll_create);
   // Advise on access patter by program of file.
@@ -134,9 +134,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_fork);
   noIntercept(SYS_vfork);
 
-  // Clone should be intercepted if you want to throw an error since we don't support
-  // threads!
-  // intercept(SYS_clone);
+  //intercept(SYS_clone);
   noIntercept(SYS_clone);
 
   intercept(SYS_execve);
@@ -150,6 +148,8 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_setitimer);
   intercept(SYS_getitimer);
   intercept(SYS_pause);
+  intercept(SYS_exit);
+  intercept(SYS_exit_group);
 
   // These system calls cause an even that is caught by ptrace and determinized:
   intercept(SYS_access, debug);

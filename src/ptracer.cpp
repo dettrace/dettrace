@@ -133,7 +133,10 @@ string ptracer::readTraceeCString(traceePtr<char> readAddress, pid_t traceePid){
 
   // Read long-sized chunks of memory at at time.
   while (!done){
-    int64_t result = doPtrace(PTRACE_PEEKDATA, traceePid, readAddress.ptr, nullptr);
+    int64_t result;
+    string err;
+    //int64_t result = doPtrace(PTRACE_PEEKDATA, traceePid, readAddress.ptr, nullptr);
+    tie(result, err) = doPtrace(PTRACE_PEEKDATA, traceePid, readAddress.ptr, nullptr);
     ptracePeeks++;
     const char* p = (const char*) &result;
     const size_t bytesRead = strnlen(p, wordSize);
@@ -153,7 +156,8 @@ string ptracer::readTraceeCString(traceePtr<char> readAddress, pid_t traceePid){
 }
 
 
-long ptracer::doPtrace(enum __ptrace_request request, pid_t pid, void *addr, void *data){
+tuple<long, string> 
+ptracer::doPtrace(enum __ptrace_request request, pid_t pid, void *addr, void *data){
   /*
     Return Value
     On success, PTRACE_PEEK* requests return the requested data, while other
@@ -165,16 +169,18 @@ long ptracer::doPtrace(enum __ptrace_request request, pid_t pid, void *addr, voi
   */
 
   errno = 0;
+  string err = "";
   const long val = ptrace(request, pid, addr, data);
 
   if (PTRACE_PEEKTEXT == request || PTRACE_PEEKDATA == request || PTRACE_PEEKUSER == request) {
     if (0 != errno) {
       throw runtime_error("dettrace runtime exception: Ptrace_peek* failed with error: " + string { strerror(errno) } );
     }
-  } else if (-1 == val) {
-    throw runtime_error("dettrace runtime exception: Ptrace failed with error: " + string { strerror(errno) } );
+  } else if(-1 == val) {
+    err = strerror(errno);
+    //throw runtime_error("dettrace runtime exception: Ptrace failed with error: " + string { strerror(errno) } );
   }
-  return val;
+  return make_tuple(val, err);
 }
 
 void ptracer::changeSystemCall(uint64_t val){

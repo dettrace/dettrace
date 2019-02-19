@@ -22,7 +22,7 @@ pid_t scheduler::getNext(){
   return nextPid;
 }
 
-void scheduler::removeAndScheduleParent(pid_t child, pid_t parent){
+bool scheduler::removeAndScheduleParent(pid_t child, pid_t parent){
   // Error if the parent of the proces has not finished.
   // Else, remove the process, and schedule its parent to run next.
   if(! isFinished(parent)){
@@ -38,7 +38,13 @@ void scheduler::removeAndScheduleParent(pid_t child, pid_t parent){
     auto msg = log.makeTextColored(Color::blue, "Removing process from scheduler: [%d]\n");
     log.writeToLog(Importance::info, msg, child);
   }
-  nextPid = parent;
+  
+  if(runnableHeap.empty() && blockedHeap.empty()){
+    return true;
+  }else{
+    nextPid = parent;
+    return false;
+  }
 }
 
 bool scheduler::isFinished(pid_t process){
@@ -109,7 +115,6 @@ bool scheduler::removeNotTop(pid_t process){
       runnableHeap.pop();
       finishedProcesses.insert(p);
       foundInRunnable = true;
-      cout << "found in runnable" << endl;
       break;
     }else{
       runnableProcesses.push_back(p);
@@ -135,7 +140,6 @@ bool scheduler::removeNotTop(pid_t process){
       if(process == p){
         blockedHeap.pop();
         finishedProcesses.insert(p);
-        cout << "found in blocked" << endl;
         break;
       }else{
         blockedProcesses.push_back(p);
@@ -154,9 +158,8 @@ bool scheduler::removeNotTop(pid_t process){
 
 bool scheduler::remove(pid_t process){
   // Remove dependencies in the scheduler's dependency tree.
-  removeDependencies(); 
+  removeDependencies(process); 
 
-  printProcesses();
   // Sanity check that there is at least one process available.
   //if (runnableHeap.empty() && blockedHeap.empty()){
   //  string err = "scheduler::remove: No such element to delete from scheduler.";
@@ -349,8 +352,7 @@ bool scheduler::circularDependency(){
   return firstDep && secondDep;
 }
 
-void scheduler::removeDependencies(){
-  pid_t finishedProcess = runnableHeap.top();
+void scheduler::removeDependencies(pid_t finishedProcess){
   for(auto iter = preemptMap.begin(); iter != preemptMap.end(); iter++){
     if(iter->first == finishedProcess){
       preemptMap.erase(iter);
@@ -374,12 +376,8 @@ void scheduler::eraseThread(pid_t thread){
 }
 
 bool scheduler::isThread(pid_t pid){
-  const bool thr = threadSet.find(pid) != threadSet.end();
+  const bool thr = threadTree.find(pid) != threadTree.end();
   return thr;
-}
-
-void scheduler::insertThreadSet(pid_t pid){
-  threadSet.insert(pid);
 }
 
 void scheduler::insertSchedChild(pid_t parent, pid_t child){
@@ -405,7 +403,7 @@ void scheduler::insertThreadTree(pid_t parent, pid_t thread){
 }
 
 void scheduler::printProcesses(){
-  log.writeToLog(Importance::extra, "Printing runnable processes\n");
+  log.writeToLog(Importance::info, "Printing runnable processes\n");
   // Print the runnableHeap.
   priority_queue<pid_t> runnableCopy = runnableHeap;
   while(!runnableCopy.empty()){
@@ -426,9 +424,11 @@ void scheduler::printProcesses(){
 }
 
 void scheduler::printThreadTree(){
-  cout << "Printing thread tree." << endl;
+  log.writeToLog(Importance::info, "Printing thread tree.\n");
   for(auto iter = threadTree.begin(); iter != threadTree.end(); iter++){
-    cout << "Thread: " << iter->first << endl;
-    cout << "Parent process: " << iter->second << endl;
+    pid_t thr = iter->first;
+    log.writeToLog(Importance::extra, "Thread: \n", thr); 
+    pid_t parent = iter->second;
+    log.writeToLog(Importance::extra, "Parent process: \n", parent);
   }
 }

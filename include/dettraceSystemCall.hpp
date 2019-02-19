@@ -214,6 +214,24 @@ public:
   const string syscallName = "dup2";
 };
 // =======================================================================================
+class exitSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched);
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched);
+
+  const int syscallNumber = SYS_exit;
+  const string syscallName = "exit";
+};
+// =======================================================================================
+class exit_groupSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched);
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched);
+
+  const int syscallNumber = SYS_exit_group;
+  const string syscallName = "exit_group";
+};
+// =======================================================================================
 /**
  * int faccessat(int dirfd, const char *pathname, int mode, int flags);
  *

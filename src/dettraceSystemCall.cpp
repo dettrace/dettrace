@@ -265,6 +265,22 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   return false;
 }
 // =======================================================================================
+bool exit_groupSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+
+void exit_groupSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return;
+}
+// =======================================================================================
+bool exitSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+
+void exitSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return;
+}
+// =======================================================================================
 bool fchownatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg2(), gs, s, t);
 

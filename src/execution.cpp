@@ -58,7 +58,12 @@ bool execution::handleExit(const pid_t traceesPid){
      !waitThreads                   &&       // Parent is not waiting on threads.
      !thr){                                  // Parent is not a thread.
     
-    myScheduler.removeAndScheduleParent(traceesPid, parent);
+    bool empty = myScheduler.removeAndScheduleParent(traceesPid, parent);
+    if(empty){
+      // All processes have finished! We're done.
+      return true;
+    }
+    log.unsetPadding();
     return false;
   }
   // Generic case, should happen most of the time.
@@ -275,7 +280,6 @@ void execution::runProgram(){
       }else{
         exitLoop = handleExit(traceesPid);
       }
-      exitLoop = handleExit(traceesPid);
       continue;
     }
 
@@ -382,7 +386,6 @@ pid_t execution::handleForkEvent(const pid_t traceesPid, bool thread){
   // This is where we add new children to our process tree.
   // Also add it to the scheduler's process tree.
   if(thread){
-    myScheduler.insertThreadSet(newChildPid);
     myScheduler.insertThreadTree(traceesPid, newChildPid);
   }else{
     auto pair = make_pair(traceesPid, newChildPid);
@@ -445,7 +448,10 @@ void execution::handleExecEvent(pid_t pid) {
   unsigned long stub = 0xcc050fccUL;
   errno = 0;
 
-  auto saved_insn = tracer.doPtrace(PTRACE_PEEKTEXT, pid, (void*)rip, 0);
+  //auto saved_insn = tracer.doPtrace(PTRACE_PEEKTEXT, pid, (void*)rip, 0);
+  long saved_insn;
+  string err;
+  tie(saved_insn, err) = tracer.doPtrace(PTRACE_PEEKTEXT, pid, (void*)rip, 0);
   tracer.doPtrace(PTRACE_POKETEXT, pid, (void*)rip, (void*)((saved_insn & ~0xffffffffUL) | stub));
   tracer.doPtrace(PTRACE_CONT, pid, 0, 0);
 
@@ -571,6 +577,12 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
 
   case SYS_execve:
     return execveSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_exit:
+    return exitSystemCall::handleDetPre(gs, s, t, sched); 
+
+  case SYS_exit_group:
+    return exit_groupSystemCall::handleDetPre(gs, s, t, sched);
 
   case SYS_faccessat:
     return faccessatSystemCall::handleDetPre(gs, s, t, sched);
@@ -796,7 +808,7 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
   switch(syscallNumber){
   case SYS_access:
     return accessSystemCall::handleDetPost(gs, s, t, sched);
-
+  
   case SYS_alarm:
     return alarmSystemCall::handleDetPost(gs, s, t, sched);
 
@@ -833,6 +845,12 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
     // TODO
   // case SYS_execve:
     // return execveSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_exit:
+    return exitSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_exit_group:
+    return exit_groupSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_faccessat:
     return faccessatSystemCall::handleDetPost(gs, s, t, sched);
@@ -1056,9 +1074,13 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 // =======================================================================================
 tuple<ptraceEvent, pid_t, int>
 execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
+  // For CONT or SYSCALL ptrace calls, it may be a thread exiting with exit_group.
+  // This is a flag to tell us when this has successfully happened.
+  bool sysContDone = false;
   // fprintf(stderr, "Getting next event for pid %d\n", pidToContinue);
   // 3rd return value of this function. Holds the status after waitpid call.
   int status;
+  int statusSysCont;
   // Pid of the process whose event we just intercepted through ptrace.
   pid_t traceesPid;
 
@@ -1078,18 +1100,88 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
   // a ptrace event on pre-system call events. Sometimes we need the system call to be
   // called and then we change it's arguments. So we call PTRACE_SYSCALL instead.
   if(ptraceSystemcall){
-    ptracer::doPtrace(PTRACE_SYSCALL, pidToContinue, 0, (void*) signalToDeliver);
+    //long ret = ptracer::doPtrace(PTRACE_SYSCALL, pidToContinue, 0, (void*) signalToDeliver);
+    long ret;
+    string err;
+    int calls = 0;
+    tie(ret, err) = ptracer::doPtrace(PTRACE_SYSCALL, pidToContinue, 0, (void*) signalToDeliver);
+    // Must check the return value of ptrace. It may be the case that exit_group has been called
+    // and threads and trying to exit, which is a race condition. We must do a waitpid on the
+    // thread repeatedly until we get it. If we do it many times and we don't get it, we error.
+    if(ret == -1){
+      bool exitingThread = myScheduler.isThread(pidToContinue);
+      if(exitingThread){
+        // Do the waitpid thing
+        bool done = false;
+        for(int i = 0; i < 1000; i++){
+          int r = waitpid(pidToContinue, &statusSysCont, WNOHANG);
+          calls++;
+          if(r != 0){
+            traceesPid = r;
+            done = true;
+            sysContDone = true;
+            auto msg = log.makeTextColored(Color::blue, "Calls to waitpid (ptrace syscall): %d\n");
+            log.writeToLog(Importance::inter, msg, calls);
+            break;
+          }
+        }
+        if(!done){
+          throw runtime_error("dettrace runtime exception: Ptrace failed with error: " + err);
+        }
+      }else{
+        // TODO: This error is not descriptive, use errno somehow.
+        throw runtime_error("dettrace runtime exception: Ptrace failed with error: " + err);
+      }
+    }
   }else{
     // Tell the process that we just intercepted an event for to continue, with us tracking
     // it's system calls. If this is the first time this function is called, it will be the
     // starting process. Which we expect to be in a waiting state.
-    ptracer::doPtrace(PTRACE_CONT, pidToContinue, 0, (void*) signalToDeliver);
+    long ret;
+    string err;
+    int calls = 0;
+    tie(ret, err) = ptracer::doPtrace(PTRACE_CONT, pidToContinue, 0, (void*) signalToDeliver);
+    //long ret = ptracer::doPtrace(PTRACE_CONT, pidToContinue, 0, (void*) signalToDeliver);
+    // Must check the return value of ptrace. It may be the case that exit_group has been called
+    // and threads and trying to exit, which is a race condition. We must do a waitpid on the
+    // thread repeatedly until we get it. If we do it many times and we don't get it, we error.
+    if(ret == -1){
+      bool exitingThread = myScheduler.isThread(pidToContinue);
+      if(exitingThread){
+        // Do the waitpid thing
+        bool done = false;
+        for(int i = 0; i < 1000; i++){
+          int r = waitpid(pidToContinue, &statusSysCont, WNOHANG);
+          calls++;
+          if(r != 0){
+            traceesPid = r;
+            done = true;
+            sysContDone = true;
+            auto msg = log.makeTextColored(Color::blue, "Calls to waitpid (ptrace cont): %d\n");
+            log.writeToLog(Importance::inter, msg, calls);
+            break;
+          }
+        }
+        if(!done){
+          throw runtime_error("dettrace runtime exception: Ptrace failed with error: " + err);
+        }
+      }else{
+        // TODO: This error is not descriptive, use errno somehow.
+        throw runtime_error("dettrace runtime exception: Ptrace failed with error. " + err);
+      }
+    }
   }
 
   // Wait for next event to intercept.
-  traceesPid = doWithCheck(waitpid(pidToContinue, &status, 0), "waitpid");
+  // Normal case.
+  if(!sysContDone){
+    traceesPid = doWithCheck(waitpid(pidToContinue, &status, 0), "waitpid");
+    return make_tuple(getPtraceEvent(status), traceesPid, status);
+  }
 
-  return make_tuple(getPtraceEvent(status), traceesPid, status);
+  // We have already done the waitpid because it is a thread that wants to exit.
+  // Just return the tuple for the next event.
+  return make_tuple(getPtraceEvent(statusSysCont), traceesPid, statusSysCont);
 }
 // =======================================================================================
 

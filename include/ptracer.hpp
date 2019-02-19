@@ -302,8 +302,11 @@ public:
    * appropriately. Since the value returned by a successful PTRACE_PEEK* request may
    * be -1, the caller must clear errno before the call, and then check it afterward
    * to determine whether or not an error occurred.
+   * @return also in the tuple is the string describing the error if ptrace returned with
+   * error, empty string otherwise.
    */
-  static long doPtrace(enum __ptrace_request request, pid_t pid, void *addr, void *data);
+  //static long doPtrace(enum __ptrace_request request, pid_t pid, void *addr, void *data);
+  static tuple<long, string> doPtrace(enum __ptrace_request request, pid_t pid, void *addr, void *data);
 
   /**
    * Read a type T from the tracee at source address. Be careful when reading

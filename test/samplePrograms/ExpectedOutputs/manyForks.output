@@ -1,0 +1,16 @@
+P2 forks P3!
+P3 forking P4!
+P3 forking P5!
+P5 is writing to the pipe!
+P5 done!
+P2 forks P3!
+P3 forking P4!
+P4 is reading from pipe!
+P4 done!
+P2 forks P3!
+P3 forking P4!
+P3 forking P5!
+P3 done!
+P2 forks P3!
+P2 is reading from pipe!
+P2 done!
