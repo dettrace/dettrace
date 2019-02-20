@@ -15,7 +15,7 @@ rm /home/*.time || true
 for package in xdelta sl whiff xdelta3 xdg-utils xdiskusage; do
     for i in 1 2 3; do
         cd /home/$package/build/;
-        /usr/bin/time --append -o /home/$package.time \
+        LC_ALL=C /usr/bin/time --append -o /home/$package.time \
         -f "build time, real %e, user %U, sys %S" \
         dpkg-buildpackage -uc -us -b;
     done
