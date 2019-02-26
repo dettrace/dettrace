@@ -28,7 +28,7 @@ For example `ls`:
 
 ## Debugging
 We support the debugging flag `--debug N` for N from [1, 5]. Where 5 is the most verbose
-output.
+output. Notice debugging output is deterministic for levels 1-4, not 5.
 
 ## Unimplemented System Calls
 We use a whitelist to determinize system calls. Therefore any system call not implemented
