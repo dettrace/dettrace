@@ -8,7 +8,7 @@ Using `ptrace` we are able to run programs deterministically. All system calls a
 and determinized by our tracer.
 
 ## Building
-This project relies on the [libseccomp library](https://github.com/seccomp/libseccomp). Please install. For hassle free, we reccomend installing from your system's standard repository of packages.
+This project relies on the [libseccomp library](https://github.com/seccomp/libseccomp). Please install. For hassle free, we recommend installing from your system's standard repository of packages.
 
 Working on any recent Linux system you should be able to `make` from this directory.
 
