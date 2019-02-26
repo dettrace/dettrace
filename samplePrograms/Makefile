@@ -5,7 +5,7 @@ SIMPLE_ROOTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname 
 SIMPLE_BINARIES= $(addsuffix .bin,$(SIMPLE_ROOTS))
 
 # binaries with parameterized builds
-PARAM_ROOTS= pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR setitimer-real setitimer-virtual setitimer-prof getitimer-real getitimer-virtual getitimer-prof mq
+PARAM_ROOTS= pipe-pWcR pipe-cWpR pipe-pcWpR pipe-pWpcR pipe-cWpcR pipe-pcWpcR setitimer-real setitimer-virtual setitimer-prof getitimer-real getitimer-virtual getitimer-prof # mq
 PARAM_BINARIES= $(addsuffix .bin,$(PARAM_ROOTS))
 
 # built-in Linux utilities, nothing to build
