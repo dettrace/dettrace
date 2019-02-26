@@ -1,7 +1,7 @@
 
 # Determinism enforcement based on ptrace.
 
-[![Build Status](http://parfunc-ci.sice.indiana.edu/buildStatus/icon?job=detTrace/master)](http://parfunc-ci.sice.indiana.edu/job/detTrace/)
+[![Build Status](https://parfunc-ci.sice.indiana.edu/buildStatus/icon?job=detTrace/master)](https://parfunc-ci.sice.indiana.edu/job/detTrace/)
 
 ## Overview
 Using `ptrace` we are able to run programs deterministically. All system calls are caught
