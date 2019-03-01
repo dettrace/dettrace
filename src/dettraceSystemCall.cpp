@@ -1363,9 +1363,9 @@ void rmdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 struct kernel_sigaction {
   /* sa_handler may be a libc #define, need to use another name: */
   unsigned long sa_handler__;
-  unsigned long sa_mask;
   unsigned long sa_flags;
   unsigned long sa_restorer;
+  unsigned long sa_mask;
 };
 bool rt_sigactionSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                           scheduler& sched){
