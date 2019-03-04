@@ -13,12 +13,10 @@
 #include <sys/socket.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
-#include <cassert>
 
 #include <limits>
 #include <cstring>
 #include <optional>
-#include <filesystem>
 
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -42,7 +40,6 @@
 // #define EXTRANEOUS_TRACEE_READS 0
 
 using namespace std;
-namespace fs = std::filesystem;
 // =======================================================================================
 bool accessSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), gs.log, s.traceePid, t);

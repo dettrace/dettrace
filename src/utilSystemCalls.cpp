@@ -1,13 +1,8 @@
 #include "utilSystemCalls.hpp"
 
 #include <sstream>
-#include<filesystem>
 #include<optional>
 #include <fcntl.h>
-
-using namespace std;
-namespace fs = std::filesystem;
-
 
 // File local functions.
 
@@ -447,9 +442,9 @@ string resolve_tracee_path(string traceePath, pid_t traceePid, logger& log,
     throw runtime_error("We do not support system calls with empty paths.");
   }
 
-  fs::path path{ traceePath };
   string prefixProcFd;
-  if (path.is_absolute()) {
+  // is absolute path:
+  if (traceePath.rfind("/", 0) == 0) {
     // Absolute path, the user might have chrooted. Use their root.
     prefixProcFd = "/proc/" + to_string(traceePid) + "/root";
   } else {

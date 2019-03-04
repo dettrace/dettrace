@@ -5,7 +5,7 @@ DEFINES=-D_GNU_SOURCE=1 -D_POSIX_C_SOURCE=20181101 -D__USE_XOPEN=1
 
 CXXFLAGS =-g -O0 -std=c++17 -Wall $(INCLUDE) $(DEFINES)
 CFLAGS =-g -O0 -Wall -Wshadow $(INCLUDE) $(DEFINES)
-LIBS = -lstdc++fs -pthread -lseccomp -L ../lib/lib64
+LIBS = -pthread -lseccomp -L ../lib/lib64
 
 LIBARCHIVE=$(shell pkg-config --libs libarchive)
 LIBARCHIVE_STATIC=$(shell pkg-config --static --libs libarchive)
