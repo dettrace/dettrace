@@ -12,28 +12,20 @@
 #include <sys/syscall.h>   /* For SYS_xxx definitions */
 
 int withError(int returnCode, char* call);
+#define file "mkdirat_temp_dir/"
+
+// simple: mkdirat using a custom fd from open on path.
 
 int main(){
-  int fd = withError(syscall(SYS_open, "temp.txt", O_CREAT|O_WRONLY|O_TRUNC),
-                     "open");
-
-  int fd2 = withError(syscall(SYS_open, "temp2.txt", O_CREAT|O_WRONLY|O_TRUNC),
-                     "open");
+  withError(mkdirat(AT_FDCWD, file, S_IRWXU), "mkdirat");
 
   struct stat myStat;
-  withError(fstat(fd, &myStat), "fstat");
-  struct stat myStat2;
-  withError(fstat(fd2, &myStat2), "fstat");
+  withError(stat(file, &myStat), "stat");
+  time_t mtime = myStat.st_mtime;
+  ino_t inode = myStat.st_ino;
 
-  time_t time = myStat.st_mtime;
-  time_t time2 = myStat2.st_mtime;
-
-  system("rm -f temp.txt");
-  system("rm -f temp2.txt");
-
-  printf("mtime %ld\n", time);
-  printf("mtime2 %ld\n", time2);
-
+  system("rm -rf "file);
+  printf("mtime %ld\n", mtime);
   return 0;
 }
 

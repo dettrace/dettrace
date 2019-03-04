@@ -4,8 +4,8 @@ set -e
 
 GCC=gcc
 GXX=g++
-CLANG=clang-6.0
-CLANGXX=clang++-6.0
+CLANG=clang
+CLANGXX=clang++
 MAKE=make
 
 TMPDIR=/tmp/test-compilation

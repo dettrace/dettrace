@@ -14,25 +14,31 @@
 int withError(int returnCode, char* call);
 
 int main(){
-  int fd = withError(syscall(SYS_open, "temp.txt", O_CREAT|O_WRONLY|O_TRUNC),
-                     "open");
+  int fd = withError(open("temp.txt", O_CREAT|O_RDWR|O_TRUNC, S_IRWXU),
+                     "open1");
+  close(fd);
+  int fd2 = withError(open("temp.txt", O_CREAT|O_RDWR|O_TRUNC),
+                     "open2");
 
-  int fd2 = withError(syscall(SYS_open, "temp2.txt", O_CREAT|O_WRONLY|O_TRUNC),
-                     "open");
+  int fd3 = withError(open("temp.txt", O_RDWR),
+                     "open3");
 
   struct stat myStat;
   withError(fstat(fd, &myStat), "fstat");
   struct stat myStat2;
   withError(fstat(fd2, &myStat2), "fstat");
+  struct stat myStat3;
+  withError(fstat(fd3, &myStat3), "fstat");
 
   time_t time = myStat.st_mtime;
   time_t time2 = myStat2.st_mtime;
+  time_t time3 = myStat3.st_mtime;
 
   system("rm -f temp.txt");
-  system("rm -f temp2.txt");
 
   printf("mtime %ld\n", time);
-  printf("mtime2 %ld\n", time2);
+  printf("mtime2 %ld\n", time);
+  printf("mtime3 %ld\n", time);
 
   return 0;
 }

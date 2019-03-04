@@ -29,15 +29,11 @@ int main(){
   time_t time = myStat.st_mtime;
   time_t time2 = myStat2.st_mtime;
 
-  if(time != 1){
-    printf("Error expected 1 as our mtime, actual %ld", time);
-    exit(1);
-  }
+  system("rm -f temp.txt");
+  system("rm -f temp2.txt");
 
-  if(time2 != 2){
-    printf("Error expected 2 as our mtime2, actual %ld", time);
-    exit(1);
-  }
+  printf("Modified time temp.txt: %ld\n", time);
+  printf("Modified time temp2.txt: %ld\n", time2);
 
   return 0;
 }
