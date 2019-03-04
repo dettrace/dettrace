@@ -9,6 +9,7 @@
 #include <sys/utsname.h>
 #include <string.h>
 #include <getopt.h>
+#include <dirent.h>
 
 #include <sched.h>
 #include <unistd.h>
@@ -53,11 +54,24 @@
  */
 
 using namespace std;
+
+struct childArgs{
+  int optIndex;
+  int argc;
+  char** argv;
+  int debugLevel;
+  string pathToChroot;
+  bool useContainer;
+  string workingDir;
+  // User is using --chroot flag.
+  bool userChroot;
+  string pathToExe;
+};
 // =======================================================================================
 tuple<int, int, string, bool, bool, string, bool, string>
 parseProgramArguments(int argc, char* argv[]);
-int runTracee(void* args);
-void runTracer(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid, void* voidArgs,
+int runTracee(childArgs args);
+void spawnTracerTracee(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid, void* voidArgs,
                bool useColor, string logFile, bool printStatistics);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 
@@ -70,16 +84,6 @@ static void createFileIfNotExist(string path);
 // See user_namespaces(7)
 static void update_map(char* mapping, char* map_file);
 static void proc_setgroups_write(pid_t child_pid, const char* str);
-// =======================================================================================
-struct childArgs{
-  int optIndex;
-  int argc;
-  char** argv;
-  int debugLevel;
-  string path;
-  bool useContainer;
-  string workingDir;
-};
 // =======================================================================================
 
 // Check if using kernel < 4.8.0. Ptrace + seccomp semantics changed in this version.
@@ -142,11 +146,24 @@ const string usageMsg =
  */
 int main(int argc, char** argv){
   int optIndex, debugLevel;
-  string path, logFile, workingDir;
-  bool useContainer, useColor, printStatistics;
+  string pathToChroot, logFile, workingDir;
+  bool useContainer, useColor, printStatistics, userChroot;
 
-  tie(optIndex, debugLevel, path, useContainer, useColor,
+  tie(optIndex, debugLevel, pathToChroot, useContainer, useColor,
       logFile, printStatistics, workingDir) = parseProgramArguments(argc, argv);
+
+  // Find absolute path to our build directory relative to the dettrace binary.
+  char argv0[strlen(argv[0])+1/*NULL*/];
+  strcpy(argv0, argv[0]); // Use a copy since dirname may mutate contents.
+  string pathToExe{ dirname(argv0) };
+  const string defaultRoot = "/../root/";
+
+  if (pathToChroot == "") {
+    userChroot = false;
+    pathToChroot = pathToExe + defaultRoot;
+  } else {
+    userChroot = true;
+  }
 
   // Check for debug enviornment variable.
   char* debugEnvvar = secure_getenv("dettraceDebug");
@@ -173,9 +190,11 @@ int main(int argc, char** argv){
   args.argc = argc;
   args.argv = argv;
   args.debugLevel = debugLevel;
-  args.path = path;
+  args.pathToChroot = pathToChroot;
   args.useContainer = useContainer;
   args.workingDir = workingDir;
+  args.pathToExe = pathToExe;
+  args.userChroot = userChroot;
 
   int cloneFlags =
     CLONE_NEWUSER | // Our own user namespace.
@@ -200,7 +219,7 @@ int main(int argc, char** argv){
     cerr << "fork failed:\n  " + reason << endl;
     return 1;
   } else if (pid == 0) {
-    runTracer(debugLevel, uid, gid, startingPid, &args, useColor, logFile, printStatistics);
+    spawnTracerTracee(debugLevel, uid, gid, startingPid, &args, useColor, logFile, printStatistics);
   } else {
     int status;
     doWithCheck(waitpid(pid, &status, 0), "waitpid");
@@ -219,30 +238,20 @@ int main(int argc, char** argv){
 // =======================================================================================
 /**
  * Child will become the process the user wishes through call to execvpe.
+ * @arg tempdir: either empty string or tempdir to use, for cpio chroot.
  */
-int runTracee(void* voidArgs){
-  childArgs args = *((childArgs*)voidArgs);
+int runTracee(childArgs args){
   int optIndex = args.optIndex;
   int argc = args.argc;
   char** argv = args.argv;
   int debugLevel = args.debugLevel;
-  string path = args.path;
+  string pathToChroot = args.pathToChroot;
   bool useContainer = args.useContainer;
   string workingDir = args.workingDir;
-
-  // Find absolute path to our build directory relative to the dettrace binary.
-  char argv0[strlen(argv[0])+1/*NULL*/];
-  strcpy(argv0, argv[0]); // Use a copy since dirname may mutate contents.
-  string pathToExe{ dirname(argv0) };
+  string pathToExe = args.pathToExe;
 
   if(useContainer){
-    // "" is our poor man's option type since we're using C++14.
-    if(path != ""){
-      setUpContainer(pathToExe, path, workingDir, true);
-    }else{
-      const string defaultRoot = "/../root/";
-      setUpContainer(pathToExe, pathToExe + defaultRoot, workingDir, false);
-    }
+    setUpContainer(pathToExe, pathToChroot, workingDir, args.userChroot);
   }
 
   doWithCheck(prctl(PR_SET_TSC, PR_TSC_SIGSEGV, 0, 0, 0), "Pre-clone prctl error");
@@ -415,7 +424,6 @@ static void populateInitramfs(const char* initramfs, const char* path)
   doWithCheck(chdir(oldcwd), errmsg + oldcwd);
   free(oldcwd);
 }
- 
 // =======================================================================================
 // pathToChroot must exist and be located inside the chroot if the user defined their own chroot!
 static void checkPaths(string pathToChroot, string workingDir){
@@ -438,7 +446,6 @@ static void checkPaths(string pathToChroot, string workingDir){
     string trueWorkingDir = string{ trueWorkingDirC };
 
     // Check if one string is a prefix of the other, the c++ way.
-
     // mismatch function: "The behavior is undefined if the second range is shorter than the first range."
     // I <3 C++
     if(trueWorkingDir.length() < trueChroot.length()){
@@ -467,24 +474,24 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
        "/dev", "/etc", "/proc", "/build", "/tmp", "/root" };
 
   if (!userDefinedChroot) {
-    string cpio;
     char buf[256];
     snprintf(buf, 256, "%s", "/tmp/dtroot.XXXXXX");
-    char* tmpdir = mkdtemp(buf);
-    doWithCheck(mount("none", tmpdir, "tmpfs", 0, NULL), "mount initramfs");
+    string tempdir = string { mkdtemp(buf) };
+
+    string cpio;
+    doWithCheck(mount("none", tempdir.c_str(), "tmpfs", 0, NULL), "mount initramfs");
     cpio = pathToExe + "/../initramfs.cpio";
     char* cpioReal = realpath(cpio.c_str(), NULL);
     if (!cpioReal) {
       fprintf(stderr, "unable to find initramfs: %s\n", cpio.c_str());
       exit(1);
     }
-    populateInitramfs(cpioReal, tmpdir);
+    populateInitramfs(cpioReal, tempdir.c_str());
     free(cpioReal);
-    pathToChroot = tmpdir;
+    pathToChroot = tempdir;
   }
 
   string buildDir = pathToChroot + "/build/";
-
   for(auto dir : mountDirs){
       mkdirIfNotExist(pathToChroot + dir);
   }
@@ -505,7 +512,8 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
   mountDir(pathToExe + "/../bin/", pathToChroot + "/dettrace/bin/");
   mountDir(pathToExe + "/../lib/", pathToChroot + "/dettrace/lib/");
 
-  // The user specified no chroot, try to scrape a minimal filesystem from the host OS'.
+  // The user did not specify a chroot env, try to scrape a minimal filesystem from the
+  // host OS'.
   if(! userDefinedChroot){
     mountDir("/bin/", pathToChroot + "/bin/");
     mountDir("/usr/", pathToChroot + "/usr/");
@@ -526,30 +534,25 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
 
   // Proc is special, we mount a new proc dir.
   doWithCheck(mount("/proc", (pathToChroot + "/proc/").c_str(), "proc", MS_MGC_VAL, nullptr),
-	      "Mounting proc failed");
+              "Mounting proc failed");
 
-  // Chroot our process!
-  if (!userDefinedChroot) {
-    auto putOld = pathToChroot + "/root/";
-    doWithCheck(syscall(SYS_pivot_root, pathToChroot.c_str(), putOld.c_str()), "Failed to chroot");
-  } else {
-    doWithCheck(chroot(pathToChroot.c_str()), "Failed to chroot");
-  }
+  doWithCheck(chroot(pathToChroot.c_str()), "Failed to chroot");
   // set working directory to buildDir
   doWithCheck(chdir("/build/"), "Failed to set working directory to " + buildDir);
+
+  // doWithCheck(mount("/proc", "/proc/", "proc", MS_MGC_VAL, nullptr),
+  //             "Mounting proc failed");
 
   // Disable ASLR for our child
   doWithCheck(personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");
 }
 // =======================================================================================
 /**
- * Parent is the tracer. Trace child by intercepting all system call and signals child
- * produces. This process will take care of running children deterministically and
- * sequentially.
- *
+ * Spawn two processes, a parent and child, the parent will become the tracer, and child
+ * will be tracee.
  */
-void runTracer(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid, void* voidArgs,
-               bool useColor, string logFile, bool printStatistics){
+void spawnTracerTracee(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid,
+                       void* voidArgs, bool useColor, string logFile, bool printStatistics){
   // This is modified code from user_namespaces(7)
   /* Update the UID and GID maps in the child */
   char map_path[PATH_MAX];
@@ -558,35 +561,39 @@ void runTracer(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid, void* vo
   char* uid_map;
   char* gid_map;
 
+  // Set up container to hostOS UID and GID mappings
   snprintf(map_path, PATH_MAX, "/proc/%ld/uid_map", (long) startingPid);
-
   snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long)uid);
   uid_map = map_buf;
-
   update_map(uid_map, map_path);
 
   // Set GID Map
   string deny = "deny";
   proc_setgroups_write(startingPid, deny.c_str());
-
   snprintf(map_path, PATH_MAX, "/proc/%ld/gid_map", (long) startingPid);
   snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long)gid);
   gid_map = map_buf;
-
   update_map(gid_map, map_path);
 
   assert(getpid() == 1);
+
+  childArgs args = *((childArgs*)voidArgs);
+
   pid_t pid = fork();
   if (pid < 0) {
     throw runtime_error("fork() failed.\n");
     exit(EXIT_FAILURE);
   } else if(pid > 0) {
-    // Init tracer and execution context.
-    execution exe {debugLevel, pid, useColor, usingOldKernel(),
-	logFile, printStatistics};
+    // We must mount proc so that the tracer sees the same PID and /proc/ directory
+    // as the tracee. The tracee will do the same so it sees /proc/ under it's chroot.
+    doWithCheck(mount("/proc", "/proc/", "proc", MS_MGC_VAL, nullptr),
+              "tracer mounting proc failed");
+    
+    execution exe{
+        debugLevel, pid, useColor, usingOldKernel(), logFile, printStatistics};
     exe.runProgram();
   } else if (pid == 0) {
-    runTracee(voidArgs);
+    runTracee(args);
   }
 }
 // =======================================================================================

@@ -41,16 +41,13 @@ public:
 
   /**
    * Given a real value, add it to our mapping tables and map it to a fresh new virtual value.
-   * Throws error if realValue already exists.
-   * @param realValue: realValue to add. Assumed to be unique.
+   * @param realValue: realValue to add.
    * @return the mapped virtual value.
    */
   virtual Virtual addRealValue(Real realValue) {
     if(realToVirtualValue.find(realValue) != realToVirtualValue.end()){
-      throw runtime_error("dettrace runtime exception: Attempting to add already existing key: " +
-                          to_string(realValue) + "\n");
+      myLogger.writeToLog(Importance::info, "Overwriting old value on map.\n");
     }
-
 
     myLogger.writeToLog(Importance::info, mappingName + ": New virtual value added: " +
                         to_string(freshValue) + "\n");

@@ -28,8 +28,9 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
   },
   myScheduler {startingPid, log},
   debugLevel {debugLevel}{
+
     // Set state for first process.
-    states.emplace(startingPid, state {startingPid, debugLevel});
+    states.emplace(startingPid, state{startingPid, debugLevel});
 
     // First process is special and we must set the options ourselves.
     // This is done everytime a new process is spawned.
@@ -708,6 +709,15 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_symlink:
     return symlinkSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_symlinkat:
+    return symlinkatSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_mknod:
+    return mknodSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_mknodat:
+    return mknodatSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_tgkill:
     return tgkillSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -969,6 +979,15 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 
   case SYS_symlink:
     return symlinkSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_symlinkat:
+    return symlinkatSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_mknod:
+    return mknodSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_mknodat:
+    return mknodatSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_tgkill:
     return tgkillSystemCall::handleDetPost(gs, s, t, sched);

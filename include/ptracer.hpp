@@ -243,11 +243,11 @@ public:
   void setReturnRegister(uint64_t retVal);
 
   /**
-   * Get results of system calls.
-   * During post system call event.
+   * Get results of system calls, we cast register value into int to avoid
+   * issues with sign.
    * @return Return value
    */
-  uint64_t getReturnValue();
+  int getReturnValue();
 
   /**
    * Get system call number.
