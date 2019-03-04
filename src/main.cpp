@@ -415,7 +415,6 @@ static void populateInitramfs(const char* initramfs, const char* path)
   doWithCheck(chdir(oldcwd), errmsg + oldcwd);
   free(oldcwd);
 }
- 
 // =======================================================================================
 // pathToChroot must exist and be located inside the chroot if the user defined their own chroot!
 static void checkPaths(string pathToChroot, string workingDir){

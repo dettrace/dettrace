@@ -230,6 +230,13 @@ public:
    * Function to get value of internal logical clock.
    */
   int getLogicalTime();
+
+  /**
+   * We must keep track of file creation. For open and openat, we set this flag.
+   * On the posthook, if the system call succeeded, we check if the file existed
+   * to know if this is a newly created file.
+   */
+  bool fileExisted = false;
 };
 
 #endif

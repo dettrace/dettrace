@@ -13,9 +13,12 @@
 #include <sys/socket.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
+#include <cassert>
 
 #include <limits>
 #include <cstring>
+#include <optional>
+#include <filesystem>
 
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -25,10 +28,12 @@
 #include <linux/fs.h>
 #include <sys/types.h>
 #include <utime.h>
+#include <unordered_map>
 
-#include<unordered_map>
+#include<optional>
 
 #include "dettraceSystemCall.hpp"
+#include "utilSystemCalls.hpp"
 #include "ptracer.hpp"
 
 // Enable tracee reads that are not strictly necessary for functionality, but
@@ -37,53 +42,10 @@
 // #define EXTRANEOUS_TRACEE_READS 0
 
 using namespace std;
-// =======================================================================================
-// Prototypes for common functions.
-void zeroOutStatfs(struct statfs& stats);
-void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName);
-void printInfoString(uint64_t addressOfCString, globalState& gs, state& s, ptracer& t,
-                     string postFix = " path: ");
-void injectFstat(globalState& gs, state& s, ptracer& t, int fd);
-void injectPause(globalState& gs, state& s, ptracer& t);
-
-pair<int,int> getPipeFds(globalState& gs, state& s, ptracer& t);
-
-static void replaceSystemCallWithNoop(globalState& gs, state& s, ptracer& t);
-static bool sendTraceeSignalNow(int signum, globalState& gs, state& s, ptracer& t, scheduler& sched);
-static void appendEnvpLdPreload(globalState& gs, state& s, ptracer& t);
-
-/**
- *
- * newfstatat is a stat variant with a "at" for using a file descriptor to a directory
- * to prepend to the relative path. For several system calls that delete a file e.g.
- * rename, renameat, renameat2,  we intercept them and make the original call a noop.
- * This is needed as once we hit the post-hook it is too late to call newfstatat.
-
- * This function does all the work to "switch out" the current system call and convert it
- * to newfstatat, only if needed, that is, based on whether this is the "first try" for
- * the current system call, or our replay done _after_ we have already injected newfstatat.
- *
- * returns true if the system call is to be injected, otherwise false.
- */
-bool injectNewfstatatIfNeeded(globalState& gs, state& s, ptracer& t, int dirfd,
-                              char* pathnameTraceesMem);
-void removeInodeFromMaps(ino_t inode, globalState& gs, ptracer& t);
-// =======================================================================================
-/**
- *
- * Replays system call if the value of errnoValue is equal to the errno value that the libc
- * call would have returned. Also logs event in logger. For example for read:
- *   replaySyscallIfBlocked(s, t, sched, EAGAIN);
- *
- * @return: true if call was replayed, else false.
- */
-bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t,
-                            scheduler& sched, int64_t errnoValue);
-bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
-                      int64_t errornoValue);
+namespace fs = std::filesystem;
 // =======================================================================================
 bool accessSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  printInfoString(t.arg1(), gs, s, t);
+  printInfoString(t.arg1(), gs.log, s.traceePid, t);
   return false;
 }
 
@@ -102,7 +64,7 @@ void alarmSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 }
 // =======================================================================================
 bool chdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  printInfoString(t.arg1(), gs, s, t);
+  printInfoString(t.arg1(), gs.log, s.traceePid, t);
 
   return false;
 }
@@ -112,7 +74,7 @@ void chdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 }
 // =======================================================================================
 bool chmodSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  printInfoString(t.arg1(), gs, s, t);
+  printInfoString(t.arg1(), gs.log, s.traceePid, t);
   return false;
 }
 
@@ -121,7 +83,7 @@ void chmodSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 }
 // =======================================================================================
 bool chownSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  printInfoString(t.arg1(), gs, s, t);
+  printInfoString(t.arg1(), gs.log, s.traceePid, t);
   return false;
 }
 
@@ -181,18 +143,24 @@ void connectSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
 }
 // =======================================================================================
 bool creatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  printInfoString(t.arg1(), gs, s, t);
+  printInfoString(t.arg1(), gs.log, s.traceePid, t);
   return true;
 }
 
 void creatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // Nothing for us to do skip the post hook!
   if((int) t.getReturnValue() < 0){
     return;
   }
 
-  // Inject fstat, creat always make a new file with write permissions.
-  injectFstat(gs, s, t, t.getReturnValue());
+  // Add an entry for this new file to our inode with a newer modified date.
+  // If the file already exists, creat truncates it since:
+  // create == open(O_CREATE | O_WRONLY | O_TRUNC)
+  // The inode is reused though, this is based on emperical observation, and I do not
+  // thin the POSIX semantics say this must happen, so we read the inode here to be
+  // safe. (Not sure how we could use this information to optimze anyways.)
+  auto inode = readInodeFor(gs.log, s.traceePid, t.getReturnValue());
+  gs.mtimeMap.addRealValue(inode);
+
   return;
 }
 // =======================================================================================
@@ -237,7 +205,7 @@ void dup2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
 
 // =======================================================================================
 bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  printInfoString(t.arg1(), gs, s, t);
+  printInfoString(t.arg1(), gs.log, s.traceePid, t);
 
   char** argv = (char**) t.arg2();
   string execveArgs {};
@@ -266,7 +234,7 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 }
 // =======================================================================================
 bool fchownatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  printInfoString(t.arg2(), gs, s, t);
+  printInfoString(t.arg2(), gs.log, s.traceePid, t);
 
   // int dirfd = t.arg1();
   // uid_t owner = t.arg3();
@@ -318,7 +286,7 @@ void fcntlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   // =======================================================================================
 bool faccessatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                        scheduler& sched){
-  printInfoString(t.arg2(), gs, s, t);
+  printInfoString(t.arg2(), gs.log, s.traceePid, t);
 
   return false;
 }
@@ -335,7 +303,7 @@ bool fgetxattrSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
 
 void fgetxattrSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                         scheduler& sched){
-  printInfoString(t.arg2(), gs, s, t);
+  printInfoString(t.arg2(), gs.log, s.traceePid, t);
 
   return;
 }
@@ -347,7 +315,7 @@ bool flistxattrSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
 
 void flistxattrSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                          scheduler& sched){
-  printInfoString(t.arg2(), gs, s, t);
+  printInfoString(t.arg2(), gs.log, s.traceePid, t);
 
   return;
 }
@@ -356,34 +324,9 @@ bool fstatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   gs.log.writeToLog(Importance::info, "fstat(fd=%d)\n", t.arg1());
   return true;
 }
+
 void fstatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-
-  // This isn't a natural call fstat from the tracee we injected this call ourselves!
-  if(s.syscallInjected){
-    gs.log.writeToLog(Importance::info, "This fstat was inject for mtime puposes.\n");
-    if((int) t.getReturnValue() < 0){
-      throw runtime_error("dettrace runtime exception: Unable to properly inject fstat call to tracee!\n"
-                          "fstat call returned: " +
-                          to_string(t.getReturnValue()) + "\n");
-    }
-    s.syscallInjected = false;
-    gs.log.writeToLog(Importance::info, "reading struct stat from %p\n", (void*)t.arg2());
-    struct stat myStat = t.readFromTracee(traceePtr<struct stat>((struct stat*) t.arg2()), s.traceePid);
-
-    gs.log.writeToLog(Importance::extra, "(device,inode) = (%lu,%lu)\n", myStat.st_dev, myStat.st_ino);
-
-    // Add an entry for this new file to our inode with a newer modified date.
-    if( ! gs.mtimeMap.realValueExists(myStat.st_ino) ){
-      gs.mtimeMap.addRealValue(myStat.st_ino);
-    }
-
-    // Previous state that should have been set by system call that created this fstat
-    // injection.
-    t.setRegs(s.regSaver.popRegisterState());
-  }else{
     handleStatFamily(gs, s, t, "fstat");
-  }
-
   return;
 }
 // =======================================================================================
@@ -522,7 +465,7 @@ bool getcwdSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
 }
 void getcwdSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                      scheduler& sched){
-  printInfoString(t.arg1(), gs, s, t);
+  printInfoString(t.arg1(), gs.log, s.traceePid, t);
 
   return;
 }
@@ -745,7 +688,6 @@ void mmapSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     replaySystemCall(gs, t, t.getSystemCallNumber());
   }
 }
-
 // =======================================================================================
 bool
 nanosleepSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -769,26 +711,37 @@ nanosleepSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
 // =======================================================================================
 bool mkdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                    scheduler& sched){
-  printInfoString(t.arg1(), gs, s, t);
+  printInfoString(t.arg1(), gs.log, s.traceePid, t);
 
-  return false;
+  return true;
 }
 
 void mkdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                      scheduler& sched){
-  throw runtime_error("Error: mkdirat post-hook should never be called.");
+  // Add/overwrite entry in our map.
+  if((int) t.getReturnValue() == 0 && (char*) t.arg1() != nullptr){
+    string strPath = t.readTraceeCString(traceePtr<char>((char*) t.arg1()), s.traceePid);
+    auto inode = inode_from_tracee(strPath, s.traceePid, gs.log, nullopt);
+    gs.mtimeMap.addRealValue(inode);
+  }
 }
 // =======================================================================================
 bool mkdiratSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                      scheduler& sched){
-  printInfoString(t.arg2(), gs, s, t);
-
-  return false;
+  printInfoString(t.arg2(), gs.log, s.traceePid, t);
+  gs.log.writeToLog(Importance::info, "dirfd: %d\n", t.arg1());
+  return true;
 }
 
 void mkdiratSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
-                                     scheduler& sched){
-  throw runtime_error("Error: mkdirat post-hook should never be called.");
+                                      scheduler& sched){
+  char* path = (char*) t.arg2();
+  // Add/overwrite entry in our map.
+  if((int) t.getReturnValue() == 0 && path != nullptr){
+    string strPath = t.readTraceeCString(traceePtr<char>(path), s.traceePid);
+    auto inode = inode_from_tracee(strPath, s.traceePid, gs.log, t.arg1());
+    gs.mtimeMap.addRealValue(inode);
+  }
 }
 // =======================================================================================
 bool newfstatatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
@@ -798,7 +751,7 @@ bool newfstatatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
 
 void newfstatatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                          scheduler& sched){
-  printInfoString(t.arg2(), gs, s, t);
+  printInfoString(t.arg2(), gs.log, s.traceePid, t);
 
   // This newfstatat was injected to get the inode belonging to a file that was deleted
   // through: unlink, unlinkat, or rmdir.
@@ -832,7 +785,7 @@ void newfstatatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
 }
 // =======================================================================================
 bool lstatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  printInfoString(t.arg1(), gs, s, t);
+  printInfoString(t.arg1(), gs.log, s.traceePid, t);
 
   return true;
 }
@@ -844,8 +797,8 @@ void lstatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 // =======================================================================================
 bool linkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
 
-  printInfoString(t.arg2(), gs, s, t, " hardlinking path: ");
-  printInfoString(t.arg1(), gs, s, t, " to path: ");
+  printInfoString(t.arg2(), gs.log, s.traceePid, t, " hardlinking path: ");
+  printInfoString(t.arg1(), gs.log, s.traceePid, t, " to path: ");
 
   return false;
 }
@@ -857,90 +810,42 @@ void linkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
 // =======================================================================================
 bool linkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
 
-  printInfoString(t.arg4(), gs, s, t, " hardlinking path: ");
-  printInfoString(t.arg2(), gs, s, t, " to path: ");
+  printInfoString(t.arg4(), gs.log, s.traceePid, t, " hardlinking path: ");
+  printInfoString(t.arg2(), gs.log, s.traceePid, t, " to path: ");
 
   return false;
 }
 
 void linkatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                      scheduler& sched){
-  throw runtime_error("Error: mkdirat post-hook should never be called.");
+  throw runtime_error("Error: linkat post-hook should never be called.");
 }
 // =======================================================================================
 bool openSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  char* addressOfCString = (char*) t.arg1();
-  // Do not use printInfo string, we want the path for checking against certain strings.
-  if(addressOfCString != nullptr){
-#ifdef EXTRANEOUS_TRACEE_READS
-    auto ptr = traceePtr<char>(addressOfCString);
-    string path = t.readTraceeCString(ptr, s.traceePid);
-    string coloredPath = gs.log.makeTextColored(Color::green, path);
-    string msg = s.systemcall->syscallName + " path:" + coloredPath + "\n";
-    gs.log.writeToLog(Importance::info, msg);
-    
-    if(path == "/dev/random"){
-      gs.devRandomOpens++;
-    }else if(path == "/dev/urandom"){
-      gs.devUrandomOpens++;
-    }
-#endif
-  }else{
-    gs.log.writeToLog(Importance::info, "Null path given to system call.\n");
+  if((char*) t.arg1() != nullptr){
+    handlePreOpens(gs, s, t, nullopt, traceePtr<char>{(char*) t.arg1()}, t.arg2());
+    return true;
   }
-
-  return true;
+  return false;
 }
 
 void openSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // Nothing for us to do skip the post hook!
-  if((int) t.getReturnValue() < 0){
-    return;
-  }
-
-  int flags = t.arg2();
-
-  // Check if this file is modifiable by tracee.
-  if(flags & (O_WRONLY | O_RDWR | O_APPEND | O_TRUNC | O_CREAT)){
-    injectFstat(gs, s, t, t.getReturnValue());
-  }
+  // Beware of unsigned numbers, can lead to wrong value if not casted!
+  handlePostOpens(gs, s, t, (int) t.arg2());
 }
 // =======================================================================================
 bool openatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-    char* addressOfCString = (char*) t.arg2();
-  // Do not use printInfo string, we want the path for checking against certain strings.
-  if(addressOfCString != nullptr){
-#ifdef EXTRANEOUS_TRACEE_READS
-    auto ptr = traceePtr<char>(addressOfCString);
-    string path = t.readTraceeCString(ptr, s.traceePid);
-    string coloredPath = gs.log.makeTextColored(Color::green, path);
-    string msg = s.systemcall->syscallName + " path:" + coloredPath + "\n";
-    gs.log.writeToLog(Importance::info, msg);
-    
-    if(path == "/dev/random"){
-      gs.devRandomOpens++;
-    }else if(path == "/dev/urandom"){
-      gs.devUrandomOpens++;
-    }
-#endif
-  }else{
-    gs.log.writeToLog(Importance::info, "Null path given to system call.\n");
+  if((char*) t.arg2() != nullptr){
+    handlePreOpens(gs, s, t, t.arg1(), traceePtr<char>{(char*) t.arg2()}, t.arg3());
+    return true;
   }
-
-  return true;
+  return false;
 }
 
 void openatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // Nothing for us to do skip the post hook!
-  if((int) t.getReturnValue() < 0){
-    return;
-  }
+  // Beware of sign, can lead to wrong value if not casted!
+  handlePostOpens(gs, s, t, (int) t.arg3());
 
-  int flags = t.arg3();
-  // Check if this file is modifiable by tracee.
-  if(flags & (O_WRONLY | O_RDWR | O_APPEND | O_TRUNC | O_CREAT)){
-    injectFstat(gs, s, t, t.getReturnValue());
-  }
 }
 // =======================================================================================
 bool pauseSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -1002,7 +907,7 @@ void pipe2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   t.writeArg2(s.originalArg2);
   auto p = getPipeFds(gs, s, t);
 
-  // This was a pipe that  got converted to a pipe2.
+  // This was a pipe that got converted to a pipe2.
   if(s.syscallInjected){
     s.syscallInjected = false;
     gs.log.writeToLog(Importance::info, "This used to a pipe()!\n");
@@ -1203,7 +1108,7 @@ void readvSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 // =======================================================================================
 bool readlinkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                       scheduler& sched){
-  printInfoString(t.arg1(), gs, s, t);
+  printInfoString(t.arg1(), gs.log, s.traceePid, t);
 
   return false;
 }
@@ -1215,7 +1120,7 @@ readlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedul
 // =======================================================================================
 bool readlinkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                       scheduler& sched){
-  printInfoString(t.arg2(), gs, s, t);
+  printInfoString(t.arg2(), gs.log, s.traceePid, t);
 
   return false;
 }
@@ -1238,122 +1143,52 @@ void recvmsgSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
 // =======================================================================================
 bool renameSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                     scheduler& sched){
-  gs.log.writeToLog(Importance::info, "rename pre-hook, s.firstTrySystemcall:%d\n", s.firstTrySystemcall);
-  printInfoString(t.arg1(), gs, s, t, " old path: ");
-  printInfoString(t.arg2(), gs, s, t, " new path: ");
-
-  // Turn into a newfstatat system call to see if newpath exists. If so, we must mark
-  // newpath as deleted.
-  bool ret = injectNewfstatatIfNeeded(gs, s, t, AT_FDCWD, (char*) t.arg2());
-  if(ret){
-    // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
-    // true.
-    return true;
-  }
-
-  // We must go into the post hook to delete the inode.
+  printInfoString(t.arg1(), gs.log, s.traceePid, t, " old path: ");
+  printInfoString(t.arg2(), gs.log, s.traceePid, t, " new path: ");
   return true;
 }
 
 void renameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                     scheduler& sched){
-  if((int) t.getReturnValue() >= 0){
-    removeInodeFromMaps(s.inodeToDelete, gs, t);
-    s.inodeToDelete = -1;
-  }
-  s.firstTrySystemcall = true;
-
+  // nothing to do, but return value may be useful for debugging (printed by
+  // handlePostSystemCall)
   return;
 }
 // =======================================================================================
 bool renameatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                     scheduler& sched){
-  // Turn into a newfstatat system call to see if oldpath existed. If so, we must mark
-  // all path as deleted.
-  int newdirfd = (int) t.arg3();
-  char* newpath = (char*) t.arg4();
-  bool ret = injectNewfstatatIfNeeded(gs, s, t, newdirfd, newpath);
-  if(ret){
-    // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
-    // true.
-    return true;
-  }
-
-  printInfoString(t.arg2(), gs, s, t, " renaming-ing path: ");
-  printInfoString(t.arg4(), gs, s, t, " to path: ");
-  // We must go into the post hook to delete the inode.
+  printInfoString(t.arg2(), gs.log, s.traceePid, t, " renaming-ing path: ");
+  printInfoString(t.arg4(), gs.log, s.traceePid, t, " to path: ");
   return true;
 }
 
 void renameatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                     scheduler& sched){
-  if((int) t.getReturnValue() >= 0){
-    removeInodeFromMaps(s.inodeToDelete, gs, t);
-    s.inodeToDelete = -1;
-  }
-  s.firstTrySystemcall = true;
+  // nothing to do, but return value may be useful for debugging (printed by
+  // handlePostSystemCall)
 }
 // =======================================================================================
 bool renameat2SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                     scheduler& sched){
-  int flags = (int) t.arg5();
-  // We do not handle this flag TODO
-#ifdef RENAME_EXCHANGE
-  if((flags | RENAME_EXCHANGE) == flags){
-    throw runtime_error("dettrace runtime exception: We do not handle RENAME_EXCHANGE flag.\n");
-  }
-#endif
-
-  // Turn into a newfstatat system call to see if oldpath existed. If so, we must mark
-  // all path as deleted.
-  int newdirfd = (int) t.arg3();
-  char* newpath = (char*) t.arg4();
-  bool ret = injectNewfstatatIfNeeded(gs, s, t, newdirfd, newpath);
-  if(ret){
-    // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
-    // true.
-    return true;
-  }
-
-  printInfoString(t.arg2(), gs, s, t, " renaming-ing path: ");
-  printInfoString(t.arg4(), gs, s, t, " to path: ");
-  // We must go into the post hook to delete the inode.
+  printInfoString(t.arg2(), gs.log, s.traceePid, t, " renaming-ing path: ");
+  printInfoString(t.arg4(), gs.log, s.traceePid, t, " to path: ");
   return true;
 }
 
 void renameat2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                     scheduler& sched){
-  if((int) t.getReturnValue() >= 0){
-    removeInodeFromMaps(s.inodeToDelete, gs, t);
-    s.inodeToDelete = -1;
-  }
-  s.firstTrySystemcall = true;
+  // nothing to do, but return value may be useful for debugging (printed by
+  // handlePostSystemCall)
 }
 // =======================================================================================
 bool rmdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // Turn into a newfstatat system call.
-  bool ret = injectNewfstatatIfNeeded(gs, s, t, AT_FDCWD, (char*) t.arg1());
-  if(ret){
-    // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
-    // true.
-    return true;
-  }
-
-  printInfoString(t.arg1(), gs, s, t);
-  // We must go into the post hook to delete the inode.
+  printInfoString(t.arg1(), gs.log, s.traceePid, t);
   return true;
-
 }
 
 void rmdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // We delete the inode here instead of at newfstatatSystemCall since we don't know
-  // until here whether the call to rmdir actually succeeded.
-  // TODO: What happens if this a symbolic link to a directory?
-  if((int) t.getReturnValue() >= 0){
-    removeInodeFromMaps(s.inodeToDelete, gs, t);
-    s.inodeToDelete = -1;
-  }
-  s.firstTrySystemcall = true;
+  // nothing to do, but return value may be useful for debugging (printed by
+  // handlePostSystemCall)
 }
 // =======================================================================================
 // cribbed from strace, as using the standard struct sigaction does not yield
@@ -1515,7 +1350,7 @@ void set_robust_listSystemCall::handleDetPost(globalState& gs, state& s, ptracer
 
 // =======================================================================================
 bool statSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  printInfoString(t.arg1(), gs, s, t);
+  printInfoString(t.arg1(), gs.log, s.traceePid, t);
 
   return true;
 }
@@ -1585,13 +1420,64 @@ void sysinfoSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
 }
 // =======================================================================================
 bool symlinkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  printInfoString(t.arg1(), gs, s, t, " target: ");
-  printInfoString(t.arg2(), gs, s, t, " linkpath: ");
-  return false;
+  printInfoString(t.arg1(), gs.log, s.traceePid, t, " target: ");
+  printInfoString(t.arg2(), gs.log, s.traceePid, t, " linkpath: ");
+  return true;
 }
 
 void symlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  throw runtime_error("symlink post hook shold never be called.");
+  if((int) t.getReturnValue() == 0 && (char*) t.arg2() != nullptr){
+    string linkpath = t.readTraceeCString(traceePtr<char>((char*) t.arg2()), s.traceePid);
+    auto inode = inode_from_tracee(linkpath, s.traceePid, gs.log, nullopt);
+    gs.mtimeMap.addRealValue(inode);
+  }
+}
+// =======================================================================================
+bool symlinkatSystemCall::
+handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  printInfoString(t.arg1(), gs.log, s.traceePid, t, " target: ");
+  // TODO Add newdirfd
+  printInfoString(t.arg3(), gs.log, s.traceePid, t, " linkpath: ");
+  return true;
+}
+
+void symlinkatSystemCall::
+handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if((int) t.getReturnValue() == 0 && (char*) t.arg3() != nullptr){
+    string linkpath = t.readTraceeCString(traceePtr<char>((char*) t.arg3()), s.traceePid);
+    auto inode = inode_from_tracee(linkpath, s.traceePid, gs.log, t.arg2());
+    gs.mtimeMap.addRealValue(inode);
+  }
+}
+// =======================================================================================
+bool mknodSystemCall::
+handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  printInfoString(t.arg1(), gs.log, s.traceePid, t);
+  return true;
+}
+
+void mknodSystemCall::
+handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if((int) t.getReturnValue() == 0 && (char*) t.arg1() != nullptr){
+    string path = t.readTraceeCString(traceePtr<char>((char*) t.arg1()), s.traceePid);
+    auto inode = inode_from_tracee(path, s.traceePid, gs.log, nullopt);
+    gs.mtimeMap.addRealValue(inode);
+  }
+}
+// =======================================================================================
+bool mknodatSystemCall::
+handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  printInfoString(t.arg2(), gs.log, s.traceePid, t);
+  return true;
+}
+
+void mknodatSystemCall::
+handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if((int) t.getReturnValue() == 0 && (char*) t.arg2() != nullptr){
+    string path = t.readTraceeCString(traceePtr<char>((char*) t.arg2()), s.traceePid);
+    auto inode = inode_from_tracee(path, s.traceePid, gs.log, t.arg1());
+    gs.mtimeMap.addRealValue(inode);
+  }
 }
 // =======================================================================================
 bool tgkillSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -1910,55 +1796,27 @@ void unameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 // =======================================================================================
 bool
 unlinkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // Turn into a newfstatat system call.
-  bool ret = injectNewfstatatIfNeeded(gs, s, t, AT_FDCWD, (char*) t.arg1());
-  if(ret){
-    // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
-    // true.
-    return true;
-  }
-
-  printInfoString(t.arg1(), gs, s, t);
-  // We must go into the post hook to delete the inode.
+  printInfoString(t.arg1(), gs.log, s.traceePid, t);
   return true;
 }
 
 void
 unlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-   // Not our first time. This is after the real unlink actually happened.
-  if((int) t.getReturnValue() >= 0){
-    removeInodeFromMaps(s.inodeToDelete, gs, t);
-    s.inodeToDelete = -1;
-  }
-  s.firstTrySystemcall = true;
-
+  // nothing to do, but return value may be useful for debugging (printed by
+  // handlePostSystemCall)
   return;
 }
 // =======================================================================================
 bool
 unlinkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // Turn into a newfstatat system call.
-  bool ret = injectNewfstatatIfNeeded(gs, s, t, (int) t.arg1(), (char*) t.arg2());
-  if(ret){
-    // We have work to do in the newfstatat post hook! Make sure to intercept this, hence,
-    // true.
-    return true;
-  }
-  printInfoString(t.arg2(), gs, s, t);
-  // We must go into the post hook to delete the inode.
+  printInfoString(t.arg2(), gs.log, s.traceePid, t);
   return true;
 }
 
 void
 unlinkatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // Not our first time. This is after the real unlink actually happened.
-  if((int) t.getReturnValue() >= 0){
-    removeInodeFromMaps(s.inodeToDelete, gs, t);
-    s.inodeToDelete = -1;
-  }
-
-  s.firstTrySystemcall = true;
-
+  // nothing to do, but return value may be useful for debugging (printed by
+  // handlePostSystemCall)
   return;
 }
 
@@ -2187,490 +2045,3 @@ void writevSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   return;
 }
 // =======================================================================================
-
-bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
-                      int64_t errornoValue){
-  if(- errornoValue == (int64_t) t.getReturnValue()){
-    gs.log.writeToLog(Importance::info, "Syscall would have blocked!\n");
-
-    sched.preemptAndScheduleNext(preemptOptions::runnable);
-    return true;
-  }else{
-    // Disambiguiate. Otherwise it's impossible to tell the difference between a
-    // maybeRunnable process that made no progress vs the case where we were on
-    // maybeRunnable and we made progress, and eventually we hit another blocking
-    // system call.
-    return false;
-  }
-}
-
-/**
-   This function provides unified handling for timer-based signals stemming from
-   alarm(), setitimer() and timer_create().
-
-   The first step is to track a tracee's signal handlers, which can be set via
-   rt_sigaction() -- on cat16 at least, the signal() and sigaction() ultimately
-   resolve to the rt_sigaction() syscall. Any given signal may be ignored, set
-   to its default behavior (usually termination, but it varies by signal), or
-   have a custom handler. These handlers for all signals are tracked in
-   the state::currentSignalHandlers map.
-
-   Then, when a tracee requests a signal be delivered some time in the future,
-   we convert this request into immediate deterministic signal delivery. Let's
-   refer to alarm(), setitimer() and timer_settime() as signal-generated
-   functions (SGFs).
-
-   If the signal generated by the SGF is being ignored, then we convert the SFG
-   into a NOP: instead of actually having a signal sent and risking some
-   nondeterministic EINTR on some other system call, we don't send the signal in
-   the first place and the tracee shouldn't be able to tell.
-
-   If the signal generated by the SGF is set to cause termination (usually the
-   default behavior), we convert the SGF into an exit() syscall.
-
-   If the signal generated by the SGF invokes a custom handler, then we have to
-   actually send a real signal. We convert the SGF into a pause() syscall and
-   send a real signal from the tracer to the tracee via tgkill(). When the
-   tracee receives the signal, its handler will run and pause() will then
-   return.
-   */
-static bool sendTraceeSignalNow(int signum, globalState& gs,
-                                state& s, ptracer& t, scheduler& sched) {
-  enum sighandler_type sh = SIGHANDLER_DEFAULT;
-  if (s.currentSignalHandlers.count(signum)) {
-    sh = s.currentSignalHandlers[signum];
-  }
-
-  switch (sh) {
-
-  case SIGHANDLER_CUSTOM_1SHOT: {
-    gs.log.writeToLog(Importance::info, "tracee has a custom 1-shot signal "+to_string(signum)+" handler, sending signal to pid %u\n", t.getPid());
-
-    // TODO: JLD is this a race? the tracee isn't technically paused yet
-    t.changeSystemCall(SYS_pause);
-    s.signalInjected = true;
-    s.currentSignalHandlers[signum] = SIGHANDLER_DEFAULT; // go back to default next time
-    int retVal = syscall(SYS_tgkill, t.getPid(), t.getPid(), signum);
-    if (0 != retVal) {
-      throw runtime_error("dettrace runtime exception: sending myself signal "+to_string(signum)+" failed, tgkill returned " + to_string(retVal));
-    }
-    return true; // run pause post-hook
-  }
-
-  case SIGHANDLER_CUSTOM: {
-    gs.log.writeToLog(Importance::info, "tracee has a custom signal "+to_string(signum)+" handler, sending signal to pid %u\n", t.getPid());
-
-    // TODO: JLD is this a race? the tracee isn't technically paused yet
-    t.changeSystemCall(SYS_pause);
-    s.signalInjected = true;
-    int retVal = syscall(SYS_tgkill, t.getPid(), t.getPid(), signum);
-    if (0 != retVal) {
-      throw runtime_error("dettrace runtime exception: sending myself signal "+to_string(signum)+" failed, tgkill returned " + to_string(retVal));
-    }
-    return true; // run pause post-hook
-  }
-
-  case SIGHANDLER_DEFAULT: {
-    if (SIGALRM != signum && SIGVTALRM != signum && SIGPROF != signum) {
-      throw runtime_error("dettrace runtime exception: can't send myself a signal "+to_string(signum));
-    }
-    // for SIGALRM, SIGVTALRM, SIGPROF, default handler terminates the tracee
-    gs.log.writeToLog(Importance::info, "tracee has default signal "+to_string(signum)+" handler, injecting exit() for pid %u\n", t.getPid());
-    t.changeSystemCall(SYS_exit);
-    t.writeArg1( 128 + signum ); // status reflects exit due to signal
-    return false; // there shouldn't be a post-hook for exit
-  }
-
-  case SIGHANDLER_IGNORED: // don't do anything
-    replaceSystemCallWithNoop(gs, s, t);
-    gs.log.writeToLog(Importance::info, "tracee is ignoring signal "+to_string(signum)+", doing nothing\n");
-    return true; // run noop (getpid) post-hook
-
-  default:
-    throw runtime_error("dettrace runtime exception: invalid handler "+to_string(sh)+
-                        " for signal "+to_string(signum));
-  }
-}
-// =======================================================================================
-bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
-                            int64_t errornoValue){
-  if(- errornoValue == (int64_t) t.getReturnValue()){
-    gs.log.writeToLog(Importance::info, "System call would have blocked!\n");
-
-    gs.replayDueToBlocking++;
-    sched.preemptAndScheduleNext(preemptOptions::markAsBlocked);
-    replaySystemCall(gs, t, t.getSystemCallNumber());
-    return true;
-  }else{
-    // Disambiguiate. Otherwise it's impossible to tell the difference between a
-    // maybeRunnable process that made no progress vs the case where we were on
-    // maybeRunnable and we made progress, and eventually we hit another blocking
-    // system call.
-    return false;
-  }
-}
-// =======================================================================================
-void replaySystemCall(globalState& gs, ptracer& t, uint64_t systemCall){
-#ifdef EXTRANEOUS_TRACEE_READS
-  uint16_t minus2 = t.readFromTracee(traceePtr<uint16_t>((uint16_t*) ((uint64_t) t.getRip().ptr - 2)), t.getPid());
-  if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
-    throw runtime_error("dettrace runtime exception: IP does not point to system call instruction!\n");
-  }
-#endif
-
-  gs.totalReplays++;
-  // Replay system call!
-  t.changeSystemCall(systemCall);
-  t.writeIp((uint64_t) t.getRip().ptr - 2);
-}
-// =======================================================================================
-void zeroOutStatfs(struct statfs& stats){
-  // Type of filesystem
-  stats.f_type = 0xEF53;// EXT4_SUPER_MAGIC
-  stats.f_bsize = 100;   /* Optimal transfer block size */
-  stats.f_blocks = 1000;  /* Total data blocks in filesystem */
-  stats.f_bfree = 10000;   /* Free blocks in filesystem */
-  stats.f_bavail = 5000;  /* Free blocks available to
-                             unprivileged user */
-  stats.f_files = 1000;   /* Total file nodes in filesystem */
-  stats.f_ffree = 1000;   /* Free file nodes in filesystem */
-  stats.f_fsid.__val[0] = 0;
-  stats.f_fsid.__val[1] = 0;
-  stats.f_namelen = 200; /* Maximum length of filenames */
-  stats.f_frsize = 20;  /* Fragment size (since Linux 2.6) */
-  stats.f_flags = 1;   /* Mount flags of filesystem */
-}
-// =======================================================================================
-void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName){
-  struct stat* statPtr;
-
-  if(syscallName == "newfstatat"){
-    statPtr = (struct stat*) t.arg3();
-  }else{
-    statPtr = (struct stat*) t.arg2();
-  }
-
-  if(statPtr == nullptr){
-    gs.log.writeToLog(Importance::info, syscallName + ": statbuf null.\n");
-    return;
-  }
-
-  int retVal = t.getReturnValue();
-  if(retVal == 0){
-    struct stat myStat = t.readFromTracee(traceePtr<struct stat>(statPtr), s.traceePid);
-    ino_t inode = myStat.st_ino;
-    gs.log.writeToLog(Importance::extra, "(device,inode) = (%lu,%lu)\n", myStat.st_dev, inode);
-    // Use inode to check if we created this file during our run.
-    time_t virtualMtime = gs.mtimeMap.realValueExists(inode) ?
-      gs.mtimeMap.getVirtualValue(inode) :
-      0; // This was an old file that has not been opened for modification.
-
-    /* Time of last access */
-    myStat.st_atim = timespec { .tv_sec =  0,
-                                .tv_nsec = 0 };
-    /* Time of last modification */
-    myStat.st_mtim = timespec { .tv_sec =  virtualMtime,
-                                .tv_nsec = 0 };
-    /* Time of last status change */
-    myStat.st_ctim = timespec { .tv_sec = 0,
-                                .tv_nsec = 0 };
-
-    // TODO: I'm surprised this doesn't break things. I guess nobody uses this
-    // result?
-    myStat.st_dev = 1;         /* ID of device containing file */
-
-    myStat.st_ino = gs.inodeMap.realValueExists(inode) ?
-      gs.inodeMap.getVirtualValue(inode) :
-      gs.inodeMap.addRealValue(inode) ;
-
-    // st_mode holds the permissions to the file. If we zero it out libc functions
-    // will think we don't have access to this file. Hence we keep our permissions
-    // as part of the stat.
-    // mode_t    st_mode;        /* File type and mode */
-
-    myStat.st_nlink = 1;       /* Number of hard links */
-
-    // These should never be set! The container handles group and user id through
-    // setting these will lead to inconistencies which will manifest themselves as
-    // weird permission denied errors for some system calls.
-    // myStat.st_uid = 65534;         /* User ID of owner */
-    // myStat.st_gid = 1;         /* Group ID of owner */
-
-    myStat.st_rdev = 1;        /* Device ID (if special file) */
-
-    // Program will stall if we put some arbitrary value here: TODO.
-    // myStat.st_size = 512;        /* Total size, in bytes */
-
-    myStat.st_blksize = 512;     /* Block size for filesystem I/O */
-
-    // TODO: could return actual value here?
-    myStat.st_blocks = 1;      /* Number of 512B blocks allocated */
-
-    // Write back result for child.
-    t.writeToTracee(traceePtr<struct stat>(statPtr), myStat, s.traceePid);
-  }
-  return;
-}
-// =======================================================================================
-/**
- * Helper function to print path for system call.
- * Given the address of the string (this can be fetched by t.argN() ).
- * It will print this string as a green text to the logger.
- *
- * @arg postFix: This is a default argument. Usually " path:" unless something
- * else is given.
- */
-void printInfoString(uint64_t addressOfCString, globalState& gs, state& s, ptracer& t, string postFix){
-#ifdef EXTRANEOUS_TRACEE_READS
-  if((char*) addressOfCString != nullptr){
-    if(gs.log.getDebugLevel() > 0){
-      string path = t.readTraceeCString(traceePtr<char>((char*) addressOfCString), s.traceePid);
-      string msg = s.systemcall->syscallName + postFix +
-        gs.log.makeTextColored(Color::green, path) + "\n";
-      gs.log.writeToLog(Importance::info, msg);
-    }
-  }else{
-    gs.log.writeToLog(Importance::info, "Null path given to system call.\n");
-  }
-#endif
-  return;
-}
-// =======================================================================================
-// Inject fstat system call. struct stat is written belows the stack and can be fetched
-// by ptrace read.
-void injectFstat(globalState& gs, state& s, ptracer& t, int fd){
-  gs.injectedSystemCalls++;
-  gs.log.writeToLog(Importance::info, "Injecting fstat call to tracee!\n");
-  // Save current register state to restore in fstat.
-  s.regSaver.pushRegisterState(t.getRegs());
-
-  // Inject fstat system call to perform!
-  s.syscallInjected = true;
-
-  struct stat* traceesMem = (struct stat*) s.mmapMemory.getAddr().ptr;
-
-  // zero out struct stat memory
-  struct stat zeroStat = {0};
-  t.writeToTracee(traceePtr<struct stat>(traceesMem), zeroStat, s.traceePid);
-
-  // Call fstat.
-  t.writeArg1(fd); // file descriptor.
-  t.writeArg2((uint64_t )traceesMem);
-  replaySystemCall(gs, t, SYS_fstat);
-
-  gs.log.writeToLog(Importance::info, "fstat(%d, %p)!\n", fd, traceesMem);
-}
-// =======================================================================================
-void injectPause(globalState& gs, state& s, ptracer& t){
-  gs.log.writeToLog(Importance::info, "Injecting pause call to tracee!\n");
-  s.syscallInjected = true;
-  gs.injectedSystemCalls++;
-
-  replaySystemCall(gs, t, SYS_pause);
-}
-// =======================================================================================
-bool injectNewfstatatIfNeeded(globalState& gs, state& s, ptracer& t, int dirfd,
-                              char* pathnameTraceesMem){
-  // This is not the first time we see this system call. We have already replayed it.
-  // not injecting.
-  if(! s.firstTrySystemcall){
-    auto str = "No need to inject newfstatat in tracee, this is not the first time!\n";
-    gs.log.writeToLog(Importance::info, str);
-    return false;
-  }
-
-  gs.log.writeToLog(Importance::info, "Replacing newfstatat call in tracee!\n");
-  gs.injectedSystemCalls++;
-
-  // Save current register state to restore in newfstatat.
-  s.regSaver.pushRegisterState(t.getRegs());
-
-  // Inject fstat system call to perform!
-  s.syscallInjected = true;
-
-  struct stat* traceesMem = (struct stat*) s.mmapMemory.getAddr().ptr;
-
-  replaySystemCall(gs, t, SYS_newfstatat);
-  t.writeArg1(dirfd); // file descriptor.
-  t.writeArg2((uint64_t) pathnameTraceesMem);
-  t.writeArg3((uint64_t ) traceesMem);
-  // Needed to handle directories and symlinks correctly.
-  t.writeArg4((uint64_t) AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH);
-
-  s.firstTrySystemcall = false;
-
-  return true;
-}
-
-// =======================================================================================
-/*
- * Only delete if exists, not existing is not an error.
- */
-void removeInodeFromMaps(ino_t inode, globalState& gs, ptracer& t){
-
-  gs.log.writeToLog(Importance::extra, "Attempting to remove inode %d from maps...\n", inode);
-  
-  // Nothing to do.
-  if(inode == -1){
-    return;
-  }
-
-  // Remove from inode and mtime maps if exists.
-  if(gs.inodeMap.realValueExists(inode)){
-    gs.log.writeToLog(Importance::extra, "Deleted inode from map: %d\n", inode);
-    gs.inodeMap.eraseBasedOnKey(inode);
-  }
-  if(gs.mtimeMap.realValueExists(inode)){
-    gs.log.writeToLog(Importance::extra, "Deleted mtime from map: %d\n", inode);
-    gs.mtimeMap.eraseBasedOnKey(inode);
-  }
-
-  return;
-}
-// =======================================================================================
-// Turn system call into a noop by changing it into a time. This should be called from
-// the pre hook only! We use time (a vdso system call), since we don't expect it to be
-// called often, unlike getpid, which is expensive to use as a noop since it is called a
-// lot.
-void replaceSystemCallWithNoop(globalState& gs, state& s, ptracer& t){
-  t.changeSystemCall(SYS_time);
-  gs.log.writeToLog(Importance::info, "Turning this system call into a NOOP\n");
-  s.noopSystemCall = true;
-  return;
-}
-// =======================================================================================
-pair<int,int> getPipeFds(globalState& gs, state& s, ptracer& t){
-// Get values of both file descriptors.
-  int* pipefdTracee = (int*) t.arg1();
-  traceePtr<int> fdPtr1 = traceePtr<int>(& pipefdTracee[0]);
-  traceePtr<int> fdPtr2 = traceePtr<int>(& pipefdTracee[1]);
-
-  int fd1 = t.readFromTracee(fdPtr1, t.getPid());
-  int fd2 = t.readFromTracee(fdPtr2, t.getPid());
-
-  gs.log.writeToLog(Importance::info, "Got pipe fd1: " + to_string(fd1) + "\n");
-  gs.log.writeToLog(Importance::info, "Got pipe fd2: " + to_string(fd2) + "\n");
-
-  // Track this file descriptor:
-  if(s.fdStatus.count(fd1) != 0){
-    throw runtime_error("dettrace runtime exception: Value already in map (fdStatus).");
-  }
-  if(s.fdStatus.count(fd2) != 0){
-    throw runtime_error("dettrace runtime exception: Value already in map (fdStatus).");
-  }
-
-  return make_pair(fd1, fd2);
-}
-// =======================================================================================
-template <typename T, typename U> static inline traceePtr<T> plusRemotePtr(traceePtr<T> rptr, U off) {
-  return traceePtr<T>((T*)((unsigned long)rptr.ptr + (long) off));
-}
-
-/* assume @remotePtr has enough space to store all of @s, '\0' included */
-static void writeTraceeCString(ptracer& t, traceePtr<unsigned long>remotePtr, string& s)
-{
-  auto len = s.length();
-  if (len == 0) return;
-  unsigned long val;
-
-  for (auto i = 0; i <= len; i += sizeof(long)) {
-    val = 0;
-    auto p = plusRemotePtr(remotePtr, i);
-    for (int j = i; j < i + sizeof(long); j++) {
-      if (j < len) {
-	val |= ((unsigned long)s[j] & 0xffUL) << 8*(j-i);
-      }
-    }
-    t.writeToTracee(p, val, t.getPid());
-  }
-}
-
-static pair<string, string> parseEnv(string& env) {
-  int i;
-  for (i = 0; i < env.length(); i++) {
-    if (env[i] == '=') {
-      break;
-    }
-  }
-  return make_pair(env.substr(0, i), env.substr(i+1));
-}
-
-static unordered_map<string, string> getTraceeEnv(ptracer& t) {
-  unordered_map<string, string> envvars;
-
-  unsigned long envpVal = (unsigned long)t.arg3();
-
-  for (int i = 0; ; i++) {
-    auto pp = traceePtr<unsigned long>((unsigned long*)(envpVal + i * sizeof(void*)));
-    unsigned long envp = t.readFromTracee(pp, t.getPid());
-    if (!envp) break;
-    auto z = t.readTraceeCString(traceePtr<char>((char*)envp), t.getPid());
-    if (z.empty()) {
-      break;
-    }
-
-    envvars.insert(parseEnv(z));
-  }
-
-  return envvars;
-}
-// =======================================================================================
-/* copy trace envs, caller to ensure @rptr has enough space */
-static void copyTraceeEnv(ptracer& t, unordered_map<string, string>& envs, traceePtr<char*> rptr, traceePtr<char> strSection) {
-  unsigned long newEnvpVal = (unsigned long)rptr.ptr;
-  auto newCString = traceePtr<unsigned long>((unsigned long*)(strSection.ptr));
-  int envpCount = 0;
-  string env;
-
-  for (auto it = envs.cbegin(); it != envs.cend(); ++it, ++envpCount) {
-    auto newpp = traceePtr<unsigned long>((unsigned long*)(newEnvpVal + envpCount * sizeof(void*)));
-    // update env string and pointer
-    env = it->first + "=" + it->second;
-    writeTraceeCString(t, newCString, env);
-    t.writeToTracee(newpp, (unsigned long)newCString.ptr, t.getPid());
-    newCString = plusRemotePtr(newCString, (1+env.length())); // point to next env string
-  }
-  // null terminate envp
-  auto newpp = traceePtr<unsigned long>((unsigned long*)(newEnvpVal + envpCount * sizeof(void*)));
-  t.writeToTracee(newpp, 0UL, t.getPid());
-}
-
-static void appendEnvpLdPreload(globalState& gs, state& s, ptracer& t) {
-  auto preloadedLibdet = true;
-  auto envs = getTraceeEnv(t);
-
-  if (!s.mmapMemory.doesExist) {
-    for (auto it = envs.cbegin(); it != envs.cend(); ++it) {
-      if (it->first == "LD_PRELOAD") {
-	setenv("TRACEE_LDPRELOAD", it->second.c_str(), 1);
-      }
-    }
-    return;
-  }
-
-  unsigned stroff = 0x1000;
-  unsigned long newEnvpVal = (unsigned long)s.mmapMemory.getAddr().ptr;
-  auto newCString = traceePtr<unsigned long>((unsigned long*)((unsigned long)newEnvpVal + stroff));
-
-  string preloadKey("LD_PRELOAD");
-
-  if (envs.find(preloadKey) == envs.end()) {  /* insert LD_PRELOAD if needed */
-    envs[preloadKey] = secure_getenv("TRACEE_LDPRELOAD");
-    preloadedLibdet = false;
-  } else {
-    auto preload = envs[preloadKey];
-    string libdet(secure_getenv("TRACEE_LDPRELOAD"));
-    /* LD_PRELOAD but no libdet.so */
-    if (preload.find(libdet) == string::npos) {
-      envs[preloadKey] = libdet + ":" + preload;
-      preloadedLibdet = false;
-    }
-  }
-
-  if (!preloadedLibdet) {
-    string msg("append LD_PRELOAD=");
-    gs.log.writeToLog(Importance::info, msg + secure_getenv("TRACEE_LDPRELOAD") + " to envp\n");
-    copyTraceeEnv(t, envs, traceePtr<char*>((char**)newEnvpVal), traceePtr<char>((char*)newCString.ptr));
-    t.writeArg3(newEnvpVal);
-  }
-}

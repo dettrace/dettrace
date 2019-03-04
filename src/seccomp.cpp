@@ -68,7 +68,6 @@ void seccomp::loadRules(bool debug){
   // TODO: Add to intercept with debug for path.
   noIntercept(SYS_fsetxattr);
   noIntercept(SYS_getresuid);
-  noIntercept(SYS_getuid);
   noIntercept(SYS_getgid);
   noIntercept(SYS_getegid);
   noIntercept(SYS_geteuid);
@@ -81,7 +80,6 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_getuid);
   noIntercept(SYS_getxattr);
   noIntercept(SYS_madvise);
-  noIntercept(SYS_mknod);
   noIntercept(SYS_munmap);
 
   noIntercept(SYS_mprotect);
@@ -122,6 +120,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_sched_yield);
   noIntercept(SYS_truncate);
   noIntercept(SYS_eventfd2);
+  // TODO
   noIntercept(SYS_writev);
 
   // These system calls must be intercepted as to know when a fork even has happened:
@@ -134,10 +133,16 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_fork);
   noIntercept(SYS_vfork);
 
-  // Clone should be intercepted if you want to throw an error since we don't support
-  // threads!
-  // intercept(SYS_clone);
   noIntercept(SYS_clone);
+
+    // syscalls that "delete" a file from the OS. We no longer have to track these.
+  // we only care about file creation.
+  intercept(SYS_rename, debug);
+  intercept(SYS_renameat, debug);
+  intercept(SYS_renameat2, debug);
+  intercept(SYS_rmdir, debug);
+  intercept(SYS_unlink, debug);
+  intercept(SYS_unlinkat, debug);
 
   intercept(SYS_execve);
 
@@ -192,21 +197,28 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_llistxattr);
   // TODO
   intercept(SYS_lgetxattr);
+
   noIntercept(SYS_mmap);
-  intercept(SYS_mkdir, debug);
-  intercept(SYS_mkdirat, debug);
 
   intercept(SYS_nanosleep);
   intercept(SYS_newfstatat);
   intercept(SYS_lstat);
-  intercept(SYS_link, debug);
-  intercept(SYS_linkat, debug);
+
+  // System calls that can create a new file for us to keep track of.
+  intercept(SYS_mkdir);
+  intercept(SYS_mkdirat);
+  intercept(SYS_mknod);
+  intercept(SYS_mknodat);
+  intercept(SYS_symlink);
+  intercept(SYS_symlinkat);
+  intercept(SYS_open);
+  intercept(SYS_openat);
 
   intercept(SYS_tgkill);
 
-  intercept(SYS_open);
-  intercept(SYS_openat);
-  // TODO Pipe
+  intercept(SYS_link, debug);
+  intercept(SYS_linkat, debug);
+
   intercept(SYS_pipe);
   intercept(SYS_pipe2);
   intercept(SYS_pselect6);
@@ -218,11 +230,6 @@ void seccomp::loadRules(bool debug){
   // TODO
   intercept(SYS_recvmsg);
 
-  intercept(SYS_rename);
-  intercept(SYS_renameat);
-  intercept(SYS_renameat2);
-
-  intercept(SYS_rmdir);
   intercept(SYS_sendto);
   // Defintely not deteministic </3
   intercept(SYS_select);
@@ -231,20 +238,17 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_stat);
   intercept(SYS_statfs);
   intercept(SYS_sysinfo);
-  intercept(SYS_symlink, debug);
-  intercept(SYS_symlinkat, debug);
+
   intercept(SYS_time);
   intercept(SYS_times);
   intercept(SYS_utime);
   intercept(SYS_utimes);
   intercept(SYS_utimensat);
   intercept(SYS_uname);
-  intercept(SYS_unlink);
-  intercept(SYS_unlinkat);
+
   intercept(SYS_wait4);
   intercept(SYS_write);
-  // TODO
-  // intercept(SYS_writev);
+
 }
 
 void seccomp::noIntercept(uint16_t systemCall){
