@@ -82,8 +82,8 @@ uint64_t ptracer::getEventMessage(pid_t traceePid){
   return event;
 }
 
-uint64_t ptracer::getReturnValue(){
-  return regs.rax;
+int ptracer::getReturnValue(){
+  return (int) regs.rax;
 }
 
 uint64_t ptracer::getSystemCallNumber(){

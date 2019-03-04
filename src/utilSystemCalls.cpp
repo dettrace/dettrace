@@ -8,7 +8,7 @@
 
 bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
                       int64_t errnoValue){
-  if(- errnoValue == (int64_t) t.getReturnValue()){
+  if(- errnoValue == t.getReturnValue()){
     gs.log.writeToLog(Importance::info, "Syscall would have blocked!\n");
 
     sched.preemptAndScheduleNext(preemptOptions::runnable);
@@ -25,7 +25,7 @@ bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
 // =======================================================================================
 bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
                             int64_t errornoValue){
-  if(- errornoValue == (int64_t) t.getReturnValue()){
+  if(- errornoValue == t.getReturnValue()){
     gs.log.writeToLog(Importance::info, "System call would have blocked!\n");
 
     gs.replayDueToBlocking++;
@@ -504,7 +504,7 @@ void handlePreOpens(globalState& gs, state& s, ptracer& t, optional<int> dirfd,
 }
 // =======================================================================================
 void handlePostOpens(globalState& gs, state& s, ptracer& t, int flags) {
-    if(t.getReturnValue() > 0 &&
+  if(t.getReturnValue() > 0 &&
      // New regular file created through O_CREAT
      ((flags & O_CREAT && ! s.fileExisted) ||
       // Special case for O_TMPFILE

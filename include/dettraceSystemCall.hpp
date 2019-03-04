@@ -1495,7 +1495,7 @@ void virtualizeEntries(vector<uint8_t>& entries, ValueMapper<ino_t, ino_t>& inod
 template <typename T>
 void handleDents(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // Error, return system call to tracee.
-  if((int64_t) t.getReturnValue() < 0){
+  if(t.getReturnValue() < 0){
     return;
   }
 

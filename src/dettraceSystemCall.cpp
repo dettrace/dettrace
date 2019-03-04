@@ -145,7 +145,7 @@ bool creatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
 }
 
 void creatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if((int) t.getReturnValue() < 0){
+  if(t.getReturnValue() < 0){
     return;
   }
 
@@ -166,8 +166,8 @@ bool dupSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedule
 }
 
 void dupSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  int newfd = (int) t.getReturnValue();
-  int fd =  (int) t.arg1();
+  int newfd = t.getReturnValue();
+  int fd = t.arg1();
   if(newfd < 0){
     return;
   }
@@ -184,8 +184,8 @@ bool dup2SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedul
 }
 
 void dup2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  int newfd = (int) t.getReturnValue();
-  int fd =  (int) t.arg1();
+  int newfd = t.getReturnValue();
+  int fd = t.arg1();
   if(newfd < 0){
     return;
   }
@@ -441,7 +441,7 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     // getting stuck on an infite polling loop.
     if(s.userDefinedTimeout){
       // Only preempt if we would have timeout out. Othewise let if continue running!
-      if((int) t.getReturnValue() == -ETIMEDOUT){
+      if(t.getReturnValue() == -ETIMEDOUT){
         sched.preemptAndScheduleNext(preemptOptions::runnable);
       }
 
@@ -667,7 +667,8 @@ void mmapSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
   // This isn't a natural call mmap from the tracee we injected this call ourselves!
   if(s.syscallInjected){
     gs.log.writeToLog(Importance::info, "This mmap was inject for use in pre and post hook purposes.\n");
-    if((void*) t.getReturnValue() == MAP_FAILED){
+
+    if(t.getRax().ptr == MAP_FAILED){
       throw runtime_error("Unable to properly inject mmap call to tracee!\n"
                           "mmap call returned: " +
                           to_string(t.getReturnValue()) + "\n");
@@ -676,7 +677,7 @@ void mmapSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
 
 
     // save memory address to be used later
-    s.mmapMemory.setAddr(traceePtr<void>((void*) t.getReturnValue()));
+    s.mmapMemory.setAddr(t.getRax());
 
     // Inject original system call:
     // Previous state that should have been set by system call that created this fstat
@@ -716,7 +717,7 @@ bool mkdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
 void mkdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                      scheduler& sched){
   // Add/overwrite entry in our map.
-  if((int) t.getReturnValue() == 0 && (char*) t.arg1() != nullptr){
+  if(t.getReturnValue() == 0 && (char*) t.arg1() != nullptr){
     string strPath = t.readTraceeCString(traceePtr<char>((char*) t.arg1()), s.traceePid);
     auto inode = inode_from_tracee(strPath, s.traceePid, gs.log, nullopt);
     gs.mtimeMap.addRealValue(inode);
@@ -734,7 +735,7 @@ void mkdiratSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                       scheduler& sched){
   char* path = (char*) t.arg2();
   // Add/overwrite entry in our map.
-  if((int) t.getReturnValue() == 0 && path != nullptr){
+  if(t.getReturnValue() == 0 && path != nullptr){
     string strPath = t.readTraceeCString(traceePtr<char>(path), s.traceePid);
     auto inode = inode_from_tracee(strPath, s.traceePid, gs.log, t.arg1());
     gs.mtimeMap.addRealValue(inode);
@@ -756,7 +757,7 @@ void newfstatatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
     gs.log.writeToLog(Importance::info, "This newfstatat was injected.\n");
     s.syscallInjected = false;
 
-    if((int) t.getReturnValue() >= 0){
+    if(t.getReturnValue() >= 0){
       struct stat* statbufPtr = (struct stat*) t.arg3();
       struct stat statbuf = t.readFromTracee(traceePtr<struct stat>(statbufPtr), s.traceePid);
 
@@ -1423,7 +1424,7 @@ bool symlinkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sche
 }
 
 void symlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if((int) t.getReturnValue() == 0 && (char*) t.arg2() != nullptr){
+  if(t.getReturnValue() == 0 && (char*) t.arg2() != nullptr){
     string linkpath = t.readTraceeCString(traceePtr<char>((char*) t.arg2()), s.traceePid);
     auto inode = inode_from_tracee(linkpath, s.traceePid, gs.log, nullopt);
     gs.mtimeMap.addRealValue(inode);
@@ -1440,7 +1441,7 @@ handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
 
 void symlinkatSystemCall::
 handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if((int) t.getReturnValue() == 0 && (char*) t.arg3() != nullptr){
+  if(t.getReturnValue() == 0 && (char*) t.arg3() != nullptr){
     string linkpath = t.readTraceeCString(traceePtr<char>((char*) t.arg3()), s.traceePid);
     auto inode = inode_from_tracee(linkpath, s.traceePid, gs.log, t.arg2());
     gs.mtimeMap.addRealValue(inode);
@@ -1455,7 +1456,7 @@ handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
 
 void mknodSystemCall::
 handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if((int) t.getReturnValue() == 0 && (char*) t.arg1() != nullptr){
+  if(t.getReturnValue() == 0 && (char*) t.arg1() != nullptr){
     string path = t.readTraceeCString(traceePtr<char>((char*) t.arg1()), s.traceePid);
     auto inode = inode_from_tracee(path, s.traceePid, gs.log, nullopt);
     gs.mtimeMap.addRealValue(inode);
@@ -1470,7 +1471,7 @@ handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
 
 void mknodatSystemCall::
 handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if((int) t.getReturnValue() == 0 && (char*) t.arg2() != nullptr){
+  if(t.getReturnValue() == 0 && (char*) t.arg2() != nullptr){
     string path = t.readTraceeCString(traceePtr<char>((char*) t.arg2()), s.traceePid);
     auto inode = inode_from_tracee(path, s.traceePid, gs.log, t.arg1());
     gs.mtimeMap.addRealValue(inode);
@@ -1513,7 +1514,7 @@ void timeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
   // directly.
   else{
     gs.timeCalls++;
-    int retVal = (int) t.getReturnValue();
+    int retVal = t.getReturnValue();
     if(retVal < 0){
       gs.log.writeToLog(Importance::info,
                         "Time call failed: \n" + string { strerror(- retVal)});
