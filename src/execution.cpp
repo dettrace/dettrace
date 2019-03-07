@@ -35,8 +35,6 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
     // First process is special and we must set the options ourselves.
     // This is done everytime a new process is spawned.
     ptracer::setOptions(startingPid);
-
-    char* path = get_current_dir_name();
   }
 // =======================================================================================
 // We only call this function on a ptrace::nonEventExit. We only receive this event once

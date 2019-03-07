@@ -164,7 +164,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_clock_gettime);
   intercept(SYS_close);
   // TODO: This system call
-  // intercept(SYS_connect);
+  intercept(SYS_connect);
   // Duplicate file descriptor.
   intercept(SYS_dup);
   intercept(SYS_dup2);
