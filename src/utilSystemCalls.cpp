@@ -356,7 +356,7 @@ ino_t readInodeFor(logger& log, pid_t traceePid, int fd){
   // read from /proc/$pid/fd/$fd
   ss << "/proc/" << traceePid << "/fd/" << fd;
   string procPath = ss.str();
-
+  log.writeToLog(Importance::info, "procPath: %s\n", procPath.c_str());
   struct stat statbuf = {0};
   int res = stat(procPath.c_str(), &statbuf);
   if (res < 0) {

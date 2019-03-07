@@ -135,8 +135,6 @@ void seccomp::loadRules(bool debug){
 
   noIntercept(SYS_clone);
 
-    // syscalls that "delete" a file from the OS. We no longer have to track these.
-  // we only care about file creation.
   intercept(SYS_rename, debug);
   intercept(SYS_renameat, debug);
   intercept(SYS_renameat2, debug);
@@ -166,7 +164,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_clock_gettime);
   intercept(SYS_close);
   // TODO: This system call
-  intercept(SYS_connect);
+  // intercept(SYS_connect);
   // Duplicate file descriptor.
   intercept(SYS_dup);
   intercept(SYS_dup2);
@@ -178,7 +176,7 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_fcntl);
   intercept(SYS_fstat);
   intercept(SYS_fstatfs);
-  // TODO
+
   intercept(SYS_futex);
   intercept(SYS_getcwd, debug);
   intercept(SYS_getdents);
@@ -191,13 +189,15 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_getrlimit);
   intercept(SYS_getrusage);
   intercept(SYS_gettimeofday);
-  // TODO IOCTL with seccomp instead of ptrace
+  // TODO we might be able to use seccomp to only intercept on the ioctl system calls
+  // arguments that we care about
   intercept(SYS_ioctl);
   // TODO
   intercept(SYS_llistxattr);
   // TODO
   intercept(SYS_lgetxattr);
-
+  // TODO I think intercepting a map might be too expensive we should
+  // switch back to writing under the stack
   noIntercept(SYS_mmap);
 
   intercept(SYS_nanosleep);
