@@ -533,12 +533,15 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
   mountDir(pathToExe + "/../root/dev/urandom", pathToChroot + "/dev/urandom");
 
   // Proc is special, we mount a new proc dir.
-  doWithCheck(mount("/proc/", "/proc/", "proc", MS_MGC_VAL, nullptr),
+  doWithCheck(mount("/proc", (pathToChroot + "/proc/").c_str(), "proc", MS_MGC_VAL, nullptr),
               "Mounting proc failed");
 
   doWithCheck(chroot(pathToChroot.c_str()), "Failed to chroot");
   // set working directory to buildDir
   doWithCheck(chdir("/build/"), "Failed to set working directory to " + buildDir);
+
+  // doWithCheck(mount("/proc", "/proc/", "proc", MS_MGC_VAL, nullptr),
+  //             "Mounting proc failed");
 
   // Disable ASLR for our child
   doWithCheck(personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");
@@ -581,6 +584,11 @@ void spawnTracerTracee(int debugLevel, uid_t uid, gid_t gid, pid_t startingPid,
     throw runtime_error("fork() failed.\n");
     exit(EXIT_FAILURE);
   } else if(pid > 0) {
+    // We must mount proc so that the tracer sees the same PID and /proc/ directory
+    // as the tracee. The tracee will do the same so it sees /proc/ under it's chroot.
+    doWithCheck(mount("/proc", "/proc/", "proc", MS_MGC_VAL, nullptr),
+              "tracer mounting proc failed");
+    
     execution exe{
         debugLevel, pid, useColor, usingOldKernel(), logFile, printStatistics};
     exe.runProgram();
