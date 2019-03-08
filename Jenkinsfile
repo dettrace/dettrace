@@ -13,7 +13,6 @@ pipeline {
     stage('Build') {
       steps {
         sh 'git submodule update --init --recursive'
-
         echo "PATH is: $PATH"
         sh "lsb_release -a"
         sh "uname -a"

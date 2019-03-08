@@ -3,8 +3,8 @@ CC= clang
 
 DEFINES=-D_GNU_SOURCE=1 -D_POSIX_C_SOURCE=20181101 -D__USE_XOPEN=1
 
-CXXFLAGS = -O2 -std=c++1z -Wall $(INCLUDE) $(DEFINES)
-CFLAGS = -O2 -Wall -Wshadow $(INCLUDE) $(DEFINES)
+CXXFLAGS =-g -O0 -std=c++17 -Wall $(INCLUDE) $(DEFINES)
+CFLAGS =-g -O0 -Wall -Wshadow $(INCLUDE) $(DEFINES)
 LIBS = -pthread -lseccomp -L ../lib/lib64
 
 LIBARCHIVE=$(shell pkg-config --libs libarchive)
