@@ -216,6 +216,8 @@ bool scheduler::removeAndScheduleNext(pid_t process){
     auto msg = log.makeTextColored(Color::blue, "Removing process from scheduler: [%d]\n");
     log.writeToLog(Importance::info, msg, process);
   }
+  printProcesses();
+  printThreadTree();
   if(runnableHeap.empty() && blockedHeap.empty()){
     return true;
   }else{
@@ -409,16 +411,16 @@ void scheduler::printProcesses(){
   while(!runnableCopy.empty()){
     pid_t curr = runnableCopy.top();
     runnableCopy.pop();
-    log.writeToLog(Importance::extra, "Pid [%d], runnable\n", curr);
+    log.writeToLog(Importance::info, "Pid [%d], runnable\n", curr);
   }
  
-  log.writeToLog(Importance::extra, "Printing blocked processes\n");
+  log.writeToLog(Importance::info, "Printing blocked processes\n");
   // Print the blockedHeap.
   priority_queue<pid_t> blockedCopy = blockedHeap;
   while(!blockedCopy.empty()){
     pid_t curr = blockedCopy.top();
     blockedCopy.pop();
-    log.writeToLog(Importance::extra, "Pid [%d], blocked\n", curr);
+    log.writeToLog(Importance::info, "Pid [%d], blocked\n", curr);
   }
   return;
 }
@@ -427,8 +429,8 @@ void scheduler::printThreadTree(){
   log.writeToLog(Importance::info, "Printing thread tree.\n");
   for(auto iter = threadTree.begin(); iter != threadTree.end(); iter++){
     pid_t thr = iter->first;
-    log.writeToLog(Importance::extra, "Thread: \n", thr); 
+    log.writeToLog(Importance::info, "Thread: \n", thr); 
     pid_t parent = iter->second;
-    log.writeToLog(Importance::extra, "Parent process: \n", parent);
+    log.writeToLog(Importance::info, "Parent process: \n", parent);
   }
 }
