@@ -10,7 +10,6 @@
 #include <string.h>
 #include <getopt.h>
 #include <dirent.h>
-#include <sys/capability.h>
 #include <sys/prctl.h>
 
 #include <sched.h>
