@@ -22,6 +22,36 @@ pid_t scheduler::getNext(){
   return nextPid;
 }
 
+void scheduler::insertThreadGroup(pid_t parentPid){
+  if(threadGroupStatMap.find(parentPid) != threadGroupStatMap.end()){
+    // Already in the map. Just return.
+    return;
+  }  
+
+  bool exitGroup = false;
+  auto pair = make_pair(parentPid, exitGroup);
+  threadGroupStatMap.insert(pair);
+  return;
+}
+
+void scheduler::updateThreadGroup(pid_t threadPid){
+  pid_t parent = threadTree.at(threadPid);
+  threadGroupStatMap.erase(parent);
+  bool exitGroup = true;
+  auto pair = make_pair(parent, exitGroup);
+  threadGroupStatMap.insert(pair);
+  return;  
+}
+
+bool scheduler::exitGroupTriggered(pid_t parent){
+  if(threadGroupStatMap.find(parent) != threadGroupStatMap.end()){
+    bool exitGroup = threadGroupStatMap.at(parent);
+    return exitGroup;
+  }else{
+    return false;
+  }
+}
+
 bool scheduler::removeAndScheduleParent(pid_t child, pid_t parent){
   // Error if the parent of the proces has not finished.
   // Else, remove the process, and schedule its parent to run next.
@@ -217,6 +247,7 @@ bool scheduler::removeAndScheduleNext(pid_t process){
     log.writeToLog(Importance::info, msg, process);
   }
   printProcesses();
+  printSchedulerTree();
   printThreadTree();
   if(runnableHeap.empty() && blockedHeap.empty()){
     return true;
@@ -267,15 +298,19 @@ pid_t scheduler::findNextNotWaiting(bool swapped){
     // So we just schedule the top of the heap to run, because it is okay to run because
     // it has not finished yet.
     // (Example: The child is waiting for the parent to write to a pipe.)
+    // Only case we don't do this is when the process is waiting on threads and one of the threads
+    // has triggered an exit_group call.
     p = runnableHeap.top();
-    if(!swapped){
-      auto msg = log.makeTextColored(Color::blue, "[%d] chosen to run next from runnable heap. \n");
-      log.writeToLog(Importance::info, msg, p);
-    }else{
-      auto msg = log.makeTextColored(Color::blue, "[%d] chosen to run next. Heaps were swapped. \n");
-      log.writeToLog(Importance::info, msg, p);
+    if(!exitGroupTriggered(p)){
+      if(!swapped){
+        auto msg = log.makeTextColored(Color::blue, "[%d] chosen to run next from runnable heap. \n");
+        log.writeToLog(Importance::info, msg, p);
+      }else{
+        auto msg = log.makeTextColored(Color::blue, "[%d] chosen to run next. Heaps were swapped. \n");
+        log.writeToLog(Importance::info, msg, p);
+      }
+      return p;
     }
-    return p;
   }else if((waitingChild || waitingThread) && done){
     // We went through the runnable heap and could not find a process not waiting on a child
     // or thread that is also not finished. 
@@ -425,12 +460,22 @@ void scheduler::printProcesses(){
   return;
 }
 
+void scheduler::printSchedulerTree(){
+  log.writeToLog(Importance::info, "Printing scheduler tree.\n");
+  for(auto iter = schedulerTree.begin(); iter != schedulerTree.end(); iter++){
+    pid_t parent = iter->first;
+    log.writeToLog(Importance::info, "Parent process: [%d]\n", parent);
+    pid_t child = iter->second;
+    log.writeToLog(Importance::info, "Child process: [%d]\n", child);
+  }
+}
+
 void scheduler::printThreadTree(){
   log.writeToLog(Importance::info, "Printing thread tree.\n");
   for(auto iter = threadTree.begin(); iter != threadTree.end(); iter++){
     pid_t thr = iter->first;
-    log.writeToLog(Importance::info, "Thread: \n", thr); 
+    log.writeToLog(Importance::info, "Thread: [%d]\n", thr); 
     pid_t parent = iter->second;
-    log.writeToLog(Importance::info, "Parent process: \n", parent);
+    log.writeToLog(Importance::info, "Parent process: [%d]\n", parent);
   }
 }

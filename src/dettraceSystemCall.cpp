@@ -266,6 +266,7 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 }
 // =======================================================================================
 bool exit_groupSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  sched.updateThreadGroup(s.traceePid);
   return true;
 }
 

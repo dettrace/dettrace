@@ -258,13 +258,29 @@ void execution::runProgram(){
       callPostHook = false;
 
       // We have children still, we cannot exit.
-      bool isThr = myScheduler.isThread(traceesPid);
-      bool waitOnChild = processTree.count(traceesPid) != 0;
-      bool waitOnThreads = myScheduler.waitingOnThread(traceesPid);
+      //bool isThr = myScheduler.isThread(traceesPid);
+      //bool waitOnChild = processTree.count(traceesPid) != 0;
+      //bool waitOnThreads = myScheduler.waitingOnThread(traceesPid);
       
-      if((waitOnChild || waitOnThreads) && !isThr){
-        myScheduler.markFinishedAndScheduleNext(traceesPid);
-      }
+      //if((waitOnChild || waitOnThreads) && !isThr){
+        //myScheduler.markFinishedAndScheduleNext(traceesPid);
+      //}
+      
+
+      // We let the OS clean up exits. We remove the process from our scheduler,
+      // and detach it with a call to ptrace.
+      auto message = log.makeTextColored(Color::blue, "Process [%d] is being removed and detached.\n");
+      log.writeToLog(Importance::inter, message, traceesPid);
+      
+      // Remove from scheduler priority queue.
+      myScheduler.removeAndScheduleNext(traceesPid);
+      // Remove from scheduler tree.
+      myScheduler.eraseSchedChild(traceesPid);
+      // Remove from thread tree if applicable. 
+      myScheduler.eraseThread(traceesPid);
+      // Remove from preemptMap (dependency tracking).
+      myScheduler.removeDependencies(traceesPid);
+      tracer.doPtrace(PTRACE_DETACH, traceesPid, NULL, NULL);
       continue;
     }
 
@@ -387,6 +403,7 @@ pid_t execution::handleForkEvent(const pid_t traceesPid, bool thread){
   // Also add it to the scheduler's process tree.
   if(thread){
     myScheduler.insertThreadTree(traceesPid, newChildPid);
+    myScheduler.insertThreadGroup(traceesPid);
   }else{
     auto pair = make_pair(traceesPid, newChildPid);
     processTree.insert(pair);
@@ -1175,6 +1192,7 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
   // Wait for next event to intercept.
   // Normal case.
   if(!sysContDone){
+    cout << "abouto to wait normally" << endl;
     traceesPid = doWithCheck(waitpid(pidToContinue, &status, 0), "waitpid");
     return make_tuple(getPtraceEvent(status), traceesPid, status);
   }

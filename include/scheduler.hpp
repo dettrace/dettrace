@@ -63,6 +63,11 @@ public:
   void printThreadTree();
 
   /**
+   * Just prints the scheduler tree for debugging purposes.
+   */
+  void printSchedulerTree();
+
+  /**
    * Erase thread from threadTree.
    */
   void eraseThread(pid_t thread);
@@ -153,6 +158,26 @@ public:
    */
   void removeDependencies(pid_t process);
 
+  /**
+   * Add a process to the map, as it is spawning threads and now has a thread group.
+   * @param pid of process who spawned a thread.
+   */
+  void insertThreadGroup(pid_t parentPid);
+
+  /**
+   * Set exit group flag to true, as a thread in the thread group has triggered
+   * an exit group.
+   * @param pid of thread who triggered exit group.
+   */
+  void updateThreadGroup(pid_t threadPid);
+
+  /**
+   * Check if one of the process's threads triggered an exit group.
+   * @param pid of parent process
+   * @return bool of whether exit group was triggered.
+   */
+  bool exitGroupTriggered(pid_t parent);
+
   // Keep track of how many times scheduleNextProcess was called:
   uint32_t callsToScheduleNextProcess = 0;
 
@@ -196,6 +221,11 @@ private:
    * Keep track of circular dependencies between processes to detect deadlock.
    */
   map<pid_t, pid_t> preemptMap; 
+
+  /**
+   * Keep track of a process's thread group status.
+   */
+  map<pid_t, bool> threadGroupStatMap;
 
   /** Remove process from scheduler.
    * Calls deleteProcess, used to share code between
