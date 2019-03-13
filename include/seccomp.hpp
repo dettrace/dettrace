@@ -46,7 +46,7 @@ private:
    * Code defining all system call that we implement or let through.
    * @param debug True for debug mode. (Extra logging if true).
    */
-  void loadRules(bool debug);
+  void loadRules(bool debug, bool convertUids);
 
   /**
    * Add system call to whitelist but no call to ptrace.
@@ -82,7 +82,7 @@ public:
    *
    * @param debugLevel: If 4 or 5, will intercept several more system calls.
    */
-  seccomp(int debugLevel);
+  seccomp(int debugLevel, bool convertUids);
 
   /**
    * Used to avoid raise conditions between the tracee and tracee of a ptrace setup.

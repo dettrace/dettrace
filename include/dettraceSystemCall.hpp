@@ -86,15 +86,7 @@ public:
   const string syscallName = "chmod";
 };
 // =======================================================================================
-class chownSystemCall {
-public:
-  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched);
-  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched);
 
-  const int syscallNumber = SYS_chown;
-  const string syscallName = "chown";
-};
-// =======================================================================================
 /**
 *
 * int clock_gettime(clockid_t clk_id, struct timespec *tp);
@@ -265,6 +257,34 @@ public:
 
   const int syscallNumber = SYS_fchownat;
   const string syscallName = "fchownat";
+};
+
+// =======================================================================================
+class fchownSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_fchown;
+  const string syscallName = "fchown";
+};
+// =======================================================================================
+class chownSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_chown;
+  const string syscallName = "chown";
+};
+// =======================================================================================
+class lchownSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_lchown;
+  const string syscallName = "lchown";
 };
 // =======================================================================================
 /**

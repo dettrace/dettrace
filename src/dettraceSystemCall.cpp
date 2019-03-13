@@ -79,15 +79,6 @@ void chmodSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   return;
 }
 // =======================================================================================
-bool chownSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  printInfoString(t.arg1(), gs.log, s.traceePid, t);
-  return false;
-}
-
-void chownSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  return;
-}
-// =======================================================================================
 bool clock_gettimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   return true;
 }
@@ -232,17 +223,62 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 // =======================================================================================
 bool fchownatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg2(), gs.log, s.traceePid, t);
+  if(t.arg3() != 0){
+    t.writeArg3(0);
+  }
+  if(t.arg4() != 0){
+    t.writeArg4(0);
+  }
 
-  // int dirfd = t.arg1();
-  // uid_t owner = t.arg3();
-  // gid_t group = t.arg4();
-  // int flags = t.arg5();
-  // string fchowatStr = "fchownat(fd = %d, _, owner = %d, group = %d, flags = %d)\n";
-  // s.log.writeToLog(Importance::extra, fchowatStr, dirfd, owner, group, flags);
   return false;
 }
 
 void fchownatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  throw runtime_error("fchownat post hook shold never be called.");
+  return;
+}
+// =======================================================================================
+bool fchownSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if(t.arg2() != 0){
+    t.writeArg2(0);
+  }
+  if(t.arg3() != 0){
+    t.writeArg3(0);
+  }
+  return false;
+}
+
+void fchownSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  throw runtime_error("fchownat post hook shold never be called.");
+  return;
+}
+// =======================================================================================
+bool chownSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if(t.arg2() != 0){
+    t.writeArg2(0);
+  }
+  if(t.arg3() != 0){
+    t.writeArg3(0);
+  }
+  return false;
+}
+
+void chownSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  throw runtime_error("fchownat post hook shold never be called.");
+  return;
+}
+// =======================================================================================
+bool lchownSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if(t.arg2() != 0){
+    t.writeArg2(0);
+  }
+  if(t.arg3() != 0){
+    t.writeArg3(0);
+  }
+  return false;
+}
+
+void lchownSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   throw runtime_error("fchownat post hook shold never be called.");
   return;
 }
