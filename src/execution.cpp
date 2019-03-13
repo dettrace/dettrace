@@ -16,7 +16,7 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
                      bool oldKernel, string logFile, bool printStatistics):
   oldKernel {oldKernel},
   log {logFile, debugLevel, useColor},
-  silentLogger {"", 0},
+  silentLogger {"NONE", 0},
   printStatistics{printStatistics},
   // Waits for first process to be ready!
   tracer{startingPid},
@@ -520,9 +520,6 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_chdir:
     return chdirSystemCall::handleDetPre(gs, s, t, sched);
 
-  case SYS_chown:
-    return chownSystemCall::handleDetPre(gs, s, t, sched);
-
   case SYS_chmod:
     return chmodSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -558,6 +555,15 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
 
   case SYS_fchownat:
     return fchownatSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_fchown:
+    return fchownSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_chown:
+    return chownSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_lchown:
+    return lchownSystemCall::handleDetPre(gs, s, t, sched);
 
   case SYS_fcntl:
     return fcntlSystemCall::handleDetPre(gs, s, t, sched);
@@ -771,7 +777,7 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   }
 
   // Generic system call. Throws error.
-  throw runtime_error("dettrace runtime exception: Missing case for system call: " +
+  throw runtime_error("dettrace runtime exception: This is a bug. Missing case for system call: " +
                       to_string(syscallNumber));
 }
 // =======================================================================================
@@ -789,6 +795,9 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 
   case SYS_chown:
     return chownSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_lchown:
+    return lchownSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_chmod:
     return chmodSystemCall::handleDetPost(gs, s, t, sched);
@@ -829,6 +838,9 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 
   case SYS_fchownat:
     return fchownatSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_fchown:
+    return fchownSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_fcntl:
     return fcntlSystemCall::handleDetPost(gs, s, t, sched);
@@ -1042,7 +1054,8 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
   }
 
   // Generic system call. Throws error.
-  throw runtime_error("dettrace runtime exception: Missing case for system call: " +
+  throw runtime_error("dettrace runtime exception: This is a bug: "
+                      "Missing case for system call: " +
                       to_string(syscallNumber));
 
 }
@@ -1168,7 +1181,7 @@ pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process){
       break;
     }
   }
-  
+
   return parent;
 }
 // =======================================================================================

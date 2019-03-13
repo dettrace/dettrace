@@ -11,17 +11,31 @@
 
 using namespace std;
 
-seccomp::seccomp(int debugLevel){
+seccomp::seccomp(int debugLevel, bool convertUids){
   ctx = seccomp_init(SCMP_ACT_TRACE(INT16_MAX));
 
   if(ctx == nullptr){
     throw runtime_error("dettrace runtime exception: Unable to init seccomp filter.\n");
   }
 
-  loadRules(debugLevel >= 4);
+  loadRules(debugLevel >= 4, convertUids);
 }
 
-void seccomp::loadRules(bool debug){
+void seccomp::loadRules(bool debug, bool convertUids){
+
+  // Add other UID functions we might need to intercept here!
+  if(convertUids){
+    intercept(SYS_fchownat);
+    intercept(SYS_chown);
+    intercept(SYS_lchown);
+    intercept(SYS_fchown);
+  } else {
+    noIntercept(SYS_fchownat);
+    noIntercept(SYS_chown);
+    noIntercept(SYS_lchown);
+    noIntercept(SYS_fchown);
+  }
+
   // sets architecture-specific process or thread state.
   noIntercept(SYS_arch_prctl);
   // Change location of the program break.
@@ -34,11 +48,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_splice);
   noIntercept(SYS_dup3);
   noIntercept(SYS_capget);
-  // Change owner of file
-  noIntercept(SYS_chown);
-  // like chown but does not dereference symbolic links.
-  noIntercept(SYS_lchown);
-  // Get clock resolution, TODO might be non deterministic.
+
   noIntercept(SYS_clock_getres);
   noIntercept(SYS_getresgid);
 #ifdef SYS_getresgid32
@@ -58,7 +68,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_fchdir);
   noIntercept(SYS_fchmod);
   noIntercept(SYS_fchmodat);
-  noIntercept(SYS_fchown);
+
   noIntercept(SYS_fdatasync);
   // TODO Flock may block! In the future this may lead to deadlock.
   // deal with it then :)
@@ -172,7 +182,6 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_faccessat, debug);
   intercept(SYS_fgetxattr, debug);
   intercept(SYS_flistxattr, debug);
-  intercept(SYS_fchownat, debug);
   intercept(SYS_fcntl);
   intercept(SYS_fstat);
   intercept(SYS_fstatfs);

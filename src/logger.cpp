@@ -25,7 +25,7 @@ logger::logger(string logFile, int debugLevel, bool useColor):
     exit(1);
   }
 
-  if (logFile == "") {
+  if (logFile == "NONE") {
     fin = stderr;
   } else {
     // find a unique name for our log file
@@ -37,7 +37,7 @@ logger::logger(string logFile, int debugLevel, bool useColor):
     }
     FILE* logfile = fopen(buf, "w");
     assert(nullptr != logfile);
-  
+
     fin = logfile;
   }
 
