@@ -151,7 +151,13 @@ const string usageMsg =
   "    0 (root).\n"
   "  --print-statistics\n"
   "    Print metadata about process that just ran including: number of system call events\n"
-  "    read/write retries, rdtsc, rdtscp, cpuid.\n";
+  "    read/write retries, rdtsc, rdtscp, cpuid.\n"
+  "  --currentAsChroot\n"
+  "    Use the current enviornment as the chroot. This is useful for running dettrace\n"
+  "    inside a chroot, using that same chroot as the environnment. For some reason the\n"
+  "    current mount namespace is polluted with our bind mounts (even though we create)\n"
+  "    our own namespace. Therefore make sure to unshare -m before running dettrace with\n"
+  "    this command, either when chrooting or when calling dettrace.";
 
 /**
  * Given a program through the command line, spawn a child thread, call PTRACEME and exec
