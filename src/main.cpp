@@ -578,8 +578,6 @@ int spawnTracerTracee(void* voidArgs){
     doWithCheck(mount("none", "/", NULL, MS_SLAVE | MS_REC, 0), "mount slave");
   }
 
-  auto syms = vdsoGetSymbols(startingPid);
-
   // TODO assert is bad (does not print buffered log output).
   // Switch to throw runtime exception.
   assert(getpid() == 1);
@@ -595,7 +593,7 @@ int spawnTracerTracee(void* voidArgs){
       doWithCheck(mount("/proc", "/proc/", "proc", MS_MGC_VAL, nullptr),
                   "tracer mounting proc failed");
     }
-
+    auto syms = vdsoGetSymbols(pid);
     execution exe{
         args.debugLevel, pid, args.useColor, usingOldKernel(), args.logFile,
         args.printStatistics, syms};
