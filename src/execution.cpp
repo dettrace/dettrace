@@ -170,9 +170,6 @@ void execution::runProgram(){
   // events. To get post hook events we must call ptrace with PTRACE_SYSCALL intead.
   // This happens in @getNextEvent.
 
-  // Whether we will skip to the next system call or get a ptrace event at the post hook.
-  // This is set by the return value of a pre-hook function call.
-  bool callPostHook = false;
 
   // Once all process' have ended. We exit.
   bool exitLoop = false;
@@ -182,12 +179,15 @@ void execution::runProgram(){
     int status;
     pid_t traceesPid;
     ptraceEvent ret;
-    tie(ret, traceesPid, status) = getNextEvent(myScheduler.getNext(), callPostHook);
+
+    pid_t nextPid = myScheduler.getNext();
+    bool post = states.at(nextPid).callPostHook;
+    tie(ret, traceesPid, status) = getNextEvent(nextPid, post);
 
     // Most common event. We handle the pre-hook for system calls here.
     if(ret == ptraceEvent::seccomp){
       systemCallsEvents++;
-      callPostHook = handleSeccomp(traceesPid);
+      states.at(traceesPid).callPostHook = handleSeccomp(traceesPid);
       continue;
     }
 
@@ -202,7 +202,7 @@ void execution::runProgram(){
 
       // old-kernel-only ptrace system call event for pre exit hook.
       if(oldKernel && currentState.onPreExitEvent){
-          callPostHook = true;
+          states.at(traceesPid).callPostHook = true;
           currentState.onPreExitEvent = false;
       }else{
         // Only count here due to comment above (we see this event twice in older kernels).
@@ -210,7 +210,7 @@ void execution::runProgram(){
         tracer.updateState(traceesPid);
         handlePostSystemCall( currentState );
         // set callPostHook to default value for next iteration.
-        callPostHook = false;
+        states.at(traceesPid).callPostHook = false;
       }
 
       continue;
@@ -245,7 +245,7 @@ void execution::runProgram(){
       auto msg = log.makeTextColored(Color::blue, "Process [%d] has finished. "
                                          "With ptrace exit event.\n");
       log.writeToLog(Importance::inter, msg, traceesPid);
-      callPostHook = false;
+      states.at(traceesPid).callPostHook = false;
 
       // We have children still, we cannot exit.
       if(processTree.count(traceesPid) != 0){
@@ -256,7 +256,7 @@ void execution::runProgram(){
 
     // Current process is finally truly done (unlike eventExit).
     if(ret == ptraceEvent::nonEventExit){
-      callPostHook = false;
+      states.at(traceesPid).callPostHook = false;
       if(processTree.count(traceesPid) != 0){
         myScheduler.markFinishedAndScheduleNext(traceesPid);
       }else{
@@ -282,7 +282,7 @@ void execution::runProgram(){
                      log.makeTextColored(Color::blue, "[%d] caught %s event!\n"),
                      traceesPid, msg.c_str());
       handleForkEvent(traceesPid);
-      callPostHook = false;
+      states.at(traceesPid).callPostHook = false;
       continue;
     }
 
