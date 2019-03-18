@@ -5,45 +5,12 @@
 #include "globalState.hpp"
 #include "state.hpp"
 #include "scheduler.hpp"
+#include "utilSystemCalls.hpp"
 
 #include <signal.h>
 #include <sys/syscall.h>   /* For SYS_xxx definitions */
 
 using namespace std;
-
-
-// template<typename Sys>
-// class SystemCall<Sys>{
-//   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-//     return true;
-//   }
-//   void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-//     return;
-//   }
-
-//   const int syscallNumber;
-//   const string syscallName;
-// };
-
-// class Access {};
-// template<>
-// class SystemCall<Access>{
-//   bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-//     return false;
-//   }
-//   const int syscallNumber = SYS_ACCESS;
-//   const string syscallName = "access";
-// };
-
-
-/**
- * Replay system call passed in.
- * The registers should already be in the correct format.
- * You should save your previous register state if needed.
- * @param t ptracer
- * @param systemCall system call to replay
- */
-void replaySystemCall(globalState& gs, ptracer& t, uint64_t systemCall);
 
 /**
  * Hopefully this will server as documentation for all our system calls.
@@ -119,15 +86,7 @@ public:
   const string syscallName = "chmod";
 };
 // =======================================================================================
-class chownSystemCall {
-public:
-  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched);
-  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched);
 
-  const int syscallNumber = SYS_chown;
-  const string syscallName = "chown";
-};
-// =======================================================================================
 /**
 *
 * int clock_gettime(clockid_t clk_id, struct timespec *tp);
@@ -298,6 +257,34 @@ public:
 
   const int syscallNumber = SYS_fchownat;
   const string syscallName = "fchownat";
+};
+
+// =======================================================================================
+class fchownSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_fchown;
+  const string syscallName = "fchown";
+};
+// =======================================================================================
+class chownSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_chown;
+  const string syscallName = "chown";
+};
+// =======================================================================================
+class lchownSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_lchown;
+  const string syscallName = "lchown";
 };
 // =======================================================================================
 /**
@@ -1072,7 +1059,7 @@ public:
  *
  * symlink() creates a symbolic link named linkpath which contains the string target.
  *
- * Deterministic thanks to our container :)
+ * Although this function is deterministic, we track it to keep track of files created.
  */
 class symlinkSystemCall {
 public:
@@ -1081,6 +1068,47 @@ public:
 
   const int syscallNumber = SYS_symlink;
   const string syscallName = "symlink";
+};
+// =======================================================================================
+/**
+ * int symlinkat(const char *target, int newdirfd, const char *linkpath);
+ * Although this function is deterministic, we track it to keep track of files created.
+ */
+class symlinkatSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_symlinkat;
+  const string syscallName = "symlinkat";
+};
+// =======================================================================================
+/**
+ * int mknod(const char *pathname, mode_t mode, dev_t dev);
+ * Create a new special file.
+ * Although this function is deterministic, we track it to keep track of files created.
+ */
+class mknodSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_mknod;
+  const string syscallName = "mknod";
+};
+// =======================================================================================
+/**
+ * int mknodat(int dirfd, const char *pathname, mode_t mode, dev_t dev);
+ * Create a new special file.
+ * Although this function is deterministic, we track it to keep track of files created.
+ */
+class mknodatSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_mknodat;
+  const string syscallName = "mknodat";
 };
 // =======================================================================================
 /**
@@ -1487,7 +1515,7 @@ void virtualizeEntries(vector<uint8_t>& entries, ValueMapper<ino_t, ino_t>& inod
 template <typename T>
 void handleDents(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // Error, return system call to tracee.
-  if((int64_t) t.getReturnValue() < 0){
+  if(t.getReturnValue() < 0){
     return;
   }
 

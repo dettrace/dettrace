@@ -24,5 +24,5 @@ cp scripts/installInsideChroot.sh ./wheezy/
 unshare -m chroot ./wheezy /installInsideChroot.sh
 
 # Set permissions so user can write to any directory in their chroot.
-chgrp -R $USER wheezy/
-chown -R $USER wheezy/
+chgrp -R $(logname 2>/dev/null || echo $SUDO_USER) wheezy/
+chown -R $(logname 2>/dev/null || echo $SUDO_USER) wheezy/

@@ -101,6 +101,11 @@ public:
    */
   bool onPreExitEvent = true;
 
+  /*
+   * Per process bool to know if we should go into the post hook.
+   */
+  bool callPostHook = false;
+
   /**
    * Signal to be delivered the next time this process runs. If 0, no signal
    * will be delivered. Otherwise the value represents the signal number.
@@ -230,6 +235,13 @@ public:
    * Function to get value of internal logical clock.
    */
   int getLogicalTime();
+
+  /**
+   * We must keep track of file creation. For open and openat, we set this flag.
+   * On the posthook, if the system call succeeded, we check if the file existed
+   * to know if this is a newly created file.
+   */
+  bool fileExisted = false;
 };
 
 #endif

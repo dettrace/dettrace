@@ -19,7 +19,7 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
 		     map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs):
   oldKernel {oldKernel},
   log {logFile, debugLevel, useColor},
-  silentLogger {"", 0},
+  silentLogger {"NONE", 0},
   printStatistics{printStatistics},
   // Waits for first process to be ready!
   tracer{startingPid},
@@ -33,7 +33,7 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
   debugLevel {debugLevel},
   vdsoFuncs(vdsoFuncs) {
     // Set state for first process.
-    states.emplace(startingPid, state {startingPid, debugLevel});
+    states.emplace(startingPid, state{startingPid, debugLevel});
 
     // First process is special and we must set the options ourselves.
     // This is done everytime a new process is spawned.
@@ -48,12 +48,14 @@ bool execution::handleExit(const pid_t traceesPid){
   log.writeToLog(Importance::inter, msg, traceesPid);
 
   // We are done. Erase ourselves from our parent's list of children.
+  // Also do this for the scheduler's process tree.
   pid_t parent = eraseChildEntry(processTree, traceesPid);
+  myScheduler.eraseSchedChild(traceesPid);
 
   if(parent != -1                   &&       // We have no parent, we're root.
      myScheduler.isFinished(parent) &&       // Check if our parent is marked as finished.
      processTree.count(parent) == 0){        // Parent has no children left.
-
+    
     myScheduler.removeAndScheduleParent(traceesPid, parent);
     return false;
   }
@@ -171,9 +173,6 @@ void execution::runProgram(){
   // events. To get post hook events we must call ptrace with PTRACE_SYSCALL intead.
   // This happens in @getNextEvent.
 
-  // Whether we will skip to the next system call or get a ptrace event at the post hook.
-  // This is set by the return value of a pre-hook function call.
-  bool callPostHook = false;
 
   // Once all process' have ended. We exit.
   bool exitLoop = false;
@@ -183,12 +182,15 @@ void execution::runProgram(){
     int status;
     pid_t traceesPid;
     ptraceEvent ret;
-    tie(ret, traceesPid, status) = getNextEvent(myScheduler.getNext(), callPostHook);
+
+    pid_t nextPid = myScheduler.getNext();
+    bool post = states.at(nextPid).callPostHook;
+    tie(ret, traceesPid, status) = getNextEvent(nextPid, post);
 
     // Most common event. We handle the pre-hook for system calls here.
     if(ret == ptraceEvent::seccomp){
       systemCallsEvents++;
-      callPostHook = handleSeccomp(traceesPid);
+      states.at(traceesPid).callPostHook = handleSeccomp(traceesPid);
       continue;
     }
 
@@ -203,7 +205,7 @@ void execution::runProgram(){
 
       // old-kernel-only ptrace system call event for pre exit hook.
       if(oldKernel && currentState.onPreExitEvent){
-          callPostHook = true;
+          states.at(traceesPid).callPostHook = true;
           currentState.onPreExitEvent = false;
       }else{
         // Only count here due to comment above (we see this event twice in older kernels).
@@ -211,7 +213,7 @@ void execution::runProgram(){
         tracer.updateState(traceesPid);
         handlePostSystemCall( currentState );
         // set callPostHook to default value for next iteration.
-        callPostHook = false;
+        states.at(traceesPid).callPostHook = false;
       }
 
       continue;
@@ -246,11 +248,7 @@ void execution::runProgram(){
       auto msg = log.makeTextColored(Color::blue, "Process [%d] has finished. "
                                          "With ptrace exit event.\n");
       log.writeToLog(Importance::inter, msg, traceesPid);
-      callPostHook = false;
-
-      // We get only get an exit if we made progress, report this. This covers the case
-      // where we had no blocking system calls in our execution path.
-      myScheduler.reportProgress(traceesPid);
+      states.at(traceesPid).callPostHook = false;
 
       // We have children still, we cannot exit.
       if(processTree.count(traceesPid) != 0){
@@ -261,8 +259,12 @@ void execution::runProgram(){
 
     // Current process is finally truly done (unlike eventExit).
     if(ret == ptraceEvent::nonEventExit){
-      callPostHook = false;
-      exitLoop = handleExit(traceesPid);
+      states.at(traceesPid).callPostHook = false;
+      if(processTree.count(traceesPid) != 0){
+        myScheduler.markFinishedAndScheduleNext(traceesPid);
+      }else{
+        exitLoop = handleExit(traceesPid);
+      }
       continue;
     }
 
@@ -283,7 +285,7 @@ void execution::runProgram(){
                      log.makeTextColored(Color::blue, "[%d] caught %s event!\n"),
                      traceesPid, msg.c_str());
       handleForkEvent(traceesPid);
-      callPostHook = false;
+      states.at(traceesPid).callPostHook = false;
       continue;
     }
 
@@ -299,7 +301,6 @@ void execution::runProgram(){
     if(ret == ptraceEvent::signal){
       int signalNum = WSTOPSIG(status);
       handleSignal(signalNum, traceesPid);
-      myScheduler.reportProgress(traceesPid);
       continue;
     }
 
@@ -362,8 +363,10 @@ pid_t execution::handleForkEvent(const pid_t traceesPid){
   states.at(newChildPid).mmapMemory.setAddr(states.at(traceesPid).mmapMemory.getAddr());
 
   // This is where we add new children to our process tree.
+  // Also add it to the scheduler's process tree.
   auto pair = make_pair(traceesPid, newChildPid);
   processTree.insert(pair);
+  myScheduler.insertSchedChild(traceesPid, newChildPid);
 
   // Wait for child to be ready.
   log.writeToLog(Importance::info, log.makeTextColored(Color::blue,
@@ -601,9 +604,6 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_chdir:
     return chdirSystemCall::handleDetPre(gs, s, t, sched);
 
-  case SYS_chown:
-    return chownSystemCall::handleDetPre(gs, s, t, sched);
-
   case SYS_chmod:
     return chmodSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -639,6 +639,15 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
 
   case SYS_fchownat:
     return fchownatSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_fchown:
+    return fchownSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_chown:
+    return chownSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_lchown:
+    return lchownSystemCall::handleDetPre(gs, s, t, sched);
 
   case SYS_fcntl:
     return fcntlSystemCall::handleDetPre(gs, s, t, sched);
@@ -790,6 +799,15 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_symlink:
     return symlinkSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_symlinkat:
+    return symlinkatSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_mknod:
+    return mknodSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_mknodat:
+    return mknodatSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_tgkill:
     return tgkillSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -843,7 +861,7 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   }
 
   // Generic system call. Throws error.
-  throw runtime_error("dettrace runtime exception: Missing case for system call: " +
+  throw runtime_error("dettrace runtime exception: This is a bug. Missing case for system call: " +
                       to_string(syscallNumber));
 }
 // =======================================================================================
@@ -861,6 +879,9 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 
   case SYS_chown:
     return chownSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_lchown:
+    return lchownSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_chmod:
     return chmodSystemCall::handleDetPost(gs, s, t, sched);
@@ -901,6 +922,9 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 
   case SYS_fchownat:
     return fchownatSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_fchown:
+    return fchownSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_fcntl:
     return fcntlSystemCall::handleDetPost(gs, s, t, sched);
@@ -1052,6 +1076,15 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
   case SYS_symlink:
     return symlinkSystemCall::handleDetPost(gs, s, t, sched);
 
+  case SYS_symlinkat:
+    return symlinkatSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_mknod:
+    return mknodSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_mknodat:
+    return mknodatSystemCall::handleDetPost(gs, s, t, sched);
+
   case SYS_tgkill:
     return tgkillSystemCall::handleDetPost(gs, s, t, sched);
 
@@ -1105,7 +1138,8 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
   }
 
   // Generic system call. Throws error.
-  throw runtime_error("dettrace runtime exception: Missing case for system call: " +
+  throw runtime_error("dettrace runtime exception: This is a bug: "
+                      "Missing case for system call: " +
                       to_string(syscallNumber));
 
 }

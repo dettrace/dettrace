@@ -1,3 +1,0 @@
-terminate called after throwing an instance of 'std::runtime_error'
-  what():  dettrace runtime exception: No filter rule for system call: kill
-Aborted (core dumped)

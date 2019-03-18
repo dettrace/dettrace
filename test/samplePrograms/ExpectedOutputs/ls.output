@@ -1,9 +1,0 @@
-lsTestDirectory:
-foo
-hello
-
-lsTestDirectory/foo:
-bar
-world
-
-lsTestDirectory/foo/bar:
