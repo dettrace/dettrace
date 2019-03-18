@@ -317,7 +317,8 @@ public:
   T readFromTracee(traceePtr<T> sourceAddress, pid_t traceePid){
     readVmCalls++;
     T myData;
-    readVmTraceeRaw(sourceAddress, &myData, sizeof(T), traceePid);
+    doWithCheck(readVmTraceeRaw(sourceAddress, &myData, sizeof(T), traceePid),
+                "readFromTracee: Unable to read bytes at address.");
     return myData;
   }
 

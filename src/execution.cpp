@@ -465,9 +465,14 @@ bool execution::handleSeccomp(const pid_t traceesPid){
 // =======================================================================================
 void execution::handleSignal(int sigNum, const pid_t traceesPid){
   if(sigNum == SIGSEGV) {
-
     tracer.updateState(traceesPid);
-    uint32_t curr_insn32 = (tracer.readFromTracee(traceePtr<uint32_t> ((uint32_t*)tracer.getRip().ptr), traceesPid));
+    uint32_t curr_insn32;
+    ssize_t ret = readVmTraceeRaw(traceePtr<uint32_t> ((uint32_t*)tracer.getRip().ptr),
+                    &curr_insn32, sizeof(uint32_t), traceesPid);
+
+    if (ret == -1) {
+      throw runtime_error("Unable to read RIP for segfault. Cannot determine if rdtsc.\n");
+    }
 
     if ((curr_insn32 << 16) == 0x310F0000 || (curr_insn32 << 8) == 0xF9010F00) {
       auto msg = "[%d] Tracer: Received rdtsc: Reading next instruction.\n";
@@ -498,13 +503,13 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
     }
   }
 
-    // Remember to deliver this signal to the tracee for next event! Happens in
-    // getNextEvent.
-    states.at(traceesPid).signalToDeliver = sigNum;
+  // Remember to deliver this signal to the tracee for next event! Happens in
+  // getNextEvent.
+  states.at(traceesPid).signalToDeliver = sigNum;
 
-    auto msg = "[%d] Tracer: Received signal: %d. Forwarding signal to tracee.\n";
-    auto coloredMsg = log.makeTextColored(Color::blue, msg);
-    log.writeToLog(Importance::inter, coloredMsg, traceesPid, sigNum);
+  auto msg = "[%d] Tracer: Received signal: %d. Forwarding signal to tracee.\n";
+  auto coloredMsg = log.makeTextColored(Color::blue, msg);
+  log.writeToLog(Importance::inter, coloredMsg, traceesPid, sigNum);
   return;
 }
 // =======================================================================================

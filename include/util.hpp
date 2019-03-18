@@ -62,8 +62,8 @@ int doWithCheck(int returnValue, string errorMessage);
 
 // =======================================================================================
 /**
- * Read bytes from tracee memory using process_vm_readv while safely
- * handling errors. The type T does not affect the behavior of the
+ * Read bytes from tracee memory using process_vm_readv while moving errors up the call
+ * chain. The type T does not affect the behavior of the
  * function, however it provides clarity as to what the caller
  * is wishing to read/write.
  * @param traceeMemory starting address in tracee memory (remote)
@@ -72,17 +72,13 @@ int doWithCheck(int returnValue, string errorMessage);
  * @param traceePid tracee process' pid, whose address space is being read
  */
 template <typename T>
-void readVmTraceeRaw(traceePtr<T> traceeMemory, T* localMemory, size_t numberOfBytes,
+ssize_t readVmTraceeRaw(traceePtr<T> traceeMemory, T* localMemory, size_t numberOfBytes,
                   pid_t traceePid) {
   iovec remoteIoVec = {traceeMemory.ptr, numberOfBytes};
   iovec localIoVec = {localMemory, numberOfBytes };
   const unsigned long flags = 0;
 
-  doWithCheck(process_vm_readv(traceePid, &localIoVec, 1, &remoteIoVec, 1, flags),
-              "process_vm_readv");
-
-  return;
-
+  return process_vm_readv(traceePid, &localIoVec, 1, &remoteIoVec, 1, flags);
 }
 // =======================================================================================
 /**
