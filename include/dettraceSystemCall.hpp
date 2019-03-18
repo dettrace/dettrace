@@ -1563,7 +1563,8 @@ void handleDents(globalState& gs, state& s, ptracer& t, scheduler& sched){
     // by the kernel into the tracee's buffer.
     size_t bytesToCopy = t.getReturnValue();
     uint8_t localBuffer[bytesToCopy];
-    readVmTraceeRaw(traceeBuffer, localBuffer, bytesToCopy, t.getPid());
+    doWithCheck(readVmTraceeRaw(traceeBuffer, localBuffer, bytesToCopy, t.getPid()),
+                "readVmTraceeRaw: Unable to read bytes for dirent into buffer.");
     // Explicitly increase counter.
     t.readVmCalls++;
 
