@@ -35,11 +35,19 @@ void scheduler::insertThreadGroup(pid_t parentPid){
 }
 
 void scheduler::updateThreadGroup(pid_t threadPid){
-  pid_t parent = threadTree.at(threadPid);
-  threadGroupStatMap.erase(parent);
-  bool exitGroup = true;
-  auto pair = make_pair(parent, exitGroup);
-  threadGroupStatMap.insert(pair);
+  if(isThread(threadPid)){
+    pid_t parent = threadTree.at(threadPid);
+    threadGroupStatMap.erase(parent);
+    bool exitGroup = true;
+    auto pair = make_pair(parent, exitGroup);
+    threadGroupStatMap.insert(pair);
+  }else{
+    // It's the parent.
+    threadGroupStatMap.erase(threadPid);
+    bool exitGroup = true;
+    auto pair = make_pair(threadPid, exitGroup);
+    threadGroupStatMap.insert(pair);
+  }
   return;  
 }
 
@@ -301,6 +309,7 @@ pid_t scheduler::findNextNotWaiting(bool swapped){
     // Only case we don't do this is when the process is waiting on threads and one of the threads
     // has triggered an exit_group call.
     p = runnableHeap.top();
+    bool e = exitGroupTriggered(p);
     if(!exitGroupTriggered(p)){
       if(!swapped){
         auto msg = log.makeTextColored(Color::blue, "[%d] chosen to run next from runnable heap. \n");
@@ -310,6 +319,19 @@ pid_t scheduler::findNextNotWaiting(bool swapped){
         log.writeToLog(Importance::info, msg, p);
       }
       return p;
+    }else{
+      // Exit group was triggered. Threads need to exit. 
+      if(!blockedHeap.empty()){
+        p = blockedHeap.top();
+        bool topDone = isFinished(p);
+        if(!topDone){
+          auto msg = log.makeTextColored(Color::blue, "[%d] chosen to run next from blocked heap, moved to runnableHeap. \n");
+          log.writeToLog(Importance::info, msg, p);
+          blockedHeap.pop();
+          runnableHeap.push(p);
+          return p;
+        }
+      }
     }
   }else if((waitingChild || waitingThread) && done){
     // We went through the runnable heap and could not find a process not waiting on a child
