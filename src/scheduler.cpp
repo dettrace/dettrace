@@ -35,19 +35,16 @@ void scheduler::insertThreadGroup(pid_t parentPid){
 }
 
 void scheduler::updateThreadGroup(pid_t threadPid){
+  pid_t parent;
   if(isThread(threadPid)){
-    pid_t parent = threadTree.at(threadPid);
-    threadGroupStatMap.erase(parent);
-    bool exitGroup = true;
-    auto pair = make_pair(parent, exitGroup);
-    threadGroupStatMap.insert(pair);
+    parent = threadTree.at(threadPid);
   }else{
-    // It's the parent.
-    threadGroupStatMap.erase(threadPid);
-    bool exitGroup = true;
-    auto pair = make_pair(threadPid, exitGroup);
-    threadGroupStatMap.insert(pair);
+    parent = threadPid;
   }
+  threadGroupStatMap.erase(parent); 
+  bool exitGroup = true;
+  auto pair = make_pair(parent, exitGroup);
+  threadGroupStatMap.insert(pair);
   return;  
 }
 
@@ -300,16 +297,16 @@ pid_t scheduler::findNextNotWaiting(bool swapped){
     runnableHeap.push(processes[i]);
   }
   processes.clear();
+
   if((waitingChild || waitingThread) && !done){
     // We went through the entire given heap and could not find a process not waiting on a child
     // or a thread.
     // So we just schedule the top of the heap to run, because it is okay to run because
-    // it has not finished yet.
+    // it has not finished yet. (Unless an exit group has been triggered for that process's threads).
     // (Example: The child is waiting for the parent to write to a pipe.)
     // Only case we don't do this is when the process is waiting on threads and one of the threads
     // has triggered an exit_group call.
     p = runnableHeap.top();
-    bool e = exitGroupTriggered(p);
     if(!exitGroupTriggered(p)){
       if(!swapped){
         auto msg = log.makeTextColored(Color::blue, "[%d] chosen to run next from runnable heap. \n");
