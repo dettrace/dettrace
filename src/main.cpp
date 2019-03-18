@@ -71,6 +71,11 @@ struct programArgs{
   string logFile;
   bool printStatistics;
   bool convertUids;
+  // We sometimes want to run dettrace inside a chrooted enviornment. Annoyingly, Linux
+  // does not let us create a user namespace if the current process is chrooted. This
+  // is a feature. So we handle this special case, by allowing dettrace to treat the
+  // current enviornment as a chroot.
+  bool currentAsChroot;
 };
 // =======================================================================================
 programArgs parseProgramArguments(int argc, char* argv[]);
@@ -146,7 +151,13 @@ const string usageMsg =
   "    0 (root).\n"
   "  --print-statistics\n"
   "    Print metadata about process that just ran including: number of system call events\n"
-  "    read/write retries, rdtsc, rdtscp, cpuid.\n";
+  "    read/write retries, rdtsc, rdtscp, cpuid.\n"
+  "  --currentAsChroot\n"
+  "    Use the current enviornment as the chroot. This is useful for running dettrace\n"
+  "    inside a chroot, using that same chroot as the environnment. For some reason the\n"
+  "    current mount namespace is polluted with our bind mounts (even though we create)\n"
+  "    our own namespace. Therefore make sure to unshare -m before running dettrace with\n"
+  "    this command, either when chrooting or when calling dettrace.";
 
 /**
  * Given a program through the command line, spawn a child thread, call PTRACEME and exec
@@ -181,6 +192,10 @@ int main(int argc, char** argv){
     CLONE_NEWPID | // Our own pid namespace.
     CLONE_NEWNS;  // Our own mount namespace
 
+  if (args.currentAsChroot) {
+    cloneFlags &= ~CLONE_NEWUSER;
+  }
+
   // our own user namespace. Other namepspace commands require CAP_SYS_ADMIN to work.
   // Namespaces must must be done before fork. As changes don't apply until after
   // fork, to all child processes.
@@ -209,29 +224,30 @@ int main(int argc, char** argv){
      to the namespace. This allows us, in the future, to extend the mappins to other
      uids when running as root (not currently implemented, but notice this cannot be
      done when using unshare.)*/
-  char map_path[PATH_MAX];
-  const int MAP_BUF_SIZE = 100;
-  char map_buf[MAP_BUF_SIZE];
-  char* uid_map;
-  char* gid_map;
+  if (! args.currentAsChroot) {
+    char map_path[PATH_MAX];
+    const int MAP_BUF_SIZE = 100;
+    char map_buf[MAP_BUF_SIZE];
+    char* uid_map;
+    char* gid_map;
 
-  // Must be done before we unshare namespaces!!!
-  uid_t uid = getuid();
-  gid_t gid = getgid();
+    uid_t uid = getuid();
+    gid_t gid = getgid();
 
-  // Set up container to hostOS UID and GID mappings
-  snprintf(map_path, PATH_MAX, "/proc/%d/uid_map", pid);
-  snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long)uid);
-  uid_map = map_buf;
-  update_map(uid_map, map_path);
+    // Set up container to hostOS UID and GID mappings
+    snprintf(map_path, PATH_MAX, "/proc/%d/uid_map", pid);
+    snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long)uid);
+    uid_map = map_buf;
+    update_map(uid_map, map_path);
 
-  // Set GID Map
-  string deny = "deny";
-  proc_setgroups_write(pid, deny.c_str());
-  snprintf(map_path, PATH_MAX, "/proc/%d/gid_map", pid);
-  snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long)gid);
-  gid_map = map_buf;
-  update_map(gid_map, map_path);
+    // Set GID Map
+    string deny = "deny";
+    proc_setgroups_write(pid, deny.c_str());
+    snprintf(map_path, PATH_MAX, "/proc/%d/gid_map", pid);
+    snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long)gid);
+    gid_map = map_buf;
+    update_map(gid_map, map_path);
+  }
 
   int status;
   doWithCheck(waitpid(-1, &status, 0), "cannot wait for child");
@@ -541,9 +557,6 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
   // set working directory to buildDir
   doWithCheck(chdir("/build/"), "Failed to set working directory to " + buildDir);
 
-  // doWithCheck(mount("/proc", "/proc/", "proc", MS_MGC_VAL, nullptr),
-  //             "Mounting proc failed");
-
   // Disable ASLR for our child
   doWithCheck(personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");
 }
@@ -560,7 +573,9 @@ int spawnTracerTracee(void* voidArgs){
   // this mount are not propegated to the parent mount.
   // This makes sure we don't pollute the host OS' mount space with entries made by us
   // here.
-  doWithCheck(mount("none", "/", NULL, MS_SLAVE | MS_REC, 0), "mount slave");
+  if (! args.currentAsChroot) {
+    doWithCheck(mount("none", "/", NULL, MS_SLAVE | MS_REC, 0), "mount slave");
+  }
 
   // TODO assert is bad (does not print buffered log output).
   // Switch to throw runtime exception.
@@ -573,8 +588,11 @@ int spawnTracerTracee(void* voidArgs){
   } else if(pid > 0) {
     // We must mount proc so that the tracer sees the same PID and /proc/ directory
     // as the tracee. The tracee will do the same so it sees /proc/ under it's chroot.
-    doWithCheck(mount("/proc", "/proc/", "proc", MS_MGC_VAL, nullptr),
-              "tracer mounting proc failed");
+
+    if (!args.currentAsChroot) {
+      doWithCheck(mount("/proc", "/proc/", "proc", MS_MGC_VAL, nullptr),
+                  "tracer mounting proc failed");
+    }
 
     execution exe{
         args.debugLevel, pid, args.useColor, usingOldKernel(), args.logFile,
@@ -607,6 +625,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
   args.logFile = "NONE";
   args.printStatistics = false;
   args.convertUids = false;
+  args.currentAsChroot = false;
 
   // Command line options for our program.
   static struct option programOptions[] = {
@@ -619,6 +638,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     {"print-statistics", no_argument, 0, 'p'},
     {"working-dir", required_argument, 0, 'w'},
     {"convert-uids", no_argument, 0, 'u'},
+    {"currentAsChroot", no_argument, 0, 'a'},
     {0,        0,                  0, 0}    // Last must be filled with 0's.
   };
 
@@ -632,9 +652,11 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     if(returnVal == -1){ break; }
 
     switch(returnVal){
+    case 'a':
+      args.currentAsChroot = true;
+      break;
     case 'c':
       args.pathToChroot = string { optarg };
-      // Debug flag.
       break;
     case 'd':
       args.debugLevel = parseNum(optarg);
@@ -691,6 +713,28 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     args.pathToChroot = pathToExe + defaultRoot;
   } else {
     args.userChroot = true;
+  }
+
+  bool usingWorkingDir = args.workingDir != "NONE";
+  if (args.currentAsChroot && (args.userChroot || usingWorkingDir)) {
+    fprintf(stderr, "Cannot use --currentAsChroot with --chroot or --working-dir.\n");
+    exit(1);
+  }
+
+  if (usingWorkingDir && !args.userChroot) {
+    fprintf(stderr, "Cannot use --working-dir without specifying a --chroot.\n");
+    exit(1);
+  }
+
+  // Detect if we're inside a chroot by attempting to make a user namespace.
+  if (args.currentAsChroot) {
+    if (unshare(CLONE_NEWUSER) != -1) {
+      fprintf(stderr, "We detected you are not currently running inside a chroot env.\n");
+      exit(1);
+    }
+    // Treat current enviornment as our chroot.
+    args.userChroot = true;
+    args.pathToChroot = "/";
   }
   return args;
 }
