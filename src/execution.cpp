@@ -108,9 +108,9 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
     if(systemCall == "clone" ){
       unsigned long flags = (unsigned long) tracer.arg1();
       unsigned long threadBit = flags & CLONE_THREAD;
-      // if(threadBit != 0){
-        // throw runtime_error("dettrace runtime exception: Threads not supported!");
-      // }
+      if(threadBit != 0){
+        throw runtime_error("dettrace runtime exception: Threads not supported!");
+      }
     }
 
     int status;
