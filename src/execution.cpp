@@ -92,7 +92,6 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   log.setPadding();
 
   bool callPostHook = callPreHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
-
   if(oldKernel){
     // Next event will be a sytem call pre-exit event as older kernels make us catch the
     // seccomp event and the ptrace pre-system call event.
@@ -382,42 +381,11 @@ pid_t execution::handleForkEvent(const pid_t traceesPid){
   return newChildPid;
 }
 
-static unsigned long traceeDoMprotect(pid_t pid, ptracer& t, unsigned long base, unsigned long size, int prot) {
-  struct user_regs_struct regs;
-  unsigned long ret;
-
-  t.doPtrace(PTRACE_GETREGS, pid, 0, &regs);
-  auto oldRegs = regs;
-
-  regs.orig_rax = SYS_mprotect;
-  regs.rax = SYS_mprotect;
-  regs.rdi = base;
-  regs.rsi = size;
-  regs.rdx = prot;
-
-  int status;
-  t.doPtrace(PTRACE_SETREGS, pid, 0, &regs);
-  t.doPtrace(PTRACE_CONT, pid, 0, 0);
-  assert(waitpid(pid, &status, 0) == pid);
-  assert(WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP);
-  t.doPtrace(PTRACE_GETREGS, pid, 0, &regs);
-  if ((long)regs.rax < 0) {
-    string err = "unable to inject mprotect, error: \n";
-    throw runtime_error(err + strerror((long)-regs.rax));
-  }
-  ret = regs.rax;
-  oldRegs.rip = regs.rip-3; /* 0xcc, syscall, 0xcc = 4 bytes */
-  memcpy(&regs, &oldRegs, sizeof(regs));
-  t.doPtrace(PTRACE_SETREGS, pid, 0, &regs);
-
-  return ret;
-}
-
 static unsigned long traceePreinitMmap(pid_t pid, ptracer& t) {
   struct user_regs_struct regs;
   unsigned long ret;
 
-  t.doPtrace(PTRACE_GETREGS, pid, 0, &regs);
+  ptracer::doPtrace(PTRACE_GETREGS, pid, 0, &regs);
   auto oldRegs = regs;
 
   regs.orig_rax = SYS_mmap;
@@ -430,34 +398,21 @@ static unsigned long traceePreinitMmap(pid_t pid, ptracer& t) {
   regs.r9 = 0;
 
   int status;
-  t.doPtrace(PTRACE_SETREGS, pid, 0, &regs);
-  t.doPtrace(PTRACE_CONT, pid, 0, 0);
+  ptracer::doPtrace(PTRACE_SETREGS, pid, 0, &regs);
+  ptracer::doPtrace(PTRACE_CONT, pid, 0, 0);
   assert(waitpid(pid, &status, 0) == pid);
   assert(WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP);
-  t.doPtrace(PTRACE_GETREGS, pid, 0, &regs);
+  ptracer::doPtrace(PTRACE_GETREGS, pid, 0, &regs);
   if ((long)regs.rax < 0) {
     string err = "unable to inject syscall page, error: \n";
     throw runtime_error(err + strerror((long)-regs.rax));
   }
   ret = regs.rax;
-  oldRegs.rip = regs.rip-3; /* 0xcc, syscall, 0xcc = 4 bytes */
+  oldRegs.rip = regs.rip - 4; /* 0xcc, syscall, 0xcc = 4 bytes */
   memcpy(&regs, &oldRegs, sizeof(regs));
-  t.doPtrace(PTRACE_SETREGS, pid, 0, &regs);
+  ptracer::doPtrace(PTRACE_SETREGS, pid, 0, &regs);
 
   return ret;
-}
-
-static inline int fromPerms(long perms)
-{
-  int prot = 0;
-
-  if (perms & ProcMapPermRead)
-    prot |= PROT_READ;
-  if (perms & ProcMapPermWrite)
-    prot |= PROT_WRITE;
-  if (perms & ProcMapPermExec)
-    prot |= PROT_EXEC;
-  return prot;
 }
 
 static inline unsigned long alignUp(unsigned long size, int align)
@@ -470,14 +425,14 @@ void execution::handleExecEvent(pid_t pid) {
 
   auto vdsoMap = vdsoGetMapEntry(pid);
 
-  tracer.doPtrace(PTRACE_GETREGS, pid, 0, &regs);
+  ptracer::doPtrace(PTRACE_GETREGS, pid, 0, &regs);
   auto rip = regs.rip;
   unsigned long stub = 0xcc050fccUL;
   errno = 0;
 
   auto saved_insn = tracer.doPtrace(PTRACE_PEEKTEXT, pid, (void*)rip, 0);
-  tracer.doPtrace(PTRACE_POKETEXT, pid, (void*)rip, (void*)((saved_insn & ~0xffffffffUL) | stub));
-  tracer.doPtrace(PTRACE_CONT, pid, 0, 0);
+  ptracer::doPtrace(PTRACE_POKETEXT, pid, (void*)rip, (void*)((saved_insn & ~0xffffffffUL) | stub));
+  ptracer::doPtrace(PTRACE_CONT, pid, 0, 0);
 
   int status;
 
@@ -490,7 +445,6 @@ void execution::handleExecEvent(pid_t pid) {
   if (vdsoMap.has_value()) {
     auto ent = vdsoMap.value();
     auto data = vdsoGetCandidateData();
-    traceeDoMprotect(pid, tracer, ent.procMapBase, ent.procMapSize, fromPerms(ent.procMapPerms) | PROT_WRITE);
 
     for (auto func: vdsoFuncs) {
       unsigned long offset, oldVdsoSize, vdsoAlignment;
@@ -505,23 +459,25 @@ void execution::handleExecEvent(pid_t pid) {
 	const unsigned char* z = data[func.first].c_str();
 	unsigned long to = target + 8*i;
 	memcpy(&val, &z[8*i], sizeof(val));
-	tracer.doPtrace(PTRACE_POKETEXT, pid, (void*)to, (void*)val);
+	ptracer::doPtrace(PTRACE_POKETEXT, pid, (void*)to, (void*)val);
       }
+
+      unsigned long off = target + nb;
+      unsigned long val = 0xccccccccccccccccUL;
+      while (nb < nbUpper) {
+	ptracer::doPtrace(PTRACE_POKETEXT, pid, (void*)off, (void*)val);
+	off += sizeof(long);
+	nb  += sizeof(long);
+      }
+      assert(nb == nbUpper);
     }
-
-    traceeDoMprotect(pid, tracer, ent.procMapBase, ent.procMapSize, fromPerms(ent.procMapPerms));
   }
-
-  tracer.doPtrace(PTRACE_GETREGS, pid, 0, &regs);
-  regs.rip -= 1; // first 0xcc
-  tracer.doPtrace(PTRACE_SETREGS, pid, 0, &regs);
-
   if (states.find(pid) == states.end())
       states.emplace(pid, state {pid, debugLevel} );
 
   states.at(pid).mmapMemory.doesExist = true;
   states.at(pid).mmapMemory.setAddr(traceePtr<void>((void*)mmapAddr));
-  tracer.doPtrace(PTRACE_POKETEXT, pid, (void*)rip, (void*)saved_insn);
+  ptracer::doPtrace(PTRACE_POKETEXT, pid, (void*)rip, (void*)saved_insn);
 }
 
 // =======================================================================================
@@ -1168,7 +1124,42 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
   // a ptrace event on pre-system call events. Sometimes we need the system call to be
   // called and then we change it's arguments. So we call PTRACE_SYSCALL instead.
   if(ptraceSystemcall){
-    ptracer::doPtrace(PTRACE_SYSCALL, pidToContinue, 0, (void*) signalToDeliver);
+    struct user_regs_struct regs;
+    ptracer::doPtrace(PTRACE_GETREGS, pidToContinue, 0, &regs);
+    // old glibc (2.13) calls (buggy) vsyscall for certain syscalls
+    // such as time. this doesn't play along well with recent
+    // kernels with seccomp-bpf support (4.4+)
+    // for more details, see `Caveats` section of kernel document:
+    // https://www.kernel.org/doc/Documentation/prctl/seccomp_filter.txt
+    if ( (regs.rip & ~0xc00ULL) == 0xFFFFFFFFFF600000ULL) {
+      int status;
+      int syscallNum = regs.orig_rax;
+      // vsyscall seccomp stop is a special case
+      // single step would cause the vsyscall exit fully
+      // we cannot use `PTRACE_SYSCALL` as it wouldn't stop
+      // at syscall exit like regular syscalls.
+      ptracer::doPtrace(PTRACE_SINGLESTEP, pidToContinue, 0, (void*) signalToDeliver);
+      // wait for our SIGTRAP
+      waitpid(pidToContinue, &status, 0);
+
+      // call our post-hook manually for vsyscall stops.
+      tracer.updateState(pidToContinue);
+      callPostHook(syscallNum, myGlobalState, states.at(pidToContinue), tracer, myScheduler);
+      tracer.updateState(pidToContinue);
+
+      // 000000000009efe0 <time@@GLIBC_2.2.5>:
+      // 9efe0:       48 83 ec 08             sub    $0x8,%rsp
+      // 9efe4:       48 c7 c0 00 04 60 ff    mov    $0xffffffffff600400,%rax
+      // 9efeb:       ff d0                   callq  *%rax
+      // 9efed:       48 83 c4 08             add    $0x8,%rsp
+      // 9eff1:       c3                      retq
+      //
+      // our expected rip is @9eff1. must resume with `PTRACE_CONT`
+      // since our vsyscall has been *emulated*
+      ptracer::doPtrace(PTRACE_CONT, pidToContinue, 0, (void*) signalToDeliver);
+    } else {
+      ptracer::doPtrace(PTRACE_SYSCALL, pidToContinue, 0, (void*) signalToDeliver);
+    }
   }else{
     // Tell the process that we just intercepted an event for to continue, with us tracking
     // it's system calls. If this is the first time this function is called, it will be the
