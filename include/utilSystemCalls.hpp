@@ -67,11 +67,11 @@ ino_t readInodeFor(logger& log, pid_t traceePid, int fd);
  * Properly handles relative paths (cwd), and chroots, to reach correct file from the
  * tracee's point of view.
  * Uses traceeDirFd to mimic semantics of *at symstem calls, e.g. mkdirat. See man 2 mkdirat
- * for specific semantics.
+ * for specific semantics. Use value -1 as poor man's optional type NONE.
  * Assumes that `traceeDirFd` is currently open for traceePid.
  */
 ino_t inode_from_tracee(string traceePath, pid_t traceePid, logger& log,
-                        optional<int> traceeDirFd);
+                        int traceeDirFd);
 
 /**
  *
@@ -129,20 +129,20 @@ bool sendTraceeSignalNow(int signum, globalState& gs, state& s, ptracer& t,
  * resolve path. Takes optional dirfd argument, for tracee calls using *at.
  */
 string resolve_tracee_path(string traceePath, pid_t traceePid, logger& log,
-                           optional<int> traceeDirFd);
+                           int traceeDirFd);
 
 /**
  * Check if a file relative to a tracee exists. Calls resolve_tracee_path,
  * uses stat on file to emulate behavior of open() and openat().
  */
 bool tracee_file_exists(string traceePath, pid_t traceePid, logger& log,
-                        optional<int> traceeDirFd);
+                        int traceeDirFd);
 /**
  * Handler for open and openat. Checks if the file exists and sets s.fileExisted,
  * if O_CREAT was set. This way we know whether a new file was created if the system
  * call suceeds.
  */
-void handlePreOpens(globalState& gs, state& s, ptracer& t, optional<int> dirfd,
+void handlePreOpens(globalState& gs, state& s, ptracer& t, int dirfd,
                     traceePtr<char> charpath, int flags);
 /**
  * Handler for open and openat. Checks if the file previously existed, if it didn't
