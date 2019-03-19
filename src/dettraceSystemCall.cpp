@@ -1560,13 +1560,12 @@ void timeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     time_t* timePtr = (time_t*) t.arg1();
     gs.log.writeToLog(Importance::info, "time: tloc is null.");
     t.writeRax(s.getLogicalTime());
+    // Tick up time.
+    s.incrementTime();
     if(timePtr == nullptr){
       return;
     }
-
     t.writeToTracee(traceePtr<time_t>(timePtr), (time_t) s.getLogicalTime(), s.traceePid);
-    // Tick up time.
-    s.incrementTime();
   }
   return;
 }
