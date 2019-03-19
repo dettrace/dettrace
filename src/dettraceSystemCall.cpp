@@ -755,7 +755,7 @@ void mkdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
   // Add/overwrite entry in our map.
   if(t.getReturnValue() == 0 && (char*) t.arg1() != nullptr){
     string strPath = t.readTraceeCString(traceePtr<char>((char*) t.arg1()), s.traceePid);
-    auto inode = inode_from_tracee(strPath, s.traceePid, gs.log, nullopt);
+    auto inode = inode_from_tracee(strPath, s.traceePid, gs.log, -1);
     gs.mtimeMap.addRealValue(inode);
   }
 }
@@ -857,7 +857,7 @@ void linkatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
 // =======================================================================================
 bool openSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if((char*) t.arg1() != nullptr){
-    handlePreOpens(gs, s, t, nullopt, traceePtr<char>{(char*) t.arg1()}, t.arg2());
+    handlePreOpens(gs, s, t, -1, traceePtr<char>{(char*) t.arg1()}, t.arg2());
     return true;
   }
   return false;
@@ -1462,7 +1462,7 @@ bool symlinkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sche
 void symlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(t.getReturnValue() == 0 && (char*) t.arg2() != nullptr){
     string linkpath = t.readTraceeCString(traceePtr<char>((char*) t.arg2()), s.traceePid);
-    auto inode = inode_from_tracee(linkpath, s.traceePid, gs.log, nullopt);
+    auto inode = inode_from_tracee(linkpath, s.traceePid, gs.log, -1);
     gs.mtimeMap.addRealValue(inode);
   }
 }
@@ -1494,7 +1494,7 @@ void mknodSystemCall::
 handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(t.getReturnValue() == 0 && (char*) t.arg1() != nullptr){
     string path = t.readTraceeCString(traceePtr<char>((char*) t.arg1()), s.traceePid);
-    auto inode = inode_from_tracee(path, s.traceePid, gs.log, nullopt);
+    auto inode = inode_from_tracee(path, s.traceePid, gs.log, -1);
     gs.mtimeMap.addRealValue(inode);
   }
 }

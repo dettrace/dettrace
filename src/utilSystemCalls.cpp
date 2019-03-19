@@ -1,7 +1,6 @@
 #include "utilSystemCalls.hpp"
 
 #include <sstream>
-#include<optional>
 #include <fcntl.h>
 
 // File local functions.
@@ -304,7 +303,7 @@ void appendEnvpLdPreload(globalState& gs, state& s, ptracer& t) {
 }
 // =======================================================================================
 bool tracee_file_exists(string traceePath, pid_t traceePid, logger& log,
-                   optional<int> traceeDirFd) {
+                   int traceeDirFd) {
   // Create full absolute path in the hostOS file system.
   string resolvedPath = resolve_tracee_path(traceePath, traceePid, log, traceeDirFd);
 
@@ -326,7 +325,7 @@ bool tracee_file_exists(string traceePath, pid_t traceePid, logger& log,
 }
 // =======================================================================================
 ino_t inode_from_tracee(string traceePath, pid_t traceePid, logger& log,
-                        optional<int> traceeDirFd) {
+                        int traceeDirFd) {
   // Create full absolute path in the hostOS file system.
   string resolvedPath = resolve_tracee_path(traceePath, traceePid, log, traceeDirFd);
   resolvedPath.append("/");
@@ -427,19 +426,18 @@ bool sendTraceeSignalNow(int signum, globalState& gs,
   }
 }
 // =======================================================================================
-/**
- * Given a path used by the tracee, either relative or absolute, resolve the exact file the
- * tracee refered to. Uses combination of /proc/traceePid/cwd, /proc/traceePid/root, to
- * resolve path. Takes optional dirfd argument, for tracee calls using *at.
- */
 string resolve_tracee_path(string traceePath, pid_t traceePid, logger& log,
-                        optional<int> traceeDirFd) {
+                        int traceeDirFd) {
   log.writeToLog(Importance::info, "Resolving path for: %s\n", traceePath.c_str());
 
   // Some system calls take empty path and use traceeDirFd exclusively to refer to a file
   // see O_PATH option in `man 2 open`. We do not support this right now...
   if (traceePath == "") {
     throw runtime_error("We do not support system calls with empty paths.");
+  }
+
+  if (traceeDirFd < -1 && traceeDirFd != AT_FDCWD) {
+    throw runtime_error("Negative dirfd given to resolve_tracee_path.");
   }
 
   string prefixProcFd;
@@ -450,10 +448,9 @@ string resolve_tracee_path(string traceePath, pid_t traceePid, logger& log,
   } else {
     // Only on relative paths should we use traceeDirFd if avaliable, and it's not.
     // AT_FDCWD, just uses CWD which we do anyways, in the else branch.
-    if (traceeDirFd && traceeDirFd.value() != AT_FDCWD) {
+    if (traceeDirFd != -1 && traceeDirFd != AT_FDCWD) {
       log.writeToLog(Importance::info, "Using user's dirfd for path resolution.\n");
-      int dirfd = traceeDirFd.value();
-      prefixProcFd = "/proc/" + to_string(traceePid) + "/fd/" + to_string(dirfd);
+      prefixProcFd = "/proc/" + to_string(traceePid) + "/fd/" + to_string(traceeDirFd);
     } else {
       // Use cwd to figure out path.
       prefixProcFd = "/proc/" + to_string(traceePid) + "/cwd";
@@ -471,7 +468,7 @@ string resolve_tracee_path(string traceePath, pid_t traceePid, logger& log,
   return string { pathbuf };
 }
 // =======================================================================================
-void handlePreOpens(globalState& gs, state& s, ptracer& t, optional<int> dirfd,
+void handlePreOpens(globalState& gs, state& s, ptracer& t, int dirfd,
                 traceePtr<char> charpath, int flags) {
   // tmp file being created, no way it could already exist. Skip straight to post-hook.
   if ((flags & O_TMPFILE) != 0) {
