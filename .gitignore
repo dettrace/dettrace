@@ -8,6 +8,7 @@ GTAGS
 .ccls
 .ccls-cache
 *.so
+initramfs.cpio
 test/samplePrograms/2writers1reader
 test/samplePrograms/catTestFile
 test/samplePrograms/creat
