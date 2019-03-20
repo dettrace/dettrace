@@ -277,7 +277,14 @@ void execution::runProgram(){
       }
       else if (ret == ptraceEvent::clone){
         msg = "clone";
+        tracer.updateState(traceesPid);
+        unsigned long flags = (unsigned long) tracer.arg1();
+        unsigned long threadBit = flags & CLONE_THREAD;
+        if(threadBit != 0){
+          throw runtime_error("dettrace runtime exception: Threads not supported!");
+        }
       }
+
       log.writeToLog(Importance::inter,
                      log.makeTextColored(Color::blue, "[%d] caught %s event!\n"),
                      traceesPid, msg.c_str());
