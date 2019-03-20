@@ -210,8 +210,8 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
       if(address == nullptr){
         break;
       }
-
-      execveArgs += " \"" + t.readTraceeCString(traceePtr<char>(address), t.getPid()) + "\" ";
+      execveArgs += ",one more arg, ";
+      // execveArgs += " \"" + t.readTraceeCString(traceePtr<char>(address), t.getPid()) + "\" ";
     }
 
     auto msg = "Args: " + gs.log.makeTextColored(Color::green, execveArgs) + "\n";
@@ -478,7 +478,7 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     if(s.userDefinedTimeout){
       // Only preempt if we would have timeout out. Othewise let if continue running!
       if(t.getReturnValue() == -ETIMEDOUT){
-        sched.preemptAndScheduleNext(preemptOptions::runnable);
+        sched.preemptAndScheduleNext(preemptOptions::markAsBlocked);
       }
 
       s.userDefinedTimeout = false;

@@ -37,38 +37,6 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
     ptracer::setOptions(startingPid);
   }
 // =======================================================================================
-// We only call this function on a ptrace::nonEventExit. We only receive this event once
-// all the process' children have finished.
-bool execution::handleExit(const pid_t traceesPid){
-  auto msg = log.makeTextColored(Color::blue, "Process [%d] has completely  finished."
-                                     " (ptrace nonEventExit).\n");
-  log.writeToLog(Importance::inter, msg, traceesPid);
-
-  // We are done. Erase ourselves from our parent's list of children.
-  // Also do this for the scheduler's process tree.
-  pid_t parent = eraseChildEntry(processTree, traceesPid);
-  myScheduler.eraseSchedChild(traceesPid);
-
-  if(parent != -1                   &&       // We have no parent, we're root.
-     myScheduler.isFinished(parent) &&       // Check if our parent is marked as finished.
-     processTree.count(parent) == 0){        // Parent has no children left.
-    
-    myScheduler.removeAndScheduleParent(traceesPid, parent);
-    return false;
-  }
-  // Generic case, should happen most of the time.
-  else{
-    // Process done, schedule next process to run.
-    bool empty = myScheduler.removeAndScheduleNext(traceesPid);
-    if(empty){
-      // All processes have finished! We're done
-      return true;
-    }
-    log.unsetPadding();
-    return false;
-  }
-}
-// =======================================================================================
 // Despite what the name will imply, this function is actually called during a
 // ptrace seccomp event. Not a pre-system call event. In newer kernel version there is no
 // need to deal with ptrace pre-system call events. So the only reason we refer to it here
@@ -218,53 +186,37 @@ void execution::runProgram(){
 
     // Current process was ended by signal.
     if(ret == ptraceEvent::terminatedBySignal){
-      // TODO: A Process terminated by signal might break some of the assumptions I make
-      // in handleExit (see function definition above) so we do not support it for now.
-      // throw runtime_error("dettrace runtime exception: Process terminated by signal. We currently do not support this.");
       auto msg =
         log.makeTextColored(Color::blue, "Process [%d] ended by signal %d.\n");
       log.writeToLog(Importance::inter, msg, traceesPid, WTERMSIG(status));
-      exitLoop = handleExit(traceesPid);
+      doWithCheck(ptracer::doPtrace(PTRACE_DETACH, traceesPid, NULL, NULL),
+                  "failed to ptrace detach process terminated by signal.\n");
+      exitLoop = myScheduler.removeAndScheduleNext(traceesPid);
       continue;
     }
-    /**
-       A process needs to do two things before dying:
-       1) eventExit through ptrace. This process is not truly done, it is stopped
-       until we let it continue and all it's children have also finished.
-       2) A nonEventExit at this point the process is done and can no longer be
-       peeked or poked.
 
-       If the process has remaining children, we will get an eventExit but the
-       nonEventExit will never arrive. Therefore we set process as exited.
-       Only when all children have exited do we get a the nonEvent exit.
-
-       Therefore we keep track of the process hierarchy and only wait for the
-       evenExit when our children have exited.
-    */
     if(ret == ptraceEvent::eventExit){
-      auto msg = log.makeTextColored(Color::blue, "Process [%d] has finished. "
-                                         "With ptrace exit event.\n");
+      auto msg = log.makeTextColored(Color::blue, "Process [%d] has completely  finished."
+                                     " (ptrace eventExit).\n");
       log.writeToLog(Importance::inter, msg, traceesPid);
-      states.at(traceesPid).callPostHook = false;
-
-      // We have children still, we cannot exit.
-      if(processTree.count(traceesPid) != 0){
-        myScheduler.markFinishedAndScheduleNext(traceesPid);
-      }
+      // detach
+      doWithCheck(ptracer::doPtrace(PTRACE_DETACH, traceesPid, NULL, NULL),
+                  "failed to ptrace detach process\n");
+      exitLoop = myScheduler.removeAndScheduleNext(traceesPid);
       continue;
     }
 
     // Current process is finally truly done (unlike eventExit).
     if(ret == ptraceEvent::nonEventExit){
-      states.at(traceesPid).callPostHook = false;
-      if(processTree.count(traceesPid) != 0){
-        myScheduler.markFinishedAndScheduleNext(traceesPid);
-      }else{
-        exitLoop = handleExit(traceesPid);
-      }
+      auto msg = log.makeTextColored(Color::blue, "Process [%d] has completely  finished."
+                                     " (ptrace nonEventExit).\n");
+      log.writeToLog(Importance::inter, msg, traceesPid);
+      // detach
+      doWithCheck(ptracer::doPtrace(PTRACE_DETACH, traceesPid, NULL, NULL),
+                  "failed to ptrace detach process\n");
+      exitLoop = myScheduler.removeAndScheduleNext(traceesPid);
       continue;
     }
-
 
     // We have encountered a call to fork, vfork, clone.
     if (ret == ptraceEvent::fork || ret == ptraceEvent::vfork || ret == ptraceEvent::clone) {
@@ -346,9 +298,7 @@ void execution::runProgram(){
 pid_t execution::handleForkEvent(const pid_t traceesPid){
   log.writeToLog(Importance::inter, log.makeTextColored(Color::blue,
                  "Fork event came!\n"));
-
   processSpawnEvents++;
-
   pid_t newChildPid = ptracer::getEventMessage(traceesPid);
 
   // Add this new process to our states.
@@ -365,12 +315,6 @@ pid_t execution::handleForkEvent(const pid_t traceesPid){
   // from parent process, to be consistent with fork() semantic.
   states.at(newChildPid).mmapMemory.doesExist = true;
   states.at(newChildPid).mmapMemory.setAddr(states.at(traceesPid).mmapMemory.getAddr());
-
-  // This is where we add new children to our process tree.
-  // Also add it to the scheduler's process tree.
-  auto pair = make_pair(traceesPid, newChildPid);
-  processTree.insert(pair);
-  myScheduler.insertSchedChild(traceesPid, newChildPid);
 
   // Wait for child to be ready.
   log.writeToLog(Importance::info, log.makeTextColored(Color::blue,
@@ -820,9 +764,6 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
   case SYS_close:
     return closeSystemCall::handleDetPost(gs, s, t, sched);
 
-  // case SYS_clone:
-  //   return cloneSystemCall::handleDetPost(gs, s, t, sched);
-
   case SYS_connect:
     return connectSystemCall::handleDetPost(gs, s, t, sched);
 
@@ -834,10 +775,6 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 
   case SYS_dup2:
     return dup2SystemCall::handleDetPost(gs, s, t, sched);
-
-    // TODO
-  // case SYS_execve:
-    // return execveSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_faccessat:
     return faccessatSystemCall::handleDetPost(gs, s, t, sched);

@@ -149,7 +149,7 @@ public:
    * @return Exit status for runProgram
    * @see runProgram()
    */
-  bool handleExit(const pid_t traceesPid);
+  // bool handleExit(const pid_t traceesPid);
 
   /**
    * Handles system call pre-hook.
