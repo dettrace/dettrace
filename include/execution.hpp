@@ -59,6 +59,8 @@ private:
    */
   ptracer tracer;
 
+  bool handleTraceeExit(string reason, pid_t traceePid, bool isNonExit);
+
   /**
    * System call state map.
    * State represents all state we wish to maintain between subsequent system calls, e.g. logical time, etc.

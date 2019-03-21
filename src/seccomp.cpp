@@ -224,6 +224,8 @@ void seccomp::loadRules(bool debug, bool convertUids){
   intercept(SYS_openat);
 
   intercept(SYS_tgkill);
+  // TODO handle KILL!!!
+  noIntercept(SYS_kill);
 
   intercept(SYS_link, debug);
   intercept(SYS_linkat, debug);
