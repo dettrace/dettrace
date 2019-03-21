@@ -58,7 +58,7 @@ void seccomp::loadRules(bool debug, bool convertUids){
   // End process.
   noIntercept(SYS_exit);
   // End process group.
-  noIntercept(SYS_exit_group);
+  intercept(SYS_exit_group);
   noIntercept(SYS_epoll_create1);
   noIntercept(SYS_epoll_create);
   // Advise on access patter by program of file.

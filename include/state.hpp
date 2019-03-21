@@ -69,6 +69,12 @@ public:
   state(pid_t traceePid, int debugLevel);
 
   /**
+   * Keeps track of whether this process just exit_group-ed, we need to remember this
+   * since there is no post-hook for exit group.
+   */
+  bool isExitGroup = false;
+
+  /**
    * Keep track of file descriptor status for blocking descriptors, as set by the
    * user program. Irregardless of what we set it to. These are
    * set in either pipe (non blocking) or pipe2 (either), or duplicated through,

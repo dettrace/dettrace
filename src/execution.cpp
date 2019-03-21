@@ -33,6 +33,8 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
     // Set state for first process.
     states.emplace(startingPid, state{startingPid, debugLevel});
     myGlobalState.threadGroups.insert({startingPid, startingPid});
+    myGlobalState.threadGroupNumber.insert({startingPid, startingPid});
+
     // First process is special and we must set the options ourselves.
     // This is done everytime a new process is spawned.
     ptracer::setOptions(startingPid);
@@ -181,7 +183,32 @@ void execution::runProgram(){
     }
 
     if(ret == ptraceEvent::eventExit){
+      bool isExitGroup = states.at(traceesPid).isExitGroup;
+      pid_t threadGroup = myGlobalState.threadGroupNumber.at(traceesPid);
       exitLoop = handleTraceeExit("ptrace event exit", traceesPid, false);
+
+      // Detach all threads/process in this exit group!!!
+      if (isExitGroup) {
+        auto msg = "Caught exit group! Ending all processes in our process group %d.\n";
+        log.writeToLog(Importance::info, msg, threadGroup);
+
+        // Make a copy to avoid deleting entries in original (done in handleTraceeExit)
+        // while iterating through it.
+        auto copyThreadGroups = myGlobalState.threadGroups;
+        auto iterpair = copyThreadGroups.equal_range(threadGroup);
+
+        auto it = iterpair.first;
+        for (; it != iterpair.second; ++it) {
+          pid_t tracee = it->second;
+
+          auto msg = "Detaching thread_group member %d after exit_group.\n";
+          log.writeToLog(Importance::info, msg, tracee);
+
+          exitLoop = handleTraceeExit("exit_group", tracee, false);
+        }
+
+        log.writeToLog(Importance::info, "All process group members detached.\n");
+      }
       continue;
     }
 
@@ -205,29 +232,30 @@ void execution::runProgram(){
         tracer.updateState(traceesPid);
         unsigned long flags = (unsigned long) tracer.arg1();
         isThread = (flags & CLONE_THREAD) != 0;
-        }
+      }
 
       // Add this to the current thread group. If there is thread group, create one!
+      pid_t childPid = ptracer::getEventMessage(traceesPid);
       if(isThread){
-        pid_t threadTid = ptracer::getEventMessage(traceesPid);
-        myGlobalState.liveThreads.insert(threadTid);
+        myGlobalState.liveThreads.insert(childPid);
 
         auto msg = log.makeTextColored(Color::blue, "Adding thread %d to thread group %d\n");
-        log.writeToLog(Importance::info, msg, threadTid, traceesPid);
+        log.writeToLog(Importance::info, msg, childPid, traceesPid);
 
-        myGlobalState.threadGroups.insert({traceesPid, threadTid});
-        myGlobalState.threadGroupNumber.insert({threadTid, traceesPid});
+        myGlobalState.threadGroups.insert({traceesPid, childPid});
+        myGlobalState.threadGroupNumber.insert({childPid, traceesPid});
       } else {
         auto msg = log.makeTextColored(Color::blue, "Creating new thread group: %d\n");
-        log.writeToLog(Importance::info, msg, traceesPid);
+        log.writeToLog(Importance::info, msg, childPid);
 
         // This should not happen! (Pid recycling?)
-        if (myGlobalState.threadGroups.count(traceesPid) != 0) {
+        if (myGlobalState.threadGroups.count(childPid) != 0) {
           throw runtime_error("Thread group already existed.");
         }
 
         // this is a process it owns it's own process group, create it.
-        myGlobalState.threadGroups.insert({traceesPid, traceesPid});
+        myGlobalState.threadGroups.insert({childPid, childPid});
+        myGlobalState.threadGroupNumber.insert({childPid, childPid});
       }
 
       log.writeToLog(Importance::inter,
@@ -530,6 +558,9 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_lchown:
     return lchownSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_exit_group:
+    return exit_groupSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_fcntl:
     return fcntlSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -763,6 +794,9 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 
   case SYS_lchown:
     return lchownSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_exit_group:
+    return exit_groupSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_chmod:
     return chmodSystemCall::handleDetPost(gs, s, t, sched);
@@ -1192,6 +1226,7 @@ bool execution::handleTraceeExit(string reason, pid_t traceesPid, bool isNonExit
   }
   // Erase tracee from our scheduler.
   bool allDone = myScheduler.removeAndScheduleNext(traceesPid);
+  auto tgNumber = myGlobalState.threadGroupNumber.at(traceesPid);
 
   // Erase tracee from our state.
   if (states.erase(traceesPid) != 1) {
@@ -1201,15 +1236,12 @@ bool execution::handleTraceeExit(string reason, pid_t traceesPid, bool isNonExit
   // This is a thread, clean up the thread specific state that we save.
   if (myGlobalState.liveThreads.count(traceesPid) != 0) {
     myGlobalState.liveThreads.erase(traceesPid);
-    auto tgNumber = myGlobalState.threadGroupNumber.at(traceesPid);
     myGlobalState.threadGroupNumber.erase(traceesPid);
-
-    // We should always be able to delete this entry.
-    deleteMultimapEntry(myGlobalState.threadGroups, tgNumber, traceesPid);
-  } else {
-    // Process, we should have our own thread group as well.
-    deleteMultimapEntry(myGlobalState.threadGroups, traceesPid, traceesPid);
   }
+
+  // If thread, we should always be able to delete this entry.
+  // If process, then it should have their own thread group as well.
+  deleteMultimapEntry(myGlobalState.threadGroups, tgNumber, traceesPid);
 
   return allDone;
 }

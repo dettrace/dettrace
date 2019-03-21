@@ -11,6 +11,8 @@
 #include <set>
 #include <vector>
 
+bool removeElementFromHeap(priority_queue<pid_t>& heap, pid_t element);
+
 scheduler::scheduler(pid_t startingPid, logger& log):
   log(log),
   nextPid(startingPid){
@@ -67,16 +69,16 @@ void scheduler::remove(pid_t process){
   log.writeToLog(Importance::info, msg, process);
 
   // Sanity check that there is at least one process available.
-  if (runnableHeap.empty()){
+  if (runnableHeap.empty() && blockedHeap.empty()){
     string err = "scheduler::remove: No such element to delete from scheduler.";
     throw runtime_error("dettrace runtime exception: " + err);
   }
 
-  pid_t runnableTop = runnableHeap.top();
-  if (runnableTop == process) {
-    runnableHeap.pop();
-  } else {
-    throw runtime_error("Removed process not at top??");
+  if (!removeElementFromHeap(runnableHeap, process)) {
+    if(!removeElementFromHeap(blockedHeap, process)){
+        string err = "scheduler::remove: No such element to delete from scheduler.";
+        throw runtime_error("dettrace runtime exception: " + err);
+    }
   }
 
   return;
@@ -134,4 +136,27 @@ void scheduler::printProcesses(){
     log.writeToLog(Importance::extra, "Pid [%d], blocked\n", curr);
   }
   return;
+}
+
+bool removeElementFromHeap(priority_queue<pid_t>& heap, pid_t element) {
+  vector<pid_t> elements;
+  bool foundElement = false;
+
+  // Go through heap, try to find the element.
+  while(!heap.empty()){
+    pid_t p = heap.top();
+    heap.pop();
+    if(element == p){
+      foundElement = true;
+    }else{
+      elements.push_back(p);
+    }
+  }
+
+  // Take all elements that we popped off and put them back in the heap.
+  for(auto e: elements){
+    heap.push(e);
+  }
+
+  return foundElement;
 }

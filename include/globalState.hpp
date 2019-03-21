@@ -37,9 +37,10 @@ public:
   unordered_multimap<pid_t, pid_t> threadGroups;
 
   /**
-   * Map threads back to their thread group. Makes it easy to look up threads in
-   * threadGroups while only knowing the traceePid.
-   *
+   * Map threads and processes back to their thread group.
+   * Makes it easy to look up threads in threadGroups while only knowing the traceePid.
+   * Notice for processes their threadGroupNumber equals their traceePid, we add them
+   * to the map anyways to avoid special cases for processes vs threads.
    * In the future we may expand to maintain process' parent as well.
    */
   unordered_map<pid_t, pid_t> threadGroupNumber;

@@ -283,6 +283,16 @@ void lchownSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   return;
 }
 // =======================================================================================
+bool exit_groupSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "Saw exit group!!\n");
+  s.isExitGroup = true;
+  return false;
+}
+
+void exit_groupSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "Saw exit group post hook!!\n");
+}
+// =======================================================================================
 bool fcntlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   return true;
 }
@@ -417,7 +427,7 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
      futexCmd == FUTEX_WAKE_BITSET || futexCmd == FUTEX_WAKE_OP){
     gs.log.writeToLog(Importance::info, "Waking on address: %p\n", t.arg1());
     // No need to go into the post hook.
-    return false;
+    return true;
   }
 
   // Handle wait operations, by setting our timeout to zero, and seeing if time runs out.
