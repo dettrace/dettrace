@@ -537,22 +537,27 @@ bool getrandomSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
 
 void getrandomSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.getRandomCalls++;
-  // Fill buffer with our own deterministic values.
+
   char* buf = (char*) t.arg1();
-  auto traceeMem = traceePtr<char>{buf};
   size_t bufLength = (size_t) t.arg2();
 
-  // const int flags = 0;
+  char prngValues[128];
 
-  // TODO For a big enough value this could stack overflow.
-  char constValues[bufLength];
-  for(size_t i = 0; i < bufLength; i++){
-    constValues[i] = i;
+  // write batches of pseudorandom bytes to the tracee
+  for (size_t traceeByteIdx = 0; traceeByteIdx < bufLength; traceeByteIdx += sizeof(prngValues)) {
+    // Fill buffer with deterministic pseudorandom values
+    for (size_t i = 0; i < sizeof(prngValues)/sizeof(uint16_t); i++) {
+      uint16_t* prngValues16b = (uint16_t*)prngValues;
+      prngValues16b[i] = gs.prng.get();
+    }
+
+    // Copy buffer contents to tracee
+    size_t amountToWrite = min(sizeof(prngValues), bufLength - traceeByteIdx);
+    auto traceeMem = traceePtr<char>{buf + traceeByteIdx};
+    writeVmTraceeRaw(prngValues, traceeMem, amountToWrite, t.getPid());
+    // Explicitly increase counter.
+    t.writeVmCalls++;
   }
-
-  writeVmTraceeRaw(constValues, traceeMem, bufLength, t.getPid());
-  // Explicitly increase counter.
-  t.writeVmCalls++;
 
   return;
 }
