@@ -11,6 +11,7 @@
 #include <getopt.h>
 #include <dirent.h>
 #include <sys/prctl.h>
+#include <pthread.h>
 
 #include <sched.h>
 #include <unistd.h>
@@ -477,6 +478,48 @@ static void checkPaths(string pathToChroot, string workingDir){
     free(trueChrootC);
     free(trueWorkingDirC);
 }
+
+static pthread_mutex_t dr_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t dr_cond = PTHREAD_COND_INITIALIZER;
+static bool dr_openedFile = false;
+
+static void* devRandThread(void* fifoPath) {
+  char* fifoPath_ = (char*) fifoPath;
+  fprintf(stderr, "[devRandThread] starting up %s\n", fifoPath_);
+
+  pthread_mutex_lock(&dr_mutex);
+  dr_openedFile = true;
+  pthread_cond_signal(&dr_cond);
+  pthread_mutex_unlock(&dr_mutex);
+
+  PRNG prng(0x1234);
+  fprintf(stderr, "[devRandThread] created prng\n");
+
+  uint32_t bytesWritten = 0;
+  while (true) {
+
+    int f = open(fifoPath_, O_WRONLY);
+    doWithCheck(f, "open");
+    free(fifoPath_); // to match strdup() in setUpContainer() 
+    
+    while (true) {
+      //fprintf(stderr, "[devRandThread] wrote %uB to /dev/random\n", bytesWritten);
+      uint16_t r = prng.get();
+      int rv = write(f, &r, 2);
+      if (EPIPE == errno) {
+        close();
+        break;
+      }
+      
+      doWithCheck(rv, "write /dev/random fifo");
+      assert(0 != rv);
+      bytesWritten += 2;
+    }
+  }
+
+  return NULL;
+}
+
 /**
  * Jail our container under chootPath.
  * This directory must exist and be located inside the chroot if the user defined their own chroot!
@@ -542,9 +585,43 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
   // Sometimes the chroot won't have a /dev/null, bind mount the host's just in case.
   createFileIfNotExist(pathToChroot + "/dev/null");
   mountDir(pathToExe + "/../root/dev/null", pathToChroot + "/dev/null");
+
   // We always want to bind mount these directories to replace the host OS or chroot ones.
-  createFileIfNotExist(pathToChroot + "/dev/random");
-  mountDir(pathToExe + "/../root/dev/random", pathToChroot + "/dev/random");
+  //createFileIfNotExist(pathToChroot + "/dev/random");
+  //mountDir(pathToExe + "/../root/dev/random", pathToChroot + "/dev/random");
+  {
+    string fifoPath = "/tmp/myfifo";
+    string devRandPath = pathToChroot + "/dev/random";
+    /*
+    doWithCheck(mkfifo(fifoPath.c_str(), 0666), "mkfifo");
+    doWithCheck(mkfifo(devRandPath.c_str(), 0666), "mkfifo");
+    */
+    createFileIfNotExist(pathToChroot + "/dev/random");
+    mountDir(fifoPath, devRandPath);
+    
+
+    /*
+    pid_t pid = fork();
+    doWithCheck(pid, "fork devRand process");
+    if (0 == pid) { // child
+      devRandThread((void*) devRandPath.c_str());
+      exit(0);
+    }
+    */
+    
+    
+    /*
+    pthread_mutex_lock(&dr_mutex);
+    if (!dr_openedFile) {
+      pthread_cond_wait(&dr_cond, &dr_mutex);
+    }
+    assert(dr_openedFile);
+    pthread_mutex_unlock(&dr_mutex);
+    fprintf(stderr, "[main] devRandThread checked in\n");
+    */
+
+    // TODO: should tear down this pthread later
+  }
 
   createFileIfNotExist(pathToChroot + "/dev/urandom");
   mountDir(pathToExe + "/../root/dev/urandom", pathToChroot + "/dev/urandom");
@@ -594,6 +671,15 @@ int spawnTracerTracee(void* voidArgs){
                   "tracer mounting proc failed");
     }
 
+    // jld: /dev/random implementation
+    string fifoPath = "/tmp/myfifo";
+    doWithCheck(mkfifo(fifoPath.c_str(), 0666), "mkfifo");
+    pthread_t devRandomPthread;
+    int r = pthread_create(&devRandomPthread, NULL, devRandThread, (void*)strdup(fifoPath.c_str()));
+    assert(0 == r);
+    fprintf(stderr, "[main] spawned devRandThread\n");
+
+    
     execution exe{
         args.debugLevel, pid, args.useColor, usingOldKernel(), args.logFile,
         args.printStatistics};
