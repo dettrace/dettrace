@@ -484,36 +484,31 @@ static pthread_cond_t dr_cond = PTHREAD_COND_INITIALIZER;
 static bool dr_openedFile = false;
 
 static void* devRandThread(void* fifoPath) {
-  char* fifoPath_ = (char*) fifoPath;
-  fprintf(stderr, "[devRandThread] starting up %s\n", fifoPath_);
 
-  pthread_mutex_lock(&dr_mutex);
-  dr_openedFile = true;
-  pthread_cond_signal(&dr_cond);
-  pthread_mutex_unlock(&dr_mutex);
+  char localFifoPath[1024];
+  strncpy(localFifoPath, (char*)fifoPath, sizeof(localFifoPath));
+  free(fifoPath); // to match strdup() in spawnTracerTracee()
+  
+  fprintf(stderr, "[devRandThread] starting up %s\n", localFifoPath);
 
   PRNG prng(0x1234);
-  fprintf(stderr, "[devRandThread] created prng\n");
 
-  uint32_t bytesWritten = 0;
   while (true) {
 
-    int f = open(fifoPath_, O_WRONLY);
-    doWithCheck(f, "open");
-    free(fifoPath_); // to match strdup() in setUpContainer() 
-    
+    int fd = open(localFifoPath, O_WRONLY);
+    doWithCheck(fd, "open");
+
     while (true) {
-      //fprintf(stderr, "[devRandThread] wrote %uB to /dev/random\n", bytesWritten);
       uint16_t r = prng.get();
-      int rv = write(f, &r, 2);
-      if (EPIPE == errno) {
-        close();
+      int rv = write(fd, &r, 2);
+      if (-1 == rv && EPIPE == errno) {
+        // the read end of the fifo was closed, we close our end and re-open so
+        // that we can block in the open() call, waiting politely for the next reader
+        close(fd);
         break;
       }
       
       doWithCheck(rv, "write /dev/random fifo");
-      assert(0 != rv);
-      bytesWritten += 2;
     }
   }
 
@@ -608,17 +603,6 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
       exit(0);
     }
     */
-    
-    
-    /*
-    pthread_mutex_lock(&dr_mutex);
-    if (!dr_openedFile) {
-      pthread_cond_wait(&dr_cond, &dr_mutex);
-    }
-    assert(dr_openedFile);
-    pthread_mutex_unlock(&dr_mutex);
-    fprintf(stderr, "[main] devRandThread checked in\n");
-    */
 
     // TODO: should tear down this pthread later
   }
@@ -675,6 +659,7 @@ int spawnTracerTracee(void* voidArgs){
     string fifoPath = "/tmp/myfifo";
     doWithCheck(mkfifo(fifoPath.c_str(), 0666), "mkfifo");
     pthread_t devRandomPthread;
+    // NB: copy fifoPath to the heap so that it's available even if the thread starts slowly
     int r = pthread_create(&devRandomPthread, NULL, devRandThread, (void*)strdup(fifoPath.c_str()));
     assert(0 == r);
     fprintf(stderr, "[main] spawned devRandThread\n");
