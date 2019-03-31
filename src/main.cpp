@@ -498,23 +498,27 @@ static void* devRandThread(void* fifoPath_) {
 
   PRNG prng(0x1234);
 
+  uint32_t bytesWritten = 0;
   while (true) {
-
     int fd = open(fifoPath, O_WRONLY);
     doWithCheck(fd, "open");
 
-    while (true) {
+    //do {
       uint16_t r = prng.get();
-      int rv = write(fd, &r, 2);
+      bytesWritten += 1;
+      int rv = write(fd, &r, 1);
       if (-1 == rv && EPIPE == errno) {
         // the read end of the fifo was closed, we close our end and re-open so
         // that we can block in the open() call, waiting politely for the next reader
-        close(fd);
-        break;
+        //close(fd);
+        fprintf(stderr, "[devRandThread] EPIPE @ %u bytes written\n", bytesWritten);
+        //break;
       }
-      
+      /*
       doWithCheck(rv, "write /dev/random fifo");
-    }
+      */
+      //} while (0 != (bytesWritten % 128));
+    close(fd);
   }
 
   return NULL;
@@ -640,7 +644,7 @@ int spawnTracerTracee(void* voidArgs){
                   "tracer mounting proc failed");
     }
 
-    // jld: /dev/random implementation
+    // jld
     string devrandFifoPath = args.pathToExe + "/../root/dev/random";
     int unlinkOk = unlink(devrandFifoPath.c_str());
     if (-1 == unlinkOk && ENOENT != errno) {
