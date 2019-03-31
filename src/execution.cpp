@@ -13,11 +13,13 @@
 pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process);
 // =======================================================================================
 execution::execution(int debugLevel, pid_t startingPid, bool useColor,
-                     bool oldKernel, string logFile, bool printStatistics):
+                     bool oldKernel, string logFile, bool printStatistics,
+                     pthread_t devRandomPthread):
   oldKernel {oldKernel},
   log {logFile, debugLevel, useColor},
   silentLogger {"NONE", 0},
   printStatistics{printStatistics},
+  devRandomPthread{devRandomPthread},
   // Waits for first process to be ready!
   tracer{startingPid},
   // Create our global state once, share across class.
@@ -312,6 +314,10 @@ void execution::runProgram(){
                         " Uknown return value for ptracer::getNextEvent()\n");
   }
 
+  // clean up /dev/[u]random fifo threads
+  //int rv = pthread_cancel(devRandomPthread);
+  //assert(0 == rv);
+  
   auto msg =
     log.makeTextColored(Color::blue, "All processes done. Finished successfully!\n");
   log.writeToLog(Importance::info, msg);

@@ -481,21 +481,38 @@ static void checkPaths(string pathToChroot, string workingDir){
 
 static pthread_mutex_t dr_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t dr_cond = PTHREAD_COND_INITIALIZER;
-static bool dr_openedFile = false;
+static string dr_fifoPath = "";
 
-static void* devRandThread(void* fifoPath) {
+static void* devRandThread(void* _) {
 
-  char localFifoPath[1024];
-  strncpy(localFifoPath, (char*)fifoPath, sizeof(localFifoPath));
-  free(fifoPath); // to match strdup() in spawnTracerTracee()
+  // allow this thread to be unilaterally killed (when dettrace exits)
+  int oldCancelType;
+  //doWithCheck(pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldCancelType), "pthread_setcanceltype");
+
+  fprintf(stderr, "[devRandThread] starting up...\n");
   
-  fprintf(stderr, "[devRandThread] starting up %s\n", localFifoPath);
+  string fifoPath;
+  pthread_mutex_lock(&dr_mutex);
+  if (dr_fifoPath == "") {
+    printf("[devRandThread] empty dr_fifoPath, waiting...\n");
+    pthread_cond_wait(&dr_cond, &dr_mutex);
+  }
+  printf("[devRandThread] dr_fifoPath = '%s'\n", dr_fifoPath.c_str());
+  assert(dr_fifoPath != "");
+  fifoPath = dr_fifoPath;
+  pthread_mutex_unlock(&dr_mutex);
+  
+  //char localFifoPath[1024];
+  //strncpy(localFifoPath, fifoPath.c_str(), sizeof(localFifoPath));
+  //free(fifoPath); // to match strdup() in spawnTracerTracee()
+  
+  fprintf(stderr, "[devRandThread] using fifo  %s\n", fifoPath.c_str());
 
   PRNG prng(0x1234);
 
   while (true) {
 
-    int fd = open(localFifoPath, O_WRONLY);
+    int fd = open(fifoPath.c_str(), O_WRONLY);
     doWithCheck(fd, "open");
 
     while (true) {
@@ -582,29 +599,15 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
   mountDir(pathToExe + "/../root/dev/null", pathToChroot + "/dev/null");
 
   // We always want to bind mount these directories to replace the host OS or chroot ones.
-  //createFileIfNotExist(pathToChroot + "/dev/random");
-  //mountDir(pathToExe + "/../root/dev/random", pathToChroot + "/dev/random");
   {
-    string fifoPath = "/tmp/myfifo";
     string devRandPath = pathToChroot + "/dev/random";
-    /*
-    doWithCheck(mkfifo(fifoPath.c_str(), 0666), "mkfifo");
     doWithCheck(mkfifo(devRandPath.c_str(), 0666), "mkfifo");
-    */
-    createFileIfNotExist(pathToChroot + "/dev/random");
-    mountDir(fifoPath, devRandPath);
-    
 
-    /*
-    pid_t pid = fork();
-    doWithCheck(pid, "fork devRand process");
-    if (0 == pid) { // child
-      devRandThread((void*) devRandPath.c_str());
-      exit(0);
-    }
-    */
-
-    // TODO: should tear down this pthread later
+    pthread_mutex_lock(&dr_mutex);
+    printf("[main] setting dr_fifoPath\n");
+    dr_fifoPath = devRandPath;
+    pthread_cond_signal(&dr_cond);
+    pthread_mutex_unlock(&dr_mutex);
   }
 
   createFileIfNotExist(pathToChroot + "/dev/urandom");
@@ -656,18 +659,15 @@ int spawnTracerTracee(void* voidArgs){
     }
 
     // jld: /dev/random implementation
-    string fifoPath = "/tmp/myfifo";
-    doWithCheck(mkfifo(fifoPath.c_str(), 0666), "mkfifo");
     pthread_t devRandomPthread;
-    // NB: copy fifoPath to the heap so that it's available even if the thread starts slowly
-    int r = pthread_create(&devRandomPthread, NULL, devRandThread, (void*)strdup(fifoPath.c_str()));
+    int r = pthread_create(&devRandomPthread, NULL, devRandThread, NULL);
     assert(0 == r);
     fprintf(stderr, "[main] spawned devRandThread\n");
 
     
     execution exe{
         args.debugLevel, pid, args.useColor, usingOldKernel(), args.logFile,
-        args.printStatistics};
+          args.printStatistics, devRandomPthread};
     exe.runProgram();
   } else if (pid == 0) {
     runTracee(args);
