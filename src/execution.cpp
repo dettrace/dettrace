@@ -315,8 +315,7 @@ void execution::runProgram(){
   }
 
   // clean up /dev/[u]random fifo threads
-  //int rv = pthread_cancel(devRandomPthread);
-  //assert(0 == rv);
+  doWithCheck(pthread_cancel(devRandomPthread), "pthread_cancel devRandThread");
   
   auto msg =
     log.makeTextColored(Color::blue, "All processes done. Finished successfully!\n");
