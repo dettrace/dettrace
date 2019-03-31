@@ -498,28 +498,40 @@ static void* devRandThread(void* fifoPath_) {
 
   PRNG prng(0x1234);
 
-  uint32_t bytesWritten = 0;
+  uint32_t totalBytesWritten = 0;
+  uint16_t random = 0;
+  bool getNewRandom = true;
+
+  int fd = open(fifoPath, O_WRONLY);
+  doWithCheck(fd, "open");
+  
   while (true) {
-    int fd = open(fifoPath, O_WRONLY);
-    doWithCheck(fd, "open");
 
     //do {
-      uint16_t r = prng.get();
-      bytesWritten += 1;
-      int rv = write(fd, &r, 1);
-      if (-1 == rv && EPIPE == errno) {
-        // the read end of the fifo was closed, we close our end and re-open so
-        // that we can block in the open() call, waiting politely for the next reader
-        //close(fd);
-        fprintf(stderr, "[devRandThread] EPIPE @ %u bytes written\n", bytesWritten);
-        //break;
-      }
-      /*
+    if (getNewRandom) {
+      random = prng.get();
+    }
+    int bytesWritten = write(fd, &random, 1);
+    if (1 != bytesWritten) {
+      getNewRandom = false;
+      // the read end of the fifo was closed, we close our end and re-open so
+      // that we can block in the open() call, waiting politely for the next reader
+      //close(fd);
+      fprintf(stderr, "[devRandThread] error @ %u bytes written\n", totalBytesWritten);
+      sleep(1);
+      //break;
+    } else {
+      getNewRandom = true;
+      totalBytesWritten += 1;
+    }
+    /*
       doWithCheck(rv, "write /dev/random fifo");
-      */
-      //} while (0 != (bytesWritten % 128));
-    close(fd);
+    */
+    //} while (0 != (bytesWritten % 128));
+    fsync(fd);
   }
+  
+  close(fd);
 
   return NULL;
 }
