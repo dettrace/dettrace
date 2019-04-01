@@ -2,6 +2,7 @@
 #define GLOBAL_STATE_H
 
 #include "ValueMapper.hpp"
+#include "PRNG.hpp"
 
 /**
  * Class to hold global state shared among all processes, this includes the logger, inode
@@ -18,6 +19,11 @@ public:
   globalState(logger& log, ValueMapper<ino_t, ino_t> inodeMap,
               ValueMapper<ino_t, time_t> mtimeMap, bool kernelPre4_12);
 
+  /** 
+   * A pseudorandom number generator to implement getrandom()
+   */
+  PRNG prng;
+  
   /**
    * Isomorphism between inodes and virtual inodes.
    */

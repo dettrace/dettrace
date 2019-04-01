@@ -1,7 +1,7 @@
 # Top-level Makefile to capture different actions you can take.
 all: build
 
-build: bin
+build: bin initramfs
 	cd src && ${MAKE}
 	cp src/dettrace bin/
 	cp src/libdet.so lib/
@@ -13,6 +13,12 @@ static: bin
 	cd src && ${MAKE} all-static
 	cp src/dettrace-static bin/dettrace
 	cp src/libdet.so lib/
+
+templistfile := $(shell mktemp)
+initramfs: initramfs.cpio
+initramfs.cpio: root
+	@cd root && find . > $(templistfile) && cpio -o > ../initramfs.cpio < $(templistfile) 2>/dev/null
+	@$(RM) $(templistfile)
 
 tests: run-tests
 test: tests
@@ -40,7 +46,7 @@ run-docker: docker
 test-docker: clean docker
 	docker run --privileged --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG} make -j tests
 
-.PHONY: clean docker run-docker tests build-tests run-tests
+.PHONY: clean docker run-docker tests build-tests run-tests initramfs
 clean:
 	$(RM) src/dettrace
 	make -C ./src/ clean

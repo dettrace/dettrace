@@ -11,17 +11,31 @@
 
 using namespace std;
 
-seccomp::seccomp(int debugLevel){
+seccomp::seccomp(int debugLevel, bool convertUids){
   ctx = seccomp_init(SCMP_ACT_TRACE(INT16_MAX));
 
   if(ctx == nullptr){
     throw runtime_error("dettrace runtime exception: Unable to init seccomp filter.\n");
   }
 
-  loadRules(debugLevel >= 4);
+  loadRules(debugLevel >= 4, convertUids);
 }
 
-void seccomp::loadRules(bool debug){
+void seccomp::loadRules(bool debug, bool convertUids){
+
+  // Add other UID functions we might need to intercept here!
+  if(convertUids){
+    intercept(SYS_fchownat);
+    intercept(SYS_chown);
+    intercept(SYS_lchown);
+    intercept(SYS_fchown);
+  } else {
+    noIntercept(SYS_fchownat);
+    noIntercept(SYS_chown);
+    noIntercept(SYS_lchown);
+    noIntercept(SYS_fchown);
+  }
+
   // sets architecture-specific process or thread state.
   intercept(SYS_arch_prctl);
   // Change location of the program break.
@@ -31,12 +45,10 @@ void seccomp::loadRules(bool debug){
   // bind mounts wrong and might need to allow for recursive mounting. But it will
   // be obvious.
   noIntercept(SYS_bind);
+  noIntercept(SYS_splice);
+  noIntercept(SYS_dup3);
   noIntercept(SYS_capget);
-  // Change owner of file
-  noIntercept(SYS_chown);
-  // like chown but does not dereference symbolic links.
-  noIntercept(SYS_lchown);
-  // Get clock resolution, TODO might be non deterministic.
+
   noIntercept(SYS_clock_getres);
   noIntercept(SYS_getresgid);
 #ifdef SYS_getresgid32
@@ -56,7 +68,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_fchdir);
   noIntercept(SYS_fchmod);
   noIntercept(SYS_fchmodat);
-  noIntercept(SYS_fchown);
+
   noIntercept(SYS_fdatasync);
   // TODO Flock may block! In the future this may lead to deadlock.
   // deal with it then :)
@@ -66,20 +78,18 @@ void seccomp::loadRules(bool debug){
   // TODO: Add to intercept with debug for path.
   noIntercept(SYS_fsetxattr);
   noIntercept(SYS_getresuid);
-  noIntercept(SYS_getuid);
   noIntercept(SYS_getgid);
   noIntercept(SYS_getegid);
   noIntercept(SYS_geteuid);
   noIntercept(SYS_getgroups);
   noIntercept(SYS_getpgrp);
-  intercept(SYS_getpid); // need to intercept for noopSystemCall()
+  noIntercept(SYS_getpid);
   noIntercept(SYS_getpgid);
   noIntercept(SYS_getppid);
   noIntercept(SYS_gettid);
   noIntercept(SYS_getuid);
   noIntercept(SYS_getxattr);
   noIntercept(SYS_madvise);
-  noIntercept(SYS_mknod);
   noIntercept(SYS_munmap);
 
   noIntercept(SYS_mprotect);
@@ -90,15 +100,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_prctl);
   noIntercept(SYS_pread64);
   noIntercept(SYS_rt_sigprocmask);
-  intercept(SYS_rt_sigaction);
-  intercept(SYS_timer_create);
-  intercept(SYS_timer_delete);
-  intercept(SYS_timer_getoverrun);
-  intercept(SYS_timer_gettime);
-  intercept(SYS_timer_settime);
-  intercept(SYS_setitimer);
-  intercept(SYS_getitimer);
-  intercept(SYS_pause);
+
   //intercept(SYS_sigaction); // is mapped to SYS_rt_sigaction on cat16
   //intercept(SYS_signal); // is mapped to SYS_rt_sigaction on cat16
   noIntercept(SYS_rt_sigsuspend);
@@ -128,6 +130,7 @@ void seccomp::loadRules(bool debug){
   noIntercept(SYS_sched_yield);
   noIntercept(SYS_truncate);
   noIntercept(SYS_eventfd2);
+  // TODO
   noIntercept(SYS_writev);
 
   // These system calls must be intercepted as to know when a fork even has happened:
@@ -137,9 +140,29 @@ void seccomp::loadRules(bool debug){
   // See:
   // https://stackoverflow.com/questions/29997244/
   // occasionally-missing-ptrace-event-vfork-when-running-ptrace
-  intercept(SYS_fork);
-  intercept(SYS_vfork);
-  intercept(SYS_clone);
+  noIntercept(SYS_fork);
+  noIntercept(SYS_vfork);
+
+  noIntercept(SYS_clone);
+
+  intercept(SYS_rename, debug);
+  intercept(SYS_renameat, debug);
+  intercept(SYS_renameat2, debug);
+  intercept(SYS_rmdir, debug);
+  intercept(SYS_unlink, debug);
+  intercept(SYS_unlinkat, debug);
+
+  intercept(SYS_execve);
+
+  intercept(SYS_rt_sigaction);
+  intercept(SYS_timer_create);
+  intercept(SYS_timer_delete);
+  intercept(SYS_timer_getoverrun);
+  intercept(SYS_timer_gettime);
+  intercept(SYS_timer_settime);
+  intercept(SYS_setitimer);
+  intercept(SYS_getitimer);
+  intercept(SYS_pause);
 
   // These system calls cause an even that is caught by ptrace and determinized:
   intercept(SYS_access, debug);
@@ -157,15 +180,13 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_dup);
   intercept(SYS_dup2);
 
-  intercept(SYS_execve, debug);
   intercept(SYS_faccessat, debug);
   intercept(SYS_fgetxattr, debug);
   intercept(SYS_flistxattr, debug);
-  intercept(SYS_fchownat, debug);
   intercept(SYS_fcntl);
   intercept(SYS_fstat);
   intercept(SYS_fstatfs);
-  // TODO
+
   intercept(SYS_futex);
   intercept(SYS_getcwd, debug);
   intercept(SYS_getdents);
@@ -178,27 +199,36 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_getrlimit);
   intercept(SYS_getrusage);
   intercept(SYS_gettimeofday);
-  // TODO IOCTL with seccomp instead of ptrace
+  // TODO we might be able to use seccomp to only intercept on the ioctl system calls
+  // arguments that we care about
   intercept(SYS_ioctl);
   // TODO
   intercept(SYS_llistxattr);
   // TODO
   intercept(SYS_lgetxattr);
-  intercept(SYS_mmap);
-  intercept(SYS_mkdir, debug);
-  intercept(SYS_mkdirat, debug);
-  // TODO Nano sleep
+  // TODO I think intercepting a map might be too expensive we should
+  // switch back to writing under the stack
+  noIntercept(SYS_mmap);
+
   intercept(SYS_nanosleep);
   intercept(SYS_newfstatat);
   intercept(SYS_lstat);
-  intercept(SYS_link, debug);
-  intercept(SYS_linkat, debug);
+
+  // System calls that can create a new file for us to keep track of.
+  intercept(SYS_mkdir);
+  intercept(SYS_mkdirat);
+  intercept(SYS_mknod);
+  intercept(SYS_mknodat);
+  intercept(SYS_symlink);
+  intercept(SYS_symlinkat);
+  intercept(SYS_open);
+  intercept(SYS_openat);
 
   intercept(SYS_tgkill);
 
-  intercept(SYS_open);
-  intercept(SYS_openat);
-  // TODO Pipe
+  intercept(SYS_link, debug);
+  intercept(SYS_linkat, debug);
+
   intercept(SYS_pipe);
   intercept(SYS_pipe2);
   intercept(SYS_pselect6);
@@ -210,11 +240,6 @@ void seccomp::loadRules(bool debug){
   // TODO
   intercept(SYS_recvmsg);
 
-  intercept(SYS_rename);
-  intercept(SYS_renameat);
-  intercept(SYS_renameat2);
-
-  intercept(SYS_rmdir);
   intercept(SYS_sendto);
   // Defintely not deteministic </3
   intercept(SYS_select);
@@ -223,20 +248,17 @@ void seccomp::loadRules(bool debug){
   intercept(SYS_stat);
   intercept(SYS_statfs);
   intercept(SYS_sysinfo);
-  intercept(SYS_symlink, debug);
-  intercept(SYS_symlinkat, debug);
+
   intercept(SYS_time);
   intercept(SYS_times);
   intercept(SYS_utime);
   intercept(SYS_utimes);
   intercept(SYS_utimensat);
   intercept(SYS_uname);
-  intercept(SYS_unlink);
-  intercept(SYS_unlinkat);
+
   intercept(SYS_wait4);
   intercept(SYS_write);
-  // TODO
-  // intercept(SYS_writev);
+
 }
 
 void seccomp::noIntercept(uint16_t systemCall){

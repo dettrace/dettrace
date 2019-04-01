@@ -27,13 +27,6 @@ public:
   mappedMemory(size_t length): length(length) {}
 
   /**
-   * A function that ensures that a memory page in the tracee virtual
-   * memory exists. This page can be read/written.
-   * @return boolean indicating if mmap was injected
-   */
-  bool ensureExistenceOfMapping(globalState& gs, state& s, ptracer& t);
-
-  /**
    * Getter for the starting address of the mapped memory page.
    * Throws an error if memory wasn't mapped.
    * @return memory address of mapped memory page in tracee memory
@@ -72,13 +65,5 @@ private:
 
   /** the length of the mapping */
   size_t length;
-  /** desired memory protection. see man mmap */
-  int prot = PROT_READ | PROT_WRITE;
-  /** flags used in the mmap call. see man mmap */
-  int flags = MAP_SHARED | MAP_ANONYMOUS;
-  /** fd. not used for anonymous mapping. */
-  int fd = -1;
-  /** offset. not used for anonymous mapping. */
-  int offset = 0;
 };
 #endif

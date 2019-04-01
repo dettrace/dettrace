@@ -3,7 +3,6 @@
 
 #include "logger.hpp"
 #include "systemCallList.hpp"
-#include "systemCall.hpp"
 #include "dettraceSystemCall.hpp"
 #include "util.hpp"
 #include "state.hpp"
@@ -58,6 +57,15 @@ private:
   bool printStatistics;
 
   /**
+   * The pthread_t for the /dev/random thread, which we cancel when dettrace exits.
+   */
+  pthread_t devRandomPthread;
+  /**
+   * The pthread_t for the /dev/urandom thread, which we cancel when dettrace exits.
+   */
+  pthread_t devUrandomPthread;
+  
+  /**
    * ptrace wrapper.
    * Class wrapping ptrace system call in a higher level API.
    */
@@ -76,13 +84,6 @@ private:
    * Ensures consistent state among all processes.
    */
   globalState myGlobalState;
-  /**
-   * Virtual<=>real pid map. Ptrace does not know the virtual pids of the tracee
-   * since that's all handled by the kernel, so we keep our own mapping to be
-   * able to deterministically output logging information related to processes,
-   * and support translation between virtual and real pids as necessary.
-   */
-  ValueMapper<pid_t, pid_t> pidMap;
 
   /**
    * Map of parent processes to children.
@@ -149,9 +150,10 @@ public:
    * @param useColor Toggles color in logging process
    * @param Using kernel version < 4.8.
    * @param logFile file to write log messages to, if "" use stderr
+   * @param devRandomPthread 
    */
-
-  execution(int debugLevel, pid_t startingPid, bool useColor, string logFile, bool printStatistics);
+  execution(int debugLevel, pid_t startingPid, bool useColor, bool oldKernel,
+            string logFile, bool printStatistics, pthread_t devRandomPthread, pthread_t devUrandomPthread);
 
   /**
    * Handles exit from current process.
@@ -193,19 +195,6 @@ public:
   void runProgram();
 
   /**
-   * Handles fork in trace.
-   * Fork is super special. We get two events whenever a fork, vfork, or clone happens.
-   * 1) A signal from the child.
-   * 2) A fork event from the parent.
-   * The problem is that the order of the events is unkown. Therefore we must be able
-   * to receive the events in either order and correctly handle them.
-   * This event also sets scheduling for process by setting nextPid to newChildPid.
-   * @param event event of the ptraceEvent enum found in ptracer.hpp ie syscall, fork, clone etc.
-   * @param traceesPid the pid of the tracee
-   */
-  void handleFork(ptraceEvent event, const pid_t traceesPid);
-
-  /**
    * Handle the fork event part of @handleFork. Pushes parent to our process hierarchy
    * and creates state for child.
    * @param traceesPid the pid of the tracee
@@ -214,18 +203,18 @@ public:
   pid_t handleForkEvent(const pid_t traceesPid);
 
   /**
-   * Handle the signal part of @handleFork.
-   * @param traceesPid the pid of the tracee
-   * @see handleFork.
-   */
-  void handleForkSignal(const pid_t traceesPid);
-
-  /**
    * Handle signal event in trace.
    * @param signum signal number
    * @param traceesPid the pid of the tracee
    */
   void handleSignal(int signum, const pid_t traceesPid);
+
+  /**
+   * Handle the signal part of @handleFork.
+   * @param traceesPid the pid of the tracee
+   * @see handleFork.
+   */
+  void handleExecEvent(pid_t traceesPid);
 
   /**
    * Handle seccomp event.
@@ -243,13 +232,16 @@ public:
   bool handleSeccomp();
 
   /**
-   * Return the system call we currently caught from the tracer.
-   * Notice we are forced to use a pointer to get virtual dispatch.
+   * Call system call handler based on system call number, if number is not a system call
+   * an runtime_error will be thrown.
    * @param syscallNumber
    * @param syscallName
-   * @return unique pointer for system call
    */
-  static unique_ptr<systemCall> getSystemCall(int syscallNumber, string syscallName);
+  bool callPreHook(int syscallNumber, globalState& gs, state& s, ptracer& t,
+                   scheduler& sched);
+
+  void callPostHook(int syscallNumber, globalState& gs, state& s, ptracer& t,
+                   scheduler& sched);
 
   /**
    * Catch next event from any process that we are tracing. Return the event type as well

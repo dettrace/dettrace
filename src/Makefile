@@ -1,15 +1,17 @@
-BUILD=debug
 CXX = clang++
 CC= clang
 
-cxxflags.debug   = -O0 -g
-cxxflags.release = -O3 -g
-CXXFLAGS = ${cxxflags.${BUILD}} -std=c++14 -Wall $(INCLUDE)
-CFLAGS = $(DEBUG) -Wall -Wshadow $(INCLUDE)
+DEFINES=-D_GNU_SOURCE=1 -D_POSIX_C_SOURCE=20181101 -D__USE_XOPEN=1
+
+CXXFLAGS =-g -O3 -std=c++14 -Wall $(INCLUDE) $(DEFINES)
+CFLAGS =-g -O3 -Wall -Wshadow $(INCLUDE) $(DEFINES)
 LIBS = -pthread -lseccomp -L ../lib/lib64
 
+LIBARCHIVE=$(shell pkg-config --libs libarchive)
+LIBARCHIVE_STATIC=$(shell pkg-config --static --libs libarchive)
+
 # Libdet only.
-LIBDETFLAGS= -g -Wall -Wextra -Wconversion -fPIC -shared -Wl,--no-as-needed -std=c99
+LIBDETFLAGS= -g -O2 -Wall -Wextra -Wconversion -fPIC -shared -Wl,--no-as-needed -std=c99
 LIBDETLIBS=-ldl -lm
 
 INCLUDE = -I ../include/ -I ../lib/include
@@ -22,17 +24,17 @@ all: dettrace libdet.so
 all-static: dettrace-static libdet.so
 
 dettrace: $(obj) $(libs)
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS)
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS) $(LIBARCHIVE)
 
 dettrace-static: $(obj) $(libs)
-	$(CXX) $(CXXFLAGS) -static $^ -o $@ $(LIBS)
+	$(CXX) $(CXXFLAGS) -static $^ -o $@ $(LIBS) $(LIBARCHIVE_STATIC)
 
 -include $(dep)
 
 # rule to generate a dep file by using the C preprocessor
 # (see man cpp for details on the -MM and -MT options)
 %.d: %.cpp
-	@$(CXX) $(CXXFLAGS) $< -MM -MT $(@:.d=.o) >$@
+	@g++ $(CXXFLAGS) $< -MM -MT $(@:.d=.o) >$@
 
 
 libdet.so: libdet.c

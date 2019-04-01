@@ -5,7 +5,10 @@ GPATH
 GRTAGS
 GTAGS
 .clang_complete
+.ccls
+.ccls-cache
 *.so
+initramfs.cpio
 test/samplePrograms/2writers1reader
 test/samplePrograms/catTestFile
 test/samplePrograms/creat
@@ -33,4 +36,6 @@ test/samplePrograms/shTestFile
 test/samplePrograms/waitOnChild
 test/samplePrograms/multipleThreads
 test/samplePrograms/simpleThreads
+src/dettrace-static
 *.bin
+benchmarking/*.time
