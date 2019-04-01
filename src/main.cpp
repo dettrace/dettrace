@@ -11,6 +11,8 @@
 #include <getopt.h>
 #include <dirent.h>
 #include <sys/prctl.h>
+#include <pthread.h>
+#include <sys/select.h>
 
 #include <sched.h>
 #include <unistd.h>
@@ -477,6 +479,60 @@ static void checkPaths(string pathToChroot, string workingDir){
     free(trueChrootC);
     free(trueWorkingDirC);
 }
+
+/** 
+ * DEVRAND STEP 3: thread that writes pseudorandom output to a /dev/[u]random fifo
+ */
+static void* devRandThread(void* fifoPath_) {
+
+  char* fifoPath = (char*) fifoPath_;
+  
+  // allow this thread to be unilaterally killed when tracer exits
+  int oldCancelType;
+  doWithCheck(pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldCancelType), "pthread_setcanceltype");
+
+  //fprintf(stderr, "[devRandThread] using fifo  %s\n", fifoPath);
+
+  PRNG prng(0x1234);
+
+  uint32_t totalBytesWritten = 0;
+  uint16_t random = 0;
+  bool getNewRandom = true;
+
+  // NB: if the fifo is ever closed by all readers/writers, then contents
+  // buffered within it get dropped. This leads to nondeterministic results, so
+  // we always keep the fifo open here. We open the fifo for writing AND reading
+  // as that eliminates EPIPE ("other end of pipe closed") errors when the
+  // tracee has closed the fifo and we call write(). Instead, our write() call
+  // will block once the fifo fills up. Once a tracee starts reading, the buffer
+  // will drain and our write() will get unblocked. However, no bytes should get
+  // lost during this process, ensuring the tracee(s) always see(s) a
+  // deterministic sequence of reads.
+  int fd = open(fifoPath, O_RDWR);
+  doWithCheck(fd, "open");
+
+  while (true) {
+    if (getNewRandom) {
+      random = prng.get();
+    }
+    int bytesWritten = write(fd, &random, 2);
+    if (2 != bytesWritten) {
+      perror("[devRandThread] error writing to fifo");
+      // need to try writing these bytes again so that the fifo generates deterministic output
+      getNewRandom = false;
+      
+    } else {
+      fsync(fd);
+      getNewRandom = true;
+      totalBytesWritten += 2;
+      //printf("[devRandThread] wrote %u bytes so far...\n", totalBytesWritten);
+    }
+  }
+  
+  close(fd);
+  return NULL;
+}
+
 /**
  * Jail our container under chootPath.
  * This directory must exist and be located inside the chroot if the user defined their own chroot!
@@ -542,10 +598,11 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
   // Sometimes the chroot won't have a /dev/null, bind mount the host's just in case.
   createFileIfNotExist(pathToChroot + "/dev/null");
   mountDir(pathToExe + "/../root/dev/null", pathToChroot + "/dev/null");
-  // We always want to bind mount these directories to replace the host OS or chroot ones.
+
+  // DEVRAND STEP 4: bind mount our /dev/[u]random fifos into the chroot
   createFileIfNotExist(pathToChroot + "/dev/random");
   mountDir(pathToExe + "/../root/dev/random", pathToChroot + "/dev/random");
-
+    
   createFileIfNotExist(pathToChroot + "/dev/urandom");
   mountDir(pathToExe + "/../root/dev/urandom", pathToChroot + "/dev/urandom");
 
@@ -594,9 +651,32 @@ int spawnTracerTracee(void* voidArgs){
                   "tracer mounting proc failed");
     }
 
+    // DEVRAND STEP 1: create a fifo outside the chroot
+    string devrandFifoPath = args.pathToExe + "/../root/dev/random";
+    int unlinkOk = unlink(devrandFifoPath.c_str()); // re-create fifo if it already exists
+    if (-1 == unlinkOk && ENOENT != errno) {
+      doWithCheck(unlinkOk, "unlink /dev/random fifo");
+    }
+    doWithCheck(mkfifo(devrandFifoPath.c_str(), 0666), "mkfifo");
+    string devUrandFifoPath = args.pathToExe + "/../root/dev/urandom";
+    unlinkOk = unlink(devUrandFifoPath.c_str());
+    if (-1 == unlinkOk && ENOENT != errno) {
+      doWithCheck(unlinkOk, "unlink /dev/urandom fifo");
+    }
+    doWithCheck(mkfifo(devUrandFifoPath.c_str(), 0666), "mkfifo");
+    
+    // DEVRAND STEP 2: spawn a thread to write to the fifo
+    pthread_t devRandomPthread, devUrandomPthread;
+    // NB: we copy *FifoPath to the heap as our stack storage goes away: these allocations DO get leaked
+    // If we wanted to not leak them, devRandThread could copy to its stack and free the heap copy
+    doWithCheck( pthread_create(&devRandomPthread, NULL, devRandThread, (void*)strdup(devrandFifoPath.c_str())),
+                 "pthread_create /dev/random pthread" );
+    doWithCheck( pthread_create(&devUrandomPthread, NULL, devRandThread, (void*)strdup(devUrandFifoPath.c_str())),
+                 "pthread_create /dev/urandom pthread" );
+    
     execution exe{
         args.debugLevel, pid, args.useColor, usingOldKernel(), args.logFile,
-        args.printStatistics};
+          args.printStatistics, devRandomPthread, devUrandomPthread};
     exe.runProgram();
   } else if (pid == 0) {
     runTracee(args);
