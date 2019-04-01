@@ -1,5 +1,5 @@
-Grandchild: My pid: 4
-Child: My pid: 3
-Child: My child's pid: 4
+Grandchild: My pid: 6
+Child: My pid: 5
+Child: My child's pid: 6
 Parent: My pid: 2
-Parent: My child's pid: 3
+Parent: My child's pid: 5
