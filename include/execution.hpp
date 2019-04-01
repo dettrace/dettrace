@@ -57,6 +57,10 @@ private:
    * The pthread_t for the /dev/random thread, which we cancel when dettrace exits.
    */
   pthread_t devRandomPthread;
+  /**
+   * The pthread_t for the /dev/urandom thread, which we cancel when dettrace exits.
+   */
+  pthread_t devUrandomPthread;
   
   /**
    * ptrace wrapper.
@@ -146,7 +150,7 @@ public:
    * @param devRandomPthread 
    */
   execution(int debugLevel, pid_t startingPid, bool useColor, bool oldKernel,
-            string logFile, bool printStatistics, pthread_t devRandomPthread);
+            string logFile, bool printStatistics, pthread_t devRandomPthread, pthread_t devUrandomPthread);
 
   /**
    * Handles exit from current process.
