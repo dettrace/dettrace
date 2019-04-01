@@ -12,6 +12,7 @@
 #include <dirent.h>
 #include <sys/prctl.h>
 #include <pthread.h>
+#include <sys/select.h>
 
 #include <sched.h>
 #include <unistd.h>
@@ -502,8 +503,10 @@ static void* devRandThread(void* fifoPath_) {
   uint16_t random = 0;
   bool getNewRandom = true;
 
-  int fd = open(fifoPath, O_WRONLY);
+  int fd = open(fifoPath, O_RDWR);
   doWithCheck(fd, "open");
+
+  fd_set selectFDs;
   
   while (true) {
 
@@ -511,24 +514,36 @@ static void* devRandThread(void* fifoPath_) {
     if (getNewRandom) {
       random = prng.get();
     }
-    int bytesWritten = write(fd, &random, 1);
-    if (1 != bytesWritten) {
+    int bytesWritten = write(fd, &random, 2);
+    if (2 != bytesWritten) {
       getNewRandom = false;
+      perror("[devRandThread] error writing to fifo");
       // the read end of the fifo was closed, we close our end and re-open so
       // that we can block in the open() call, waiting politely for the next reader
       //close(fd);
-      fprintf(stderr, "[devRandThread] error @ %u bytes written\n", totalBytesWritten);
-      sleep(1);
+      //sleep(1);
+      /*
+      FD_ZERO(&selectFDs);
+      FD_SET(fd, &selectFDs);
+      int fdsReady = select(fd+1, NULL, &selectFDs, NULL, NULL);
+      if (1 == fdsReady) {
+        getNewRandom = true;
+        continue;
+      } else {
+        doWithCheck(fdsReady, "select");
+      }
+      */
       //break;
     } else {
+      fsync(fd);
       getNewRandom = true;
-      totalBytesWritten += 1;
+      totalBytesWritten += 2;
+      //printf("[devRandThread] wrote %u bytes so far...\n", totalBytesWritten);
     }
     /*
       doWithCheck(rv, "write /dev/random fifo");
     */
     //} while (0 != (bytesWritten % 128));
-    fsync(fd);
   }
   
   close(fd);
