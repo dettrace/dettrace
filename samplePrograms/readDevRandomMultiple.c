@@ -1,41 +1,39 @@
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/syscall.h>
-#include <unistd.h>
-#include <time.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <string.h>
-#include <sched.h>
-#include <errno.h>
-#include <string.h>
-#include <stdio.h>
-
-#include <sys/types.h>
-#include <sys/stat.h>
+#include <assert.h>
 #include <fcntl.h>
+#include <sched.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
 
-void readRand() {
-  size_t length = 100;
-  char randomBuf[length];
+void readRand(char* path) {
+  char randomBuf[3907];
 
-  int fd = open("/dev/random", O_RDONLY);
+  int fd = open(path, O_RDONLY);
   if(fd < 0){
-    printf("Error: %s\n", strerror(errno));
+    perror("open() error");
     close(fd);
     return;
   }
 
-  read(fd, randomBuf, length);
+  size_t bytesRead = read(fd, randomBuf, sizeof(randomBuf));
+  assert(sizeof(randomBuf) == bytesRead);
   close(fd);
-  for(int i = 0; i < length; i++){
+  for(int i = 0; i < sizeof(randomBuf); i++){
     printf("%d ", randomBuf[i]);
   }
   printf("\n");
 }
 
 int main(){
-  readRand();
-  readRand();
+  // read about 117KB from each fifo, to exceed default fifo buffer size of 64KB
+  for (int i = 0; i < 30; i++) {
+    readRand("/dev/random");
+    readRand("/dev/urandom");
+  }
   return 0;
 }
