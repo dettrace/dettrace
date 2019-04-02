@@ -533,6 +533,8 @@ static void* devRandThread(void* fifoPath_) {
   return NULL;
 }
 
+static string devrandFifoPath, devUrandFifoPath;
+
 /**
  * Jail our container under chootPath.
  * This directory must exist and be located inside the chroot if the user defined their own chroot!
@@ -601,10 +603,10 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
 
   // DEVRAND STEP 4: bind mount our /dev/[u]random fifos into the chroot
   createFileIfNotExist(pathToChroot + "/dev/random");
-  mountDir(pathToExe + "/../root/dev/random", pathToChroot + "/dev/random");
+  mountDir(devrandFifoPath, pathToChroot + "/dev/random");
     
   createFileIfNotExist(pathToChroot + "/dev/urandom");
-  mountDir(pathToExe + "/../root/dev/urandom", pathToChroot + "/dev/urandom");
+  mountDir(devUrandFifoPath, pathToChroot + "/dev/urandom");
 
   // Proc is special, we mount a new proc dir.
   doWithCheck(mount("/proc", (pathToChroot + "/proc/").c_str(), "proc", MS_MGC_VAL, nullptr),
@@ -638,6 +640,15 @@ int spawnTracerTracee(void* voidArgs){
   // Switch to throw runtime exception.
   assert(getpid() == 1);
 
+  // DEVRAND STEP 0: determine names for /dev/[u]random fifos before we fork, so
+  // that information is available to tracee
+  char tmpnamBuffer[L_tmpnam];
+  char* tmpnamResult = tmpnam(tmpnamBuffer);
+  assert(NULL != tmpnamResult); 
+  devrandFifoPath = string{ tmpnamBuffer } + "-random.fifo";
+  //fprintf(stderr, "%s\n", devrandFifoPath.c_str());
+  devUrandFifoPath = string{ tmpnamBuffer } + "-urandom.fifo";
+  
   pid_t pid = fork();
   if (pid < 0) {
     throw runtime_error("fork() failed.\n");
@@ -651,21 +662,11 @@ int spawnTracerTracee(void* voidArgs){
                   "tracer mounting proc failed");
     }
 
-    // DEVRAND STEP 1: create a fifo outside the chroot
-    string devrandFifoPath = args.pathToExe + "/../root/dev/random";
-    int unlinkOk = unlink(devrandFifoPath.c_str()); // re-create fifo if it already exists
-    if (-1 == unlinkOk && ENOENT != errno) {
-      doWithCheck(unlinkOk, "unlink /dev/random fifo");
-    }
+    // DEVRAND STEP 1: create fifos outside the chroot
     doWithCheck(mkfifo(devrandFifoPath.c_str(), 0666), "mkfifo");
-    string devUrandFifoPath = args.pathToExe + "/../root/dev/urandom";
-    unlinkOk = unlink(devUrandFifoPath.c_str());
-    if (-1 == unlinkOk && ENOENT != errno) {
-      doWithCheck(unlinkOk, "unlink /dev/urandom fifo");
-    }
     doWithCheck(mkfifo(devUrandFifoPath.c_str(), 0666), "mkfifo");
     
-    // DEVRAND STEP 2: spawn a thread to write to the fifo
+    // DEVRAND STEP 2: spawn a thread to write to each fifo
     pthread_t devRandomPthread, devUrandomPthread;
     // NB: we copy *FifoPath to the heap as our stack storage goes away: these allocations DO get leaked
     // If we wanted to not leak them, devRandThread could copy to its stack and free the heap copy
