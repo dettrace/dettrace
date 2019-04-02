@@ -1,5 +1,5 @@
 # binaries that are simple to build (1 source file, same name as binary)
-SIMPLE_ROOTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat  sigsegv sigill sigabrt kill tgkill alarm-handler alarm-nohandler alarm-ignore selectWithoutTimeout selectWithTimeout getdents getdents64 pollWithoutTimeout pollWithPositiveTimeout pollWithNegativeTimeout rdtsc rdtscp nanosleep nanosleep-par alarm-resethand readDevRandom readDevRandomMultiple readDevUrandom exec-mkstemp complex_mkdirat_dirfd mkdir mkdirat_fdcwd mknod mknod_fullpath open_already_exists openat_already_exists simpleCreat simple_mkdirat_dirfd symlink symlinkat # open_tmpfile
+SIMPLE_ROOTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe deadlockingPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat  sigsegv sigill sigabrt kill tgkill alarm-handler alarm-nohandler alarm-ignore selectWithoutTimeout selectWithTimeout getdents getdents64 pollWithoutTimeout pollWithPositiveTimeout pollWithNegativeTimeout rdtsc rdtscp cpuid nanosleep nanosleep-par alarm-resethand readDevRandom readDevRandomMultiple readDevUrandom exec-mkstemp complex_mkdirat_dirfd mkdir mkdirat_fdcwd mknod mknod_fullpath open_already_exists openat_already_exists simpleCreat simple_mkdirat_dirfd symlink symlinkat # open_tmpfile
 
 # cpuid simpleThreads multipleThreads
 SIMPLE_BINARIES= $(addsuffix .bin,$(SIMPLE_ROOTS))
@@ -20,16 +20,19 @@ BROADWELL_BINARIES= $(addsuffix .bin,$(BROADWELL_ROOTS))
 RT_ROOTS= timer_create_default timer_create_sigvtalrm timer_gettime
 RT_BINARIES= $(addsuffix .bin,$(RT_ROOTS))
 
+CXX_ROOTS=random_device
+CXX_BINARIES= $(addsuffix .bin,$(CXX_ROOTS))
+
 DETTRACE=../../bin/dettrace
 DIFF_CMD=diff
 
-build: $(SIMPLE_BINARIES) $(PARAM_BINARIES) $(BROADWELL_BINARIES) $(RT_BINARIES)
+build: $(SIMPLE_BINARIES) $(PARAM_BINARIES) $(BROADWELL_BINARIES) $(RT_BINARIES) $(CXX_BINARIES)
 
 CC=clang
 
 run: test
 test: test-binaries test-scripts
-test-binaries: $(patsubst %.bin, %.ok, $(SIMPLE_BINARIES)) $(patsubst %.bin, %.ok, $(PARAM_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES)) $(patsubst %.bin, %.ok, $(BROADWELL_BINARIES)) $(patsubst %.bin, %.ok, $(RT_BINARIES))
+test-binaries: $(patsubst %.bin, %.ok, $(SIMPLE_BINARIES)) $(patsubst %.bin, %.ok, $(PARAM_BINARIES)) $(patsubst %, %.ok, $(LINUX_UTILITIES)) $(patsubst %.bin, %.ok, $(BROADWELL_BINARIES)) $(patsubst %.bin, %.ok, $(RT_BINARIES)) $(patsubst %.bin, %.ok, $(CXX_BINARIES))
 test-scripts: $(patsubst %.sh, %.ok, $(SHELL_SCRIPTS))
 
 # compile each sample program binary
@@ -43,6 +46,9 @@ $(BROADWELL_BINARIES): %.bin: %.c
 # timer_create tests need to link with -lrt
 $(RT_BINARIES): %.bin: %.c
 	$(CC) $< -Wall -g -o $@ -std=gnu99 -lrt
+
+$(CXX_BINARIES): %.bin: %.cpp
+	$(CXX) $< -Wall -g -o $@ -std=gnu++11
 
 # NB: disable special cpu insn tests for now
 rdrand.ok: rdrand.bin
