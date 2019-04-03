@@ -7,11 +7,13 @@
 #include <inttypes.h>
 
 static void handler(int sig, siginfo_t *si, void *ctxt) {
-  printf("Received signal %d\n siginfo_t fields: signo:%d errno:%d code:%d pid:%d uid:%d status:%d utime:%ld stime:%ld value:%p int:%d ptr:%p overrun:%d timerid:%d addr:%p band:%ld fd:%d addr_lsb:%d lower:%p upper:%p call_addr:%p syscall:%d uarch:%u\n",
-         sig, 
-         si->si_signo, si->si_errno, si->si_code, si->si_pid, si->si_uid, si->si_status,
+  printf("Received signal %d\n  valid siginfo_t fields: signo:%d errno:%d code:%d addr:%p\n",
+         sig,
+         si->si_signo, si->si_errno, si->si_code,si->si_addr);
+  printf("  other (technically undefined) siginfo_t fields: pid:%d uid:%d status:%d utime:%ld stime:%ld value:%p int:%d ptr:%p overrun:%d timerid:%d band:%ld fd:%d addr_lsb:%d lower:%p upper:%p call_addr:%p syscall:%d uarch:%u\n",
+         si->si_pid, si->si_uid, si->si_status,
          si->si_utime, si->si_stime, si->si_value.sival_ptr, si->si_int, si->si_ptr, si->si_overrun, si->si_timerid,
-         si->si_addr, si->si_band, si->si_fd, si->si_addr_lsb, si->si_lower, si->si_upper,
+         si->si_band, si->si_fd, si->si_addr_lsb, si->si_lower, si->si_upper,
          si->si_call_addr, si->si_syscall, si->si_arch);
 
   ucontext_t* c = (ucontext_t*) ctxt;

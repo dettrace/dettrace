@@ -1,4 +1,5 @@
 Received signal 4
- siginfo_t fields: signo:4 errno:0 code:2 pid:4195947 uid:0 status:-144881200 utime:140737347544040 stime:140737354028288 value:0x1f75d49d0 int:-144881200 ptr:0x1f75d49d0 overrun:0 timerid:4195947 addr:0x40066b band:4195947 fd:-144881200 addr_lsb:18896 lower:0x7ffff79b63e8 upper:0x7ffff7fe5500 call_addr:0x40066b syscall:-144881200 uarch:1
+  valid siginfo_t fields: signo:4 errno:0 code:2 addr:0x40066b
+  other (technically undefined) siginfo_t fields: pid:4195947 uid:0 status:-134328320 utime:1 stime:140737351909215 value:0x7ffff7fe5000 int:-134328320 ptr:0x7ffff7fe5000 overrun:0 timerid:4195947 band:4195947 fd:-134328320 addr_lsb:20480 lower:0x1 upper:0x7ffff7ddff5f call_addr:0x40066b syscall:-134328320 uarch:32767
 context: R8:0, R9:7ffff79afd80, R10:8, R11:246, R12:4004f0, R13:7fffffffee10, R14:0, R15:0
  RDI:4, RSI:7fffffffeb30, RBP:7fffffffed30, RBX:0, RDX:0, RAX:0, RCX:0, RSP:7fffffffec80, RIP:40066b
