@@ -6,7 +6,6 @@
 #include <sys/user.h>
 #include <sys/vfs.h>
 #include <sys/wait.h>
-#include <sys/utsname.h>
 #include <string.h>
 #include <getopt.h>
 #include <dirent.h>
@@ -48,7 +47,6 @@
 
 #include <seccomp.h>
 
-#define MAKE_KERNEL_VERSION(x, y, z) ((x) << 16 | (y) << 8 | (z) )
 
 /**
  * Useful link for understanding ptrace as it works with execve.
@@ -99,30 +97,6 @@ static void proc_setgroups_write(pid_t pid, const char* str);
 static bool isDefault(string arg);
 // =======================================================================================
 
-// Check if using kernel < 4.8.0. Ptrace + seccomp semantics changed in this version.
-bool usingOldKernel(){
-  struct utsname utsname = {};
-  long x, y, z;
-  char* r = NULL, *rp = NULL;
-
-  doWithCheck(uname(&utsname), "uname");
-
-  r = utsname.release;
-  x = strtoul(r, &rp, 10);
-  if (rp == r){
-    throw runtime_error("dettrace runtime exception: Problem parsing uname results.\n");
-  }
-  r = 1 + rp;
-  y = strtoul(r, &rp, 10);
-  if (rp == r){
-    throw runtime_error("dettrace runtime exception: Problem parsing uname results.\n");
-  }
-  r = 1 + rp;
-  z = strtoul(r, &rp, 10);
-
-  return (MAKE_KERNEL_VERSION(x, y, z) < MAKE_KERNEL_VERSION(4, 8, 0) ?
-          true : false);
-}
 
 const string usageMsg =
   "  Dettrace\n"
@@ -676,8 +650,9 @@ int spawnTracerTracee(void* voidArgs){
                  "pthread_create /dev/urandom pthread" );
     
     execution exe{
-        args.debugLevel, pid, args.useColor, usingOldKernel(), args.logFile,
-          args.printStatistics, devRandomPthread, devUrandomPthread};
+        args.debugLevel, pid, args.useColor, 
+        args.logFile, args.printStatistics, 
+        devRandomPthread, devUrandomPthread};
     exe.runProgram();
   } else if (pid == 0) {
     runTracee(args);

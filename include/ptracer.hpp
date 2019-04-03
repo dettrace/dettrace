@@ -223,6 +223,12 @@ public:
    * @param val new rax register value
    */
   void writeRax(uint64_t val);
+  
+  /**
+   * Write value to rbx register.
+   * @param val new rbx register value
+   */
+  void writeRbx(uint64_t val);
 
   /**
    * Write  value to rdx register.

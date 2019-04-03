@@ -14,6 +14,9 @@
 #include <stack>
 #include <map>
 
+#define ARCH_GET_CPUID		0x1011
+#define ARCH_SET_CPUID		0x1012
+
 
 /**
  * Execution class.
@@ -37,7 +40,7 @@ private:
    * Using kernel version < 4.8 . Needed as semantics of ptrace + seccomp have changed.
    * See `man 2 ptrace`
    */
-  bool oldKernel;
+  bool kernelPre4_8;
 
   /** Main log.
    * For writing all messages.
@@ -149,8 +152,9 @@ public:
    * @param logFile file to write log messages to, if "" use stderr
    * @param devRandomPthread 
    */
-  execution(int debugLevel, pid_t startingPid, bool useColor, bool oldKernel,
-            string logFile, bool printStatistics, pthread_t devRandomPthread, pthread_t devUrandomPthread);
+  execution(int debugLevel, pid_t startingPid, bool useColor, 
+            string logFile, bool printStatistics, 
+            pthread_t devRandomPthread, pthread_t devUrandomPthread);
 
   /**
    * Handles exit from current process.

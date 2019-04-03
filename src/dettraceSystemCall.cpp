@@ -13,6 +13,8 @@
 #include <sys/socket.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
+#include <asm/prctl.h>
+#include <sys/prctl.h>
 
 #include <limits>
 #include <cstring>
@@ -34,6 +36,7 @@
 #include "utilSystemCalls.hpp"
 #include "ptracer.hpp"
 
+
 // Enable tracee reads that are not strictly necessary for functionality, but
 // are enabled for instrumentation or sanity checking. For example, verify,
 // before system call replay, that RIP points at a valid system call insn.
@@ -43,11 +46,54 @@ using namespace std;
 // =======================================================================================
 bool accessSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
-  return false;
+  return true;
 }
-
 void accessSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   return;
+}
+// ========================================================================================
+bool brkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+void brkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return;
+}
+// =======================================================================================
+bool arch_prctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+
+  gs.log.writeToLog(Importance::info, "pre-hook for arch_prctl(%d, 0) == ARCH_SET_CPUID? %d\n", t.arg1(), t.arg1() == ARCH_SET_CPUID);
+
+  switch (t.arg1()) {
+  case ARCH_SET_CPUID:
+    return true;
+  case ARCH_SET_FS: // getting/setting these segment registers is reproducible, we don't need to intercept post-hook
+  case ARCH_GET_FS:
+  case ARCH_SET_GS:
+  case ARCH_GET_GS:
+    return false;
+  default:
+    throw runtime_error("dettrace runtime exception: unsupported arch_prctl syscall");
+  }
+  return false; // unreachable
+}
+void arch_prctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if (s.syscallInjected)
+  {
+    gs.log.writeToLog(Importance::info, "post-hook for arch_prctl, returning %d\n", t.getReturnValue());
+
+    if (!s.CPUIDTrapSet) {
+      s.syscallInjected = false;
+      s.CPUIDTrapSet = true;
+
+      // restore reg state
+      // I don't believe arch_prctl(ARCH_SET_CPUID) writes to tracee memory at all
+      t.setRegs(s.regSaver.popRegisterState());
+
+      gs.log.writeToLog(Importance::info, "restored register state from access() post-hook\n");
+    }
+
+    replaySystemCall(gs, t, t.getSystemCallNumber());
+  }
 }
 // =======================================================================================
 bool alarmSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -218,8 +264,19 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     gs.log.writeToLog(Importance::info, msg);
   }
 
-  return false;
+  return true;
 }
+void execveSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "in execve post-hook\n");
+
+  // this will cause us to inject the appropriate prctl incantation on the next
+  // access() system call TODO: this is a *HUGE* hack, only checking on
+  // access(), but empirically it seems that access() often happens right after
+  // the exec and this is easier to implement than checking in every system call
+  // (I'm not sure how to plumb things through the superclass).
+  s.CPUIDTrapSet = false;
+}
+
 // =======================================================================================
 bool fchownatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg2(), gs.log, s.traceePid, t);

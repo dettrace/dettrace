@@ -37,9 +37,10 @@ void seccomp::loadRules(bool debug, bool convertUids){
   }
 
   // sets architecture-specific process or thread state.
-  noIntercept(SYS_arch_prctl);
+  intercept(SYS_arch_prctl);
   // Change location of the program break.
-  noIntercept(SYS_brk);
+  //noIntercept(SYS_brk);
+  intercept(SYS_brk);
   // Bind seems safe enough to let though, specially since user is stuck in chroot.
   // There might be some slight issues with permission denied if we set up our
   // bind mounts wrong and might need to allow for recursive mounting. But it will
@@ -175,6 +176,7 @@ void seccomp::loadRules(bool debug, bool convertUids){
   intercept(SYS_close);
   // TODO: This system call
   intercept(SYS_connect);
+
   // Duplicate file descriptor.
   intercept(SYS_dup);
   intercept(SYS_dup2);

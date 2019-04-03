@@ -8,14 +8,46 @@
 #include "scheduler.hpp"
 
 #include <stack>
+#include <sys/utsname.h>
 #include <cassert>
 
+#define MAKE_KERNEL_VERSION(x, y, z) ((x) << 16 | (y) << 8 | (z) )
+
+
 pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process);
+bool kernelCheck(int a, int b, int c);
+void trapCPUID(globalState& gs, state& s, ptracer& t);
+
+
+bool kernelCheck(int a, int b, int c){
+  struct utsname utsname = {};
+  long x, y, z;
+  char* r = NULL, *rp = NULL;
+
+  doWithCheck(uname(&utsname), "uname");
+
+  r = utsname.release;
+  x = strtoul(r, &rp, 10);
+  if (rp == r){
+    throw runtime_error("Problem parsing uname results.\n");
+  }
+  r = 1 + rp;
+  y = strtoul(r, &rp, 10);
+  if (rp == r){
+    throw runtime_error("Problem parsing uname results.\n");
+  }
+  r = 1 + rp;
+  z = strtoul(r, &rp, 10);
+
+  return (MAKE_KERNEL_VERSION(x, y, z) < MAKE_KERNEL_VERSION(a, b, c) ?
+          true : false);
+}
+
 // =======================================================================================
 execution::execution(int debugLevel, pid_t startingPid, bool useColor,
-                     bool oldKernel, string logFile, bool printStatistics,
+                     string logFile, bool printStatistics,
                      pthread_t devRandomPthread, pthread_t devUrandomPthread):
-  oldKernel {oldKernel},
+  kernelPre4_8 {kernelCheck(4,8,0)},
   log {logFile, debugLevel, useColor},
   silentLogger {"NONE", 0},
   printStatistics{printStatistics},
@@ -27,7 +59,8 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
   myGlobalState{
     log,
     ValueMapper<ino_t, ino_t> {log, "inode map", 1},
-    ValueMapper<ino_t, time_t> {log, "mtime map", 1}
+    ValueMapper<ino_t, time_t> {log, "mtime map", 1},
+    kernelCheck(4,12,0)
   },
   myScheduler {startingPid, log},
   debugLevel {debugLevel}{
@@ -93,7 +126,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
 
   bool callPostHook = callPreHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
 
-  if(oldKernel){
+  if(kernelPre4_8){
     // Next event will be a sytem call pre-exit event as older kernels make us catch the
     // seccomp event and the ptrace pre-system call event.
     currState.onPreExitEvent = true;
@@ -105,6 +138,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   // https://stackoverflow.com/questions/29997244/
   // occasionally-missing-ptrace-event-vfork-when-running-ptrace
   if(systemCall == "fork" || systemCall == "vfork" || systemCall == "clone"){
+
     processSpawnEvents++;
 
     // Threads are not supported!
@@ -120,7 +154,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
     ptraceEvent e;
     pid_t newPid;
 
-    if(oldKernel){
+    if(kernelPre4_8){
       // fork/vfork/clone pre system call.
       // On older version of the kernel, we would need to catch the pre-system call
       // event to forking system calls. This is event needs to be taken off the ptrace
@@ -134,7 +168,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
     }
   }
 
-  if(oldKernel){
+  if(kernelPre4_8){
     // This is the seccomp event where we do the work for the pre-system call hook.
     // In older versions of seccomp, we must also do the pre-exit ptrace event, as we
     // have to. This is dictated by this variable.
@@ -204,7 +238,7 @@ void execution::runProgram(){
       state& currentState = states.at(traceesPid);
 
       // old-kernel-only ptrace system call event for pre exit hook.
-      if(oldKernel && currentState.onPreExitEvent){
+      if(kernelPre4_8 && currentState.onPreExitEvent){
           states.at(traceesPid).callPostHook = true;
           currentState.onPreExitEvent = false;
       }else{
@@ -301,6 +335,10 @@ void execution::runProgram(){
                      log.makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
                      traceesPid);
 
+      //reset CPUID trap flag
+      states.at(traceesPid).CPUIDTrapSet = false;
+
+  
       handleExecEvent(traceesPid);
       continue;
     }
@@ -473,6 +511,13 @@ bool execution::handleSeccomp(const pid_t traceesPid){
   // small optimization we might not want to...
   // Get registers from tracee.
   tracer.updateState(traceesPid);
+
+  if (!states.at(traceesPid).CPUIDTrapSet && !myGlobalState.kernelPre4_12)
+  {
+    //check if CPUID needs to be set, if it does, set trap
+    trapCPUID(myGlobalState, states.at(traceesPid), tracer);
+  }
+
   auto callPostHook = handlePreSystemCall( states.at(traceesPid), traceesPid );
   return callPostHook;
 }
@@ -487,6 +532,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
     if (ret == -1) {
       throw runtime_error("Unable to read RIP for segfault. Cannot determine if rdtsc.\n");
     }
+
 
     if ((curr_insn32 << 16) == 0x310F0000 || (curr_insn32 << 8) == 0xF9010F00) {
       auto msg = "[%d] Tracer: Received rdtsc: Reading next instruction.\n";
@@ -512,9 +558,70 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
       auto coloredMsg = log.makeTextColored(Color::blue, msg);
       log.writeToLog(Importance::inter, coloredMsg, traceesPid, sigNum);
+      return;
+
+    } else if ((curr_insn32 << 16) ==0xA20F0000) {
+      struct user_regs_struct regs = tracer.getRegs();
+
+      auto msg = "[%d] Tracer: intercepted cpuid instruction at %p. %rax == 0x%p, %rcx == 0x%p\n";
+      auto coloredMsg = log.makeTextColored(Color::blue, msg);
+      log.writeToLog(Importance::inter, coloredMsg, traceesPid, regs.rip, regs.rax, regs.rcx);
+
+      // step over cpuid insn
+      tracer.writeIp((uint64_t) tracer.getRip().ptr + 2);
+
+      // suppress SIGSEGV from reaching the tracee
+      states.at(traceesPid).signalToDeliver = 0;
+
+      // fill in canonical cpuid return values
+
+      switch (regs.rax) {
+      case 0x0:
+        tracer.writeRax( 0x00000002 ); // max supported %eax argument. Set to 4 to narrow support (IE Pentium 4).  For reference, Sandy Bridge has 0xD and Kaby Lake 0x16
+        tracer.writeRbx( 0x756e6547 ); // "GenuineIntel" string
+        tracer.writeRdx( 0x49656e69 );
+        tracer.writeRcx( 0x6c65746e );
+        //tracer.writeRcx( 0x6c6c6c6c ); // for debugging, returns "GenuineIllll" instead
+        break;
+      case 0x01: // basic features
+        tracer.writeRax( 0x0 );
+        tracer.writeRbx( 0x0 );
+        tracer.writeRdx( 0x0 );
+        tracer.writeRcx( 0x0 );
+        break;
+      case 0x02: // TLB/Cache/Prefetch Information
+        // say that we have no caches, TLBs or prefetchers
+        tracer.writeRax( 0x80000001 );
+        tracer.writeRbx( 0x80000000 );
+        tracer.writeRcx( 0x80000000 );
+        tracer.writeRdx( 0x80000000 );
+        break;
+      case 0x03:
+        tracer.writeRax( 0x0 );
+        tracer.writeRbx( 0x0 );
+        tracer.writeRdx( 0x0 );
+        tracer.writeRcx( 0x0 );
+        break;
+      case 0x04:
+        tracer.writeRax( 0x0 );
+        tracer.writeRbx( 0x0 );
+        tracer.writeRdx( 0x0 );
+        tracer.writeRcx( 0x0 );
+        break;
+      case 0x80000000:
+        tracer.writeRax( 0x80000000 );
+        tracer.writeRbx( 0x0 );
+        tracer.writeRdx( 0x0 );
+        tracer.writeRcx( 0x0 );
+        break;
+      default:
+        throw runtime_error("dettrace runtime exception: CPUID unsupported %eax argument");
+      }
 
       return;
     }
+
+
   }
 
   // Remember to deliver this signal to the tracee for next event! Happens in
@@ -536,6 +643,9 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_alarm:
     return alarmSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_arch_prctl:
+    return arch_prctlSystemCall::handleDetPre(gs, s, t, sched);
+    
   case SYS_chdir:
     return chdirSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -716,6 +826,8 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_select:
     return selectSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_brk:
+    return brkSystemCall::handleDetPre(gs, s, t, sched);
   case SYS_setitimer:
     return setitimerSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -809,6 +921,9 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
   case SYS_alarm:
     return alarmSystemCall::handleDetPost(gs, s, t, sched);
 
+  case SYS_arch_prctl:
+    return arch_prctlSystemCall::handleDetPost(gs, s, t, sched);
+
   case SYS_chdir:
     return chdirSystemCall::handleDetPost(gs, s, t, sched);
 
@@ -842,9 +957,8 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
   case SYS_dup2:
     return dup2SystemCall::handleDetPost(gs, s, t, sched);
 
-    // TODO
-  // case SYS_execve:
-    // return execveSystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_execve:
+    return execveSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_faccessat:
     return faccessatSystemCall::handleDetPost(gs, s, t, sched);
@@ -992,6 +1106,9 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 
   case SYS_select:
     return selectSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_brk:
+    return brkSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_setitimer:
     return setitimerSystemCall::handleDetPost(gs, s, t, sched);
@@ -1204,3 +1321,29 @@ pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process){
   return parent;
 }
 // =======================================================================================
+
+void trapCPUID(globalState& gs, state& s, ptracer& t){
+
+  gs.log.writeToLog(Importance::info, "Injecting arch_prctl call to tracee to intercept CPUID!\n");
+  // Save current register state to restore after arch_prctl
+  s.regSaver.pushRegisterState(t.getRegs());
+
+  // Inject arch_prctl system call
+  s.syscallInjected = true;
+
+  // Call arch_prctl
+  t.writeArg1(ARCH_SET_CPUID);
+  t.writeArg2(0);
+
+  uint16_t minus2 = t.readFromTracee(traceePtr<uint16_t>((uint16_t*) ((uint64_t) t.getRip().ptr - 2)), t.getPid());
+  if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
+    throw runtime_error("dettrace runtime exception: IP does not point to system call instruction!\n");
+  }
+
+
+  gs.totalReplays++;
+  // Replay system call!
+  t.changeSystemCall(SYS_arch_prctl);
+  t.writeIp((uint64_t) t.getRip().ptr - 2);
+  gs.log.writeToLog(Importance::info, "arch_prctl(%d, 0)\n", ARCH_SET_CPUID);
+}
