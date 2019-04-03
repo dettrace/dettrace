@@ -67,7 +67,7 @@ int main(void)
   unsigned int ext=0;
   // unsigned int ext=0x80000000;
   int max_level = __get_cpuid_max(ext,&sig);
-  printf("Highest supported __get_cpuid input (eax value): %d\n",max_level);
+  printf("Highest supported __get_cpuid input (aka eax value, cpuid leaf): %d\n",max_level);
 
   unsigned int eax=0,ebx=0,ecx=0,edx=0;
   for(int i=0; i<1; i++) {
@@ -161,6 +161,12 @@ int main(void)
   printf("  unsupported features: %s\n", orig_doesnot);
   supports = orig_supports;
   doesnot  = orig_doesnot;
+
+  if (max_level < 7) {
+    printf("Extended Features (eax==7) not supported.\n");
+    printf("Exiting successfully.\n");
+    return 0;
+  }
 
   printf("\n   Extended Features (eax == 7)\n");
   printf(  "   ----------------------------\n");
