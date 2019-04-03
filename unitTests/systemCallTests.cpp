@@ -161,9 +161,9 @@ TEST_CASE("lstat", "lstat"){
   statFamilyTests(statbuf);
 }
 
- TEST_CASE("open", "/dev/urandom"){
+TEST_CASE("open", "/dev/urandom"){
    // TODO.
- }
+}
 
 TEST_CASE("prlimit64", "prlimit64"){
   // joe: can't compile a prlimit test on acggrid, I get:
@@ -239,7 +239,7 @@ TEST_CASE("utime", "utime"){
 
   REQUIRE(myStat.st_atim.tv_sec == 0);
   REQUIRE(myStat.st_atim.tv_nsec == 0);
-  REQUIRE(myStat.st_mtim.tv_sec == 2);
+  REQUIRE(myStat.st_mtim.tv_sec == 1);
   REQUIRE(myStat.st_mtim.tv_nsec == 0);
 }
 
