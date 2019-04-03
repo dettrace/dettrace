@@ -54,6 +54,15 @@ public:
   const string syscallName = "access";
 };
 // =======================================================================================
+class brkSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched);
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched);
+
+  const int syscallNumber = SYS_brk;
+  const string syscallName = "brk";
+};
+// =======================================================================================
 /**
  *
  * int chdir(const char *path);

@@ -826,6 +826,8 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_select:
     return selectSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_brk:
+    return brkSystemCall::handleDetPre(gs, s, t, sched);
   case SYS_setitimer:
     return setitimerSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -1104,6 +1106,9 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 
   case SYS_select:
     return selectSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_brk:
+    return brkSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_setitimer:
     return setitimerSystemCall::handleDetPost(gs, s, t, sched);
