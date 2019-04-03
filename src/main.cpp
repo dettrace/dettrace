@@ -172,16 +172,11 @@ int main(int argc, char** argv){
     cloneFlags &= ~CLONE_NEWUSER;
   }
 
-<<<<<<< HEAD
-  //set faulting for TSC instructions
-  doWithCheck(prctl(PR_SET_TSC, PR_TSC_SIGSEGV, 0, 0, 0), "Pre-clone prctl error");
-=======
   // our own user namespace. Other namepspace commands require CAP_SYS_ADMIN to work.
   // Namespaces must must be done before fork. As changes don't apply until after
   // fork, to all child processes.
   const int STACK_SIZE (1024 * 1024);
   static char child_stack[STACK_SIZE];    /* Space for child's stack */
->>>>>>> master
 
   doWithCheck(prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0),
               "Pre-clone prctl error: setting no new privs");
@@ -654,8 +649,9 @@ int spawnTracerTracee(void* voidArgs){
                  "pthread_create /dev/urandom pthread" );
     
     execution exe{
-        args.debugLevel, pid, args.useColor, usingOldKernel(), args.logFile,
-          args.printStatistics, devRandomPthread, devUrandomPthread};
+        args.debugLevel, pid, args.useColor, 
+        args.logFile, args.printStatistics, 
+        devRandomPthread, devUrandomPthread};
     exe.runProgram();
   } else if (pid == 0) {
     runTracee(args);

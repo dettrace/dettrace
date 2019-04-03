@@ -152,8 +152,9 @@ public:
    * @param logFile file to write log messages to, if "" use stderr
    * @param devRandomPthread 
    */
-  execution(int debugLevel, pid_t startingPid, bool useColor, bool oldKernel,
-            string logFile, bool printStatistics, pthread_t devRandomPthread, pthread_t devUrandomPthread);
+  execution(int debugLevel, pid_t startingPid, bool useColor, 
+            string logFile, bool printStatistics, 
+            pthread_t devRandomPthread, pthread_t devUrandomPthread);
 
   /**
    * Handles exit from current process.

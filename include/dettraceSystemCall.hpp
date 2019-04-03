@@ -760,8 +760,11 @@ public:
  */
 class arch_prctlSystemCall {
 public:
-  bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
-  void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_arch_prctl;
+  const string syscallName = "arch_prctl";
 };
 
 

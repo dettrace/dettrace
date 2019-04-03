@@ -9,6 +9,7 @@
 
 #include <stack>
 #include <sys/utsname.h>
+#include <cassert>
 
 #define MAKE_KERNEL_VERSION(x, y, z) ((x) << 16 | (y) << 8 | (z) )
 
@@ -41,12 +42,12 @@ bool kernelCheck(int a, int b, int c){
   return (MAKE_KERNEL_VERSION(x, y, z) < MAKE_KERNEL_VERSION(a, b, c) ?
           true : false);
 }
+
 // =======================================================================================
 execution::execution(int debugLevel, pid_t startingPid, bool useColor,
-                     bool oldKernel, string logFile, bool printStatistics,
+                     string logFile, bool printStatistics,
                      pthread_t devRandomPthread, pthread_t devUrandomPthread):
   kernelPre4_8 {kernelCheck(4,8,0)},
-  oldKernel {oldKernel},
   log {logFile, debugLevel, useColor},
   silentLogger {"NONE", 0},
   printStatistics{printStatistics},
@@ -332,7 +333,7 @@ void execution::runProgram(){
     if(ret == ptraceEvent::exec){
       log.writeToLog(Importance::inter,
                      log.makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
-                     pidMap.getVirtualValue(traceesPid));
+                     traceesPid);
 
       //reset CPUID trap flag
       states.at(traceesPid).CPUIDTrapSet = false;
@@ -556,8 +557,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
       states.at(traceesPid).signalToDeliver = 0;
 
       auto coloredMsg = log.makeTextColored(Color::blue, msg);
-      auto virtualPid = pidMap.getVirtualValue(traceesPid);
-      log.writeToLog(Importance::inter, coloredMsg, virtualPid/*, sigNum*/);
+      log.writeToLog(Importance::inter, coloredMsg, traceesPid, sigNum);
       return;
 
     } else if ((curr_insn32 << 16) ==0xA20F0000) {
@@ -565,8 +565,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
       auto msg = "[%d] Tracer: intercepted cpuid instruction at %p. %rax == 0x%p, %rcx == 0x%p\n";
       auto coloredMsg = log.makeTextColored(Color::blue, msg);
-      auto virtualPid = pidMap.getVirtualValue(traceesPid);
-      log.writeToLog(Importance::inter, coloredMsg, virtualPid, regs.rip, regs.rax, regs.rcx);
+      log.writeToLog(Importance::inter, coloredMsg, traceesPid, regs.rip, regs.rax, regs.rcx);
 
       // step over cpuid insn
       tracer.writeIp((uint64_t) tracer.getRip().ptr + 2);
@@ -640,12 +639,13 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   switch(syscallNumber){
   case SYS_access:
     return accessSystemCall::handleDetPre(gs, s, t, sched);
-  case SYS_arch_prctl:
-    return arch_prctlSystemCall::handleDetPre(gs, s, t, sched);
 
   case SYS_alarm:
     return alarmSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_arch_prctl:
+    return arch_prctlSystemCall::handleDetPre(gs, s, t, sched);
+    
   case SYS_chdir:
     return chdirSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -919,6 +919,9 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
   case SYS_alarm:
     return alarmSystemCall::handleDetPost(gs, s, t, sched);
 
+  case SYS_arch_prctl:
+    return arch_prctlSystemCall::handleDetPost(gs, s, t, sched);
+
   case SYS_chdir:
     return chdirSystemCall::handleDetPost(gs, s, t, sched);
 
@@ -952,9 +955,8 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
   case SYS_dup2:
     return dup2SystemCall::handleDetPost(gs, s, t, sched);
 
-    // TODO
-  // case SYS_execve:
-    // return execveSystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_execve:
+    return execveSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_faccessat:
     return faccessatSystemCall::handleDetPost(gs, s, t, sched);

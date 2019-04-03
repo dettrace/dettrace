@@ -13,6 +13,8 @@
 #include <sys/socket.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
+#include <asm/prctl.h>
+#include <sys/prctl.h>
 
 #include <limits>
 #include <cstring>
