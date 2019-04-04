@@ -614,14 +614,16 @@ int spawnTracerTracee(void* voidArgs){
   // Switch to throw runtime exception.
   assert(getpid() == 1);
 
-  // DEVRAND STEP 0: determine names for /dev/[u]random fifos before we fork, so
-  // that information is available to tracee
+  // DEVRAND STEP 1: create unique /dev/[u]random fifos before we fork, so
+  // that their names are available to tracee
   char tmpnamBuffer[L_tmpnam];
   char* tmpnamResult = tmpnam(tmpnamBuffer);
   assert(NULL != tmpnamResult); 
   devrandFifoPath = string{ tmpnamBuffer } + "-random.fifo";
   //fprintf(stderr, "%s\n", devrandFifoPath.c_str());
   devUrandFifoPath = string{ tmpnamBuffer } + "-urandom.fifo";
+  doWithCheck(mkfifo(devrandFifoPath.c_str(), 0666), "mkfifo");
+  doWithCheck(mkfifo(devUrandFifoPath.c_str(), 0666), "mkfifo");
   
   pid_t pid = fork();
   if (pid < 0) {
@@ -636,10 +638,6 @@ int spawnTracerTracee(void* voidArgs){
                   "tracer mounting proc failed");
     }
 
-    // DEVRAND STEP 1: create fifos outside the chroot
-    doWithCheck(mkfifo(devrandFifoPath.c_str(), 0666), "mkfifo");
-    doWithCheck(mkfifo(devUrandFifoPath.c_str(), 0666), "mkfifo");
-    
     // DEVRAND STEP 2: spawn a thread to write to each fifo
     pthread_t devRandomPthread, devUrandomPthread;
     // NB: we copy *FifoPath to the heap as our stack storage goes away: these allocations DO get leaked
