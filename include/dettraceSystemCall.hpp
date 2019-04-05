@@ -12,6 +12,9 @@
 
 using namespace std;
 
+#define ARCH_GET_CPUID		0x1011
+#define ARCH_SET_CPUID		0x1012
+
 /**
  * Hopefully this will server as documentation for all our system calls.
  * Please keep in alphabetical order.
@@ -49,6 +52,15 @@ public:
 
   const int syscallNumber = SYS_access;
   const string syscallName = "access";
+};
+// =======================================================================================
+class brkSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched);
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched);
+
+  const int syscallNumber = SYS_brk;
+  const string syscallName = "brk";
 };
 // =======================================================================================
 /**
@@ -750,6 +762,21 @@ public:
   const int syscallNumber = SYS_pipe2;
   const string syscallName = "pipe2";
 };
+// =======================================================================================
+/**
+ * int arch_prctl(int code, unsigned long addr);
+ * arch-specific thread state - currently we use this for establishing a SIGSEGV on CPUID
+ */
+class arch_prctlSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_arch_prctl;
+  const string syscallName = "arch_prctl";
+};
+
+
 // =======================================================================================
 /**
  * The  Linux  pselect6() system call modifies its timeout argument.  However, the glibc
@@ -1563,7 +1590,8 @@ void handleDents(globalState& gs, state& s, ptracer& t, scheduler& sched){
     // by the kernel into the tracee's buffer.
     size_t bytesToCopy = t.getReturnValue();
     uint8_t localBuffer[bytesToCopy];
-    readVmTraceeRaw(traceeBuffer, localBuffer, bytesToCopy, t.getPid());
+    doWithCheck(readVmTraceeRaw(traceeBuffer, localBuffer, bytesToCopy, t.getPid()),
+                "readVmTraceeRaw: Unable to read bytes for dirent into buffer.");
     // Explicitly increase counter.
     t.readVmCalls++;
 

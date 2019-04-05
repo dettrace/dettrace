@@ -6,11 +6,12 @@
 #include <sys/user.h>
 #include <sys/vfs.h>
 #include <sys/wait.h>
-#include <sys/utsname.h>
 #include <string.h>
 #include <getopt.h>
 #include <dirent.h>
 #include <sys/prctl.h>
+#include <pthread.h>
+#include <sys/select.h>
 
 #include <sched.h>
 #include <unistd.h>
@@ -47,7 +48,6 @@
 
 #include <seccomp.h>
 
-#define MAKE_KERNEL_VERSION(x, y, z) ((x) << 16 | (y) << 8 | (z) )
 
 /**
  * Useful link for understanding ptrace as it works with execve.
@@ -98,30 +98,6 @@ static void proc_setgroups_write(pid_t pid, const char* str);
 static bool isDefault(string arg);
 // =======================================================================================
 
-// Check if using kernel < 4.8.0. Ptrace + seccomp semantics changed in this version.
-bool usingOldKernel(){
-  struct utsname utsname = {};
-  long x, y, z;
-  char* r = NULL, *rp = NULL;
-
-  doWithCheck(uname(&utsname), "uname");
-
-  r = utsname.release;
-  x = strtoul(r, &rp, 10);
-  if (rp == r){
-    throw runtime_error("dettrace runtime exception: Problem parsing uname results.\n");
-  }
-  r = 1 + rp;
-  y = strtoul(r, &rp, 10);
-  if (rp == r){
-    throw runtime_error("dettrace runtime exception: Problem parsing uname results.\n");
-  }
-  r = 1 + rp;
-  z = strtoul(r, &rp, 10);
-
-  return (MAKE_KERNEL_VERSION(x, y, z) < MAKE_KERNEL_VERSION(4, 8, 0) ?
-          true : false);
-}
 
 const string usageMsg =
   "  Dettrace\n"
@@ -478,6 +454,62 @@ static void checkPaths(string pathToChroot, string workingDir){
     free(trueChrootC);
     free(trueWorkingDirC);
 }
+
+/** 
+ * DEVRAND STEP 3: thread that writes pseudorandom output to a /dev/[u]random fifo
+ */
+static void* devRandThread(void* fifoPath_) {
+
+  char* fifoPath = (char*) fifoPath_;
+  
+  // allow this thread to be unilaterally killed when tracer exits
+  int oldCancelType;
+  doWithCheck(pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldCancelType), "pthread_setcanceltype");
+
+  //fprintf(stderr, "[devRandThread] using fifo  %s\n", fifoPath);
+
+  PRNG prng(0x1234);
+
+  uint32_t totalBytesWritten = 0;
+  uint16_t random = 0;
+  bool getNewRandom = true;
+
+  // NB: if the fifo is ever closed by all readers/writers, then contents
+  // buffered within it get dropped. This leads to nondeterministic results, so
+  // we always keep the fifo open here. We open the fifo for writing AND reading
+  // as that eliminates EPIPE ("other end of pipe closed") errors when the
+  // tracee has closed the fifo and we call write(). Instead, our write() call
+  // will block once the fifo fills up. Once a tracee starts reading, the buffer
+  // will drain and our write() will get unblocked. However, no bytes should get
+  // lost during this process, ensuring the tracee(s) always see(s) a
+  // deterministic sequence of reads.
+  int fd = open(fifoPath, O_RDWR);
+  doWithCheck(fd, "open");
+
+  while (true) {
+    if (getNewRandom) {
+      random = prng.get();
+    }
+    int bytesWritten = write(fd, &random, 2);
+    if (2 != bytesWritten) {
+      perror("[devRandThread] error writing to fifo");
+      // need to try writing these bytes again so that the fifo generates deterministic output
+      getNewRandom = false;
+      
+    } else {
+      fsync(fd);
+      getNewRandom = true;
+      totalBytesWritten += 2;
+      //printf("[devRandThread] wrote %u bytes so far...\n", totalBytesWritten);
+    }
+  }
+  
+  close(fd);
+  return NULL;
+}
+
+static string devrandFifoPath, devUrandFifoPath;
+
 /**
  * Jail our container under chootPath.
  * This directory must exist and be located inside the chroot if the user defined their own chroot!
@@ -543,12 +575,13 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
   // Sometimes the chroot won't have a /dev/null, bind mount the host's just in case.
   createFileIfNotExist(pathToChroot + "/dev/null");
   mountDir(pathToExe + "/../root/dev/null", pathToChroot + "/dev/null");
-  // We always want to bind mount these directories to replace the host OS or chroot ones.
-  createFileIfNotExist(pathToChroot + "/dev/random");
-  mountDir(pathToExe + "/../root/dev/random", pathToChroot + "/dev/random");
 
+  // DEVRAND STEP 4: bind mount our /dev/[u]random fifos into the chroot
+  createFileIfNotExist(pathToChroot + "/dev/random");
+  mountDir(devrandFifoPath, pathToChroot + "/dev/random");
+    
   createFileIfNotExist(pathToChroot + "/dev/urandom");
-  mountDir(pathToExe + "/../root/dev/urandom", pathToChroot + "/dev/urandom");
+  mountDir(devUrandFifoPath, pathToChroot + "/dev/urandom");
 
   // Proc is special, we mount a new proc dir.
   doWithCheck(mount("/proc", (pathToChroot + "/proc/").c_str(), "proc", MS_MGC_VAL, nullptr),
@@ -582,6 +615,17 @@ int spawnTracerTracee(void* voidArgs){
   // Switch to throw runtime exception.
   assert(getpid() == 1);
 
+  // DEVRAND STEP 1: create unique /dev/[u]random fifos before we fork, so
+  // that their names are available to tracee
+  char tmpnamBuffer[L_tmpnam];
+  char* tmpnamResult = tmpnam(tmpnamBuffer);
+  assert(NULL != tmpnamResult); 
+  devrandFifoPath = string{ tmpnamBuffer } + "-random.fifo";
+  //fprintf(stderr, "%s\n", devrandFifoPath.c_str());
+  devUrandFifoPath = string{ tmpnamBuffer } + "-urandom.fifo";
+  doWithCheck(mkfifo(devrandFifoPath.c_str(), 0666), "mkfifo");
+  doWithCheck(mkfifo(devUrandFifoPath.c_str(), 0666), "mkfifo");
+  
   pid_t pid = fork();
   if (pid < 0) {
     throw runtime_error("fork() failed.\n");
@@ -593,10 +637,23 @@ int spawnTracerTracee(void* voidArgs){
       doWithCheck(mount("/proc", "/proc/", "proc", MS_MGC_VAL, nullptr),
                   "tracer mounting proc failed");
     }
+
     auto syms = vdsoGetSymbols(pid);
+
+    // DEVRAND STEP 2: spawn a thread to write to each fifo
+    pthread_t devRandomPthread, devUrandomPthread;
+    // NB: we copy *FifoPath to the heap as our stack storage goes away: these allocations DO get leaked
+    // If we wanted to not leak them, devRandThread could copy to its stack and free the heap copy
+    doWithCheck( pthread_create(&devRandomPthread, NULL, devRandThread, (void*)strdup(devrandFifoPath.c_str())),
+                 "pthread_create /dev/random pthread" );
+    doWithCheck( pthread_create(&devUrandomPthread, NULL, devRandThread, (void*)strdup(devUrandFifoPath.c_str())),
+                 "pthread_create /dev/urandom pthread" );
+    
     execution exe{
-        args.debugLevel, pid, args.useColor, usingOldKernel(), args.logFile,
-        args.printStatistics, syms};
+        args.debugLevel, pid, args.useColor, 
+        args.logFile, args.printStatistics, 
+        devRandomPthread, devUrandomPthread,
+        syms};
     exe.runProgram();
   } else if (pid == 0) {
     runTracee(args);

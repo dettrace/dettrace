@@ -14,6 +14,9 @@
 #include <stack>
 #include <map>
 
+#define ARCH_GET_CPUID		0x1011
+#define ARCH_SET_CPUID		0x1012
+
 
 /**
  * Execution class.
@@ -37,7 +40,7 @@ private:
    * Using kernel version < 4.8 . Needed as semantics of ptrace + seccomp have changed.
    * See `man 2 ptrace`
    */
-  bool oldKernel;
+  bool kernelPre4_8;
 
   /** Main log.
    * For writing all messages.
@@ -53,6 +56,15 @@ private:
    */
   bool printStatistics;
 
+  /**
+   * The pthread_t for the /dev/random thread, which we cancel when dettrace exits.
+   */
+  pthread_t devRandomPthread;
+  /**
+   * The pthread_t for the /dev/urandom thread, which we cancel when dettrace exits.
+   */
+  pthread_t devUrandomPthread;
+  
   /**
    * ptrace wrapper.
    * Class wrapping ptrace system call in a higher level API.
@@ -140,9 +152,14 @@ public:
    * @param useColor Toggles color in logging process
    * @param Using kernel version < 4.8.
    * @param logFile file to write log messages to, if "" use stderr
+   * @param devRandomPthread 
    */
-  execution(int debugLevel, pid_t startingPid, bool useColor, bool oldKernel,
-            string logFile, bool printStatistics, map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs);
+
+  execution(int debugLevel, pid_t startingPid, bool useColor, 
+            string logFile, bool printStatistics, 
+            pthread_t devRandomPthread, pthread_t devUrandomPthread,
+            map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs);
+
 
   /**
    * Handles exit from current process.

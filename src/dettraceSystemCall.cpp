@@ -13,6 +13,8 @@
 #include <sys/socket.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
+#include <asm/prctl.h>
+#include <sys/prctl.h>
 
 #include <limits>
 #include <cstring>
@@ -34,6 +36,7 @@
 #include "utilSystemCalls.hpp"
 #include "ptracer.hpp"
 
+
 // Enable tracee reads that are not strictly necessary for functionality, but
 // are enabled for instrumentation or sanity checking. For example, verify,
 // before system call replay, that RIP points at a valid system call insn.
@@ -43,11 +46,54 @@ using namespace std;
 // =======================================================================================
 bool accessSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
-  return false;
+  return true;
 }
-
 void accessSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   return;
+}
+// ========================================================================================
+bool brkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+void brkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return;
+}
+// =======================================================================================
+bool arch_prctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+
+  gs.log.writeToLog(Importance::info, "pre-hook for arch_prctl(%d, 0) == ARCH_SET_CPUID? %d\n", t.arg1(), t.arg1() == ARCH_SET_CPUID);
+
+  switch (t.arg1()) {
+  case ARCH_SET_CPUID:
+    return true;
+  case ARCH_SET_FS: // getting/setting these segment registers is reproducible, we don't need to intercept post-hook
+  case ARCH_GET_FS:
+  case ARCH_SET_GS:
+  case ARCH_GET_GS:
+    return false;
+  default:
+    throw runtime_error("dettrace runtime exception: unsupported arch_prctl syscall");
+  }
+  return false; // unreachable
+}
+void arch_prctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if (s.syscallInjected)
+  {
+    gs.log.writeToLog(Importance::info, "post-hook for arch_prctl, returning %d\n", t.getReturnValue());
+
+    if (!s.CPUIDTrapSet) {
+      s.syscallInjected = false;
+      s.CPUIDTrapSet = true;
+
+      // restore reg state
+      // I don't believe arch_prctl(ARCH_SET_CPUID) writes to tracee memory at all
+      t.setRegs(s.regSaver.popRegisterState());
+
+      gs.log.writeToLog(Importance::info, "restored register state from access() post-hook\n");
+    }
+
+    replaySystemCall(gs, t, t.getSystemCallNumber());
+  }
 }
 // =======================================================================================
 bool alarmSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -218,8 +264,19 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     gs.log.writeToLog(Importance::info, msg);
   }
 
-  return false;
+  return true;
 }
+void execveSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "in execve post-hook\n");
+
+  // this will cause us to inject the appropriate prctl incantation on the next
+  // access() system call TODO: this is a *HUGE* hack, only checking on
+  // access(), but empirically it seems that access() often happens right after
+  // the exec and this is easier to implement than checking in every system call
+  // (I'm not sure how to plumb things through the superclass).
+  s.CPUIDTrapSet = false;
+}
+
 // =======================================================================================
 bool fchownatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg2(), gs.log, s.traceePid, t);
@@ -537,22 +594,27 @@ bool getrandomSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
 
 void getrandomSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.getRandomCalls++;
-  // Fill buffer with our own deterministic values.
+
   char* buf = (char*) t.arg1();
-  auto traceeMem = traceePtr<char>{buf};
   size_t bufLength = (size_t) t.arg2();
 
-  // const int flags = 0;
+  char prngValues[128];
 
-  // TODO For a big enough value this could stack overflow.
-  char constValues[bufLength];
-  for(size_t i = 0; i < bufLength; i++){
-    constValues[i] = i;
+  // write batches of pseudorandom bytes to the tracee
+  for (size_t traceeByteIdx = 0; traceeByteIdx < bufLength; traceeByteIdx += sizeof(prngValues)) {
+    // Fill buffer with deterministic pseudorandom values
+    for (size_t i = 0; i < sizeof(prngValues)/sizeof(uint16_t); i++) {
+      uint16_t* prngValues16b = (uint16_t*)prngValues;
+      prngValues16b[i] = gs.prng.get();
+    }
+
+    // Copy buffer contents to tracee
+    size_t amountToWrite = min(sizeof(prngValues), bufLength - traceeByteIdx);
+    auto traceeMem = traceePtr<char>{buf + traceeByteIdx};
+    writeVmTraceeRaw(prngValues, traceeMem, amountToWrite, t.getPid());
+    // Explicitly increase counter.
+    t.writeVmCalls++;
   }
-
-  writeVmTraceeRaw(constValues, traceeMem, bufLength, t.getPid());
-  // Explicitly increase counter.
-  t.writeVmCalls++;
 
   return;
 }
@@ -755,7 +817,7 @@ void mkdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
   // Add/overwrite entry in our map.
   if(t.getReturnValue() == 0 && (char*) t.arg1() != nullptr){
     string strPath = t.readTraceeCString(traceePtr<char>((char*) t.arg1()), s.traceePid);
-    auto inode = inode_from_tracee(strPath, s.traceePid, gs.log, nullopt);
+    auto inode = inode_from_tracee(strPath, s.traceePid, gs.log, -1);
     gs.mtimeMap.addRealValue(inode);
   }
 }
@@ -857,7 +919,7 @@ void linkatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
 // =======================================================================================
 bool openSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if((char*) t.arg1() != nullptr){
-    handlePreOpens(gs, s, t, nullopt, traceePtr<char>{(char*) t.arg1()}, t.arg2());
+    handlePreOpens(gs, s, t, -1, traceePtr<char>{(char*) t.arg1()}, t.arg2());
     return true;
   }
   return false;
@@ -1462,7 +1524,7 @@ bool symlinkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sche
 void symlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(t.getReturnValue() == 0 && (char*) t.arg2() != nullptr){
     string linkpath = t.readTraceeCString(traceePtr<char>((char*) t.arg2()), s.traceePid);
-    auto inode = inode_from_tracee(linkpath, s.traceePid, gs.log, nullopt);
+    auto inode = inode_from_tracee(linkpath, s.traceePid, gs.log, -1);
     gs.mtimeMap.addRealValue(inode);
   }
 }
@@ -1494,7 +1556,7 @@ void mknodSystemCall::
 handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(t.getReturnValue() == 0 && (char*) t.arg1() != nullptr){
     string path = t.readTraceeCString(traceePtr<char>((char*) t.arg1()), s.traceePid);
-    auto inode = inode_from_tracee(path, s.traceePid, gs.log, nullopt);
+    auto inode = inode_from_tracee(path, s.traceePid, gs.log, -1);
     gs.mtimeMap.addRealValue(inode);
   }
 }
