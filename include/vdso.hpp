@@ -1,7 +1,6 @@
 #ifndef _DETTRACE_VDSO_HPP
 #define _DETTRACE_VDSO_HPP
 
-#include <optional>
 #include <string>
 #include <vector>
 #include <map>
@@ -20,12 +19,12 @@ struct ProcMapEntry {
   unsigned long              procMapOffset;
   unsigned long              procMapDev;
   unsigned long              procMapInode;
-  std::optional<std::string> procMapName;
+  std::string                procMapName;
 };
 
 std::ostream& operator<< (std::ostream &out, ProcMapEntry const& e);
 
-std::optional<ProcMapEntry> vdsoGetMapEntry(pid_t pid);
+int vdsoGetMapEntry(pid_t pid, struct ProcMapEntry& entry);
 std::map<std::string, std::basic_string<unsigned char>> vdsoGetCandidateData(void);
 std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>> vdsoGetSymbols(pid_t pid);
 

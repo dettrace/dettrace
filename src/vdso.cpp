@@ -91,15 +91,12 @@ std::ostream& operator<< (std::ostream &out, ProcMapEntry const& e) {
   out << e.procMapOffset << ' ';
   out << (e.procMapDev >> 8) << ':' << (e.procMapDev & 0xffL) << ' ';
   out << e.procMapInode << "\t\t";
-  if (e.procMapName.has_value())
-    out << e.procMapName.value();
+  out << e.procMapName;
   return out;
 }
 
-std::optional<ProcMapEntry> parseProcMapEntry(const std::string& line_)
+int parseProcMapEntry(const std::string& line_, struct ProcMapEntry& res)
 {
-  ProcMapEntry res;
-
   char* p, *q;
   char* line = strdupa(line_.c_str());
 
@@ -127,7 +124,7 @@ std::optional<ProcMapEntry> parseProcMapEntry(const std::string& line_)
   } else {
     res.procMapName = p;
   }
-  return res;
+  return 0;
 }
 
 std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid)
@@ -174,11 +171,12 @@ std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid)
   std::istringstream f(buffer);
   std::string line;
   delete [] buffer;
+  ProcMapEntry mapEntry;
 
   while (std::getline(f, line)) {
-    auto parsed = parseProcMapEntry(line);
-    if (parsed.has_value())
-      res.push_back(parsed.value());
+    if (parseProcMapEntry(line, mapEntry) == 0) {
+      res.push_back(mapEntry);
+    }
   }
 
   return res;
@@ -205,16 +203,17 @@ create_empty_loader(void* base, unsigned long size) {
   return std::make_shared<empty_loader>(base, size);
 }
 
-std::optional<ProcMapEntry> vdsoGetMapEntry(pid_t pid)
+int vdsoGetMapEntry(pid_t pid, struct ProcMapEntry& entry)
 {
   auto entries = parseProcMapEntries(pid);
 
   for (auto ent: entries) {
     if (ent.procMapName == "[vdso]") {
-      return ent;
+      entry = ent;
+      return 0;
     }
   }
-  return {};
+  return -1;
 }
 
 std::vector<std::string> vdsoGetFuncNames(void)
@@ -236,13 +235,11 @@ std::vector<std::string> vdsoGetFuncNames(void)
 std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>> vdsoGetSymbols(pid_t pid)
 {
   std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>> res;
+  struct ProcMapEntry vdsoMapEntry;
 
-  auto vdsoMapEntry_ = vdsoGetMapEntry(pid);
-  if (!vdsoMapEntry_.has_value()) {
+  if (vdsoGetMapEntry(pid, vdsoMapEntry) != 0) {
     return res;
   }
-
-  auto vdsoMapEntry = vdsoMapEntry_.value();
 
   elf::elf elf(create_empty_loader(reinterpret_cast<void*>(vdsoMapEntry.procMapBase), vdsoMapEntry.procMapSize));
 

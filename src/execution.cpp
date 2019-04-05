@@ -475,8 +475,7 @@ static inline unsigned long alignUp(unsigned long size, int align)
 
 void execution::handleExecEvent(pid_t pid) {
   struct user_regs_struct regs;
-
-  auto vdsoMap = vdsoGetMapEntry(pid);
+  struct ProcMapEntry vdsoMap;
 
   ptracer::doPtrace(PTRACE_GETREGS, pid, 0, &regs);
   auto rip = regs.rip;
@@ -495,14 +494,13 @@ void execution::handleExecEvent(pid_t pid) {
   unsigned long mmapAddr = traceePreinitMmap(pid, tracer);
 
   // vdso is enabled by kernel command line.
-  if (vdsoMap.has_value()) {
-    auto ent = vdsoMap.value();
+  if (vdsoGetMapEntry(pid, vdsoMap) == 0) {
     auto data = vdsoGetCandidateData();
 
     for (auto func: vdsoFuncs) {
       unsigned long offset, oldVdsoSize, vdsoAlignment;
       tie(offset, oldVdsoSize, vdsoAlignment) = func.second;
-      unsigned long target  = ent.procMapBase + offset;
+      unsigned long target  = vdsoMap.procMapBase + offset;
       unsigned long nbUpper = alignUp(oldVdsoSize, vdsoAlignment);
       unsigned long nb      = alignUp(data[func.first].size(), vdsoAlignment);
       assert(nb <= nbUpper);
