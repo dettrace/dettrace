@@ -541,6 +541,7 @@ void handlePostOpens(globalState& gs, state& s, ptracer& t, int flags) {
     // Use fd to get inode.
     auto inode = readInodeFor(gs.log, s.traceePid, t.getReturnValue());
     gs.mtimeMap.addRealValue(inode);
+    gs.inodeMap.addRealValue(inode);
   }
   s.fileExisted = false;
 }
