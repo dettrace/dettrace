@@ -99,6 +99,7 @@ bool scheduler::removeAndScheduleNext(pid_t process){
 }
 
 pid_t scheduler::scheduleNextProcess(){
+  printProcesses();
   callsToScheduleNextProcess++;
 
   if(!runnableHeap.empty()){

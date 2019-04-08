@@ -178,7 +178,7 @@ void execution::runProgram(){
 
     // Current process was ended by signal.
     if(ret == ptraceEvent::terminatedBySignal){
-      exitLoop = handleTraceeExit("terminated by signal", traceesPid, false);
+      exitLoop = handleTraceeExit("terminated by signal", traceesPid, true);
       continue;
     }
 
@@ -772,6 +772,7 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
    return writevSystemCall::handleDetPre(gs, s, t, sched);
   }
 
+  return true;
   // Generic system call. Throws error.
   throw runtime_error("dettrace runtime exception: This is a bug. Missing case for system call: " +
                       to_string(syscallNumber));
@@ -1045,6 +1046,7 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
    return writevSystemCall::handleDetPost(gs, s, t, sched);
   }
 
+  return;
   // Generic system call. Throws error.
   throw runtime_error("dettrace runtime exception: This is a bug: "
                       "Missing case for system call: " +
@@ -1059,7 +1061,7 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
   int status;
   // Pid of the process whose event we just intercepted through ptrace.
   pid_t traceesPid;
-
+  
   // At every doPtrace we have the choice to deliver a signal. We must deliver a signal
   // when an actual signal was returned (ptraceEvent::signal), otherwise the signal is
   // never delivered to the tracee! This field is updated in @handleSignal
@@ -1110,8 +1112,7 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
       // move on.
       throw runtime_error("Failed to hear from tracee through waitpid, this process is lost.\n");
     }
-  }
-  else if (ret == -1) {
+  } else if (ret == -1) {
     throw runtime_error("Ptrace continue/syscall failed with :" + string(strerror(errno)) + "\n");
   }
   // Call to ptrace succeeded! Proceed as usual, that is, wait for event to come.

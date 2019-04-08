@@ -416,7 +416,7 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
     operation = to_string(futexOp);
   }
 
-  gs.log.writeToLog(Importance::extra, "Futex operation: " + operation + "\n");
+  gs.log.writeToLog(Importance::info, "Operation: " + operation + "\n");
 
   // See definitions of variables here.
   // https://github.com/spotify/linux/blob/master/include/linux/futex.h
@@ -427,7 +427,7 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
      futexCmd == FUTEX_WAKE_BITSET || futexCmd == FUTEX_WAKE_OP){
     gs.log.writeToLog(Importance::info, "Waking on address: %p\n", t.arg1());
     // No need to go into the post hook.
-    return true;
+    return false;
   }
 
   // Handle wait operations, by setting our timeout to zero, and seeing if time runs out.
@@ -435,11 +435,11 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
      futexCmd == FUTEX_WAIT_BITSET ||
      futexCmd == FUTEX_WAIT_REQUEUE_PI
      ){
-    gs.log.writeToLog(Importance::info, "Futex wait on: %p.\n", t.arg1());
-    gs.log.writeToLog(Importance::info, "On value: " + to_string(futexValue) + "\n");
+    gs.log.writeToLog(Importance::info, "Waiting on value at address: %p.\n", t.arg1());
+    gs.log.writeToLog(Importance::info, "Against value: " + to_string(futexValue) + "\n");
     if (gs.log.getDebugLevel() > 0) {
       int actualValue = (int) t.readFromTracee(traceePtr<int>((int*) t.arg1()), t.getPid());
-      gs.log.writeToLog(Importance::extra, "Actual value: " + to_string(actualValue) + "\n");
+      gs.log.writeToLog(Importance::info, "Actual value: " + to_string(actualValue) + "\n");
     }
 
     // Overwrite the current value with our value. Restore value in post hook.
@@ -450,12 +450,9 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
     if(timeoutPtr == nullptr){
       // We need somewhere to store timespec. We will write this data below the current
       // stack pointer accounting for the red zone, known to be 128 bytes.
-      gs.log.writeToLog(Importance::info,
-                        "timeout null, writing our data below the current stack frame...\n");
-
-      // Enough space for timespec struct.
+      gs.log.writeToLog(Importance::extra,
+                        "timeout null, writing our data to mmaped page...\n");
       timespec* newAddress = (timespec*) s.mmapMemory.getAddr().ptr;
-
       t.writeToTracee(traceePtr<timespec>(newAddress), ourTimeout, s.traceePid);
 
       // Point system call to new address.
@@ -478,22 +475,21 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
 void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int futexOp = t.arg2();
   int futexCmd = futexOp & FUTEX_CMD_MASK;
+
   if(futexCmd == FUTEX_WAIT ||
      futexCmd == FUTEX_WAIT_BITSET ||
      futexCmd == FUTEX_WAIT_REQUEUE_PI
      ){
-
-    // The process is trying to poll. We preempt but do not mark as blocked to avoid
-    // getting stuck on an infite polling loop.
+    gs.log.writeToLog(Importance::info, "Futex post-hook, handling wait operation.\n");
     if(s.userDefinedTimeout){
       // Only preempt if we would have timeout out. Othewise let if continue running!
       if(t.getReturnValue() == -ETIMEDOUT){
         sched.preemptAndScheduleNext(preemptOptions::markAsBlocked);
       }
-
       s.userDefinedTimeout = false;
       return;
     } else {
+      gs.log.writeToLog(Importance::info, "Replaying futex system call.\n");
       t.writeArg4(s.originalArg4);
       replaySyscallIfBlocked(gs, s, t, sched, ETIMEDOUT);
     }
@@ -745,12 +741,12 @@ nanosleepSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedul
     t.writeToTracee(traceePtr<struct timespec>(myReq), localReq, s.traceePid);
     t.writeArg1((uint64_t) myReq);
   }
-  return false;
+  return true;
 }
 
 void
 nanosleepSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  throw runtime_error("Error: nanosleep post-hook should never be called.");
+  sched.preemptAndScheduleNext(preemptOptions::markAsBlocked);
 }
 // =======================================================================================
 bool mkdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
@@ -2066,6 +2062,7 @@ bool wait4SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   t.writeArg3(s.originalArg3 | WNOHANG);
   return true;
 }
+
 void wait4SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(s.wait4Blocking){
     gs.log.writeToLog(Importance::info, "Non-blocking wait4 found\n");
