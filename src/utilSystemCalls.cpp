@@ -345,8 +345,10 @@ ino_t inode_from_tracee(string traceePath, pid_t traceePid, logger& log,
     log.writeToLog(Importance::info, "This file is a symbolic link\n");
   }
 
-  log.writeToLog(Importance::info, "lstat(%s) returned inode: %d!\n", resolvedPath.c_str(),
+  log.writeToLog(Importance::info, "lstat(%s) returned inode!\n", resolvedPath.c_str());
+  log.writeToLog(Importance::extra, "lstat(%s) returned inode: %d!\n", resolvedPath.c_str(),
                  statbuf.st_ino);
+
   return statbuf.st_ino;
 }
 // =======================================================================================
@@ -363,8 +365,10 @@ ino_t readInodeFor(logger& log, pid_t traceePid, int fd){
                        "tracee from /proc/. errno: " + to_string(res));
   }
 
-  log.writeToLog(Importance::info, "stat(%s) returned inode: %d!\n", procPath.c_str(),
+  log.writeToLog(Importance::info, "stat(%s) returned inode!\n", procPath.c_str());
+  log.writeToLog(Importance::extra, "stat(%s) returned inode: %d!\n", procPath.c_str(),
                     statbuf.st_ino);
+
   return statbuf.st_ino;
 }
 // =======================================================================================
