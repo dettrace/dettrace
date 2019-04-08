@@ -223,6 +223,7 @@ bool dup2SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedul
 void dup2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int newfd = t.getReturnValue();
   int fd = t.arg1();
+  gs.log.writeToLog(Importance::info, "dup2(%d) returned %d\n", fd, newfd);
   if(newfd < 0){
     return;
   }
