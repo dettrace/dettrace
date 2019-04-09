@@ -479,32 +479,42 @@ void handlePreOpens(globalState& gs, state& s, ptracer& t, int dirfd,
   string coloredPath = gs.log.makeTextColored(Color::green, path);
   gs.log.writeToLog(Importance::info, "Path: %s\n", coloredPath.c_str());
   string flagsStr = "";
-  if (flags & O_RDONLY) { flagsStr += "O_RDONLY "; }
-  if (flags & O_WRONLY) { flagsStr += "O_WRONLY "; }
-  if (flags & O_RDWR) { flagsStr += "O_RDWR "; }
-  if (flags & O_APPEND) { flagsStr += "O_APPEND "; }
-  if (flags & O_ASYNC) { flagsStr += "O_ASYNC "; }
-  if (flags & O_CLOEXEC) { flagsStr += "O_CLOEXEC "; }
-  if (flags & O_CREAT) { flagsStr += "O_CREAT "; }
-  if (flags & O_DIRECT) { flagsStr += "O_DIRECT "; }
-  if (flags & O_DIRECTORY) { flagsStr += "O_DIRECTORY "; }
-  if (flags & O_DSYNC) { flagsStr += "O_DSYNC "; }
-  if (flags & O_EXCL) { flagsStr += "O_EXCL "; }
-  if (flags & O_LARGEFILE) { flagsStr += "O_LARGEFILE "; }
-  if (flags & O_NOATIME) { flagsStr += "O_NOATIME "; }
-  if (flags & O_NOCTTY) { flagsStr += "O_NOCTTY "; }
-  if (flags & O_NOFOLLOW) { flagsStr += "O_NOFOLLOW "; }
-  if (flags & O_NONBLOCK) { flagsStr += "O_NONBLOCK "; }
-  if (flags & O_NDELAY) { flagsStr += "O_NDELAY "; }
-  if (flags & O_PATH) { flagsStr += "O_PATH "; }
-  if (flags & O_SYNC) { flagsStr += "O_SYNC "; }
-  if (flags & O_TMPFILE) { flagsStr += "O_TMPFILE "; }
-  if (flags & O_TRUNC) { flagsStr += "O_TRUNC "; }
+  if ((flags & O_RDONLY) == O_RDONLY) { flagsStr += "O_RDONLY "; }
+  if ((flags & O_WRONLY) == O_WRONLY) { flagsStr += "O_WRONLY "; }
+  if ((flags & O_RDWR) == O_RDWR) { flagsStr += "O_RDWR "; }
+  if ((flags & O_APPEND) == O_APPEND) { flagsStr += "O_APPEND "; }
+  if ((flags & O_ASYNC) == O_ASYNC) { flagsStr += "O_ASYNC "; }
+  if ((flags & O_CLOEXEC) == O_CLOEXEC) { flagsStr += "O_CLOEXEC "; }
+  if ((flags & O_CREAT) == O_CREAT) { flagsStr += "O_CREAT "; }
+  if ((flags & O_DIRECT) == O_DIRECT) { flagsStr += "O_DIRECT "; }
+  if ((flags & O_DIRECTORY) == O_DIRECTORY) { flagsStr += "O_DIRECTORY "; }
+  if ((flags & O_DSYNC) == O_DSYNC) { flagsStr += "O_DSYNC "; }
+  if ((flags & O_EXCL) == O_EXCL) { flagsStr += "O_EXCL "; }
+  if ((flags & O_LARGEFILE) == O_LARGEFILE) { flagsStr += "O_LARGEFILE "; }
+  if ((flags & O_NOATIME) == O_NOATIME) { flagsStr += "O_NOATIME "; }
+  if ((flags & O_NOCTTY) == O_NOCTTY) { flagsStr += "O_NOCTTY "; }
+  if ((flags & O_NOFOLLOW) == O_NOFOLLOW) { flagsStr += "O_NOFOLLOW "; }
+  if ((flags & O_NONBLOCK) == O_NONBLOCK) { flagsStr += "O_NONBLOCK "; }
+  if ((flags & O_NDELAY) == O_NDELAY) { flagsStr += "O_NDELAY "; }
+  if ((flags & O_PATH) == O_PATH) { flagsStr += "O_PATH "; }
+  if ((flags & O_SYNC) == O_SYNC) { flagsStr += "O_SYNC "; }
+  if ((flags & O_TMPFILE) == O_TMPFILE) { flagsStr += "O_TMPFILE "; }
+  if ((flags & O_TRUNC) == O_TRUNC) { flagsStr += "O_TRUNC "; }
   gs.log.writeToLog(Importance::info, "Flags: 0x%x "+flagsStr+"\n", flags);
 
-  // NB: O_TMPFILE includes O_DIRECTORY for some strange reason! See:
-  // https://elixir.bootlin.com/linux/v4.1/source/include/uapi/asm-generic/fcntl.h#L92
-  if ((flags & O_TMPFILE) && !(flags & O_DIRECTORY)) {
+  /*
+  The O_TMPFILE is a superset of other flags and includes, bizarrely,
+  O_DIRECTORY. So we always check for exact equivalence instead of a non-zero
+  result after ANDing.
+
+  see https://elixir.bootlin.com/linux/v4.1/source/include/uapi/asm-generic/fcntl.h#L92 for the Linux kernel definitions 
+  glibc has the same property but different constants:
+d@acghaswellcat16:dettrace-experiments$ gcc -Wall opentest.c -o opentest && ./opentest
+O_DIRECTORY: 10000 O_TMPFILE: 410000
+d@acghaswellcat16:dettrace-experiments$ uname -a
+Linux acghaswellcat16 4.15.0-43-generic #46-Ubuntu SMP Thu Dec 6 14:45:28 UTC 2018 x86_64 x86_64 x86_64 GNU/Linux
+  */
+  if ((flags & O_TMPFILE) == O_TMPFILE) {
     // tmp file being created, no way it could already exist. Skip straight to post-hook.
     gs.log.writeToLog(Importance::info, "temporary file being created.\n");
     return;
@@ -523,7 +533,7 @@ void handlePreOpens(globalState& gs, state& s, ptracer& t, int dirfd,
 
   // We only case we care about newly created files, later we might want to update
   // the mtime for other modification events like O_TRUNC or O_APPEND.
-  if(flags & O_CREAT){
+  if((flags & O_CREAT) == O_CREAT){
     gs.log.writeToLog(Importance::info, "Tracee included O_CREATE.\n");
     s.fileExisted = tracee_file_exists(path, s.traceePid, gs.log, dirfd);
     gs.log.writeToLog(Importance::info, "fileExisted? %s\n", s.fileExisted ? "true" : "false");
@@ -533,9 +543,9 @@ void handlePreOpens(globalState& gs, state& s, ptracer& t, int dirfd,
 void handlePostOpens(globalState& gs, state& s, ptracer& t, int flags) {
   if(t.getReturnValue() > 0 &&
      // New regular file created through O_CREAT
-     ((flags & O_CREAT && ! s.fileExisted) ||
+     (((flags & O_CREAT) == O_CREAT && ! s.fileExisted) ||
       // Special case for O_TMPFILE
-      (flags & O_TMPFILE))
+      ((flags & O_TMPFILE) == O_TMPFILE))
      ){
     gs.log.writeToLog(Importance::info, "A new file was created\n!");
     // Use fd to get inode.
