@@ -502,8 +502,20 @@ void handlePreOpens(globalState& gs, state& s, ptracer& t, int dirfd,
   if ((flags & O_TRUNC) == O_TRUNC) { flagsStr += "O_TRUNC "; }
   gs.log.writeToLog(Importance::info, "Flags: 0x%x "+flagsStr+"\n", flags);
 
-  // tmp file being created, no way it could already exist. Skip straight to post-hook.
-  if ((flags & O_TMPFILE) != 0) {
+  /*
+  The O_TMPFILE is a superset of other flags and includes, bizarrely,
+  O_DIRECTORY. So we always check for exact equivalence instead of a non-zero
+  result after ANDing.
+
+  see https://elixir.bootlin.com/linux/v4.1/source/include/uapi/asm-generic/fcntl.h#L92 for the Linux kernel definitions 
+  glibc has the same property but different constants:
+d@acghaswellcat16:dettrace-experiments$ gcc -Wall opentest.c -o opentest && ./opentest
+O_DIRECTORY: 10000 O_TMPFILE: 410000
+d@acghaswellcat16:dettrace-experiments$ uname -a
+Linux acghaswellcat16 4.15.0-43-generic #46-Ubuntu SMP Thu Dec 6 14:45:28 UTC 2018 x86_64 x86_64 x86_64 GNU/Linux
+  */
+  if ((flags & O_TMPFILE) == O_TMPFILE) {
+    // tmp file being created, no way it could already exist. Skip straight to post-hook.
     gs.log.writeToLog(Importance::info, "temporary file being created.\n");
     return;
   }
@@ -521,7 +533,7 @@ void handlePreOpens(globalState& gs, state& s, ptracer& t, int dirfd,
 
   // We only case we care about newly created files, later we might want to update
   // the mtime for other modification events like O_TRUNC or O_APPEND.
-  if((flags & O_CREAT) != 0){
+  if((flags & O_CREAT) == O_CREAT){
     gs.log.writeToLog(Importance::info, "Tracee included O_CREATE.\n");
     s.fileExisted = tracee_file_exists(path, s.traceePid, gs.log, dirfd);
     gs.log.writeToLog(Importance::info, "fileExisted? %s\n", s.fileExisted ? "true" : "false");
@@ -531,14 +543,15 @@ void handlePreOpens(globalState& gs, state& s, ptracer& t, int dirfd,
 void handlePostOpens(globalState& gs, state& s, ptracer& t, int flags) {
   if(t.getReturnValue() > 0 &&
      // New regular file created through O_CREAT
-     ((flags & O_CREAT && ! s.fileExisted) ||
-      // Special case for O_TMPFILE
-      (flags & O_TMPFILE))
+     (((flags & O_CREAT) == O_CREAT && ! s.fileExisted) ||
+      // Special case for O_TMPFILE, always consider the file to be newly-created
+      ((flags & O_TMPFILE) == O_TMPFILE))
      ){
     gs.log.writeToLog(Importance::info, "A new file was created\n!");
     // Use fd to get inode.
     auto inode = readInodeFor(gs.log, s.traceePid, t.getReturnValue());
     gs.mtimeMap.addRealValue(inode);
+    gs.inodeMap.addRealValue(inode);
   }
   s.fileExisted = false;
 }

@@ -194,7 +194,8 @@ void creatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   // safe. (Not sure how we could use this information to optimze anyways.)
   auto inode = readInodeFor(gs.log, s.traceePid, t.getReturnValue());
   gs.mtimeMap.addRealValue(inode);
-
+  gs.inodeMap.addRealValue(inode);
+  
   return;
 }
 // =======================================================================================
@@ -820,6 +821,7 @@ void mkdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
     string strPath = t.readTraceeCString(traceePtr<char>((char*) t.arg1()), s.traceePid);
     auto inode = inode_from_tracee(strPath, s.traceePid, gs.log, -1);
     gs.mtimeMap.addRealValue(inode);
+    gs.inodeMap.addRealValue(inode);
   }
 }
 // =======================================================================================
@@ -838,6 +840,7 @@ void mkdiratSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
     string strPath = t.readTraceeCString(traceePtr<char>(path), s.traceePid);
     auto inode = inode_from_tracee(strPath, s.traceePid, gs.log, t.arg1());
     gs.mtimeMap.addRealValue(inode);
+    gs.inodeMap.addRealValue(inode);
   }
 }
 // =======================================================================================
@@ -1527,6 +1530,7 @@ void symlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
     string linkpath = t.readTraceeCString(traceePtr<char>((char*) t.arg2()), s.traceePid);
     auto inode = inode_from_tracee(linkpath, s.traceePid, gs.log, -1);
     gs.mtimeMap.addRealValue(inode);
+    gs.inodeMap.addRealValue(inode);
   }
 }
 // =======================================================================================
@@ -1544,6 +1548,7 @@ handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
     string linkpath = t.readTraceeCString(traceePtr<char>((char*) t.arg3()), s.traceePid);
     auto inode = inode_from_tracee(linkpath, s.traceePid, gs.log, t.arg2());
     gs.mtimeMap.addRealValue(inode);
+    gs.inodeMap.addRealValue(inode);
   }
 }
 // =======================================================================================
@@ -1559,6 +1564,7 @@ handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
     string path = t.readTraceeCString(traceePtr<char>((char*) t.arg1()), s.traceePid);
     auto inode = inode_from_tracee(path, s.traceePid, gs.log, -1);
     gs.mtimeMap.addRealValue(inode);
+    gs.inodeMap.addRealValue(inode);
   }
 }
 // =======================================================================================
@@ -1574,6 +1580,7 @@ handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
     string path = t.readTraceeCString(traceePtr<char>((char*) t.arg2()), s.traceePid);
     auto inode = inode_from_tracee(path, s.traceePid, gs.log, t.arg1());
     gs.mtimeMap.addRealValue(inode);
+    gs.inodeMap.addRealValue(inode);
   }
 }
 // =======================================================================================
