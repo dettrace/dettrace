@@ -474,7 +474,7 @@ string resolve_tracee_path(string traceePath, pid_t traceePid, logger& log,
 // =======================================================================================
 void handlePreOpens(globalState& gs, state& s, ptracer& t, int dirfd,
                 traceePtr<char> charpath, int flags) {
-  
+
   string path = t.readTraceeCString(charpath, s.traceePid);
   string coloredPath = gs.log.makeTextColored(Color::green, path);
   gs.log.writeToLog(Importance::info, "Path: %s\n", coloredPath.c_str());
