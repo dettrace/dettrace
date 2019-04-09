@@ -573,7 +573,7 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
 
   // Sometimes the chroot won't have a /dev/null, bind mount the host's just in case.
   createFileIfNotExist(pathToChroot + "/dev/null");
-  mountDir(pathToExe + "/../root/dev/null", pathToChroot + "/dev/null");
+  mountDir("/dev/null", pathToChroot + "/dev/null");
 
   // DEVRAND STEP 4: bind mount our /dev/[u]random fifos into the chroot
   createFileIfNotExist(pathToChroot + "/dev/random");
