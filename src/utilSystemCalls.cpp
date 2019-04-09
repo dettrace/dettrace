@@ -554,5 +554,6 @@ void handlePostOpens(globalState& gs, state& s, ptracer& t, int flags) {
     gs.inodeMap.addRealValue(inode);
   }
   s.fileExisted = false;
+  gs.log.writeToLog(Importance::info, "File descriptor: %d\n", t.getReturnValue());
 }
 // =======================================================================================
