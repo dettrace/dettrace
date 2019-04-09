@@ -544,7 +544,7 @@ void handlePostOpens(globalState& gs, state& s, ptracer& t, int flags) {
   if(t.getReturnValue() > 0 &&
      // New regular file created through O_CREAT
      (((flags & O_CREAT) == O_CREAT && ! s.fileExisted) ||
-      // Special case for O_TMPFILE
+      // Special case for O_TMPFILE, always consider the file to be newly-created
       ((flags & O_TMPFILE) == O_TMPFILE))
      ){
     gs.log.writeToLog(Importance::info, "A new file was created\n!");
