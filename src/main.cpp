@@ -12,6 +12,7 @@
 #include <sys/prctl.h>
 #include <pthread.h>
 #include <sys/select.h>
+#include <sys/sysmacros.h>
 
 #include <sched.h>
 #include <unistd.h>
@@ -83,9 +84,11 @@ int runTracee(programArgs args);
 int spawnTracerTracee(void* args);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 
+static bool realDevNull(string path);
 static bool fileExists(string directory);
+static void deleteFile(string path);
 static void mountDir(string source, string target);
-static void setUpContainer(string pathToExe, string pathToChroot, string workingDir, bool userDefinedChroot);
+static void setUpContainer(string pathToExe, string pathToChroot, string workingDir, bool userDefinedChroot, bool currentAsChroot);
 static void mkdirIfNotExist(string dir);
 static void createFileIfNotExist(string path);
 
@@ -244,7 +247,7 @@ int runTracee(programArgs args){
   string pathToExe = args.pathToExe;
 
   if(useContainer){
-    setUpContainer(pathToExe, pathToChroot, workingDir, args.userChroot);
+    setUpContainer(pathToExe, pathToChroot, workingDir, args.userChroot, args.currentAsChroot);
   }
 
   doWithCheck(prctl(PR_SET_TSC, PR_TSC_SIGSEGV, 0, 0, 0), "Pre-clone prctl error");
@@ -513,7 +516,7 @@ static string devrandFifoPath, devUrandFifoPath;
  * Jail our container under chootPath.
  * This directory must exist and be located inside the chroot if the user defined their own chroot!
  */
-static void setUpContainer(string pathToExe, string pathToChroot, string workingDir, bool userDefinedChroot){
+static void setUpContainer(string pathToExe, string pathToChroot, string workingDir, bool userDefinedChroot, bool currentAsChroot){
   if(userDefinedChroot && ! isDefault(workingDir)){
     checkPaths(pathToChroot, workingDir);
   }
@@ -571,10 +574,31 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
     mountDir("/etc/ld.so.cache", pathToChroot + "/etc/ld.so.cache");
   }
 
-  // Sometimes the chroot won't have a /dev/null, bind mount the host's just in case.
-  createFileIfNotExist(pathToChroot + "/dev/null");
-  mountDir("/dev/null", pathToChroot + "/dev/null");
-
+  // make sure chroot has a real /dev/null
+  string chrootDevNullPath = pathToChroot + "/dev/null";
+  if (fileExists(chrootDevNullPath) && realDevNull(chrootDevNullPath)) {
+    // we're done!
+  } else {
+    if (fileExists(chrootDevNullPath)) {
+      deleteFile(chrootDevNullPath);
+    }
+    if (currentAsChroot) {
+      // we're running under reprotest as sudo, so we can use real mknod
+      // hat tip to: https://unix.stackexchange.com/questions/27279/how-to-create-dev-null
+      dev_t dev = makedev(1,3);
+      mode_t mode = S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+      doWithCheck(mknod(chrootDevNullPath.c_str(), mode, dev), "mknod");
+    } else {
+      // fail if /dev/null isn't real
+      if (!realDevNull("/dev/null")) {
+        throw runtime_error("dettrace runtime exception: /dev/null is not a real /dev/null device\n");
+      }
+      // bind mount our /dev/null into the container
+      createFileIfNotExist(chrootDevNullPath);
+      mountDir("/dev/null", chrootDevNullPath);
+    }
+  }
+  
   // DEVRAND STEP 4: bind mount our /dev/[u]random fifos into the chroot
   createFileIfNotExist(pathToChroot + "/dev/random");
   mountDir(devrandFifoPath, pathToChroot + "/dev/random");
@@ -804,6 +828,35 @@ static bool fileExists(string file) {
 }
 
 /**
+ * @return true if the given path is a real /dev/null device, false otherwise
+ */
+static bool realDevNull(string path) {
+  struct stat statDevNull;
+  doWithCheck(stat(path.c_str(), &statDevNull), "stat /dev/null");
+  /*
+  string fileType = "";
+  if (S_ISREG(statDevNull.st_mode)) { fileType = "S_ISREG"; }
+  if (S_ISDIR(statDevNull.st_mode)) { fileType = "S_ISDIR"; }
+  if (S_ISCHR(statDevNull.st_mode)) { fileType = "S_ISCHR"; }
+  if (S_ISBLK(statDevNull.st_mode)) { fileType = "S_ISBLK"; }
+  if (S_ISFIFO(statDevNull.st_mode)) { fileType = "S_ISFIFO"; }
+  if (S_ISLNK(statDevNull.st_mode)) { fileType = "S_ISLNK"; }
+  if (S_ISSOCK(statDevNull.st_mode)) { fileType = "S_ISSOCK"; }  
+  cout << path
+       << " " << fileType
+       << " major:" << major(statDevNull.st_dev)
+       << " minor:" << minor(statDevNull.st_dev)
+       << endl;
+  */
+  // NB: when running DT tests, /dev/null shows up as a 0,6 CHR device. Not sure
+  // what this is, but it seems to act like proper /dev/null as far as our
+  // readDevNull test is concerned.
+  return S_ISCHR(statDevNull.st_mode) &&
+    ((1 == major(statDevNull.st_dev) && 3 == minor(statDevNull.st_dev)) ||
+     (0 == major(statDevNull.st_dev) && 6 == minor(statDevNull.st_dev)));
+}
+
+/**
  * Wrapper around mount with strings.
  */
 static void mountDir(string source, string target){
@@ -915,6 +968,13 @@ static void createFileIfNotExist(string path){
               "Unable to create file: " + path);
 
   return;
+}
+/** Delete the file at the given path. If file does not exist, this does nothing. */
+static void deleteFile(string path) {
+  if (!fileExists(path)) {
+    return;
+  }
+  doWithCheck(unlink(path.c_str()), "unlink");
 }
 // =======================================================================================
 // Default starting value used by our programArgs.
