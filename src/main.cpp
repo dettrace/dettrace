@@ -265,18 +265,7 @@ int runTracee(programArgs args){
   // Note: gcc needs to be somewhere along PATH or it gets very confused, see
   // https://github.com/upenn-acg/detTrace/issues/23
 
-  string ldpreload {"LD_PRELOAD=/dettrace/lib/libdet.so"};
-  if(! useContainer){
-    // Always use full path when refering to files.
-    auto path = pathToExe + "/../lib/libdet.so";
-    char* fullpath = realpath(path.c_str(), NULL);
-    ldpreload = "LD_PRELOAD=" + string { fullpath };
-
-    free(fullpath);
-  }
-
-  char *const envs[] = {(char* const)ldpreload.c_str(),
-                        (char* const)"PATH=/usr/bin/:/bin",
+  char *const envs[] = {(char* const)"PATH=/usr/bin/:/bin",
                         NULL};
 
   // Set up seccomp + bpf filters using libseccomp.

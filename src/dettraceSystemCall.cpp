@@ -244,8 +244,6 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   char** argv = (char**) t.arg2();
   string execveArgs {};
 
-  appendEnvpLdPreload(gs, s, t);
-
   // Print all arguments to execve!
   if(gs.log.getDebugLevel() > 0 && argv != nullptr){
     // Remeber these are addresses in the tracee. We must explicitly read them
