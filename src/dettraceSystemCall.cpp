@@ -210,14 +210,17 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
       if(address == nullptr){
         break;
       }
-      execveArgs += ",one more arg, ";
-      // execveArgs += " \"" + t.readTraceeCString(traceePtr<char>(address), t.getPid()) + "\" ";
+      // execveArgs += ",one more arg, ";
+      execveArgs += " \"" + t.readTraceeCString(traceePtr<char>(address), t.getPid()) + "\" ";
     }
 
     auto msg = "Args: " + gs.log.makeTextColored(Color::green, execveArgs) + "\n";
     gs.log.writeToLog(Importance::info, msg);
   }
 
+  s.isExecve = true;
+
+  // do not go to post hook, there is no post hook for execve!
   return false;
 }
 // =======================================================================================
@@ -734,8 +737,7 @@ nanosleepSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedul
   // Write 0 seconds to time. Required to skip waiting at all.
   struct timespec *req = (struct timespec *) t.arg1();
   if(req != nullptr){
-    uint64_t rsp = (uint64_t) t.getRsp().ptr;
-    struct timespec* myReq = (timespec*) (rsp - 128 - sizeof(struct timespec));
+    struct timespec* myReq = (timespec*) s.mmapMemory.getAddr().ptr;
     struct timespec localReq = {0};
 
     t.writeToTracee(traceePtr<struct timespec>(myReq), localReq, s.traceePid);
@@ -2055,6 +2057,7 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 // =======================================================================================
 bool wait4SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   s.wait4Blocking = (t.arg3() & WNOHANG) == 0;
+  gs.log.writeToLog(Importance::info, "wait4(%d)\n", (int) t.arg1());
   gs.log.writeToLog(Importance::info, "Making this a non-blocking wait4\n");
 
   // Make this a non blocking hang!

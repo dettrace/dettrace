@@ -3,6 +3,7 @@ all: build
 
 build: bin initramfs
 	cd src && ${MAKE}
+	rm -rf bin/dettrace
 	cp src/dettrace bin/
 	cp src/libdet.so lib/
 
@@ -11,6 +12,7 @@ bin:
 
 static: bin
 	cd src && ${MAKE} all-static
+	rm -rf bin/dettrace
 	cp src/dettrace-static bin/dettrace
 	cp src/libdet.so lib/
 

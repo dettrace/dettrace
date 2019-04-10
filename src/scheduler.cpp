@@ -92,8 +92,8 @@ bool scheduler::removeAndScheduleNext(pid_t process){
     return true;
   }else{
     nextPid = scheduleNextProcess();
-    auto msg = log.makeTextColored(Color::blue, "Next process scheduled: [%d]\n");
-    log.writeToLog(Importance::info, msg, nextPid);
+    // auto msg = log.makeTextColored(Color::blue, "Next process scheduled: [%d]\n");
+    // log.writeToLog(Importance::info, msg, nextPid);
     return false;
   }
 }

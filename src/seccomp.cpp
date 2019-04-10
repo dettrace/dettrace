@@ -36,6 +36,11 @@ void seccomp::loadRules(bool debug, bool convertUids){
     noIntercept(SYS_fchown);
   }
 
+  noIntercept(SYS_getsockname);
+  noIntercept(SYS_getsockopt);
+  noIntercept(SYS_setsockopt);
+  noIntercept(SYS_socketpair);
+
   // sets architecture-specific process or thread state.
   noIntercept(SYS_arch_prctl);
   // Change location of the program break.
