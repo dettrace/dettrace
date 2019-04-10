@@ -11,7 +11,7 @@ LIBARCHIVE=$(shell pkg-config --libs libarchive)
 LIBARCHIVE_STATIC=$(shell pkg-config --static --libs libarchive)
 
 LIBELFIN=$(shell pkg-config --libs libelf++)
-LIBELFIN=$(shell pkg-config --static --libs libelf++)
+LIBELFIN_STATIC=$(shell pkg-config --static --libs libelf++)
 
 # Libdet only.
 LIBDETFLAGS= -g -O2 -Wall -Wextra -Wconversion -fPIC -shared -Wl,--no-as-needed -std=c99
