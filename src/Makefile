@@ -24,8 +24,8 @@ src = $(wildcard *.cpp)
 obj = $(src:.cpp=.o)
 dep = $(obj:.o=.d)
 
-all: dettrace libdet.so
-all-static: dettrace-static libdet.so
+all: dettrace
+all-static: dettrace-static
 
 dettrace: $(obj) $(libs)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS) $(LIBARCHIVE) $(LIBELFIN)
@@ -41,13 +41,10 @@ dettrace-static: $(obj) $(libs)
 	@g++ $(CXXFLAGS) $< -MM -MT $(@:.d=.o) >$@
 
 
-libdet.so: libdet.c
-	$(CC) $(LIBDETFLAGS) -o libdet.so libdet.c $(LIBDETLIBS)
-
 .PHONY: clean
 clean:
 	$(RM) $(obj)
 	$(RM) $(dep)
-	$(RM) dettrace libdet.so
+	$(RM) dettrace
 # Credits to the awesome makefile guide:
 # http://nuclear.mutantstargoat.com/articles/make/
