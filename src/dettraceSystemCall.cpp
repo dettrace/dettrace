@@ -709,7 +709,7 @@ bool ioctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
 void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int fd = t.arg1();
   const uint64_t request = t.arg2();
-  gs.log.writeToLog(Importance::info, "fd %d\n", fd);
+  gs.log.writeToLog(Importance::info, "File descriptor: %d\n", fd);
   gs.log.writeToLog(Importance::info, "Request %" PRId64 "\n", request);
 
   // Even though we don't particularly like TCGETS, we will let it through as we need
@@ -945,7 +945,6 @@ bool openatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 void openatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // Beware of sign, can lead to wrong value if not casted!
   handlePostOpens(gs, s, t, (int) t.arg3());
-
 }
 // =======================================================================================
 bool pauseSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -2038,7 +2037,7 @@ void utimensatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
 }
 // =======================================================================================
 bool writeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  gs.log.writeToLog(Importance::info, "fd: %d\n", t.arg1());
+  gs.log.writeToLog(Importance::info, "File descriptor: %d\n", t.arg1());
   gs.log.writeToLog(Importance::info, "Bytes to write %d\n", t.arg3());
 
   return true;
