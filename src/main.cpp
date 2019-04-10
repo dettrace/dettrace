@@ -115,7 +115,7 @@ const string usageMsg =
   "    Prints log information based on verbosity, useful to debug dettrace errors.\n"
   "  --working-dir\n"
   "     Specify the working directory that dettrace should use to build, by default\n"
-  "     it is the current working directory."
+  "     it is the current working directory.\n"
   "  --chroot <pathToRoot>\n"
   "    Specify root to use for chroot (such as one created by debootstrap).\n"
   "  --no-container\n"
