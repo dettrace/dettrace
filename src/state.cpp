@@ -1,7 +1,7 @@
 #include "state.hpp"
 
 state::state(pid_t traceePid, int debugLevel)
-  : clock(0),
+  : clock(744847200),
     traceePid(traceePid),
     signalToDeliver(0),
     mmapMemory(2048),
