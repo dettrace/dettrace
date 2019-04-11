@@ -43,6 +43,7 @@ static const unsigned char __vdso_clock_gettime[] = {
   , 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00    // nopl 0x0(%rax, %rax, 1)
   , 0x00 };
 
+// returns 0 regardless
 static const unsigned char __vdso_getcpu[] = {
     0x48, 0x85, 0xff                                   // test %rdi, %rdi
   , 0x74, 0x06                                         // je ..
