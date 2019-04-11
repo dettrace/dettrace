@@ -1,7 +1,8 @@
 #include "state.hpp"
 
 state::state(pid_t traceePid, int debugLevel)
-  : clock(744847200),
+  : clock(744847200), // avoid clock skew, see issue #24 for more details.
+                      // same value as of libdet.c
     traceePid(traceePid),
     signalToDeliver(0),
     mmapMemory(2048),
