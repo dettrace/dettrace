@@ -119,24 +119,24 @@ pid_t scheduler::scheduleNextProcess(){
 }
 
 void scheduler::printProcesses(){
-  log.writeToLog(Importance::extra, "Printing runnable processes\n");
-  // Print the runnableHeap.
-  priority_queue<pid_t> runnableCopy = runnableHeap;
-  while(!runnableCopy.empty()){
-    pid_t curr = runnableCopy.top();
-    runnableCopy.pop();
-    log.writeToLog(Importance::extra, "Pid [%d], runnable\n", curr);
-  }
+  // log.writeToLog(Importance::extra, "Printing runnable processes\n");
+  // // Print the runnableHeap.
+  // priority_queue<pid_t> runnableCopy = runnableHeap;
+  // while(!runnableCopy.empty()){
+  //   pid_t curr = runnableCopy.top();
+  //   runnableCopy.pop();
+  //   log.writeToLog(Importance::extra, "Pid [%d], runnable\n", curr);
+  // }
 
-  log.writeToLog(Importance::extra, "Printing blocked processes\n");
-  // Print the blockedHeap.
-  priority_queue<pid_t> blockedCopy = blockedHeap;
-  while(!blockedCopy.empty()){
-    pid_t curr = blockedCopy.top();
-    blockedCopy.pop();
-    log.writeToLog(Importance::extra, "Pid [%d], blocked\n", curr);
-  }
-  return;
+  // log.writeToLog(Importance::extra, "Printing blocked processes\n");
+  // // Print the blockedHeap.
+  // priority_queue<pid_t> blockedCopy = blockedHeap;
+  // while(!blockedCopy.empty()){
+  //   pid_t curr = blockedCopy.top();
+  //   blockedCopy.pop();
+  //   log.writeToLog(Importance::extra, "Pid [%d], blocked\n", curr);
+  // }
+  // return;
 }
 
 bool removeElementFromHeap(priority_queue<pid_t>& heap, pid_t element) {

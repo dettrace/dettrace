@@ -12,7 +12,7 @@
 
 pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process);
 void deleteMultimapEntry(unordered_multimap<pid_t, pid_t>& mymap, pid_t key, pid_t value);
-pair<bool, int> waitpidOrStuck(pid_t pid);
+pair<bool, int> waitpidOrStuck(pid_t pid, bool canGetStuck, logger& log);
 // =======================================================================================
 execution::execution(int debugLevel, pid_t startingPid, bool useColor,
                      bool oldKernel, string logFile, bool printStatistics):
@@ -147,9 +147,24 @@ void execution::runProgram(){
 
     // Most common event. We handle the pre-hook for system calls here.
     if(ret == ptraceEvent::seccomp){
+      state& currentState = states.at(traceesPid);
+      // We reset this flag here instead of in getNextEvent as it is possible to
+      // receive other events. E.g. canGetStuck was true, we see a signal event,
+      // if we reset flag on getNextEvent we would set it to false, and then
+      // we might wrongly say we cannot get stuck when we still can. To reverse
+      // the assumption, we can say "we cannot be stuck between a pre-hook and
+      // a post-hook".
+      currentState.canGetStuck = false;
+
       log.writeToLog(Importance::extra, "Is seccomp event!\n");
       systemCallsEvents++;
-      states.at(traceesPid).callPostHook = handleSeccomp(traceesPid);
+      currentState.callPostHook = handleSeccomp(traceesPid);
+      // If we're in the preehook (we are) and we skip the post-hook event, we can
+      // become stuck.
+      if (! currentState.callPostHook) {
+        currentState.canGetStuck = true;
+      }
+
       continue;
     }
 
@@ -161,6 +176,9 @@ void execution::runProgram(){
       // event. I chose to always handle the pre-system call on the ptracer seccomp event.
       // So we skip the pre-system call event here on older kernels.
       state& currentState = states.at(traceesPid);
+
+      // We're in the post-hook going to the next event. We can also become stuck.
+      currentState.canGetStuck = true;
 
       // old-kernel-only ptrace system call event for pre exit hook.
       if(oldKernel && currentState.onPreExitEvent){
@@ -1060,15 +1078,21 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 // =======================================================================================
 tuple<ptraceEvent, pid_t, int>
 execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
+  log.writeToLog(Importance::extra, "Letting process %d run!\n", pidToContinue);
+  state& currentState = states.at(pidToContinue);
   // At every doPtrace we have the choice to deliver a signal. We must deliver a signal
   // when an actual signal was returned (ptraceEvent::signal), otherwise the signal is
   // never delivered to the tracee! This field is updated in @handleSignal
   //
   // 64 bit value to avoid warning when casting to void* below.
-  int64_t signalToDeliver = states.at(pidToContinue).signalToDeliver;
+  int64_t signalToDeliver = currentState.signalToDeliver;
+
+  bool canGetStuck = currentState.canGetStuck;
+  bool isExecve = currentState.isExecve;
 
   // Reset signal field after for next event.
-  states.at(pidToContinue).signalToDeliver = 0;
+  currentState.signalToDeliver = 0;
+  currentState.isExecve = false;
 
   // Usually we use PTRACE_CONT below because we are letting seccomp + bpf handle the
   // events. So unlike standard ptrace, we do not rely on system call events. Instead,
@@ -1079,31 +1103,29 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
   if(ptraceSystemcall){
     ret = ptrace(PTRACE_SYSCALL, pidToContinue, 0, (void*) signalToDeliver);
   }else{
-    // Tell the process that we just intercepted an event for to continue, with us tracking
-    // it's system calls. If this is the first time this function is called, it will be the
-    // starting process. Which we expect to be in a waiting state.
+    // We do not care about the post-hook, move on to the next system call to be
+    // intercepted by seccomp.
     ret = ptrace(PTRACE_CONT, pidToContinue, 0, (void*) signalToDeliver);
   }
 
   // This is a thread and continuing failed. This thread has probably has exited from a
-  // exit_group or execve!
-  if (ret == -1 && errno == ESRCH &&
-      myGlobalState.liveThreads.count(pidToContinue) == 1) {
+  // exit_group!
+  if (ret == -1 && errno == ESRCH && myGlobalState.liveThreads.count(pidToContinue) == 1) {
     return handleExitedThread(pidToContinue);
-    }
-  else if (ret == -1) {
-    throw runtime_error("Ptrace continue/syscall failed with :" + string(strerror(errno)) + "\n");
   }
-  // Call to ptrace succeeded! Proceed as usual, that is, wait for event to come.
-  else {
+  else if (ret == -1) {
+    throw runtime_error("Ptrace continue/syscall failed with :" +
+                        string(strerror(errno)) + "\n");
+  } else {
+    // Call to ptrace succeeded! Proceed as usual, that is, wait for event to come.
     bool isStuck; int status;
-    tie(isStuck, status) = waitpidOrStuck(pidToContinue);
-
+    tie(isStuck, status) = waitpidOrStuck(pidToContinue,
+                                          canGetStuck || isExecve, log);
     if (!isStuck) {
       return make_tuple(getPtraceEvent(status), pidToContinue, status);
     }
     // Thread/process did an execve and is now stuck waiting for it's thread group to end.
-    if (isStuck && states.at(pidToContinue).isExecve) {
+    if (isStuck && isExecve) {
       return handleStuckExecve(pidToContinue);
     }
     // Thread/process that is busy waiting.
@@ -1259,17 +1281,25 @@ void deleteMultimapEntry(unordered_multimap<pid_t, pid_t>& mymap, pid_t key, pid
                         to_string(key) + ", " + to_string(value) + ")\n");
 }
 // =======================================================================================
-pair<bool, int> waitpidOrStuck(pid_t pid) {
+pair<bool, int> waitpidOrStuck(pid_t pid, bool canGetStuck, logger& log) {
   int status;
-  // Wait for next event to intercept.
-  for (int i = 0; i < 100000; i++) {
-    auto newPid = doWithCheck(waitpid(pid, &status, WNOHANG),
-                              "Cannot wait on pid");
-    if(newPid == pid){
-      return pair<bool, int>(false, status);
+  if (canGetStuck) {
+    // log.writeToLog(Importance::extra, "This wait can possibly get stuck.\n");
+    // Wait for next event to intercept.
+    for (int i = 0; i < 1000000; i++) {
+      auto newPid = doWithCheck(waitpid(pid, &status, WNOHANG), "Cannot wait on pid");
+      if(newPid == pid){
+        // log.writeToLog(Importance::extra, "This event did not get stuck.\n");
+        return pair<bool, int>(false, status);
+      }
     }
+    // log.writeToLog(Importance::info, "This event got stuck.\n");
+    return  pair<bool, int>{true, 0};
+  } else {
+    // log.writeToLog(Importance::extra, "This wait cannot get stuck\n.");
+    doWithCheck(waitpid(pid, &status, 0), "Cannot wait on pid");
+    return pair<bool, int>(false, status);
   }
-  return  pair<bool, int>{true, 0};
 }
 
 tuple<ptraceEvent, pid_t, int>
@@ -1337,18 +1367,18 @@ execution::handleStuckThread(pid_t currentPid) {
   int status;
   log.writeToLog(Importance::inter, "Process/thread is probably busy waiting.\n");
 
-  log.writeToLog(Importance::inter, "Sending it stop signal.\n");
+  log.writeToLog(Importance::extra, "Sending it stop signal.\n");
   auto ret = syscall(SYS_tkill, currentPid, SIGTRAP);
   if (ret < 0) {
     throw runtime_error("tkill failed because: " + to_string(ret) + "\n");
   }
 
-  log.writeToLog(Importance::inter, "Waiting for response.\n");
+  log.writeToLog(Importance::extra, "Waiting for response.\n");
   doWithCheck(waitpid(currentPid, &status, 0), "waiting for stopped signal.");
   if (getPtraceEvent(status) != ptraceEvent::signal) {
     throw runtime_error("unexpected event after SIGTRAP (expect signal event)\n");
   }
-  log.writeToLog(Importance::inter, "Process in stopped state.\n");
+  log.writeToLog(Importance::extra, "Process in stopped state.\n");
 
   // We have set this process back to it's original state (maybe different IP)
   // in it's busy loop. preempt and let somebody else run.
@@ -1359,7 +1389,7 @@ execution::handleStuckThread(pid_t currentPid) {
 
   // log.writeToLog(Importance::inter, "Single stepping through process.\n");
 
-  // while (true) {
+  // for (int j = 0; j < 100; j++) {
   //   tracer.updateState(currentPid);
   //   auto rip = tracer.getRip();
   //   log.writeToLog(Importance::inter, "single step rip: %p\n", tracer.getRip());
@@ -1368,19 +1398,20 @@ execution::handleStuckThread(pid_t currentPid) {
   //   unsigned char buffer[size] = {0};
   //   readVmTraceeRaw(rip, (void*)buffer, size, currentPid);
 
-  //   log.writeToLog(Importance::inter, "instruction stream:\n");
-  //   for (int i = 0; i < size; i++) {
-  //     printf("%02x", buffer[i]);
-  //     fflush(NULL);
-  //   }
-  //   log.writeToLog(Importance::inter, "end\n");
+  //   // log.writeToLog(Importance::inter, "instruction stream:\n");
+  //   // for (int i = 0; i < size; i++) {
+  //   //   printf("%02x", buffer[i]);
+  //   //   fflush(NULL);
+  //   // }
+  //   // log.writeToLog(Importance::inter, "end\n");
 
   //   tracer.doPtrace(PTRACE_SINGLESTEP, currentPid, NULL, NULL);
 
   //   doWithCheck(waitpid(currentPid, &status, 0), "single stepping...");
 
-  //   // throw runtime_error("hex dump done.\n");
+
   // }
+  // throw runtime_error("hex dump done.\n");
 }
 
 tuple<ptraceEvent, pid_t, int>

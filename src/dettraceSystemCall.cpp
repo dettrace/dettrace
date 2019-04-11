@@ -430,7 +430,7 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
      futexCmd == FUTEX_WAKE_BITSET || futexCmd == FUTEX_WAKE_OP){
     gs.log.writeToLog(Importance::info, "Waking on address: %p\n", t.arg1());
     // No need to go into the post hook.
-    return false;
+    return true;
   }
 
   // Handle wait operations, by setting our timeout to zero, and seeing if time runs out.
@@ -2068,10 +2068,10 @@ bool wait4SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
 
 void wait4SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(s.wait4Blocking){
-    gs.log.writeToLog(Importance::info, "Non-blocking wait4 found\n");
+    gs.log.writeToLog(Importance::info, "Blocking wait4 found\n");
     replaySyscallIfBlocked(gs, s, t, sched, 0);
   }else{
-    gs.log.writeToLog(Importance::info, "Blocking wait4 found\n");
+    gs.log.writeToLog(Importance::info, "Non-blocking wait4 found\n");
     preemptIfBlocked(gs, s, t, sched, EAGAIN);
   }
   // Reset.
