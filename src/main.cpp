@@ -512,7 +512,7 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
   }
 
   const vector<string> mountDirs =
-    {  "/dettrace", "/dettrace/lib", "/dettrace/bin", "/bin", "/usr", "/lib", "/lib64",
+    {  "/dettrace", "/dettrace/bin", "/bin", "/usr", "/lib", "/lib64",
        "/dev", "/etc", "/proc", "/build", "/tmp", "/root" };
 
   if (!userDefinedChroot) {
@@ -552,7 +552,6 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
 
   // Mount our dettrace/bin and dettrace/lib folders.
   mountDir(pathToExe + "/../bin/", pathToChroot + "/dettrace/bin/");
-  mountDir(pathToExe + "/../lib/", pathToChroot + "/dettrace/lib/");
 
   // The user did not specify a chroot env, try to scrape a minimal filesystem from the
   // host OS'.
