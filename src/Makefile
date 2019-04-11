@@ -10,24 +10,28 @@ LIBS = -pthread -lseccomp -L ../lib/lib64
 LIBARCHIVE=$(shell pkg-config --libs libarchive)
 LIBARCHIVE_STATIC=$(shell pkg-config --static --libs libarchive)
 
+LIBELFIN=$(shell pkg-config --libs libelf++)
+LIBELFIN_STATIC=$(shell pkg-config --static --libs libelf++)
+
 # Libdet only.
 LIBDETFLAGS= -g -O2 -Wall -Wextra -Wconversion -fPIC -shared -Wl,--no-as-needed -std=c99
 LIBDETLIBS=-ldl -lm
 
-INCLUDE = -I ../include/ -I ../lib/include
+LIBELFIN_CFLAGS = $(shell pkg-config --cflags libelf++)
+INCLUDE = -I ../include/ -I ../lib/include $(LIBELFIN_CFLAGS)
 
 src = $(wildcard *.cpp)
 obj = $(src:.cpp=.o)
 dep = $(obj:.o=.d)
 
-all: dettrace libdet.so
-all-static: dettrace-static libdet.so
+all: dettrace
+all-static: dettrace-static
 
 dettrace: $(obj) $(libs)
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS) $(LIBARCHIVE)
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS) $(LIBARCHIVE) $(LIBELFIN)
 
 dettrace-static: $(obj) $(libs)
-	$(CXX) $(CXXFLAGS) -static $^ -o $@ $(LIBS) $(LIBARCHIVE_STATIC)
+	$(CXX) $(CXXFLAGS) -static $^ -o $@ $(LIBS) $(LIBARCHIVE_STATIC) $(LIBELFIN_STATIC)
 
 -include $(dep)
 
@@ -37,13 +41,10 @@ dettrace-static: $(obj) $(libs)
 	@g++ $(CXXFLAGS) $< -MM -MT $(@:.d=.o) >$@
 
 
-libdet.so: libdet.c
-	$(CC) $(LIBDETFLAGS) -o libdet.so libdet.c $(LIBDETLIBS)
-
 .PHONY: clean
 clean:
 	$(RM) $(obj)
 	$(RM) $(dep)
-	$(RM) dettrace libdet.so
+	$(RM) dettrace
 # Credits to the awesome makefile guide:
 # http://nuclear.mutantstargoat.com/articles/make/

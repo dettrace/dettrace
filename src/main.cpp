@@ -45,6 +45,7 @@
 #include "execution.hpp"
 #include "ptracer.hpp"
 #include "seccomp.hpp"
+#include "vdso.hpp"
 
 #include <seccomp.h>
 
@@ -267,18 +268,7 @@ int runTracee(programArgs args){
   // Note: gcc needs to be somewhere along PATH or it gets very confused, see
   // https://github.com/upenn-acg/detTrace/issues/23
 
-  string ldpreload {"LD_PRELOAD=/dettrace/lib/libdet.so"};
-  if(! useContainer){
-    // Always use full path when refering to files.
-    auto path = pathToExe + "/../lib/libdet.so";
-    char* fullpath = realpath(path.c_str(), NULL);
-    ldpreload = "LD_PRELOAD=" + string { fullpath };
-
-    free(fullpath);
-  }
-
-  char *const envs[] = {(char* const)ldpreload.c_str(),
-                        (char* const)"PATH=/usr/bin/:/bin",
+  char *const envs[] = {(char* const)"PATH=/usr/bin/:/bin",
                         NULL};
 
   // Set up seccomp + bpf filters using libseccomp.
@@ -656,11 +646,12 @@ int spawnTracerTracee(void* voidArgs){
   } else if(pid > 0) {
     // We must mount proc so that the tracer sees the same PID and /proc/ directory
     // as the tracee. The tracee will do the same so it sees /proc/ under it's chroot.
-
     if (!args.currentAsChroot) {
       doWithCheck(mount("/proc", "/proc/", "proc", MS_MGC_VAL, nullptr),
                   "tracer mounting proc failed");
     }
+
+    auto syms = vdsoGetSymbols(pid);
 
     // DEVRAND STEP 2: spawn a thread to write to each fifo
     pthread_t devRandomPthread, devUrandomPthread;
@@ -674,7 +665,8 @@ int spawnTracerTracee(void* voidArgs){
     execution exe{
         args.debugLevel, pid, args.useColor, 
         args.logFile, args.printStatistics, 
-        devRandomPthread, devUrandomPthread};
+        devRandomPthread, devUrandomPthread,
+        syms};
     exe.runProgram();
   } else if (pid == 0) {
     runTracee(args);

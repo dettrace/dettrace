@@ -4,7 +4,6 @@ all: build
 build: bin initramfs
 	cd src && ${MAKE}
 	cp src/dettrace bin/
-	cp src/libdet.so lib/
 
 bin:
 	mkdir -p ./bin
@@ -12,7 +11,6 @@ bin:
 static: bin
 	cd src && ${MAKE} all-static
 	cp src/dettrace-static bin/dettrace
-	cp src/libdet.so lib/
 
 templistfile := $(shell mktemp)
 initramfs: initramfs.cpio

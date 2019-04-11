@@ -141,6 +141,8 @@ private:
   */
   uint32_t processSpawnEvents = 0;
 
+  map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs;
+
 public:
 
   /**
@@ -152,9 +154,12 @@ public:
    * @param logFile file to write log messages to, if "" use stderr
    * @param devRandomPthread 
    */
+
   execution(int debugLevel, pid_t startingPid, bool useColor, 
             string logFile, bool printStatistics, 
-            pthread_t devRandomPthread, pthread_t devUrandomPthread);
+            pthread_t devRandomPthread, pthread_t devUrandomPthread,
+            map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs);
+
 
   /**
    * Handles exit from current process.
