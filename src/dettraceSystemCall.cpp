@@ -2032,6 +2032,18 @@ void utimensatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
   t.writeArg3(s.originalArg3);
 }
 // =======================================================================================
+bool futimesatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  s.originalArg4 = t.arg4();
+  t.writeArg4(0);
+  t.changeSystemCall(SYS_utimensat);
+  return true;
+}
+
+void futimesatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  // Restore value of register.
+  t.writeArg4(s.originalArg4);
+}
+// =======================================================================================
 bool writeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "File descriptor: %d\n", t.arg1());
   gs.log.writeToLog(Importance::info, "Bytes to write %d\n", t.arg3());

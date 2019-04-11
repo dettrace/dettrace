@@ -1423,6 +1423,25 @@ public:
 };
 // =======================================================================================
 /**
+ * int futimesat(int dirfd, const char *pathname, const struct timespec times[2]);
+ *
+ * Updates the timestamps of a file with nanosecond precision.
+ * TODO FILESYSTEM RELATED.
+ *
+ * Definitely not deterministic! We use our logical clock to set the file timestamps.
+ * This is an issue for the case where both times entries are null. From utimensat(2):
+ * > If times is NULL, then both timestamps are set to the current time.
+ */
+class futimesatSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_futimesat;
+  const string syscallName = "futimesat";
+};
+// =======================================================================================
+/**
  * We intercept exceve since we need to append our LD_PRELOAD enviornment to and pass in,
  * as the last argument.
  *
