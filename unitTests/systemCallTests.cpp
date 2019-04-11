@@ -40,7 +40,7 @@ using namespace std;
 TEST_CASE("time system call", "time"){
   time_t tloc;
   syscall(SYS_time, &tloc);
-  REQUIRE(744847202 == tloc);
+  REQUIRE(744847201 == tloc);
 }
 
 TEST_CASE("statfs system call", "statfs"){
