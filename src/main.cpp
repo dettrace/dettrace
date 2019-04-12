@@ -101,6 +101,10 @@ static void proc_setgroups_write(pid_t pid, const char* str);
 static bool isDefault(string arg);
 // =======================================================================================
 
+struct CloneArgs {
+  struct programArgs args;
+  std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>> vdsoSyms;
+};
 
 const string usageMsg =
   "  Dettrace\n"
@@ -185,12 +189,23 @@ int main(int argc, char** argv){
   doWithCheck(prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0),
               "Pre-clone prctl error: setting no new privs");
 
+  // get vDSO symbols before clone/fork
+  // only offets are used so it doesn't really matter
+  // we read it from tracer or tracee.
+  CloneArgs cloneArgs;
+  auto syms = vdsoGetSymbols(getpid());
+  if (4 != syms.size()) {
+    throw runtime_error("VDSO symbol map has only "+to_string(syms.size())+" entries instead of 4!");
+  }
+  cloneArgs.args = args;
+  cloneArgs.vdsoSyms = syms;
+
   // Requires SIGCHILD otherwise parent won't be notified of parent exit.
   // We use clone instead of unshare so that the current process does not live in
   // the new user namespace, this is a requirement for writing multiple UIDs into
   // the uid mappings.
   pid_t pid = clone(spawnTracerTracee, child_stack + STACK_SIZE, cloneFlags | SIGCHLD,
-                    (void*) &args);
+                    (void*) &cloneArgs);
   if(pid == -1){
     string reason = strerror(errno);
     cerr << "clone failed:\n  " + reason << endl;
@@ -612,7 +627,9 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
  * will be tracee.
  */
 int spawnTracerTracee(void* voidArgs){
-  programArgs args = *((programArgs*) voidArgs);
+  CloneArgs* cloneArgs = static_cast<CloneArgs*>(voidArgs);
+  programArgs args = cloneArgs->args;
+  auto vdsoSyms = cloneArgs->vdsoSyms;
 
   // Properly set up propegation rules for mounts created by dettrace, that is
   // make this a slave mount (and all mounts underneath this one) so that changes inside
@@ -637,7 +654,7 @@ int spawnTracerTracee(void* voidArgs){
   devUrandFifoPath = string{ tmpnamBuffer } + "-urandom.fifo";
   doWithCheck(mkfifo(devrandFifoPath.c_str(), 0666), "mkfifo");
   doWithCheck(mkfifo(devUrandFifoPath.c_str(), 0666), "mkfifo");
-  
+
   pid_t pid = fork();
   if (pid < 0) {
     throw runtime_error("fork() failed.\n");
@@ -650,12 +667,6 @@ int spawnTracerTracee(void* voidArgs){
                   "tracer mounting proc failed");
     }
 
-    sleep(1);
-    auto syms = vdsoGetSymbols(pid);
-    if (4 != syms.size()) {
-      throw runtime_error("VDSO symbol map has only "+to_string(syms.size())+" entries instead of 4!");
-    }
-    
     // DEVRAND STEP 2: spawn a thread to write to each fifo
     pthread_t devRandomPthread, devUrandomPthread;
     // NB: we copy *FifoPath to the heap as our stack storage goes away: these allocations DO get leaked
@@ -669,7 +680,7 @@ int spawnTracerTracee(void* voidArgs){
         args.debugLevel, pid, args.useColor, 
         args.logFile, args.printStatistics, 
         devRandomPthread, devUrandomPthread,
-        syms};
+        cloneArgs->vdsoSyms};
     exe.runProgram();
   } else if (pid == 0) {
     runTracee(args);

@@ -236,6 +236,7 @@ std::vector<std::string> vdsoGetFuncNames(void)
 /**
  * vdsoGetSymbols: get vdso symbols information
  * return as std::tuple<symbol_address, symbol_size, symbol/section_alignment>
+ * NB: symbol address is relative (just an offset).
  */
 std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>> vdsoGetSymbols(pid_t pid)
 {
