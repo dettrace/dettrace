@@ -255,6 +255,7 @@ void seccomp::loadRules(bool debug, bool convertUids){
   intercept(SYS_utime);
   intercept(SYS_utimes);
   intercept(SYS_utimensat);
+  intercept(SYS_futimesat);
   intercept(SYS_uname);
 
   intercept(SYS_wait4);

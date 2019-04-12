@@ -936,6 +936,9 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_utimensat:
     return utimensatSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_futimesat:
+    return futimesatSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_wait4:
     return wait4SystemCall::handleDetPre(gs, s, t, sched);
 
@@ -1217,6 +1220,9 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 
   case SYS_utimensat:
     return utimensatSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_futimesat:
+    return futimesatSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_wait4:
     return wait4SystemCall::handleDetPost(gs, s, t, sched);

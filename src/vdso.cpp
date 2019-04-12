@@ -137,10 +137,14 @@ std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid)
 
   std::vector<ProcMapEntry> res;
 
-  asprintf(&mapsFile, "/proc/%u/maps", pid);
+  int ret = asprintf(&mapsFile, "/proc/%u/maps", pid);
+  if (-1 == ret) {
+    return {};
+  }
 
   fd = open(mapsFile, O_RDONLY);
   if (fd < 0) {
+    free(mapsFile);
     return {};
   }
 
@@ -232,6 +236,7 @@ std::vector<std::string> vdsoGetFuncNames(void)
 /**
  * vdsoGetSymbols: get vdso symbols information
  * return as std::tuple<symbol_address, symbol_size, symbol/section_alignment>
+ * NB: symbol address is relative (just an offset).
  */
 std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>> vdsoGetSymbols(pid_t pid)
 {
