@@ -137,10 +137,14 @@ std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid)
 
   std::vector<ProcMapEntry> res;
 
-  asprintf(&mapsFile, "/proc/%u/maps", pid);
+  int ret = asprintf(&mapsFile, "/proc/%u/maps", pid);
+  if (-1 == ret) {
+    return {};
+  }
 
   fd = open(mapsFile, O_RDONLY);
   if (fd < 0) {
+    free(mapsFile);
     return {};
   }
 
