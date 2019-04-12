@@ -410,33 +410,34 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   int futexOp = t.arg2();
   int futexValue = t.arg3();
   timespec* timeoutPtr = (timespec*) t.arg4();
-  string operation;
-
-  try{
-     operation = futexNames.at(futexOp);
-  }catch(...){
-    // Uknown operation? Pehaps a combination of multiple non trivial options.
-    operation = to_string(futexOp);
-  }
-
-  gs.log.writeToLog(Importance::info, "Operation: " + operation + "\n");
 
   // See definitions of variables here.
   // https://github.com/spotify/linux/blob/master/include/linux/futex.h
   int futexCmd = futexOp & FUTEX_CMD_MASK;
+  gs.log.writeToLog(Importance::info, "Operation: " + futexCommands.at(futexCmd) + "\n");
+
+  if ((futexOp & FUTEX_PRIVATE_FLAG) != 0) {
+    gs.log.writeToLog(Importance::info, "with: FUTEX_PRIVATE_FLAG\n");
+  }
+  if ((futexOp & FUTEX_CLOCK_REALTIME) != 0) {
+    gs.log.writeToLog(Importance::info, "with: FUTEX_CLOCK_REALTIME\n");
+  }
+  if (timeoutPtr != NULL) {
+    gs.log.writeToLog(Importance::info, "with: user defined timeout.\n");
+  }
 
   // Handle wake operations by notifying scheduler of progress.
-  if(futexCmd == FUTEX_WAKE || futexCmd == FUTEX_REQUEUE || futexCmd == FUTEX_CMP_REQUEUE ||
-     futexCmd == FUTEX_WAKE_BITSET || futexCmd == FUTEX_WAKE_OP){
+  if(futexCmd == FUTEX_WAKE){/* || futexCmd == FUTEX_REQUEUE || futexCmd == FUTEX_CMP_REQUEUE ||
+                                futexCmd == FUTEX_WAKE_BITSET || futexCmd == FUTEX_WAKE_OP){*/
     gs.log.writeToLog(Importance::info, "Waking on address: %p\n", t.arg1());
     // No need to go into the post hook.
     return true;
   }
 
   // Handle wait operations, by setting our timeout to zero, and seeing if time runs out.
-  if(futexCmd == FUTEX_WAIT ||
-     futexCmd == FUTEX_WAIT_BITSET ||
-     futexCmd == FUTEX_WAIT_REQUEUE_PI
+  if(futexCmd == FUTEX_WAIT /*||
+           futexCmd == FUTEX_WAIT_BITSET ||
+             futexCmd == FUTEX_WAIT_REQUEUE_PI*/
      ){
     gs.log.writeToLog(Importance::info, "Waiting on value at address: %p.\n", t.arg1());
     gs.log.writeToLog(Importance::info, "Against value: " + to_string(futexValue) + "\n");
@@ -470,9 +471,12 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
       t.writeToTracee(traceePtr<timespec>(timeoutPtr), ourTimeout, s.traceePid);
       s.userDefinedTimeout = true;
     }
-  }
 
   return true;
+  }
+
+  throw runtime_error("Unimplemented futex command: " + futexCommands.at(futexCmd) + "\n");
+
 }
 
 void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -659,7 +663,7 @@ void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 
   // Even though we don't particularly like TCGETS, we will let it through as we need
   // it for some programs to work, like `more`.
-  if(TCGETS == request || TCSETS == request || FIOCLEX){
+  if(TCGETS == request || TCSETS == request || FIOCLEX == request){
     return;
   }
 

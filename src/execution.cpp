@@ -794,7 +794,6 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
    return writevSystemCall::handleDetPre(gs, s, t, sched);
   }
 
-  return true;
   // Generic system call. Throws error.
   throw runtime_error("dettrace runtime exception: This is a bug. Missing case for system call: " +
                       to_string(syscallNumber));
@@ -1068,7 +1067,6 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
    return writevSystemCall::handleDetPost(gs, s, t, sched);
   }
 
-  return;
   // Generic system call. Throws error.
   throw runtime_error("dettrace runtime exception: This is a bug: "
                       "Missing case for system call: " +
@@ -1141,38 +1139,38 @@ ptraceEvent execution::getPtraceEvent(const int status){
   // Events ordered in order of likely hood.
 
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_SECCOMP) ){
-    log.writeToLog(Importance::extra, "seccomp\n");
+    // log.writeToLog(Importance::extra, "seccomp\n");
     return ptraceEvent::seccomp;
   }
 
   // This is a stop caused by a system call exit-post.
   // All pre events are caught by seccomp.
   if(WIFSTOPPED(status) && (WSTOPSIG(status) == (SIGTRAP | 0x80)) ){
-    log.writeToLog(Importance::extra, "systemcall\n");
+    // log.writeToLog(Importance::extra, "systemcall\n");
     return ptraceEvent::syscall;
   }
 
   // Check if tracee has exited.
   if (WIFEXITED(status)){
-    log.writeToLog(Importance::extra, "nonEventExit\n");
+    // log.writeToLog(Importance::extra, "nonEventExit\n");
     return ptraceEvent::nonEventExit;
   }
 
   // Condition for PTRACE_O_TRACEEXEC
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_EXEC) ){
-    log.writeToLog(Importance::extra, "exec\n");
+    // log.writeToLog(Importance::extra, "exec\n");
     return ptraceEvent::exec;
   }
 
   // Condition for PTRACE_O_TRACECLONE
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_CLONE) ){
-    log.writeToLog(Importance::extra, "clone\n");
+    // log.writeToLog(Importance::extra, "clone\n");
     return ptraceEvent::clone;
   }
 
   // Condition for PTRACE_O_TRACEVFORK
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_VFORK) ){
-    log.writeToLog(Importance::extra, "vfork\n");
+    // log.writeToLog(Importance::extra, "vfork\n");
     return ptraceEvent::vfork;
   }
 
@@ -1180,7 +1178,7 @@ ptraceEvent execution::getPtraceEvent(const int status){
   // SIGCHLD, ptrace calls that event a fork *sigh*.
   // Also requires PTRACE_O_FORK flag.
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_FORK) ){
-    log.writeToLog(Importance::extra, "fork\n");
+    // log.writeToLog(Importance::extra, "fork\n");
     return ptraceEvent::fork;
   }
 
@@ -1192,20 +1190,20 @@ ptraceEvent execution::getPtraceEvent(const int status){
 #endif
 
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_EXIT) ){
-    log.writeToLog(Importance::extra, "eventExit\n");
+    // log.writeToLog(Importance::extra, "eventExit\n");
     return ptraceEvent::eventExit;
   }
 
   // Check if we intercepted a signal before it was delivered to the child.
   if(WIFSTOPPED(status)){
-    log.writeToLog(Importance::extra, "signal\n");
+    // log.writeToLog(Importance::extra, "signal\n");
     return ptraceEvent::signal;
   }
 
   // Check if the child was terminated by a signal. This can happen after when we,
   //the tracer, intercept a signal of the tracee and deliver it.
   if(WIFSIGNALED(status)){
-    log.writeToLog(Importance::extra, "teminatedBySignal\n");
+    // log.writeToLog(Importance::extra, "teminatedBySignal\n");
     return ptraceEvent::terminatedBySignal;
   }
 
