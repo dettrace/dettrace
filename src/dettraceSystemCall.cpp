@@ -194,7 +194,8 @@ void creatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   // safe. (Not sure how we could use this information to optimze anyways.)
   auto inode = readInodeFor(gs.log, s.traceePid, t.getReturnValue());
   gs.mtimeMap.addRealValue(inode);
-
+  gs.inodeMap.addRealValue(inode);
+  
   return;
 }
 // =======================================================================================
@@ -223,6 +224,7 @@ bool dup2SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedul
 void dup2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int newfd = t.getReturnValue();
   int fd = t.arg1();
+  gs.log.writeToLog(Importance::info, "dup2(%d) returned %d\n", fd, newfd);
   if(newfd < 0){
     return;
   }
@@ -705,7 +707,7 @@ bool ioctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
 void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int fd = t.arg1();
   const uint64_t request = t.arg2();
-  gs.log.writeToLog(Importance::info, "fd %d\n", fd);
+  gs.log.writeToLog(Importance::info, "File descriptor: %d\n", fd);
   gs.log.writeToLog(Importance::info, "Request %" PRId64 "\n", request);
 
   // Even though we don't particularly like TCGETS, we will let it through as we need
@@ -817,6 +819,7 @@ void mkdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
     string strPath = t.readTraceeCString(traceePtr<char>((char*) t.arg1()), s.traceePid);
     auto inode = inode_from_tracee(strPath, s.traceePid, gs.log, -1);
     gs.mtimeMap.addRealValue(inode);
+    gs.inodeMap.addRealValue(inode);
   }
 }
 // =======================================================================================
@@ -835,6 +838,7 @@ void mkdiratSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
     string strPath = t.readTraceeCString(traceePtr<char>(path), s.traceePid);
     auto inode = inode_from_tracee(strPath, s.traceePid, gs.log, t.arg1());
     gs.mtimeMap.addRealValue(inode);
+    gs.inodeMap.addRealValue(inode);
   }
 }
 // =======================================================================================
@@ -939,7 +943,6 @@ bool openatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 void openatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // Beware of sign, can lead to wrong value if not casted!
   handlePostOpens(gs, s, t, (int) t.arg3());
-
 }
 // =======================================================================================
 bool pauseSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -1524,6 +1527,7 @@ void symlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
     string linkpath = t.readTraceeCString(traceePtr<char>((char*) t.arg2()), s.traceePid);
     auto inode = inode_from_tracee(linkpath, s.traceePid, gs.log, -1);
     gs.mtimeMap.addRealValue(inode);
+    gs.inodeMap.addRealValue(inode);
   }
 }
 // =======================================================================================
@@ -1541,6 +1545,7 @@ handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
     string linkpath = t.readTraceeCString(traceePtr<char>((char*) t.arg3()), s.traceePid);
     auto inode = inode_from_tracee(linkpath, s.traceePid, gs.log, t.arg2());
     gs.mtimeMap.addRealValue(inode);
+    gs.inodeMap.addRealValue(inode);
   }
 }
 // =======================================================================================
@@ -1556,6 +1561,7 @@ handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
     string path = t.readTraceeCString(traceePtr<char>((char*) t.arg1()), s.traceePid);
     auto inode = inode_from_tracee(path, s.traceePid, gs.log, -1);
     gs.mtimeMap.addRealValue(inode);
+    gs.inodeMap.addRealValue(inode);
   }
 }
 // =======================================================================================
@@ -1571,6 +1577,7 @@ handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
     string path = t.readTraceeCString(traceePtr<char>((char*) t.arg2()), s.traceePid);
     auto inode = inode_from_tracee(path, s.traceePid, gs.log, t.arg1());
     gs.mtimeMap.addRealValue(inode);
+    gs.inodeMap.addRealValue(inode);
   }
 }
 // =======================================================================================
@@ -2027,7 +2034,7 @@ void utimensatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
 }
 // =======================================================================================
 bool writeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  gs.log.writeToLog(Importance::info, "fd: %d\n", t.arg1());
+  gs.log.writeToLog(Importance::info, "File descriptor: %d\n", t.arg1());
   gs.log.writeToLog(Importance::info, "Bytes to write %d\n", t.arg3());
 
   return true;
