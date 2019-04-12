@@ -652,7 +652,10 @@ int spawnTracerTracee(void* voidArgs){
     }
 
     auto syms = vdsoGetSymbols(pid);
-
+    if (4 != syms.size()) {
+      throw runtime_error("VDSO symbol map has only "+to_string(syms.size())+" entries instead of 4!");
+    }
+    
     // DEVRAND STEP 2: spawn a thread to write to each fifo
     pthread_t devRandomPthread, devUrandomPthread;
     // NB: we copy *FifoPath to the heap as our stack storage goes away: these allocations DO get leaked
