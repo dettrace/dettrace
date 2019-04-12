@@ -651,6 +651,7 @@ int spawnTracerTracee(void* voidArgs){
                   "tracer mounting proc failed");
     }
 
+    sleep(1);
     auto syms = vdsoGetSymbols(pid);
     if (4 != syms.size()) {
       throw runtime_error("VDSO symbol map has only "+to_string(syms.size())+" entries instead of 4!");
