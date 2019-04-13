@@ -45,8 +45,12 @@ public:
    * @return the mapped virtual value.
    */
   virtual Virtual addRealValue(Real realValue) {
+    // it is nondet whether this realValue (typically an inode) has been seen
+    // before, so we need to print either way to keep log message IDs deterministic
     if(realToVirtualValue.find(realValue) != realToVirtualValue.end()){
-      myLogger.writeToLog(Importance::info, "Overwriting old value on map.\n");
+      myLogger.writeToLog(Importance::extra, "Overwriting old value in map.\n");
+    } else {
+      myLogger.writeToLog(Importance::extra, "Allocating new value in map.\n");
     }
 
     myLogger.writeToLog(Importance::info, mappingName + ": New virtual value added: " +
