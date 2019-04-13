@@ -44,7 +44,7 @@ void replaySystemCall(globalState& gs, ptracer& t, uint64_t systemCall){
 #ifdef EXTRANEOUS_TRACEE_READS
   uint16_t minus2 = t.readFromTracee(traceePtr<uint16_t>((uint16_t*) ((uint64_t) t.getRip().ptr - 2)), t.getPid());
   if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
-    throw runtime_error("dettrace runtime exception: IP does not point to system call instruction!\n");
+    runtimeError("IP does not point to system call instruction!\n");
   }
 #endif
 
@@ -180,10 +180,10 @@ pair<int,int> getPipeFds(globalState& gs, state& s, ptracer& t){
 
   // Track this file descriptor:
   if(s.fdStatus.count(fd1) != 0){
-    throw runtime_error("dettrace runtime exception: Value already in map (fdStatus).");
+    runtimeError("Value already in map (fdStatus).");
   }
   if(s.fdStatus.count(fd2) != 0){
-    throw runtime_error("dettrace runtime exception: Value already in map (fdStatus).");
+    runtimeError("Value already in map (fdStatus).");
   }
 
   return make_pair(fd1, fd2);
@@ -207,9 +207,11 @@ bool tracee_file_exists(string traceePath, pid_t traceePid, logger& log,
   } else if (err == ENOENT /*|| err == ENOTDIR might be needed later */) {
     return false;
   } else {
-    throw runtime_error("dettrace runtime exception: "
-                        "Unable to check for existance of file: " + to_string(errno));
+    runtimeError("Unable to check for existance of file: " + to_string(errno));
   }
+
+  // Can never happen, here to avoid spurious warning.
+  return false;
 }
 // =======================================================================================
 ino_t inode_from_tracee(string traceePath, pid_t traceePid, logger& log,
@@ -225,7 +227,7 @@ ino_t inode_from_tracee(string traceePath, pid_t traceePid, logger& log,
   // points to! So we lstat
   int res = lstat(resolvedPath.c_str(), &statbuf);
   if (res < 0) {
-    throw runtime_error("dettrace runtime exception: Unable to stat file in "
+    runtimeError("Unable to stat file in "
                        "tracee from /proc/. errno: " + to_string(res));
   }
 
@@ -249,7 +251,7 @@ ino_t readInodeFor(logger& log, pid_t traceePid, int fd){
   struct stat statbuf = {0};
   int res = stat(procPath.c_str(), &statbuf);
   if (res < 0) {
-    throw runtime_error("dettrace runtime exception: Unable to stat file in "
+    runtimeError("Unable to stat file in "
                        "tracee from /proc/. errno: " + to_string(res));
   }
 
@@ -278,7 +280,7 @@ bool sendTraceeSignalNow(int signum, globalState& gs,
     s.currentSignalHandlers[signum] = SIGHANDLER_DEFAULT; // go back to default next time
     int retVal = syscall(SYS_tgkill, t.getPid(), t.getPid(), signum);
     if (0 != retVal) {
-      throw runtime_error("dettrace runtime exception: sending myself signal "+to_string(signum)+" failed, tgkill returned " + to_string(retVal));
+      runtimeError("sending myself signal "+to_string(signum)+" failed, tgkill returned " + to_string(retVal));
     }
     return true; // run pause post-hook
   }
@@ -291,14 +293,14 @@ bool sendTraceeSignalNow(int signum, globalState& gs,
     s.signalInjected = true;
     int retVal = syscall(SYS_tgkill, t.getPid(), t.getPid(), signum);
     if (0 != retVal) {
-      throw runtime_error("dettrace runtime exception: sending myself signal "+to_string(signum)+" failed, tgkill returned " + to_string(retVal));
+      runtimeError("sending myself signal "+to_string(signum)+" failed, tgkill returned " + to_string(retVal));
     }
     return true; // run pause post-hook
   }
 
   case SIGHANDLER_DEFAULT: {
     if (SIGALRM != signum && SIGVTALRM != signum && SIGPROF != signum) {
-      throw runtime_error("dettrace runtime exception: can't send myself a signal "+to_string(signum));
+      runtimeError("can't send myself a signal "+to_string(signum));
     }
     // for SIGALRM, SIGVTALRM, SIGPROF, default handler terminates the tracee
     gs.log.writeToLog(Importance::info, "tracee has default signal "+to_string(signum)+" handler, injecting exit() for pid %u\n", t.getPid());
@@ -313,9 +315,11 @@ bool sendTraceeSignalNow(int signum, globalState& gs,
     return true; // run noop (getpid) post-hook
 
   default:
-    throw runtime_error("dettrace runtime exception: invalid handler "+to_string(sh)+
+    runtimeError("invalid handler "+to_string(sh)+
                         " for signal "+to_string(signum));
   }
+  // Can never happen, here to avoid spurious warning.
+  return false;
 }
 // =======================================================================================
 string resolve_tracee_path(string traceePath, pid_t traceePid, logger& log,
@@ -325,11 +329,11 @@ string resolve_tracee_path(string traceePath, pid_t traceePid, logger& log,
   // Some system calls take empty path and use traceeDirFd exclusively to refer to a file
   // see O_PATH option in `man 2 open`. We do not support this right now...
   if (traceePath == "") {
-    throw runtime_error("We do not support system calls with empty paths.");
+    runtimeError("We do not support system calls with empty paths.");
   }
 
   if (traceeDirFd < -1 && traceeDirFd != AT_FDCWD) {
-    throw runtime_error("Negative dirfd given to resolve_tracee_path.");
+    runtimeError("Negative dirfd given to resolve_tracee_path.");
   }
 
   string prefixProcFd;
@@ -353,7 +357,7 @@ string resolve_tracee_path(string traceePath, pid_t traceePid, logger& log,
   char pathbuf[PATH_MAX + 1] = {0};
   int ret = readlink(prefixProcFd.c_str(), pathbuf, PATH_MAX);
   if (ret == -1) {
-    throw runtime_error("Unable to read cwd from tracee: " + to_string(traceePid) +
+    runtimeError("Unable to read cwd from tracee: " + to_string(traceePid) +
                         " errno: " + to_string(errno));
   }
 
@@ -416,7 +420,7 @@ Linux acghaswellcat16 4.15.0-43-generic #46-Ubuntu SMP Thu Dec 6 14:45:28 UTC 20
 
   // Flag should never be false in pre-hook.
   if (s.fileExisted != false) {
-    throw runtime_error("fileExisted flag out of sync. It should have been set to false.");
+    runtimeError("fileExisted flag out of sync. It should have been set to false.");
   }
 
   // We only case we care about newly created files, later we might want to update

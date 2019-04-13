@@ -26,7 +26,7 @@ void scheduler::removeAndScheduleParent(pid_t child, pid_t parent){
   // Error if the parent of the proces has not finished.
   // Else, remove the process, and schedule its parent to run next.
   if(! isFinished(parent)){
-    throw runtime_error("dettrace runtime exception: scheduleThisProcess: Parent : " + to_string(parent) +
+    runtimeError("dettrace runtime exception: scheduleThisProcess: Parent : " + to_string(parent) +
                         " was not marked as finished!");
   }
 
@@ -64,7 +64,7 @@ void scheduler::preemptAndScheduleNext(preemptOptions p){
     // If the process is still runnable we don't need to do anything.
     log.writeToLog(Importance::extra, "Process still runnable.\n", curr);
   }else{
-    throw runtime_error("dettrace runtime exception: Unknown preemptOption!\n");
+    runtimeError("Unknown preemptOption!\n");
   }
 
   nextPid = scheduleNextProcess();
@@ -152,7 +152,7 @@ void scheduler::remove(pid_t process){
   // Sanity check that there is at least one process available.
   if (runnableHeap.empty() && blockedHeap.empty()){
     string err = "scheduler::remove: No such element to delete from scheduler.";
-    throw runtime_error("dettrace runtime exception: " + err);
+    runtimeError("" + err);
   }
 
   // Sanity check: can't call top() on a priority queue
@@ -283,7 +283,7 @@ pid_t scheduler::scheduleNextProcess(){
   }
 
   if(deadlock){
-    throw runtime_error("dettrace runtime exception: Deadlock detected!\n");
+    runtimeError("Deadlock detected!\n");
   }else if(!runnableHeap.empty()){ 
     pid_t nextProcess = findNextNotWaiting(swapped);
     return nextProcess;
@@ -297,7 +297,9 @@ pid_t scheduler::scheduleNextProcess(){
   }
 
   // Went through all processes and none were ready. This is a dead lock.
-  throw runtime_error("dettrace runtime exception: No runnable processes left in scheduler!\n");
+  runtimeError("No runnable processes left in scheduler!\n");
+  // Can never happen, here to avoid spurious warning.
+  return -1;
 }
 
 bool scheduler::circularDependency(){

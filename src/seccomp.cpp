@@ -1,4 +1,5 @@
 #include "seccomp.hpp"
+#include "util.hpp"
 
 #include <string>
 #include <iostream>
@@ -15,7 +16,7 @@ seccomp::seccomp(int debugLevel, bool convertUids){
   ctx = seccomp_init(SCMP_ACT_TRACE(INT16_MAX));
 
   if(ctx == nullptr){
-    throw runtime_error("dettrace runtime exception: Unable to init seccomp filter.\n");
+    runtimeError("Unable to init seccomp filter.\n");
   }
 
   loadRules(debugLevel >= 4, convertUids);
@@ -267,7 +268,7 @@ void seccomp::noIntercept(uint16_t systemCall){
   // Send system call number as data to tracer to avoid a ptrace(GET_REGS).
   int ret = seccomp_rule_add(ctx, SCMP_ACT_ALLOW, systemCall, 0);
   if(ret < 0){
-    throw runtime_error("dettrace runtime exception: Failed to add system call no interception rule! Reason: \n" +
+    runtimeError("Failed to add system call no interception rule! Reason: \n" +
 			to_string(systemCall));
   }
 
@@ -278,7 +279,7 @@ void seccomp::intercept(uint16_t systemCall){
   // Send system call number as data to tracer to avoid a ptrace(GET_REGS).
   int ret = seccomp_rule_add(ctx, SCMP_ACT_TRACE(systemCall), systemCall, 0);
   if(ret < 0){
-    throw runtime_error("dettrace runtime exception: Failed to add system call no interception rule! Reason: \n" +
+    runtimeError("Failed to add system call no interception rule! Reason: \n" +
 			to_string(systemCall));
   }
 
@@ -298,7 +299,7 @@ void seccomp::intercept(uint16_t systemCall, bool cond){
 void seccomp::loadFilterToKernel(){
   int ret = seccomp_load(ctx);
   if(ret < 0){
-    throw runtime_error("dettrace runtime exception: Unable to seccomp_load.\n Reason: " + string { strerror(- ret)});
+    runtimeError("Unable to seccomp_load.\n Reason: " + string { strerror(- ret)});
   }
 
 }

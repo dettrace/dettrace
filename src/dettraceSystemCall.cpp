@@ -72,7 +72,7 @@ bool arch_prctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, s
   case ARCH_GET_GS:
     return false;
   default:
-    throw runtime_error("dettrace runtime exception: unsupported arch_prctl syscall");
+    runtimeError("unsupported arch_prctl syscall");
   }
   return false; // unreachable
 }
@@ -291,7 +291,7 @@ bool fchownatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sch
 }
 
 void fchownatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  throw runtime_error("fchownat post hook shold never be called.");
+  runtimeError("fchownat post hook shold never be called.");
   return;
 }
 // =======================================================================================
@@ -306,7 +306,7 @@ bool fchownSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 }
 
 void fchownSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  throw runtime_error("fchownat post hook shold never be called.");
+  runtimeError("fchownat post hook shold never be called.");
   return;
 }
 // =======================================================================================
@@ -321,7 +321,7 @@ bool chownSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
 }
 
 void chownSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  throw runtime_error("fchownat post hook shold never be called.");
+  runtimeError("fchownat post hook shold never be called.");
   return;
 }
 // =======================================================================================
@@ -336,7 +336,7 @@ bool lchownSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 }
 
 void lchownSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  throw runtime_error("fchownat post hook shold never be called.");
+  runtimeError("fchownat post hook shold never be called.");
   return;
 }
 // =======================================================================================
@@ -382,7 +382,7 @@ bool faccessatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
 }
 
 void faccessatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  throw runtime_error("faccessat post hook shold never be called.");
+  runtimeError("faccessat post hook shold never be called.");
   return;
 }
 // =======================================================================================
@@ -582,7 +582,7 @@ bool getpeernameSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, 
 void getpeernameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int ret = t.getReturnValue();
   if(ret == 0){
-    throw runtime_error("dettrace runtime exception: Call to getpeername with network socket not suported.\n");
+    runtimeError("Call to getpeername with network socket not suported.\n");
   }
   return;
 }
@@ -734,7 +734,7 @@ void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
           ){ // clone file
     return;
   }else{
-    throw runtime_error("dettrace runtime exception: Unsupported ioctl call: fd=" + to_string(t.arg1()) +
+    runtimeError("Unsupported ioctl call: fd=" + to_string(t.arg1()) +
                         " request=" + to_string(request));
   }
   return;
@@ -767,7 +767,7 @@ void mmapSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     gs.log.writeToLog(Importance::info, "This mmap was inject for use in pre and post hook purposes.\n");
 
     if(t.getRax().ptr == MAP_FAILED){
-      throw runtime_error("Unable to properly inject mmap call to tracee!\n"
+      runtimeError("Unable to properly inject mmap call to tracee!\n"
                           "mmap call returned: " +
                           to_string(t.getReturnValue()) + "\n");
     }
@@ -802,7 +802,7 @@ nanosleepSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedul
 
 void
 nanosleepSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  throw runtime_error("Error: nanosleep post-hook should never be called.");
+  runtimeError("nanosleep post-hook should never be called.");
 }
 // =======================================================================================
 bool mkdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
@@ -903,7 +903,7 @@ bool linkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedul
 
 void linkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                      scheduler& sched){
-  throw runtime_error("Error: link post-hook should never be called.");
+  runtimeError("link post-hook should never be called.");
 }
 // =======================================================================================
 bool linkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -916,7 +916,7 @@ bool linkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 
 void linkatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                      scheduler& sched){
-  throw runtime_error("Error: linkat post-hook should never be called.");
+  runtimeError("linkat post-hook should never be called.");
 }
 // =======================================================================================
 bool openSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -980,7 +980,7 @@ bool pipeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedul
 
 void pipeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // We should never get here. We always change the call to pipe to a call to pipe2.
-  throw runtime_error("did not expect to arrive a pipe post hook.");
+  runtimeError("did not expect to arrive a pipe post hook.");
   // Restore original register state.
   // t.writeArg2(s.originalArg2);
   // auto p = getPipeFds(gs, s, t);
@@ -1076,7 +1076,7 @@ bool prlimit64SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
   // TODO: could also always overwrite first argument with zero
   int pid = (pid_t) t.arg1();
   if(pid != 0){
-    throw runtime_error("dettrace runtime exception: prlimit64: We do not support prlimit64 on other processes.\n "
+    runtimeError("prlimit64: We do not support prlimit64 on other processes.\n "
                         "(pid: " + to_string(pid));
   }
 
@@ -1212,7 +1212,7 @@ bool readlinkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
 
 void
 readlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  throw runtime_error("Error: readlink post-hook should never be called.");
+  runtimeError("readlink post-hook should never be called.");
 }
 // =======================================================================================
 bool readlinkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
@@ -1224,7 +1224,7 @@ bool readlinkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
 
 void
 readlinkatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  throw runtime_error("Error: readlinkat post-hook should never be called.");
+  runtimeError("readlinkat post-hook should never be called.");
 }
 // =======================================================================================
 bool recvmsgSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
@@ -1593,7 +1593,7 @@ bool tgkillSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     // ok
   } else {
     gs.log.writeToLog(Importance::info, "tgkillSystemCall::handleDetPre: tracee vtgid="+to_string(tgid)+" vtid=" +to_string(tid)+ " ptgid="+to_string(s.traceePid)+" trying to send unsupported signal="+to_string(signal));
-    throw runtime_error("dettrace runtime exception: tgkillSystemCall::handleDetPre: tracee trying to send unsupported signal");
+    runtimeError("tgkillSystemCall::handleDetPre: tracee trying to send unsupported signal");
   }
 
   return true;
@@ -1659,13 +1659,13 @@ timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sche
     case SIGEV_SIGNAL: // send a signal upon timer expiration
       break;
     case SIGEV_THREAD:
-      throw runtime_error("dettrace runtime exception: unsupported launching a thread on timer expiration in timer_create()");
+      runtimeError("unsupported launching a thread on timer expiration in timer_create()");
       break;
     case SIGEV_THREAD_ID:
-      throw runtime_error("dettrace runtime exception: unsupported sending a signal to a specific thread in timer_create()");
+      runtimeError("unsupported sending a signal to a specific thread in timer_create()");
       break;
     default:
-      throw runtime_error("dettrace runtime exception: unsupported sigev_notify value in timer_create() " +
+      runtimeError("unsupported sigev_notify value in timer_create() " +
                           to_string(se.sigev_notify));
       break;
     }
@@ -1699,7 +1699,7 @@ timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sche
 
 void timer_createSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                       scheduler& sched){
-  throw runtime_error("Error: timer_create post-hook should never be called.");
+  runtimeError("timer_create post-hook should never be called.");
 }
 // =======================================================================================
 bool timer_deleteSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
@@ -1709,7 +1709,7 @@ bool timer_deleteSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                     to_string(timerid) + "\n");
 
   if(!s.timerCreateTimers.count(timerid)){
-    throw runtime_error("dettrace runtime exception: invalid timerid "+to_string(timerid));
+    runtimeError("invalid timerid "+to_string(timerid));
   }
   return true;
 }
@@ -1723,7 +1723,7 @@ bool timer_getoverrunSystemCall::handleDetPre(globalState& gs, state& s, ptracer
   timerID_t timerid = t.arg1();
   gs.log.writeToLog(Importance::info, "timer_getoverrun pre-hook for timer "+to_string(timerid)+"\n");
   if (!s.timerCreateTimers.count(timerid)) {
-    throw runtime_error("dettrace runtime exception: invalid timerid "+to_string(timerid));
+    runtimeError("invalid timerid "+to_string(timerid));
   }
   return true;
 }
@@ -1738,7 +1738,7 @@ bool timer_gettimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t
   gs.log.writeToLog(Importance::info, "timer_gettime pre-hook for timer "+to_string(timerid)+"\n");
 
   if (!s.timerCreateTimers.count(timerid)) {
-    throw runtime_error("dettrace runtime exception: invalid timerid "+to_string(timerid));
+    runtimeError("invalid timerid "+to_string(timerid));
   }
 
   struct itimerspec *isp = (struct itimerspec*) t.arg2();
@@ -1771,7 +1771,7 @@ bool timer_settimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t
   timerID_t timerid = t.arg1();
 
   if (!s.timerCreateTimers.count(timerid)) {
-    throw runtime_error("dettrace runtime exception: invalid timerid "+to_string(timerid));
+    runtimeError("invalid timerid "+to_string(timerid));
   }
 
   timerInfo tinfo = s.timerCreateTimers[timerid];
@@ -1826,7 +1826,7 @@ bool setitimerSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
   case ITIMER_PROF:
     return sendTraceeSignalNow(SIGPROF, gs, s, t, sched);
   default:
-    throw runtime_error("dettrace runtime exception: invalid timer for setitimer "+to_string(whichTimer));
+    runtimeError("invalid timer for setitimer "+to_string(whichTimer));
   }
 
   return true;
@@ -1879,7 +1879,7 @@ void unameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
         sizeof(((struct utsname*)0)->release) < MEMBER_LENGTH ||
         sizeof(((struct utsname*)0)->version) < MEMBER_LENGTH ||
         sizeof(((struct utsname*)0)->machine) < MEMBER_LENGTH) {
-      throw runtime_error("dettrace runtime exception: unameSystemCall::handleDetPost: struct utsname members too small!");
+      runtimeError("unameSystemCall::handleDetPost: struct utsname members too small!");
     }
 
     // NB: this is our standard environment
