@@ -391,7 +391,7 @@ void handlePreOpens(globalState& gs, state& s, ptracer& t, int dirfd,
   gs.log.writeToLog(Importance::info, "Flags: 0x%x "+flagsStr+"\n", flags);
 
   /*
-  The O_TMPFILE is a superset of other flags and includes, bizarrely,
+  The O_TMPFILE flag is a superset of other flags and includes, bizarrely,
   O_DIRECTORY. So we always check for exact equivalence instead of a non-zero
   result after ANDing.
 
@@ -429,11 +429,12 @@ Linux acghaswellcat16 4.15.0-43-generic #46-Ubuntu SMP Thu Dec 6 14:45:28 UTC 20
 }
 // =======================================================================================
 void handlePostOpens(globalState& gs, state& s, ptracer& t, int flags) {
-  if(t.getReturnValue() > 0 &&
+  gs.log.writeToLog(Importance::info, "Flags: 0x%x\n", flags);
+  if(t.getReturnValue() >= 0 &&
      // New regular file created through O_CREAT
-     (((flags & O_CREAT) == O_CREAT && ! s.fileExisted) ||
+     ( (((flags & O_CREAT) == O_CREAT) && ! s.fileExisted) ||
       // Special case for O_TMPFILE, always consider the file to be newly-created
-      ((flags & O_TMPFILE) == O_TMPFILE))
+      ((flags & O_TMPFILE) == O_TMPFILE) )
      ){
     gs.log.writeToLog(Importance::info, "A new file was created\n!");
     // Use fd to get inode.
