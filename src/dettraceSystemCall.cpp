@@ -244,23 +244,38 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
 
   char** argv = (char**) t.arg2();
+  char** envp = (char**) t.arg3();
   string execveArgs {};
+  string execveEnvp {};
 
   // Print all arguments to execve!
-  if(gs.log.getDebugLevel() > 0 && argv != nullptr){
+  if(gs.log.getDebugLevel() > 0){
     // Remeber these are addresses in the tracee. We must explicitly read them
     // ourselves!
-    for(int i = 0; true; i++){
-      // Make sure it's non null before reading to string.
-      char* address = t.readFromTracee(traceePtr<char*>(&(argv[i])), t.getPid());
-      if(address == nullptr){
-        break;
+    if (argv != nullptr) {
+      for(int i = 0; true; i++){
+        // Make sure it's non null before reading to string.
+        char* address = t.readFromTracee(traceePtr<char*>(&(argv[i])), t.getPid());
+        if(address == nullptr){
+          break;
+        }
+        execveArgs += " \"" + t.readTraceeCString(traceePtr<char>(address), t.getPid()) + "\" ";
       }
-
-      execveArgs += " \"" + t.readTraceeCString(traceePtr<char>(address), t.getPid()) + "\" ";
+    }
+    
+    if (envp != nullptr) {
+      for(int i = 0; true; i++){
+        // Make sure it's non null before reading to string.
+        char* address = t.readFromTracee(traceePtr<char*>(&(envp[i])), t.getPid());
+        if(address == nullptr){
+          break;
+        }
+        execveEnvp += " \"" + t.readTraceeCString(traceePtr<char>(address), t.getPid()) + "\" ";
+      }
     }
 
     auto msg = "Args: " + gs.log.makeTextColored(Color::green, execveArgs) + "\n";
+    msg += "Envp: " + gs.log.makeTextColored(Color::green, execveEnvp) + "\n";
     gs.log.writeToLog(Importance::info, msg);
   }
 
