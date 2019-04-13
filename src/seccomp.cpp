@@ -241,7 +241,7 @@ void seccomp::loadRules(bool debug, bool convertUids){
 
   intercept(SYS_pipe);
   intercept(SYS_pipe2);
-  intercept(SYS_pselect6);
+  // intercept(SYS_pselect6);
   intercept(SYS_poll);
   intercept(SYS_prlimit64);
   intercept(SYS_read);

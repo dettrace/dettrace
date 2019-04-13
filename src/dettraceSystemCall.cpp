@@ -427,17 +427,18 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   }
 
   // Handle wake operations by notifying scheduler of progress.
-  if(futexCmd == FUTEX_WAKE){/* || futexCmd == FUTEX_REQUEUE || futexCmd == FUTEX_CMP_REQUEUE ||
-                                futexCmd == FUTEX_WAKE_BITSET || futexCmd == FUTEX_WAKE_OP){*/
+  if(futexCmd == FUTEX_WAKE || futexCmd == FUTEX_REQUEUE || futexCmd == FUTEX_CMP_REQUEUE ||
+     futexCmd == FUTEX_WAKE_BITSET || futexCmd == FUTEX_WAKE_OP){
     gs.log.writeToLog(Importance::info, "Waking on address: %p\n", t.arg1());
+    gs.log.writeToLog(Importance::info, "Trying to wake up to %d threads.\n", t.arg3());
     // No need to go into the post hook.
     return true;
   }
 
   // Handle wait operations, by setting our timeout to zero, and seeing if time runs out.
-  if(futexCmd == FUTEX_WAIT /*||
+  if(futexCmd == FUTEX_WAIT ||
            futexCmd == FUTEX_WAIT_BITSET ||
-             futexCmd == FUTEX_WAIT_REQUEUE_PI*/
+             futexCmd == FUTEX_WAIT_REQUEUE_PI
      ){
     gs.log.writeToLog(Importance::info, "Waiting on value at address: %p.\n", t.arg1());
     gs.log.writeToLog(Importance::info, "Against value: " + to_string(futexValue) + "\n");
@@ -496,7 +497,6 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
       s.userDefinedTimeout = false;
       return;
     } else {
-      gs.log.writeToLog(Importance::info, "Replaying futex system call.\n");
       t.writeArg4(s.originalArg4);
       replaySyscallIfBlocked(gs, s, t, sched, ETIMEDOUT);
     }
