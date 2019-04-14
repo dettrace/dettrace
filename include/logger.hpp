@@ -63,6 +63,9 @@ public:
    */
   void writeToLog(Importance imp, std::string format, ...);
 
+  /** Just like writeToLog() but don't interpret % codes in the string */
+  void writeToLogNoFormat(Importance imp, std::string s);
+
   /**
    * Set padding.
    */
@@ -101,6 +104,8 @@ private:
   bool padding;   /**< Add a 2 space padding to the string to print. Useful for nested messages. */
 
   uint64_t logEntryID = 0;
+
+  bool logPrintfFormattingEnabled; /**< Whether to enable interpretation of printf format specifiers within log messages */
   
 };
 #endif

@@ -275,8 +275,9 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     }
 
     auto msg = "Args: " + gs.log.makeTextColored(Color::green, execveArgs) + "\n";
-    msg += "Envp: " + gs.log.makeTextColored(Color::green, execveEnvp) + "\n";
-    gs.log.writeToLog(Importance::info, msg);
+    gs.log.writeToLogNoFormat(Importance::info, msg);
+    auto msg2 = "Envp: " + gs.log.makeTextColored(Color::green, execveEnvp) + "\n";
+    gs.log.writeToLogNoFormat(Importance::info, msg2);
   }
 
   return true;
