@@ -5,6 +5,22 @@
 
 // File local functions.
 
+/** Run a command and return its output as a string 
+ * https://stackoverflow.com/questions/478898/how-do-i-execute-a-command-and-get-output-of-command-within-c-using-posix
+ */
+static string backtick(const char* cmd) {
+  array<char, 128> buffer;
+  string result;
+  unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
+  if (!pipe) {
+    throw runtime_error("popen() failed!");
+  }
+  while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+    result += buffer.data();
+  }
+  return result;
+}
+
 bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
                       int64_t errnoValue){
   if(- errnoValue == t.getReturnValue()){
