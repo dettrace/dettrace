@@ -18,6 +18,7 @@ steps:
 - script: |
     lsb_release -a
     uname -a
+    stat /dev/null
   displayName: 'Debugging information'
 
 - script: |
