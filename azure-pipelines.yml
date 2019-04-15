@@ -15,10 +15,15 @@ steps:
   submodules: true
   persistCredentials: true
 
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
+- script: |
+    lsb_release -a
+    uname -a
+  displayName: 'Debugging information'
 
 - script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+    make docker
+  displayName: 'Build the Docker image'
+
+- script: |
+    make test-docker
+  displayName: 'Run the tests'
