@@ -2061,6 +2061,10 @@ void utimensatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
 }
 // =======================================================================================
 bool futimesatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  // NB: this mapping to utimensat is fragile, and assumes struct timeval has
+  // the same layout as struct timespec. I try to codify it as a compile-time
+  // check here.
+  static_assert(sizeof(struct timeval) == sizeof(struct timespec), "translating futimesat into utimensat is unsafe");
   s.originalArg4 = t.arg4();
   t.writeArg4(0);
   t.changeSystemCall(SYS_utimensat);
