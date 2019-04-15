@@ -46,6 +46,12 @@ logger::logger(string logFile, int debugLevel, bool useColor):
   return;
 }
 
+void logger::writeToLogNoFormat(Importance imp, std::string s){
+  logPrintfFormattingEnabled = false;
+  writeToLog(imp, s);
+  logPrintfFormattingEnabled = true;
+}
+
 void logger::writeToLog(Importance imp, std::string format, ...){
   // Don't bother, we're not printing anything.
   if (debugLevel == 0){
@@ -101,9 +107,13 @@ void logger::writeToLog(Importance imp, std::string format, ...){
       fprintf(fin, "  ");
     }
 
-    va_start(args, format);
-    vfprintf(fin, format.c_str(), args);
-    va_end(args);
+    if (logPrintfFormattingEnabled) {
+      va_start(args, format);
+      vfprintf(fin, format.c_str(), args);
+      va_end(args);
+    } else {
+      fwrite(format.c_str(), 1, format.length(), fin);
+    }
   }
 
   return;

@@ -193,8 +193,14 @@ void execution::handlePostSystemCall(state& currState){
   string syscallName = systemCallMappings[syscallNum];
   log.writeToLog(Importance::info,"Calling post hook for: " + syscallName + "\n");
 
-  log.writeToLog(Importance::info,"Value before handler: %d\n",
-                 tracer.getReturnValue());
+  if (SYS_times == syscallNum || SYS_time == syscallNum) {
+    // for syscalls with a nondet return value, print it at Importance::extra
+    log.writeToLog(Importance::extra,"(nondet) Value before handler: %d\n",
+                   tracer.getReturnValue());
+  } else {
+    log.writeToLog(Importance::info,"Value before handler: %d\n",
+                   tracer.getReturnValue());
+  }
 
   callPostHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
 

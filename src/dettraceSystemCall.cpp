@@ -36,6 +36,9 @@
 #include "utilSystemCalls.hpp"
 #include "ptracer.hpp"
 
+#include <sstream>
+#include <iomanip>
+#include <openssl/sha.h>
 
 // Enable tracee reads that are not strictly necessary for functionality, but
 // are enabled for instrumentation or sanity checking. For example, verify,
@@ -152,7 +155,8 @@ bool closeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
 
 void closeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int fd = (int) t.arg1();
-  // Remove entry from our direEntries.
+  gs.log.writeToLog(Importance::info, "close(%d)\n", fd);
+  // Remove entry from our dirEntries.
   auto result = s.dirEntries.find(fd);
   // Exists.
   if(result != s.dirEntries.end()){
@@ -244,24 +248,40 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
 
   char** argv = (char**) t.arg2();
+  char** envp = (char**) t.arg3();
   string execveArgs {};
+  string execveEnvp {};
 
   // Print all arguments to execve!
-  if(gs.log.getDebugLevel() > 0 && argv != nullptr){
+  if(gs.log.getDebugLevel() > 0){
     // Remeber these are addresses in the tracee. We must explicitly read them
     // ourselves!
-    for(int i = 0; true; i++){
-      // Make sure it's non null before reading to string.
-      char* address = t.readFromTracee(traceePtr<char*>(&(argv[i])), t.getPid());
-      if(address == nullptr){
-        break;
+    if (argv != nullptr) {
+      for(int i = 0; true; i++){
+        // Make sure it's non null before reading to string.
+        char* address = t.readFromTracee(traceePtr<char*>(&(argv[i])), t.getPid());
+        if(address == nullptr){
+          break;
+        }
+        execveArgs += " \"" + t.readTraceeCString(traceePtr<char>(address), t.getPid()) + "\" ";
       }
-
-      execveArgs += " \"" + t.readTraceeCString(traceePtr<char>(address), t.getPid()) + "\" ";
+    }
+    
+    if (envp != nullptr) {
+      for(int i = 0; true; i++){
+        // Make sure it's non null before reading to string.
+        char* address = t.readFromTracee(traceePtr<char*>(&(envp[i])), t.getPid());
+        if(address == nullptr){
+          break;
+        }
+        execveEnvp += " \"" + t.readTraceeCString(traceePtr<char>(address), t.getPid()) + "\" ";
+      }
     }
 
     auto msg = "Args: " + gs.log.makeTextColored(Color::green, execveArgs) + "\n";
-    gs.log.writeToLog(Importance::info, msg);
+    gs.log.writeToLogNoFormat(Importance::info, msg);
+    auto msg2 = "Envp: " + gs.log.makeTextColored(Color::green, execveEnvp) + "\n";
+    gs.log.writeToLogNoFormat(Importance::info, msg2);
   }
 
   return true;
@@ -686,14 +706,14 @@ bool gettimeofdaySystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
 
 void gettimeofdaySystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                            scheduler& sched){
-  gs.log.writeToLog(Importance::info, "Inside gettimeOfday Post hook!\n");
+  gs.log.writeToLog(Importance::info, "Inside gettimeofday post-hook, sending tv_sec=%d\n", s.getLogicalTime());
   gs.timeCalls++;
   struct timeval* tp = (struct timeval*) t.arg1();
   if (nullptr != tp) {
     struct timeval myTv = {};
     myTv.tv_sec = s.getLogicalTime();
     myTv.tv_usec = 0;
-
+    
     t.writeToTracee(traceePtr<struct timeval>(tp), myTv, t.getPid());
     s.incrementTime();
   }
@@ -1183,6 +1203,23 @@ void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
   if(bytes_read == 0  || // EOF
      s.totalBytes == s.beforeRetry.rdx){  // original bytes requested
     gs.log.writeToLog(Importance::info, "EOF or read all bytes.\n");
+
+    if (gs.log.getDebugLevel() > 0 && s.totalBytes > 0) {
+      // NB: this operation is very expensive!
+      unsigned char* buffer = (unsigned char*) malloc(s.totalBytes);
+      readVmTraceeRaw(traceePtr<unsigned char>((unsigned char*) s.beforeRetry.rsi), buffer, s.totalBytes, s.traceePid);
+      unsigned char sha1[SHA_DIGEST_LENGTH] = {0};
+      SHA1(buffer, s.totalBytes, sha1);
+      free(buffer);
+      stringstream ss;
+      ss << std::hex << std::setw(2) << std::setfill('0');
+      for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
+        ss << (unsigned short) sha1[i];
+      }
+      gs.log.writeToLog(Importance::info, "sha1 checksum of %d bytes read: %s\n",
+                        s.totalBytes, ss.str().c_str());
+    }
+    
     resetState();
   } else {
     gs.log.writeToLog(Importance::info, "Got less bytes than requested.\n");
@@ -1625,7 +1662,7 @@ void timeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     }
 
     time_t* timePtr = (time_t*) t.arg1();
-    gs.log.writeToLog(Importance::info, "time: tloc is null.\n");
+    gs.log.writeToLog(Importance::info, "time: tloc is null, returning %d\n", s.getLogicalTime());
     t.writeRax(s.getLogicalTime());
     if(timePtr != nullptr){
       t.writeToTracee(traceePtr<time_t>(timePtr), (time_t) s.getLogicalTime(), s.traceePid);
@@ -1996,8 +2033,17 @@ void utimesSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
 // =======================================================================================
 bool utimensatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // Set times to our own logical time for deterministic time only if times is null.
-  if((const struct timespec*) t.arg3() != nullptr){
+  const struct timespec* origTimespec = (const struct timespec*) t.arg3();
+  if(origTimespec != nullptr){
     // user specified his/her own time which should be deterministic.
+    if(gs.log.getDebugLevel() > 0){
+      // log tracee-specified struct timespec for validation
+      struct timespec times[2];
+      readVmTraceeRaw(traceePtr<struct timespec>((struct timespec*) origTimespec), times, sizeof(times), s.traceePid);
+      gs.log.writeToLog(Importance::info,
+                        "atime.tv_sec:%lu atime.tv_nsec:%ld mtime.tv_sec:%lu mtime.tv_nsec:%ld \n",
+                        times[0].tv_sec, times[0].tv_nsec, times[1].tv_sec, times[1].tv_nsec);
+    }
     return false;
   }
 
@@ -2006,18 +2052,18 @@ bool utimensatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
   // 128 bytes.
   s.originalArg3 = t.arg3();
   // Enough space for 2 timespec structs.
-  timespec* ourTimespec = (timespec*) s.mmapMemory.getAddr().ptr;
+  struct timespec* ourTimespec = (struct timespec*) s.mmapMemory.getAddr().ptr;
 
   // Create our own struct with our time.
   // TODO: In the future we might want to unify this with our mtimeMapper.
-  timespec clockTime = {
+  struct timespec clockTime = {
     .tv_sec = 0,// (time_t) s.getLogicalTime(),
     .tv_nsec = 0, //(time_t) s.getLogicalTime()
   };
 
   // Write our struct to the tracee's memory.
-  t.writeToTracee(traceePtr<timespec>(& (ourTimespec[0])), clockTime, s.traceePid);
-  t.writeToTracee(traceePtr<timespec>(& (ourTimespec[1])), clockTime, s.traceePid);
+  t.writeToTracee(traceePtr<struct timespec>(& (ourTimespec[0])), clockTime, s.traceePid);
+  t.writeToTracee(traceePtr<struct timespec>(& (ourTimespec[1])), clockTime, s.traceePid);
 
   // Point system call to new address.
   t.writeArg3((uint64_t) ourTimespec);
@@ -2033,6 +2079,10 @@ void utimensatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
 }
 // =======================================================================================
 bool futimesatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  // NB: this mapping to utimensat is fragile, and assumes struct timeval has
+  // the same layout as struct timespec. I try to codify it as a compile-time
+  // check here.
+  static_assert(sizeof(struct timeval) == sizeof(struct timespec), "translating futimesat into utimensat is unsafe");
   s.originalArg4 = t.arg4();
   t.writeArg4(0);
   t.changeSystemCall(SYS_utimensat);
@@ -2113,6 +2163,23 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   // https://stackoverflow.com/questions/41904221/can-write2-return-0-bytes-written-and-what-to-do-if-it-does?utm_medium=organic&utm_source=google_rich_qa&utm_campaign=google_rich_qa
   if(s.totalBytes == s.beforeRetry.rdx ||
      bytes_written == 0){
+
+    if (gs.log.getDebugLevel() > 0 && s.totalBytes > 0) {
+      // NB: this operation is very expensive!
+      unsigned char* buffer = (unsigned char*) malloc(s.totalBytes);
+      readVmTraceeRaw(traceePtr<unsigned char>((unsigned char*) s.beforeRetry.rsi), buffer, s.totalBytes, s.traceePid);
+      unsigned char sha1[SHA_DIGEST_LENGTH] = {0};
+      SHA1(buffer, s.totalBytes, sha1);
+      free(buffer);
+      stringstream ss;
+      ss << std::hex << std::setw(2) << std::setfill('0');
+      for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
+        ss << (unsigned short) sha1[i];
+      }
+      gs.log.writeToLog(Importance::info, "sha1 checksum of %d bytes written: %s\n",
+                        s.totalBytes, ss.str().c_str());
+    }
+    
     resetState();
   }else{
     gs.log.writeToLog(Importance::info, "Not all bytes written: Replaying system call!\n");
