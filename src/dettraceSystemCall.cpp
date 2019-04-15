@@ -36,6 +36,8 @@
 #include "utilSystemCalls.hpp"
 #include "ptracer.hpp"
 
+#include <sstream>
+#include <iomanip>
 
 // Enable tracee reads that are not strictly necessary for functionality, but
 // are enabled for instrumentation or sanity checking. For example, verify,
@@ -152,7 +154,8 @@ bool closeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
 
 void closeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int fd = (int) t.arg1();
-  // Remove entry from our direEntries.
+  gs.log.writeToLog(Importance::info, "close(%d)\n", fd);
+  // Remove entry from our dirEntries.
   auto result = s.dirEntries.find(fd);
   // Exists.
   if(result != s.dirEntries.end()){
@@ -702,14 +705,14 @@ bool gettimeofdaySystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
 
 void gettimeofdaySystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                            scheduler& sched){
-  gs.log.writeToLog(Importance::info, "Inside gettimeOfday Post hook!\n");
+  gs.log.writeToLog(Importance::info, "Inside gettimeofday post-hook, sending tv_sec=%d\n", s.getLogicalTime());
   gs.timeCalls++;
   struct timeval* tp = (struct timeval*) t.arg1();
   if (nullptr != tp) {
     struct timeval myTv = {};
     myTv.tv_sec = s.getLogicalTime();
     myTv.tv_usec = 0;
-
+    
     t.writeToTracee(traceePtr<struct timeval>(tp), myTv, t.getPid());
     s.incrementTime();
   }
@@ -1641,7 +1644,7 @@ void timeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     }
 
     time_t* timePtr = (time_t*) t.arg1();
-    gs.log.writeToLog(Importance::info, "time: tloc is null.\n");
+    gs.log.writeToLog(Importance::info, "time: tloc is null, returning %d\n", s.getLogicalTime());
     t.writeRax(s.getLogicalTime());
     if(timePtr != nullptr){
       t.writeToTracee(traceePtr<time_t>(timePtr), (time_t) s.getLogicalTime(), s.traceePid);
@@ -2012,8 +2015,17 @@ void utimesSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
 // =======================================================================================
 bool utimensatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // Set times to our own logical time for deterministic time only if times is null.
-  if((const struct timespec*) t.arg3() != nullptr){
+  const struct timespec* origTimespec = (const struct timespec*) t.arg3();
+  if(origTimespec != nullptr){
     // user specified his/her own time which should be deterministic.
+    if(gs.log.getDebugLevel() > 0){
+      // log tracee-specified struct timespec for validation
+      struct timespec times[2];
+      readVmTraceeRaw(traceePtr<struct timespec>((struct timespec*) origTimespec), times, sizeof(times), s.traceePid);
+      gs.log.writeToLog(Importance::info,
+                        "atime.tv_sec:%lu atime.tv_nsec:%ld mtime.tv_sec:%lu mtime.tv_nsec:%ld \n",
+                        times[0].tv_sec, times[0].tv_nsec, times[1].tv_sec, times[1].tv_nsec);
+    }
     return false;
   }
 
