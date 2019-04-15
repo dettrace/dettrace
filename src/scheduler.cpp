@@ -39,7 +39,7 @@ void scheduler::preemptAndScheduleNext(preemptOptions p){
     // If the process is still runnable we don't need to do anything.
     log.writeToLog(Importance::extra, "Process still runnable.\n", curr);
   }else{
-    throw runtime_error("dettrace runtime exception: Unknown preemptOption!\n");
+    runtimeError("Unknown preemptOption!\n");
   }
 
   nextPid = scheduleNextProcess();
@@ -71,13 +71,13 @@ void scheduler::remove(pid_t process){
   // Sanity check that there is at least one process available.
   if (runnableHeap.empty() && blockedHeap.empty()){
     string err = "scheduler::remove: No such element to delete from scheduler.";
-    throw runtime_error("dettrace runtime exception: " + err);
+    runtimeError(err);
   }
 
   if (!removeElementFromHeap(runnableHeap, process)) {
     if(!removeElementFromHeap(blockedHeap, process)){
         string err = "scheduler::remove: No such element to delete from scheduler.";
-        throw runtime_error("dettrace runtime exception: " + err);
+        runtimeError(err);
     }
   }
 
@@ -107,7 +107,7 @@ pid_t scheduler::scheduleNextProcess(){
     return nextProcess;
   }else{
     if (blockedHeap.empty()) {
-      throw runtime_error("No processes left to run!\n");
+      runtimeError("No processes left to run!\n");
     }
     priority_queue<pid_t> temp = runnableHeap;
     runnableHeap = blockedHeap;

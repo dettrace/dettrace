@@ -49,7 +49,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   int syscallNum = tracer.getSystemCallNumber();
 
   if(syscallNum < 0 || syscallNum > SYSTEM_CALL_COUNT){
-    throw runtime_error("dettrace runtime exception: Unkown system call number: " +
+    runtimeError("Unkown system call number: " +
                         to_string(syscallNum));
   }
 
@@ -86,7 +86,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
       // queue so we do that here and simply ignore the event.
       tie(e, newPid, status) = getNextEvent(traceesPid, true);
       if(e != ptraceEvent::syscall){
-        throw runtime_error("dettrace runtime exception: Expected pre-system call event after fork.");
+        runtimeError("Expected pre-system call event after fork.");
       }
       // That was the pre-exit event, make sure we set onPreExitEvent to false.
       currState.onPreExitEvent = false;
@@ -108,7 +108,7 @@ void execution::handlePostSystemCall(state& currState){
 
   // No idea what this system call is! error out.
   if(syscallNum < 0 || syscallNum > SYSTEM_CALL_COUNT){
-    throw runtime_error("dettrace runtime exception: Unkown system call number: " +
+    runtimeError("Unkown system call number: " +
                         to_string(syscallNum));
   }
 
@@ -272,7 +272,7 @@ void execution::runProgram(){
 
         // This should not happen! (Pid recycling?)
         if (myGlobalState.threadGroups.count(childPid) != 0) {
-          throw runtime_error("Thread group already existed.");
+          runtimeError("Thread group already existed.");
         }
 
         // this is a process it owns it's own process group, create it.
@@ -306,7 +306,7 @@ void execution::runProgram(){
       continue;
     }
 
-    throw runtime_error("dettrace runtime exception: " + to_string(traceesPid) +
+    runtimeError(to_string(traceesPid) +
                         " Uknown return value for ptracer::getNextEvent()\n");
   }
 
@@ -381,7 +381,7 @@ pid_t execution::handleForkEvent(const pid_t traceesPid){
   int retPid = doWithCheck(waitpid(newChildPid, &status, 0), "waitpid");
   // This should never happen.
   if(retPid != newChildPid){
-    throw runtime_error("dettrace runtime exception: wait call return pid does not match new child's pid.");
+    runtimeError("wait call return pid does not match new child's pid.");
   }
   log.writeToLog(Importance::info,
                  log.makeTextColored(Color::blue, "Child ready!\n"));
@@ -412,7 +412,7 @@ static unsigned long traceePreinitMmap(pid_t pid, ptracer& t) {
   t.doPtrace(PTRACE_GETREGS, pid, 0, &regs);
   if ((long)regs.rax < 0) {
     string err = "unable to inject syscall page, error: \n";
-    throw runtime_error(err + strerror((long)-regs.rax));
+    runtimeError(err + strerror((long)-regs.rax));
   }
   ret = regs.rax;
   oldRegs.rip = regs.rip-4; /* 0xcc, syscall, 0xcc = 4 bytes */
@@ -461,7 +461,7 @@ bool execution::handleSeccomp(const pid_t traceesPid){
     // Fetch real system call from register.
     tracer.updateState(traceesPid);
     syscallNum = tracer.getSystemCallNumber();
-    throw runtime_error("dettrace runtime exception: No filter rule for system call: " +
+    runtimeError("No filter rule for system call: " +
                         systemCallMappings[syscallNum]);
   }
 
@@ -481,7 +481,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
                     &curr_insn32, sizeof(uint32_t), traceesPid);
 
     if (ret == -1) {
-      throw runtime_error("Unable to read RIP for segfault. Cannot determine if rdtsc.\n");
+      runtimeError("Unable to read RIP for segfault. Cannot determine if rdtsc.\n");
     }
 
     if ((curr_insn32 << 16) == 0x310F0000 || (curr_insn32 << 8) == 0xF9010F00) {
@@ -795,7 +795,7 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   }
 
   // Generic system call. Throws error.
-  throw runtime_error("dettrace runtime exception: This is a bug. Missing case for system call: " +
+  runtimeError("This is a bug. Missing case for system call: " +
                       to_string(syscallNumber));
 }
 // =======================================================================================
@@ -1068,7 +1068,7 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
   }
 
   // Generic system call. Throws error.
-  throw runtime_error("dettrace runtime exception: This is a bug: "
+  runtimeError("This is a bug: "
                       "Missing case for system call: " +
                       to_string(syscallNumber));
 
@@ -1112,7 +1112,7 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
     return handleExitedThread(pidToContinue);
   }
   else if (ret == -1) {
-    throw runtime_error("Ptrace continue/syscall failed with :" +
+    runtimeError("Ptrace continue/syscall failed with :" +
                         string(strerror(errno)) + "\n");
   } else {
     // Call to ptrace succeeded! Proceed as usual, that is, wait for event to come.
@@ -1131,7 +1131,7 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
       return handleStuckThread(pidToContinue);
     }
   }
-  throw runtime_error("Should not have reached down here, missed a case.\n");
+  runtimeError("Should not have reached down here, missed a case.\n");
 }
 // =======================================================================================
 
@@ -1185,7 +1185,7 @@ ptraceEvent execution::getPtraceEvent(const int status){
 #ifdef PTRACE_EVENT_STOP
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_STOP) ){
     log.writeToLog(Importance::extra, "event stop\n");
-    throw runtime_error("dettrace runtime exception: Ptrace event stop.\n");
+    runtimeError("Ptrace event stop.\n");
   }
 #endif
 
@@ -1207,7 +1207,7 @@ ptraceEvent execution::getPtraceEvent(const int status){
     return ptraceEvent::terminatedBySignal;
   }
 
-  throw runtime_error("dettrace runtime exception: Uknown event on dettrace::getNextEvent()");
+  runtimeError("Uknown event on dettrace::getNextEvent()");
 }
 // =======================================================================================
 /**
@@ -1239,7 +1239,7 @@ bool execution::handleTraceeExit(string reason, pid_t traceesPid,
     // That's okay, move on.
     auto ret = ptrace(PTRACE_DETACH, traceesPid, NULL, NULL);
     if (ret != 0 && errno != ESRCH) {
-      throw runtime_error("failed to ptrace detach process " + to_string(traceesPid) +
+      runtimeError("failed to ptrace detach process " + to_string(traceesPid) +
                           " that " + reason + "\n");
     }
   }
@@ -1249,7 +1249,7 @@ bool execution::handleTraceeExit(string reason, pid_t traceesPid,
 
   // Erase tracee from our state.
   if (states.erase(traceesPid) != 1) {
-    throw runtime_error("Not such tracee to delete: " + to_string(traceesPid));
+    runtimeError("Not such tracee to delete: " + to_string(traceesPid));
   }
 
   // This is a thread, clean up the thread specific state that we save.
@@ -1275,7 +1275,7 @@ void deleteMultimapEntry(unordered_multimap<pid_t, pid_t>& mymap, pid_t key, pid
       }
     }
 
-    throw runtime_error("Unable to delete entry thread group entry for (" +
+    runtimeError("Unable to delete entry thread group entry for (" +
                         to_string(key) + ", " + to_string(value) + ")\n");
 }
 // =======================================================================================
@@ -1345,7 +1345,7 @@ execution::handleStuckExecve(pid_t currentPid) {
                 "waiting for exit event from TG leader after execve.\n");
     auto event = getPtraceEvent(status);
     if (event != ptraceEvent::eventExit) {
-      throw runtime_error("Expected eventExit from thread group leader.");
+      runtimeError("Expected eventExit from thread group leader.");
     }
     // This should now be the execve event we were waiting for!
     tracer.doPtrace(PTRACE_CONT, threadGroup, NULL, NULL);
@@ -1355,7 +1355,7 @@ execution::handleStuckExecve(pid_t currentPid) {
                              "waiting for process/thread after execve");
   auto event = getPtraceEvent(status);
   if (event != ptraceEvent::exec) {
-    throw runtime_error("Expected exec event from thread group leader.");
+    runtimeError("Expected exec event from thread group leader.");
   }
   return make_tuple(event, thispid, status);
 }
@@ -1363,18 +1363,19 @@ execution::handleStuckExecve(pid_t currentPid) {
 tuple<ptraceEvent, pid_t, int>
 execution::handleStuckThread(pid_t currentPid) {
   int status;
+  runtimeError("Process/thread is probably busy waiting.\n");
   log.writeToLog(Importance::inter, "Process/thread is probably busy waiting.\n");
 
   log.writeToLog(Importance::extra, "Sending it stop signal.\n");
   auto ret = syscall(SYS_tkill, currentPid, SIGTRAP);
   if (ret < 0) {
-    throw runtime_error("tkill failed because: " + to_string(ret) + "\n");
+    runtimeError("tkill failed because: " + to_string(ret) + "\n");
   }
 
   log.writeToLog(Importance::extra, "Waiting for response.\n");
   doWithCheck(waitpid(currentPid, &status, 0), "waiting for stopped signal.");
   if (getPtraceEvent(status) != ptraceEvent::signal) {
-    throw runtime_error("unexpected event after SIGTRAP (expect signal event)\n");
+    runtimeError("unexpected event after SIGTRAP (expect signal event)\n");
   }
   log.writeToLog(Importance::extra, "Process in stopped state.\n");
 
@@ -1409,7 +1410,7 @@ execution::handleStuckThread(pid_t currentPid) {
 
 
   // }
-  // throw runtime_error("hex dump done.\n");
+  // runtimeError("hex dump done.\n");
 }
 
 tuple<ptraceEvent, pid_t, int>
@@ -1435,7 +1436,7 @@ execution::handleExitedThread(pid_t currentPid) {
   if (!done) {
     // TODO: Throwing an error is an option, We could also assume this process exited and simply
     // move on.
-    throw runtime_error("Failed to hear from tracee through waitpid, this process is lost.\n");
+    runtimeError("Failed to hear from tracee through waitpid, this process is lost.\n");
   }
   return make_tuple(getPtraceEvent(status), nextPid, status);
 }

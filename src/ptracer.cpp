@@ -30,7 +30,7 @@ ptracer::ptracer(pid_t pid ){
 
   int startingStatus;
   if(-1 == waitpid(pid, &startingStatus, 0)){
-    throw runtime_error("dettrace runtime exception: Unable to start first process: " + string { strerror(errno)});
+    runtimeError("Unable to start first process: " + string { strerror(errno)});
   }
 }
 
@@ -169,10 +169,10 @@ long ptracer::doPtrace(enum __ptrace_request request, pid_t pid, void *addr, voi
 
   if (PTRACE_PEEKTEXT == request || PTRACE_PEEKDATA == request || PTRACE_PEEKUSER == request) {
     if (0 != errno) {
-      throw runtime_error("dettrace runtime exception: Ptrace_peek* failed with error: " + string { strerror(errno) } );
+      runtimeError("Ptrace_peek* failed with error: " + string { strerror(errno) } );
     }
   } else if (-1 == val) {
-    throw runtime_error("dettrace runtime exception: Ptrace failed with error: " + string { strerror(errno) } );
+    runtimeError("Ptrace failed with error: " + string { strerror(errno) } );
   }
   return val;
 }

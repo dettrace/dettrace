@@ -56,7 +56,7 @@
 
 using namespace std;
 
-struct programArgs{
+struct programArgs {
   int optIndex;
   int argc;
   char** argv;
@@ -108,12 +108,12 @@ bool usingOldKernel(){
   r = utsname.release;
   x = strtoul(r, &rp, 10);
   if (rp == r){
-    throw runtime_error("dettrace runtime exception: Problem parsing uname results.\n");
+    runtimeError("Problem parsing uname results.\n");
   }
   r = 1 + rp;
   y = strtoul(r, &rp, 10);
   if (rp == r){
-    throw runtime_error("dettrace runtime exception: Problem parsing uname results.\n");
+    runtimeError("Problem parsing uname results.\n");
   }
   r = 1 + rp;
   z = strtoul(r, &rp, 10);
@@ -174,11 +174,11 @@ int main(int argc, char** argv){
     try{
       args.debugLevel = stoi(str);
     }catch (...){
-      throw runtime_error("dettrace runtime exception: Invalid integer: " + str);
+      runtimeError("Invalid integer: " + str);
     }
 
     if(args.debugLevel < 0 || args.debugLevel > 5){
-      throw runtime_error("dettrace runtime exception: Debug level must be between [0,5].");
+      runtimeError("Debug level must be between [0,5].");
     }
   }
 
@@ -445,7 +445,7 @@ static void populateInitramfs(const char* initramfs, const char* path)
 // pathToChroot must exist and be located inside the chroot if the user defined their own chroot!
 static void checkPaths(string pathToChroot, string workingDir){
     if( !fileExists(workingDir)){
-      throw runtime_error("dettrace runtime exception: workingDir: " + workingDir + " does not exits!");
+      runtimeError("workingDir: " + workingDir + " does not exits!");
     }
 
     // Check it is "inside" the userDefinedChroot:
@@ -583,7 +583,7 @@ int spawnTracerTracee(void* voidArgs){
 
   pid_t pid = fork();
   if (pid < 0) {
-    throw runtime_error("fork() failed.\n");
+    runtimeError("fork() failed.\n");
     exit(EXIT_FAILURE);
   } else if(pid > 0) {
     // We must mount proc so that the tracer sees the same PID and /proc/ directory
@@ -661,7 +661,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     case 'd':
       args.debugLevel = parseNum(optarg);
       if(args.debugLevel < 0 || args.debugLevel > 5){
-        throw runtime_error("dettrace runtime exception: Debug level must be between [0,5].");
+        runtimeError("Debug level must be between [0,5].");
       }
       break;
       // Help message.
@@ -688,7 +688,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       args.workingDir = string { optarg };
       break;
     case '?':
-      throw runtime_error("dettrace runtime exception: Invalid option passed to detTrace!");
+      runtimeError("Invalid option passed to detTrace!");
     }
   }
 
@@ -756,12 +756,12 @@ static void mountDir(string source, string target){
 
   /* Check if source path exists*/
   if (!fileExists(source)) {
-    throw runtime_error("dettrace runtime exception: Trying to mount source " + source + ". File does not exist.\n");
+    runtimeError("Trying to mount source " + source + ". File does not exist.\n");
   }
 
   /* Check if target path exists*/
   if (!fileExists(target))  {
-    throw runtime_error("dettrace runtime exception: Trying to mount target " + target + ". File does not exist.\n");
+    runtimeError("Trying to mount target " + target + ". File does not exist.\n");
   }
 
   // TODO: Marking it as private here shouldn't be necessary since we already unshared the entire namespace as private?
@@ -845,7 +845,7 @@ static void mkdirIfNotExist(string dir){
       return;
     }else{
       string reason { strerror(errno) };
-      throw runtime_error("dettrace runtime exception: Unable to make directory: " + dir + "\nReason: " + reason);
+      runtimeError("Unable to make directory: " + dir + "\nReason: " + reason);
     }
   }
   return;
