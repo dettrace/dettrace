@@ -22,6 +22,7 @@
 #include <elf/elf++.hh>
 
 #include "vdso.hpp"
+#include "util.hpp"
 
 /*
  * byte code for the new psudo vdso functions
@@ -198,7 +199,7 @@ public:
   }
   const void* load(off_t offset, size_t size) {
     if (offset + size > lim)
-      throw std::range_error("offset exceeds mapped size");
+      runtimeError("offset exceeds mapped size");
     return ((const char*)base + offset);
   }
 };

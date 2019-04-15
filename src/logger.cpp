@@ -151,7 +151,7 @@ string logger::makeTextColored(Color color, string text){
     colorCode = "\033[1;34m";
     break;
   default:
-    throw runtime_error("dettrace runtime exception: Unkown color! Please add color code.");
+    runtimeError("Unkown color! Please add color code.");
   }
 
   return colorCode + text + reset;
