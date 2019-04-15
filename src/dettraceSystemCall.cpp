@@ -2034,18 +2034,18 @@ bool utimensatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
   // 128 bytes.
   s.originalArg3 = t.arg3();
   // Enough space for 2 timespec structs.
-  timespec* ourTimespec = (timespec*) s.mmapMemory.getAddr().ptr;
+  struct timespec* ourTimespec = (struct timespec*) s.mmapMemory.getAddr().ptr;
 
   // Create our own struct with our time.
   // TODO: In the future we might want to unify this with our mtimeMapper.
-  timespec clockTime = {
+  struct timespec clockTime = {
     .tv_sec = 0,// (time_t) s.getLogicalTime(),
     .tv_nsec = 0, //(time_t) s.getLogicalTime()
   };
 
   // Write our struct to the tracee's memory.
-  t.writeToTracee(traceePtr<timespec>(& (ourTimespec[0])), clockTime, s.traceePid);
-  t.writeToTracee(traceePtr<timespec>(& (ourTimespec[1])), clockTime, s.traceePid);
+  t.writeToTracee(traceePtr<struct timespec>(& (ourTimespec[0])), clockTime, s.traceePid);
+  t.writeToTracee(traceePtr<struct timespec>(& (ourTimespec[1])), clockTime, s.traceePid);
 
   // Point system call to new address.
   t.writeArg3((uint64_t) ourTimespec);
