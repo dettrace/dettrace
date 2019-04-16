@@ -15,6 +15,7 @@
 #include <sys/syscall.h>
 #include <asm/prctl.h>
 #include <sys/prctl.h>
+#include <sys/epoll.h>
 
 #include <limits>
 #include <cstring>
@@ -242,7 +243,62 @@ void dup2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     gs.log.writeToLog(Importance::info, "%d = dup2(%d)\n", newfd, fd);
   }
 }
+// =======================================================================================
+bool epoll_ctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  int epfd = (int) t.arg1();
+  int op = (int) t.arg2();
+  int fd = (int) t.arg3();
+  struct epoll_event *traceeEvent = (struct epoll_event*) t.arg4();
 
+  struct epoll_event epev;
+  readVmTraceeRaw(traceePtr<struct epoll_event>(traceeEvent), &epev, sizeof(epev), s.traceePid);
+  
+  string epollMsg = "epoll_ctl epfd="+to_string(epfd)+" fd="+to_string(fd);
+  string opStr;
+  if (EPOLL_CTL_ADD == op) {
+    opStr = "EPOLL_CTL_ADD";
+  } else if (EPOLL_CTL_MOD == op) {
+    opStr = "EPOLL_CTL_MOD";
+  } else if (EPOLL_CTL_DEL == op) {
+    opStr = "EPOLL_CTL_DEL";
+  }
+  string eventStr;
+  if ((epev.events & EPOLLIN) == EPOLLIN) {
+    eventStr += " EPOLLIN";
+  }
+  if ((epev.events & EPOLLOUT) == EPOLLOUT) {
+    eventStr += " EPOLLOUT";
+  }
+  if ((epev.events & EPOLLERR) == EPOLLERR) {
+    eventStr += " EPOLLERR";
+  }
+  if ((epev.events & EPOLLET) == EPOLLET) {
+    eventStr += " EPOLLET";
+  }
+  if ((epev.events & EPOLLRDHUP) == EPOLLRDHUP) {
+    eventStr += " EPOLLRDHUP";
+  }
+  if ((epev.events & EPOLLPRI) == EPOLLPRI) {
+    eventStr += " EPOLLPRI";
+  }
+  if ((epev.events & EPOLLHUP) == EPOLLHUP) {
+    eventStr += " EPOLLHUP";
+  }
+  if ((epev.events & EPOLLONESHOT) == EPOLLONESHOT) {
+    eventStr += " EPOLLONESHOT";
+  }
+  if ((epev.events & EPOLLWAKEUP) == EPOLLWAKEUP) {
+    eventStr += " EPOLLWAKEUP";
+  }
+  if ((epev.events & EPOLLEXCLUSIVE) == EPOLLEXCLUSIVE) {
+    eventStr += " EPOLLEXCLUSIVE";
+  }
+    
+  runtimeError(epollMsg + " op="+opStr+" events="+eventStr);
+  return false; // unreachable
+}
+void epoll_ctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+}
 // =======================================================================================
 bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), gs.log, s.traceePid, t);

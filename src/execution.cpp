@@ -715,6 +715,9 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_dup2:
     return dup2SystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_epoll_ctl:
+    return epoll_ctlSystemCall::handleDetPre(gs, s, t, sched);
+    
   case SYS_execve:
     return execveSystemCall::handleDetPre(gs, s, t, sched);
 

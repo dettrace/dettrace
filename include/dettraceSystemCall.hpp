@@ -1442,6 +1442,19 @@ public:
 };
 // =======================================================================================
 /**
+ * Many threaded packages use epoll_*
+ *
+ */
+class epoll_ctlSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_epoll_ctl;
+  const string syscallName = "epoll_ctl";
+};
+// =======================================================================================
+/**
  * We intercept exceve since we need to append our LD_PRELOAD enviornment to and pass in,
  * as the last argument.
  *
