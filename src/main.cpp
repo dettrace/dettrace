@@ -872,7 +872,7 @@ static bool fileExists(string file) {
 static bool realDevNull(string path) {
   struct stat statDevNull;
   doWithCheck(stat(path.c_str(), &statDevNull), "stat /dev/null");
-  
+  /*
   string fileType = "";
   if (S_ISREG(statDevNull.st_mode)) { fileType = "S_ISREG"; }
   if (S_ISDIR(statDevNull.st_mode)) { fileType = "S_ISDIR"; }
@@ -886,6 +886,7 @@ static bool realDevNull(string path) {
        << " major:" << major(statDevNull.st_dev)
        << " minor:" << minor(statDevNull.st_dev)
        << endl;
+  */
   // NB: when running DT tests, /dev/null shows up as a 0,6 CHR device. Not sure
   // what this is, but it seems to act like proper /dev/null as far as our
   // readDevNull test is concerned.
