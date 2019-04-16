@@ -839,7 +839,7 @@ static bool fileExists(string file) {
 static bool realDevNull(string path) {
   struct stat statDevNull;
   doWithCheck(stat(path.c_str(), &statDevNull), "stat /dev/null");
-
+  /*
   string fileType = "";
   if (S_ISREG(statDevNull.st_mode)) { fileType = "S_ISREG"; }
   if (S_ISDIR(statDevNull.st_mode)) { fileType = "S_ISDIR"; }
@@ -853,7 +853,7 @@ static bool realDevNull(string path) {
        << " major:" << major(statDevNull.st_dev)
        << " minor:" << minor(statDevNull.st_dev)
        << endl;
-
+  */
   // NB: on platforms where we run DT tests, /dev/null sometimes shows up as
   // something besides a 1,3 CHR device. For example, it appears to show up
   // with the version number 0,64 on Azure DevOps. Not sure what the
