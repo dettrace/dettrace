@@ -81,6 +81,19 @@ public:
   // Keep track of how many times scheduleNextProcess was called:
   uint32_t callsToScheduleNextProcess = 0;
 
+  void killAllProcesses() {
+    while (!runnableHeap.empty()) {
+      pid_t pid = runnableHeap.top();
+      kill(pid, SIGKILL);
+      runnableHeap.pop();
+    }
+    while (!blockedHeap.empty()) {
+      pid_t pid = blockedHeap.top();
+      kill(pid, SIGKILL);
+      blockedHeap.pop();
+    }
+  }
+  
 private:
   logger& log; /**< log file wrapper */
 

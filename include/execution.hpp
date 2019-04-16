@@ -255,6 +255,10 @@ public:
   tuple<ptraceEvent, pid_t, int> handleStuckThread(pid_t currentPid);
 
   tuple<ptraceEvent, pid_t, int> handleExitedThread(pid_t pidToContinue);
+
+  void killAllProcesses() {
+    myScheduler.killAllProcesses();
+  }
 };
 
 #endif
