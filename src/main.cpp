@@ -860,10 +860,8 @@ static bool realDevNull(string path) {
   // significance of these numbers are, but they seem to act like proper
   // /dev/null files as far as our readDevNull test is concerned.
   return S_ISCHR(statDevNull.st_mode) &&
-    ((1 == major(statDevNull.st_dev) && 3  == minor(statDevNull.st_dev)) ||
-     (0 == major(statDevNull.st_dev) && 6  == minor(statDevNull.st_dev)) ||
-     (0 == major(statDevNull.st_dev) && 64 == minor(statDevNull.st_dev)) ||
-     (0 == major(statDevNull.st_dev) && 73 == minor(statDevNull.st_dev)));
+    ((1 == major(statDevNull.st_dev) && 3 == minor(statDevNull.st_dev)) ||
+     (0 == major(statDevNull.st_dev)));
 }
 
 /**
