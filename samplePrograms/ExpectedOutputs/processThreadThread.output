@@ -1,0 +1,9 @@
+Parent process pid: 2
+Parent process ppid: 1
+Thread1 forking P2.
+Thread 1 pid: 2
+Thread 1 ppid: 1
+Thread1 wrote this many bytes: 100
+Thread1 done, returning.
+Process made thread1, pid: 5
+Process is exiting.
