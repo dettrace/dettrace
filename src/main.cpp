@@ -865,10 +865,9 @@ static bool realDevNull(string path) {
   // with the version number 0,64 on Azure DevOps. Not sure what the
   // significance of these numbers are, but they seem to act like proper
   // /dev/null files as far as our readDevNull test is concerned.
-  return S_ISCHR(statDevNull.st_mode) &&
+    return S_ISCHR(statDevNull.st_mode) &&
     ((1 == major(statDevNull.st_dev) && 3 == minor(statDevNull.st_dev)) ||
-     (0 == major(statDevNull.st_dev) && 6 == minor(statDevNull.st_dev)));
-  (0 == major(statDevNull.st_dev)));
+     (0 == major(statDevNull.st_dev)));
 }
 
 /**
