@@ -69,6 +69,18 @@ public:
   state(pid_t traceePid, int debugLevel);
 
   /**
+   * Keeps track of whether this process just exit_group-ed, we need to remember this
+   * since there is no post-hook for exit group.
+   */
+  bool isExitGroup = false;
+
+  /**
+   * Keeps track of whether this process just trying to do an execve,
+   * we need to remember this since TODO
+   */
+  bool isExecve = false;
+
+  /**
    * Keep track of file descriptor status for blocking descriptors, as set by the
    * user program. Irregardless of what we set it to. These are
    * set in either pipe (non blocking) or pipe2 (either), or duplicated through,
@@ -245,6 +257,13 @@ public:
    * to know if this is a newly created file.
    */
   bool fileExisted = false;
+
+  /**
+   * Keep track of places where it's okay to see a stuck thread versus where it's not.
+   * We should only see a stuck thread after a pre-hook where we skip the post-hook,
+   * or a post-hook, continuing to the next system call.
+   */
+  bool canGetStuck = false;
 };
 
 #endif

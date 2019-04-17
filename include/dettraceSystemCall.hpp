@@ -317,6 +317,15 @@ public:
   const string syscallName = "lchown";
 };
 // =======================================================================================
+ class exit_groupSystemCall {
+ public:
+   static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched);
+   static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched);
+
+   const int syscallNumber = SYS_exit_group;
+   const string syscallName = "exit_group";
+};
+// =======================================================================================
 /**
  * fcntl - manipulate file descriptor
  *

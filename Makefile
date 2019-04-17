@@ -3,6 +3,7 @@ all: build
 
 build: bin initramfs
 	cd src && ${MAKE}
+	rm -rf bin/dettrace
 	cp src/dettrace bin/
 
 bin:
@@ -10,6 +11,7 @@ bin:
 
 static: bin
 	cd src && ${MAKE} all-static
+	rm -rf bin/dettrace
 	cp src/dettrace-static bin/dettrace
 
 templistfile := $(shell mktemp)

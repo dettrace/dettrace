@@ -34,13 +34,6 @@ public:
   scheduler(pid_t startingPid, logger& log);
 
   /**
-   * Check if this process has been marked as finished.
-   * @param process pid of process to check
-   * @return whether the process is finished
-   */
-  bool isFinished(pid_t process);
-
-  /**
    * Mark this process as exited. Let other's run. We need our children to run
    * and finish before we get a ptrace nonEventExit. We actually remove the process
    * when our last child has itself ended.
@@ -71,10 +64,10 @@ public:
   void addAndScheduleNext(pid_t newProcess);
 
   /**
-   * Remove a process from the scheduler when it is not at the top of the 
+   * Remove a process from the scheduler when it is not at the top of the
    * runnableHeap or the blockedHeap.
    * @param process pid of process to be removed
-   */ 
+   */
   void removeNotTop(pid_t process);
 
   /**
@@ -84,40 +77,6 @@ public:
    * This marks the end of the program.
    */
   bool removeAndScheduleNext(pid_t process);
-
-  /**
-   * Removes specified process, let our parent run to completion.
-   * Should only be called by the last child of parent, when parent has already
-   * been marked as finished.
-   * @param pid of process to remove from scheduler
-   * @param pid of parent process
-   */
-  void removeAndScheduleParent(pid_t child, pid_t parent);
-
-  /**
-   * Find and erase process from scheduler's process tree.
-   * @param pid of process to find and erase.
-   */ 
-  void eraseSchedChild(pid_t process);
-  
-  /**
-   * Insert parent and child pair into scheduler's process tree.
-   * @param pid of parent process
-   * @param pid of child process
-   */
-  void insertSchedChild(pid_t parent, pid_t child);
-
-  /**
-   * Check for circular dependency between tops of the two heaps (runnableHeap and blockedHeap).
-   * @return bool for whether there is a circular dependency.
-   */
-  bool circularDependency();
-
-  /**
-   * Remove dependencies from the scheduler's dependency tree
-   * when a process is removed from the scheduler.
-   */
-  void removeDependencies();
 
   // Keep track of how many times scheduleNextProcess was called:
   uint32_t callsToScheduleNextProcess = 0;
@@ -137,22 +96,7 @@ private:
    * and continue.
    */
   priority_queue<pid_t> runnableHeap;
-  priority_queue<pid_t> blockedHeap;  
-
-  /**
-   * Set of finished processes.
-   */
-  set<pid_t> finishedProcesses; 
-  
-  /**
-   * Keep track of parent processes and their children on the scheduler side.
-   */  
-  multimap<pid_t, pid_t> schedulerTree;
-
-  /**
-   * Keep track of circular dependencies between processes to detect deadlock.
-   */
-  map<pid_t, pid_t> preemptMap; 
+  priority_queue<pid_t> blockedHeap;
 
   /** Remove process from scheduler.
    * Calls deleteProcess, used to share code between
@@ -166,17 +110,10 @@ private:
 
   /**
    * Get next process based on whether the runnableHeap is empty.
-   * If the runnableHeap is empty, swap the heaps, and continue. 
+   * If the runnableHeap is empty, swap the heaps, and continue.
    * @return next process to schedule.
    */
   pid_t scheduleNextProcess();
-
-  /**
-   * Return the next process that is not waiting on a child.
-   * @param bool saying whether the heaps have been swapped.
-   * @return next non-waiting process to schedule.
-   */
-  pid_t findNextNotWaiting(bool swapped);
 
   void printProcesses();   /**< Debug function to print all data about processes. */
 };

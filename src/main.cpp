@@ -58,7 +58,7 @@
 
 using namespace std;
 
-struct programArgs{
+struct programArgs {
   int optIndex;
   int argc;
   char** argv;
@@ -100,6 +100,7 @@ static void proc_setgroups_write(pid_t pid, const char* str);
 // Default starting value used by our programArgs.
 static bool isDefault(string arg);
 // =======================================================================================
+
 
 struct CloneArgs {
   struct programArgs args;

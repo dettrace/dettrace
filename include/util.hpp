@@ -25,7 +25,8 @@ using namespace std;
  */
 void runtimeError(string error);
 
-extern unordered_map<int, string> futexNames; /**< map of futex words (32-bits) to string representations */
+extern unordered_map<int, string> futexCommands;
+extern unordered_map<int, string> futexAdditionalFlags;
 
 /**
  * Get env variable copy to free space and return as a heap-allocated pointer.
