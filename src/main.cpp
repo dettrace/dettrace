@@ -861,7 +861,7 @@ static bool realDevNull(string path) {
   // readDevNull test is concerned.
   return S_ISCHR(statDevNull.st_mode) &&
     ((1 == major(statDevNull.st_dev) && 3 == minor(statDevNull.st_dev)) ||
-     (0 == major(statDevNull.st_dev) && 6 == minor(statDevNull.st_dev)));
+     (0 == major(statDevNull.st_dev)));
 }
 
 /**

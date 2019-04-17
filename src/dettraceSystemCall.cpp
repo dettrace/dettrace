@@ -801,7 +801,7 @@ void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 
   // Even though we don't particularly like TCGETS, we will let it through as we need
   // it for some programs to work, like `more`.
-  if(TCGETS == request || TCSETS == request || FIOCLEX == request){
+  if(TCGETS == request || TCSETS == request || FIOCLEX == request || FIONREAD){
     return;
   }
 
