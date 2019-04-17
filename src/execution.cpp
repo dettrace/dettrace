@@ -343,11 +343,9 @@ void execution::runProgram(){
       log.writeToLog(Importance::inter,
                      log.makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
                      traceesPid);
-
       //reset CPUID trap flag
       states.at(traceesPid).CPUIDTrapSet = false;
 
-  
       handleExecEvent(traceesPid);
       continue;
     }
@@ -557,8 +555,7 @@ bool execution::handleSeccomp(const pid_t traceesPid){
   // Get registers from tracee.
   tracer.updateState(traceesPid);
 
-  if (!states.at(traceesPid).CPUIDTrapSet && !myGlobalState.kernelPre4_12)
-  {
+  if(!states.at(traceesPid).CPUIDTrapSet && !myGlobalState.kernelPre4_12){
     //check if CPUID needs to be set, if it does, set trap
     trapCPUID(myGlobalState, states.at(traceesPid), tracer);
   }
@@ -690,7 +687,7 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
 
   case SYS_arch_prctl:
     return arch_prctlSystemCall::handleDetPre(gs, s, t, sched);
-    
+
   case SYS_chdir:
     return chdirSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -717,7 +714,7 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
 
   case SYS_epoll_ctl:
     return epoll_ctlSystemCall::handleDetPre(gs, s, t, sched);
-    
+
   case SYS_execve:
     return execveSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -1007,9 +1004,6 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 
   case SYS_dup2:
     return dup2SystemCall::handleDetPost(gs, s, t, sched);
-
-  case SYS_execve:
-    return execveSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_faccessat:
     return faccessatSystemCall::handleDetPost(gs, s, t, sched);
