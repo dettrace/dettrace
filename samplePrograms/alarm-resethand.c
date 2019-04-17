@@ -21,7 +21,7 @@ int main() {
   sa.sa_mask = sigset;
   sa.sa_flags = SA_RESETHAND; // go back to SIG_DFL after alarmListener runs once
   sa.sa_handler = alarmListener;
-  printf("&sa: %p\n", &sa);
+  //printf("&sa: %p\n", &sa);
   int rv = sigaction(SIGALRM, &sa, NULL);
   assert( 0 == rv );
   

@@ -1,5 +1,2 @@
 Received signal 11
   valid siginfo_t fields: signo:11 errno:0 code:1 addr:0x1
-  other (technically undefined) siginfo_t fields: pid:1 uid:0 status:-134225552 utime:0 stime:140737351909215 value:0x7ffff7ffe170 int:-134225552 ptr:0x7ffff7ffe170 overrun:0 timerid:1 band:1 fd:-134225552 addr_lsb:-7824 lower:(nil) upper:0x7ffff7ddff5f call_addr:0x1 syscall:-134225552 uarch:32767
-context: R8:0, R9:7ffff7bb1d80, R10:8, R11:246, R12:4004f0, R13:7fffffffee20, R14:0, R15:0
- RDI:b, RSI:7fffffffeb30, RBP:7fffffffed40, RBX:0, RDX:0, RAX:1, RCX:1, RSP:7fffffffec80, RIP:400680
