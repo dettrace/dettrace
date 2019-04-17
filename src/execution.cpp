@@ -1292,11 +1292,17 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
       // at syscall exit like regular syscalls.
       ptracer::doPtrace(PTRACE_SINGLESTEP, pidToContinue, 0, (void*) signalToDeliver);
       // wait for our SIGTRAP
+      // TODO check return value of this!!
       waitpid(pidToContinue, &status, 0);
 
       // call our post-hook manually for vsyscall stops.
       tracer.updateState(pidToContinue);
+
+      // TODO this assumes we wanted to call the post-hook for this system call,
+      // is this always true?
       callPostHook(syscallNum, myGlobalState, states.at(pidToContinue), tracer, myScheduler);
+
+      // TODO What's the point of this second updateState call?
       tracer.updateState(pidToContinue);
 
       // 000000000009efe0 <time@@GLIBC_2.2.5>:

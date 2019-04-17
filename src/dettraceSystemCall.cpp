@@ -55,13 +55,6 @@ bool accessSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 void accessSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   return;
 }
-// ========================================================================================
-bool brkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  return true;
-}
-void brkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  return;
-}
 // =======================================================================================
 bool arch_prctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
 
@@ -293,11 +286,31 @@ bool epoll_ctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
   if ((epev.events & EPOLLEXCLUSIVE) == EPOLLEXCLUSIVE) {
     eventStr += " EPOLLEXCLUSIVE";
   }
-    
+
   runtimeError(epollMsg + " op="+opStr+" events="+eventStr);
   return false; // unreachable
 }
 void epoll_ctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+}
+// =======================================================================================
+bool epoll_waitSystemCall::handleDetPre(globalState &gs, state &s, ptracer &t,
+                                        scheduler &sched) {
+  
+}
+
+void epoll_waitSystemCall::handleDetPost(globalState &gs, state &s, ptracer &t,
+                                        scheduler &sched) {
+  
+}
+// =======================================================================================
+bool epoll_pwaitSystemCall::handleDetPre(globalState &gs, state &s, ptracer &t,
+                                        scheduler &sched) {
+  
+}
+
+void epoll_pwaitSystemCall::handleDetPost(globalState &gs, state &s, ptracer &t,
+                                        scheduler &sched) {
+  
 }
 // =======================================================================================
 bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -2235,7 +2248,6 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
       gs.log.writeToLog(Importance::info, "sha1 checksum of %d bytes written: %s\n",
                         s.totalBytes, ss.str().c_str());
     }
-    
     resetState();
   }else{
     gs.log.writeToLog(Importance::info, "Not all bytes written: Replaying system call!\n");
