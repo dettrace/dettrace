@@ -860,9 +860,15 @@ static bool realDevNull(string path) {
   // NB: when running DT tests, /dev/null shows up as a 0,6 CHR device. Not sure
   // what this is, but it seems to act like proper /dev/null as far as our
   // readDevNull test is concerned.
+  // NB: on platforms where we run DT tests, /dev/null sometimes shows up as
+  // something besides a 1,3 CHR device. For example, it appears to show up
+  // with the version number 0,64 on Azure DevOps. Not sure what the
+  // significance of these numbers are, but they seem to act like proper
+  // /dev/null files as far as our readDevNull test is concerned.
   return S_ISCHR(statDevNull.st_mode) &&
     ((1 == major(statDevNull.st_dev) && 3 == minor(statDevNull.st_dev)) ||
-     (0 == major(statDevNull.st_dev)));
+     (0 == major(statDevNull.st_dev) && 6 == minor(statDevNull.st_dev)));
+  (0 == major(statDevNull.st_dev)));
 }
 
 /**
