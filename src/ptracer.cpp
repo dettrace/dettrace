@@ -30,7 +30,7 @@ ptracer::ptracer(pid_t pid ){
 
   int startingStatus;
   if(-1 == waitpid(pid, &startingStatus, 0)){
-    runtimeError("Unable to start first process: " + string { strerror(errno)});
+    throw runtime_error("Unable to start first process: " + string { strerror(errno)});
   }
 }
 

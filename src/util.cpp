@@ -9,7 +9,7 @@
 
 using namespace std;
 
-unordered_map<int, string> futexCommands = {
+unordered_map<int, string> futexNames = {
   {FUTEX_WAIT, "FUTEX_WAIT"},
   {FUTEX_WAKE, "FUTEX_WAKE"},
   { FUTEX_FD, " FUTEX_FD"},
@@ -22,12 +22,8 @@ unordered_map<int, string> futexCommands = {
   { FUTEX_WAIT_BITSET, " FUTEX_WAIT_BITSET"},
   { FUTEX_WAKE_BITSET, " FUTEX_WAKE_BITSET"},
   { FUTEX_WAIT_REQUEUE_PI, " FUTEX_WAIT_REQUEUE_PI"},
-  { FUTEX_CMP_REQUEUE_PI, " FUTEX_CMP_REQUEUE_PI"}};
-
-unordered_map<int, string> futexAdditionalFlags = {
-  // This is 128 which includes FUTEX_WAIT (value of 0).
-  // So we omit it as it's equal to FUTEX_WAIT_PRIVATE.
-  // { FUTEX_PRIVATE_FLAG, " FUTEX_PRIVATE_FLAG"},
+  { FUTEX_CMP_REQUEUE_PI, " FUTEX_CMP_REQUEUE_PI"},
+  { FUTEX_PRIVATE_FLAG, " FUTEX_PRIVATE_FLAG"},
   { FUTEX_CLOCK_REALTIME, " FUTEX_CLOCK_REALTIME"},
   { FUTEX_CMD_MASK, " FUTEX_CMD_MASK"},
   { FUTEX_WAIT_PRIVATE, " FUTEX_WAIT_PRIVATE"},

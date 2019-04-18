@@ -37,11 +37,6 @@ void seccomp::loadRules(bool debug, bool convertUids){
     noIntercept(SYS_fchown);
   }
 
-  noIntercept(SYS_getsockname);
-  noIntercept(SYS_getsockopt);
-  noIntercept(SYS_setsockopt);
-  noIntercept(SYS_socketpair);
-
   // sets architecture-specific process or thread state.
   intercept(SYS_arch_prctl);
   // Change location of the program break.
@@ -65,7 +60,9 @@ void seccomp::loadRules(bool debug, bool convertUids){
   // End process.
   noIntercept(SYS_exit);
   // End process group.
-  intercept(SYS_exit_group);
+  noIntercept(SYS_exit_group);
+
+  // Epoll system calls.
   noIntercept(SYS_epoll_create1);
   noIntercept(SYS_epoll_create);
   noIntercept(SYS_epoll_ctl);
@@ -235,14 +232,13 @@ void seccomp::loadRules(bool debug, bool convertUids){
   intercept(SYS_openat);
 
   intercept(SYS_tgkill);
-  // TODO We explicitly don't handle kill, why?
 
   intercept(SYS_link, debug);
   intercept(SYS_linkat, debug);
 
   intercept(SYS_pipe);
   intercept(SYS_pipe2);
-  // intercept(SYS_pselect6);
+  intercept(SYS_pselect6);
   intercept(SYS_poll);
   intercept(SYS_prlimit64);
   intercept(SYS_read);

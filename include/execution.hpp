@@ -71,8 +71,6 @@ private:
    */
   ptracer tracer;
 
-  bool handleTraceeExit(string reason, pid_t traceePid, bool isNonExit);
-
   /**
    * System call state map.
    * State represents all state we wish to maintain between subsequent system calls, e.g. logical time, etc.
@@ -170,7 +168,7 @@ public:
    * @return Exit status for runProgram
    * @see runProgram()
    */
-  // bool handleExit(const pid_t traceesPid);
+  bool handleExit(const pid_t traceesPid);
 
   /**
    * Handles system call pre-hook.
@@ -268,12 +266,6 @@ public:
     * @return ptrace event type
    */
   ptraceEvent getPtraceEvent(const int status);
-
-  tuple<ptraceEvent, pid_t, int> handleStuckExecve(pid_t currentPid);
-
-  tuple<ptraceEvent, pid_t, int> handleStuckThread(pid_t currentPid);
-
-  tuple<ptraceEvent, pid_t, int> handleExitedThread(pid_t pidToContinue);
 };
 
 #endif

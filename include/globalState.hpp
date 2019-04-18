@@ -3,7 +3,6 @@
 
 #include "ValueMapper.hpp"
 #include "PRNG.hpp"
-#include<unordered_set>
 
 /**
  * Class to hold global state shared among all processes, this includes the logger, inode
@@ -25,31 +24,6 @@ public:
    */
   PRNG prng;
   
-  /**
-   * Keeps track of live threads in our program.
-   */
-  unordered_set<pid_t> liveThreads;
-
-  /**
-   * Keeps track of thread groups, each thread groups is composed of the threads and
-   * the single parent process that belongs to that thread group. Notice at any given
-   * time, the thread group may not contain a process, as the process may have exited.
-   * when no members are left, the threadGroup is deleted.
-   * The pid of the process is used as the key into the multimap.
-   * Hence {(2, 2), (2, 3), (2, 4)} means for thread group 2, process 2, thread 3, and
-   * thread 4 are members of this thread group. (k, k) is always the process, and two
-   * different processes cannot belong to the same thread group.
-   */
-  unordered_multimap<pid_t, pid_t> threadGroups;
-
-  /**
-   * Map threads and processes back to their thread group.
-   * Makes it easy to look up threads in threadGroups while only knowing the traceePid.
-   * Notice for processes their threadGroupNumber equals their traceePid, we add them
-   * to the map anyways to avoid special cases for processes vs threads.
-   * In the future we may expand to maintain process' parent as well.
-   */
-  unordered_map<pid_t, pid_t> threadGroupNumber;
   /**
    * Isomorphism between inodes and virtual inodes.
    */
@@ -115,8 +89,6 @@ public:
    * Counter for keeping track of injected system calls
    */
   uint32_t injectedSystemCalls = 0;
-
-  
 };
 
 #endif
