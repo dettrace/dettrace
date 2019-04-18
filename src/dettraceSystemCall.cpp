@@ -533,25 +533,27 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   int futexOp = t.arg2();
   int futexValue = t.arg3();
   timespec* timeoutPtr = (timespec*) t.arg4();
-  string operation;
-
-  try{
-     operation = futexNames.at(futexOp);
-  }catch(...){
-    // Uknown operation? Pehaps a combination of multiple non trivial options.
-    operation = to_string(futexOp);
-  }
-
-  gs.log.writeToLog(Importance::extra, "Futex operation: " + operation + "\n");
 
   // See definitions of variables here.
   // https://github.com/spotify/linux/blob/master/include/linux/futex.h
   int futexCmd = futexOp & FUTEX_CMD_MASK;
+  gs.log.writeToLog(Importance::info, "Operation: " + futexCommands.at(futexCmd) + "\n");
+
+  if ((futexOp & FUTEX_PRIVATE_FLAG) != 0) {
+    gs.log.writeToLog(Importance::info, "with: FUTEX_PRIVATE_FLAG\n");
+  }
+  if ((futexOp & FUTEX_CLOCK_REALTIME) != 0) {
+    gs.log.writeToLog(Importance::info, "with: FUTEX_CLOCK_REALTIME\n");
+  }
+  if (timeoutPtr != NULL) {
+    gs.log.writeToLog(Importance::info, "with: user defined timeout.\n");
+  }
 
   // Handle wake operations by notifying scheduler of progress.
   if(futexCmd == FUTEX_WAKE || futexCmd == FUTEX_REQUEUE || futexCmd == FUTEX_CMP_REQUEUE ||
      futexCmd == FUTEX_WAKE_BITSET || futexCmd == FUTEX_WAKE_OP){
     gs.log.writeToLog(Importance::info, "Waking on address: %p\n", t.arg1());
+    gs.log.writeToLog(Importance::info, "Trying to wake up to %d threads.\n", t.arg3());
     // No need to go into the post hook.
     return false;
   }
@@ -561,11 +563,12 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
      futexCmd == FUTEX_WAIT_BITSET ||
      futexCmd == FUTEX_WAIT_REQUEUE_PI
      ){
-    gs.log.writeToLog(Importance::info, "Futex wait on: %p.\n", t.arg1());
-    gs.log.writeToLog(Importance::info, "On value: " + to_string(futexValue) + "\n");
+    gs.log.writeToLog(Importance::info, "Waiting on value at address: %p.\n", t.arg1());
+    gs.log.writeToLog(Importance::info, "Against value: " + to_string(futexValue) + "\n");
+
     if (gs.log.getDebugLevel() > 0) {
       int actualValue = (int) t.readFromTracee(traceePtr<int>((int*) t.arg1()), t.getPid());
-      gs.log.writeToLog(Importance::extra, "Actual value: " + to_string(actualValue) + "\n");
+      gs.log.writeToLog(Importance::info, "Actual value: " + to_string(actualValue) + "\n");
     }
 
     // Overwrite the current value with our value. Restore value in post hook.
@@ -574,14 +577,9 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
     timespec ourTimeout = {0};
 
     if(timeoutPtr == nullptr){
-      // We need somewhere to store timespec. We will write this data below the current
-      // stack pointer accounting for the red zone, known to be 128 bytes.
-      gs.log.writeToLog(Importance::info,
-                        "timeout null, writing our data below the current stack frame...\n");
-
-      // Enough space for timespec struct.
+       gs.log.writeToLog(Importance::extra,
+                        "timeout null, writing our data to mmaped page...\n");
       timespec* newAddress = (timespec*) s.mmapMemory.getAddr().ptr;
-
       t.writeToTracee(traceePtr<timespec>(newAddress), ourTimeout, s.traceePid);
 
       // Point system call to new address.
@@ -609,17 +607,16 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
      futexCmd == FUTEX_WAIT_REQUEUE_PI
      ){
 
-    // The process is trying to poll. We preempt but do not mark as blocked to avoid
-    // getting stuck on an infite polling loop.
+    gs.log.writeToLog(Importance::info, "Futex post-hook, handling wait operation.\n");
     if(s.userDefinedTimeout){
       // Only preempt if we would have timeout out. Othewise let if continue running!
       if(t.getReturnValue() == -ETIMEDOUT){
-        sched.preemptAndScheduleNext(preemptOptions::runnable);
+        sched.preemptAndScheduleNext(preemptOptions::markAsBlocked);
       }
-
       s.userDefinedTimeout = false;
       return;
     } else {
+      gs.log.writeToLog(Importance::info, "Replaying futex system call.\n");
       t.writeArg4(s.originalArg4);
       replaySyscallIfBlocked(gs, s, t, sched, ETIMEDOUT);
     }
@@ -791,7 +788,7 @@ void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 
   // Even though we don't particularly like TCGETS, we will let it through as we need
   // it for some programs to work, like `more`.
-  if(TCGETS == request || TCSETS == request || FIOCLEX == request || FIONREAD){
+  if(TCGETS == request || TCSETS == request || FIOCLEX == request || FIONREAD == request){
     return;
   }
 
@@ -869,8 +866,7 @@ nanosleepSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedul
   // Write 0 seconds to time. Required to skip waiting at all.
   struct timespec *req = (struct timespec *) t.arg1();
   if(req != nullptr){
-    uint64_t rsp = (uint64_t) t.getRsp().ptr;
-    struct timespec* myReq = (timespec*) (rsp - 128 - sizeof(struct timespec));
+    struct timespec* myReq = (timespec*) s.mmapMemory.getAddr().ptr;
     struct timespec localReq = {0};
 
     t.writeToTracee(traceePtr<struct timespec>(myReq), localReq, s.traceePid);
@@ -2251,6 +2247,7 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 // =======================================================================================
 bool wait4SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   s.wait4Blocking = (t.arg3() & WNOHANG) == 0;
+  gs.log.writeToLog(Importance::info, "wait4(%d)\n", (int) t.arg1());
   gs.log.writeToLog(Importance::info, "Making this a non-blocking wait4\n");
 
   // Make this a non blocking hang!
@@ -2260,10 +2257,10 @@ bool wait4SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
 }
 void wait4SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(s.wait4Blocking){
-    gs.log.writeToLog(Importance::info, "Non-blocking wait4 found\n");
+    gs.log.writeToLog(Importance::info, "Blocking wait4 found\n");
     replaySyscallIfBlocked(gs, s, t, sched, 0);
   }else{
-    gs.log.writeToLog(Importance::info, "Blocking wait4 found\n");
+    gs.log.writeToLog(Importance::info, "Non-blocking wait4 found\n");
     preemptIfBlocked(gs, s, t, sched, EAGAIN);
   }
   // Reset.

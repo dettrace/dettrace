@@ -2,6 +2,7 @@
 all: build
 
 build: bin initramfs
+	rm -rf bin/dettrace
 	cd src && ${MAKE}
 	cp src/dettrace bin/
 
@@ -9,6 +10,7 @@ bin:
 	mkdir -p ./bin
 
 static: bin
+	rm -rf bin/dettrace
 	cd src && ${MAKE} all-static
 	cp src/dettrace-static bin/dettrace
 

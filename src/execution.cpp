@@ -232,6 +232,7 @@ void execution::runProgram(){
 
     // Most common event. We handle the pre-hook for system calls here.
     if(ret == ptraceEvent::seccomp){
+      log.writeToLog(Importance::extra, "Is seccomp event!\n");
       systemCallsEvents++;
       states.at(traceesPid).callPostHook = handleSeccomp(traceesPid);
       continue;

@@ -41,7 +41,7 @@ bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
 bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
                             int64_t errornoValue){
   if(- errornoValue == t.getReturnValue()){
-    gs.log.writeToLog(Importance::info, "System call would have blocked!\n");
+    gs.log.writeToLog(Importance::info, "System call would have blocked! Replaying\n");
 
     gs.replayDueToBlocking++;
     sched.preemptAndScheduleNext(preemptOptions::markAsBlocked);
