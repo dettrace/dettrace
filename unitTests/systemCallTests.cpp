@@ -114,7 +114,7 @@ TEST_CASE("getuid", "getuid"){
 void statFamilyTests(struct stat statbuf){
   CHECK(statbuf.st_uid == 0);
   CHECK(statbuf.st_dev == 1);
-  CHECK(statbuf.st_ino == 7);
+  CHECK(statbuf.st_ino == 8);
   CHECK(statbuf.st_blksize == 512);
   CHECK(statbuf.st_blocks == 1);
   CHECK(statbuf.st_gid == 0);
@@ -133,12 +133,12 @@ void statFamilyTests(struct stat statbuf){
 
 TEST_CASE("stat", "stat"){
   struct stat statbuf;
+  system("rm test_temp.txt");
   // Create new file to verify it has the newest filestamp possible.
   system("touch test_temp.txt");
 
   int ret = stat("test_temp.txt", &statbuf);
   statFamilyTests(statbuf);
-
 }
 
 
@@ -148,8 +148,10 @@ TEST_CASE("fstat", "fstat"){
   int fd = open("test_temp.txt", O_RDONLY);
   int ret = fstat(fd, &statbuf);
   if(ret == -1){
+    system("rm test_temp.txt");
     REQUIRE(false);
   }
+
   statFamilyTests(statbuf);
 }
 
@@ -159,6 +161,7 @@ TEST_CASE("lstat", "lstat"){
 
   int ret = lstat("./test_temp.txt", &statbuf);
   statFamilyTests(statbuf);
+  system("rm test_temp.txt");
 }
 
 TEST_CASE("open", "/dev/urandom"){
@@ -234,12 +237,14 @@ TEST_CASE("utime", "utime"){
   // Verify timestamp is zero:
   struct stat myStat;
   if(-1 == stat(test, &myStat)){
-      REQUIRE(false);
+    system("rm utimeTestFile.txt");
+    REQUIRE(false);
   }
+  system("rm utimeTestFile.txt");
 
   REQUIRE(myStat.st_atim.tv_sec == 0);
   REQUIRE(myStat.st_atim.tv_nsec == 0);
-  REQUIRE(myStat.st_mtim.tv_sec == 1);
+  REQUIRE(myStat.st_mtim.tv_sec == 2);
   REQUIRE(myStat.st_mtim.tv_nsec == 0);
 }
 
