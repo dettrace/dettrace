@@ -10,7 +10,7 @@ bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
   if(- errnoValue == t.getReturnValue()){
     gs.log.writeToLog(Importance::info, "Syscall would have blocked!\n");
 
-    sched.preemptAndScheduleNext(preemptOptions::runnable);
+    sched.preemptAndScheduleNext();
     return true;
   }else{
     // Disambiguiate. Otherwise it's impossible to tell the difference between a
@@ -28,7 +28,7 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sc
     gs.log.writeToLog(Importance::info, "System call would have blocked! Replaying.\n");
 
     gs.replayDueToBlocking++;
-    sched.preemptAndScheduleNext(preemptOptions::markAsBlocked);
+    sched.preemptAndScheduleNext();
     replaySystemCall(gs, t, t.getSystemCallNumber());
     return true;
   }else{
@@ -321,6 +321,9 @@ bool tracee_file_exists(string traceePath, pid_t traceePid, logger& log,
   } else {
     runtimeError("Unable to check for existance of file: " + to_string(errno));
   }
+
+  // Can never happen, here to avoid spurious warning.
+  return false;
 }
 // =======================================================================================
 ino_t inode_from_tracee(string traceePath, pid_t traceePid, logger& log,
@@ -423,6 +426,8 @@ bool sendTraceeSignalNow(int signum, globalState& gs,
     runtimeError("invalid handler "+to_string(sh)+
                         " for signal "+to_string(signum));
   }
+  // Can never happen, here to avoid spurious warning.
+  return false;
 }
 // =======================================================================================
 string resolve_tracee_path(string traceePath, pid_t traceePid, logger& log,

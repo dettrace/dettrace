@@ -52,5 +52,3 @@ test-docker: clean docker
 clean:
 	$(RM) src/dettrace
 	make -C ./src/ clean
-	make -C ./test/unitTests/ clean
-	make -C ./test/samplePrograms/ clean

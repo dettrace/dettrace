@@ -173,6 +173,24 @@ public:
   const string syscallName = "dup2";
 };
 // =======================================================================================
+class epoll_waitSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_epoll_wait;
+  const string syscallName = "epoll_wait";
+};
+// =======================================================================================
+class epoll_pwaitSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_epoll_pwait;
+  const string syscallName = "epoll_wait";
+};
+// =======================================================================================
 /**
  * int faccessat(int dirfd, const char *pathname, int mode, int flags);
  *

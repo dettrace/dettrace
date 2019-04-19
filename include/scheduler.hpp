@@ -10,13 +10,6 @@
 
 using namespace std;
 
-
-/**
- * Options for process being preempted.
- * Sometimes we want to mark it as blocked, sometimes we want to continue to let it run.
- */
-enum class preemptOptions { runnable, markAsBlocked };
-
 /**
  * Stateful class to keep track of all currently running processes in our process tree.
  * Returns which process should run next based on our scheduling policy. Keeps track
@@ -51,10 +44,9 @@ public:
   /**
    * Preempt current process and get pid of process that ptrace should run next.
    * Throws exception if empty.
-   * @param p: Options for process we're preempting.
    * (No need to pass PID in.)
    */
-  void preemptAndScheduleNext(preemptOptions p);
+  void preemptAndScheduleNext();
 
   /**
    * Adds new process to scheduler.
