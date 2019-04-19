@@ -71,7 +71,10 @@ void seccomp::loadRules(bool debug, bool convertUids){
   intercept(SYS_exit_group);
   noIntercept(SYS_epoll_create1);
   noIntercept(SYS_epoll_create);
+  //noIntercept(SYS_epoll_ctl);
   intercept(SYS_epoll_ctl);
+  intercept(SYS_epoll_wait);
+  intercept(SYS_epoll_pwait);
   // Advise on access patter by program of file.
   noIntercept(SYS_fadvise64);
   noIntercept(SYS_fallocate);
