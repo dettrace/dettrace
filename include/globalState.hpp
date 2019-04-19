@@ -3,6 +3,7 @@
 
 #include "ValueMapper.hpp"
 #include "PRNG.hpp"
+#include<unordered_set>
 
 /**
  * Class to hold global state shared among all processes, this includes the logger, inode
@@ -89,6 +90,34 @@ public:
    * Counter for keeping track of injected system calls
    */
   uint32_t injectedSystemCalls = 0;
+
+  /**
+   * Keeps track of live threads in our program.
+   */
+  unordered_set<pid_t> liveThreads;
+
+  /**
+   * Keeps track of thread groups, each thread groups is composed of the threads and
+   * the single parent process that belongs to that thread group. The process will always
+   * be the last live member of a thread group as it cannot exit until all it's threads
+   * and true process children have exited.
+   * When no members are left, the threadGroup is deleted.
+   * The pid of the process is used as the key into the multimap.
+   * Hence {(2, 2), (2, 3), (2, 4)} means for thread group 2, process 2, thread 3, and
+   * thread 4 are members of this thread group. (k, k) is always the process, and two
+   * different processes cannot belong to the same thread group.
+   * Child processes of a process are NOT included in the thread group, only threads are.
+   * A child process will get it's own thread group.
+   */
+  unordered_multimap<pid_t, pid_t> threadGroups;
+
+  /**
+   * Map threadsGroups members back to their thread group.
+   * Makes it easy to look up threads in threadGroups while only knowing their tid/traceePid.
+   * Notice for processes their threadGroupNumber equals their traceePid, we add them
+   * to the map anyways to avoid special cases for the process owner vs threads.
+   */
+  unordered_map<pid_t, pid_t> threadGroupNumber;
 };
 
 #endif

@@ -70,32 +70,40 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
   vdsoFuncs(vdsoFuncs) {
     // Set state for first process.
     states.emplace(startingPid, state{startingPid, debugLevel});
+    myGlobalState.threadGroups.insert({startingPid, startingPid});
+    myGlobalState.threadGroupNumber.insert({startingPid, startingPid});
 
     // First process is special and we must set the options ourselves.
     // This is done everytime a new process is spawned.
     ptracer::setOptions(startingPid);
   }
 // =======================================================================================
-// We only call this function on a ptrace::nonEventExit. We only receive this event once
-// all the process' children have finished.
-bool execution::handleExit(const pid_t traceesPid){
-  auto msg = log.makeTextColored(Color::blue, "Process [%d] has completely  finished."
-                                     " (ptrace nonEventExit).\n");
-  log.writeToLog(Importance::inter, msg, traceesPid);
+// We only call this function on a ptrace::nonEventExit.
 
+// Notice it's the last-child-alive's job to schedule a finished parent to exit.
+// If this is the  last-child-alive, but the parent is not marked as finished, that's
+// fine, it still has more code to run, eventually it will spawn more children, or exit.
+
+// This is the base case. You may, be wondering what happens if the currentProcess itself
+// has children and got here, this can't happen. A process with live children will never
+// get a nonEventExit.
+bool execution::handleNonEventExit(const pid_t traceesPid){
   // We are done. Erase ourselves from our parent's list of children.
-  // Also do this for the scheduler's process tree.
   pid_t parent = eraseChildEntry(processTree, traceesPid);
-  myScheduler.eraseSchedChild(traceesPid);
 
+  // Parent has no childrent left, and want's to exit! Schedule for exit as it is
+  // no longer in our scheduler's heaps.
   if(parent != -1                   &&       // We have no parent, we're root.
      myScheduler.isFinished(parent) &&       // Check if our parent is marked as finished.
      processTree.count(parent) == 0){        // Parent has no children left.
-    
+    log.writeToLog(Importance::info,
+                   "All children of finished parent %d have exited"
+                   ", scheduling parent for exiting.\n", parent);
     myScheduler.removeAndScheduleParent(traceesPid, parent);
     return false;
   }
-  // Generic case, should happen most of the time.
+  // This is the base case for any process, we have no children, and no parent that
+  // we need to help exit.
   else{
     // Process done, schedule next process to run.
     bool empty = myScheduler.removeAndScheduleNext(traceesPid);
@@ -141,18 +149,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   // https://stackoverflow.com/questions/29997244/
   // occasionally-missing-ptrace-event-vfork-when-running-ptrace
   if(systemCall == "fork" || systemCall == "vfork" || systemCall == "clone"){
-
     processSpawnEvents++;
-
-    // Threads are not supported!
-    if(systemCall == "clone" ){
-      unsigned long flags = (unsigned long) tracer.arg1();
-      unsigned long threadBit = flags & CLONE_THREAD;
-      if(threadBit != 0){
-        runtimeError("Threads not supported!");
-      }
-    }
-
     int status;
     ptraceEvent e;
     pid_t newPid;
@@ -265,15 +262,13 @@ void execution::runProgram(){
 
     // Current process was ended by signal.
     if(ret == ptraceEvent::terminatedBySignal){
-      // TODO: A Process terminated by signal might break some of the assumptions I make
-      // in handleExit (see function definition above) so we do not support it for now.
-      // runtimeError("Process terminated by signal. We currently do not support this.");
       auto msg =
         log.makeTextColored(Color::blue, "Process [%d] ended by signal %d.\n");
       log.writeToLog(Importance::inter, msg, traceesPid, WTERMSIG(status));
-      exitLoop = handleExit(traceesPid);
+      exitLoop = handleNonEventExit(traceesPid);
       continue;
     }
+
     /**
        A process needs to do two things before dying:
        1) eventExit through ptrace. This process is not truly done, it is stopped
@@ -290,24 +285,32 @@ void execution::runProgram(){
     */
     if(ret == ptraceEvent::eventExit){
       auto msg = log.makeTextColored(Color::blue, "Process [%d] has finished. "
-                                         "With ptrace exit event.\n");
+                                         "With ptraceEventExit.\n");
       log.writeToLog(Importance::inter, msg, traceesPid);
       states.at(traceesPid).callPostHook = false;
 
       // We have children still, we cannot exit.
       if(processTree.count(traceesPid) != 0){
         myScheduler.markFinishedAndScheduleNext(traceesPid);
+      } else {
+        // We have no more children, nothing stops us from exiting, we continue
+        // to the next event, which we expect to be a nonEventExit
       }
       continue;
     }
 
     // Current process is finally truly done (unlike eventExit).
     if(ret == ptraceEvent::nonEventExit){
+      auto msg = log.makeTextColored(Color::blue, "Process [%d] has finished. "
+                                         "With ptraceNonEventExit.\n");
+      log.writeToLog(Importance::inter, msg, traceesPid);
+
       states.at(traceesPid).callPostHook = false;
       if(processTree.count(traceesPid) != 0){
-        myScheduler.markFinishedAndScheduleNext(traceesPid);
+        runtimeError("We receieved a nonEventExit with children left."
+                     "This should be impossible!");
       }else{
-        exitLoop = handleExit(traceesPid);
+        exitLoop = handleNonEventExit(traceesPid);
       }
       continue;
     }
@@ -316,26 +319,27 @@ void execution::runProgram(){
     // We have encountered a call to fork, vfork, clone.
     if (ret == ptraceEvent::fork || ret == ptraceEvent::vfork || ret == ptraceEvent::clone) {
       string msg;
+      bool isThread = false;
       if (ret == ptraceEvent::fork){
         msg = "fork";
       }
       else if (ret == ptraceEvent::vfork){
         msg = "vfork";
       }
+
+      // Clone events are harder than fork/vfork, they can generate threads as well.
       else if (ret == ptraceEvent::clone){
         msg = "clone";
         tracer.updateState(traceesPid);
         unsigned long flags = (unsigned long) tracer.arg1();
-        unsigned long threadBit = flags & CLONE_THREAD;
-        if(threadBit != 0){
-          runtimeError("Threads not supported!");
-        }
+        isThread = (flags & CLONE_THREAD) != 0;
       }
 
       log.writeToLog(Importance::inter,
                      log.makeTextColored(Color::blue, "[%d] caught %s event!\n"),
                      traceesPid, msg.c_str());
-      handleForkEvent(traceesPid);
+
+      handleForkEvent(traceesPid, isThread);
       states.at(traceesPid).callPostHook = false;
       continue;
     }
@@ -396,13 +400,43 @@ void execution::runProgram(){
   }
 }
 // =======================================================================================
-pid_t execution::handleForkEvent(const pid_t traceesPid){
+pid_t execution::handleForkEvent(const pid_t traceesPid, bool isThread){
   log.writeToLog(Importance::inter, log.makeTextColored(Color::blue,
                  "Fork event came!\n"));
 
   processSpawnEvents++;
 
   pid_t newChildPid = ptracer::getEventMessage(traceesPid);
+  auto threadGroup = myGlobalState.threadGroupNumber.at(traceesPid);
+
+  if(isThread){
+    myGlobalState.liveThreads.insert(newChildPid);
+    auto msg = log.makeTextColored(Color::blue, "Adding thread %d to thread group %d\n");
+    log.writeToLog(Importance::info, msg, newChildPid, threadGroup);
+
+    // Careful here, the thread group is not necessarily traceesPid, as traceesPid may
+    // be a thread, fetch the actual threadGroup by querying our (traceesPid) thread
+    // group number.
+    myGlobalState.threadGroups.insert({threadGroup, newChildPid});
+    myGlobalState.threadGroupNumber.insert({newChildPid, threadGroup});
+  } else {
+    auto msg = log.makeTextColored(Color::blue, "Creating new thread group: %d\n");
+    log.writeToLog(Importance::info, msg, newChildPid);
+
+    // This should not happen! (Pid recycling?)
+    if (myGlobalState.threadGroups.count(newChildPid) != 0) {
+      runtimeError("Thread group already existed.\n");
+    }
+
+    // This is a process it owns it's own process group, create it.
+    myGlobalState.threadGroups.insert({newChildPid, newChildPid});
+    myGlobalState.threadGroupNumber.insert({newChildPid, newChildPid});
+  }
+
+  // If a thread T1 spawns thread T2, then T1 is NOT the parent of T2. The parent is always
+  // the process (the thread group leader) that T1 belongs to.
+  // This is where we add new children to the thread group leader.
+  processTree.insert(make_pair(threadGroup, newChildPid));
 
   // Add this new process to our states.
   states.emplace(newChildPid, state {newChildPid, debugLevel} );
@@ -410,20 +444,15 @@ pid_t execution::handleForkEvent(const pid_t traceesPid){
                  log.makeTextColored(Color::blue,"Added process [%d] to states map.\n"),
                  newChildPid);
 
-  // Tracee just had a child! It's a parent!
+  // Let child run instead of the parent, inform scheduler of new process.
   myScheduler.addAndScheduleNext(newChildPid);
 
   // during fork, the parent's mmaped memory are COWed, as we set the mapping
   // attributes to MAP_PRIVATE. new child's `mmapMemory` hence must be inherited
   // from parent process, to be consistent with fork() semantic.
+  // TODO for threads we may not need to do this?!
   states.at(newChildPid).mmapMemory.doesExist = true;
   states.at(newChildPid).mmapMemory.setAddr(states.at(traceesPid).mmapMemory.getAddr());
-
-  // This is where we add new children to our process tree.
-  // Also add it to the scheduler's process tree.
-  auto pair = make_pair(traceesPid, newChildPid);
-  processTree.insert(pair);
-  myScheduler.insertSchedChild(traceesPid, newChildPid);
 
   // Wait for child to be ready.
   log.writeToLog(Importance::info, log.makeTextColored(Color::blue,
