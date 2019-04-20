@@ -1,9 +1,9 @@
-Parent process pid: 2
-Parent process ppid: 1
-Thread1 forking P2.
-Thread 1 pid: 2
-Thread 1 ppid: 1
+Process cloning thread1.
+Thread1 cloning thread2.
+Thread2 trying to read from pipe.
+my pid is: 2
+Thread1 cloned thread2, pid: 6
 Thread1 wrote this many bytes: 100
-Thread1 done, returning.
+Thread1 is done.
 Process made thread1, pid: 5
 Process is exiting.
