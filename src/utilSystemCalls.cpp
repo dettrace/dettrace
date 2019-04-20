@@ -26,7 +26,7 @@ bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
   if(- errnoValue == t.getReturnValue()){
     gs.log.writeToLog(Importance::info, "Syscall would have blocked!\n");
 
-    sched.preemptAndScheduleNext(preemptOptions::markAsBlocked);
+    sched.preemptAndScheduleNext();
     return true;
   }else{
     // Disambiguiate. Otherwise it's impossible to tell the difference between a
@@ -44,7 +44,7 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sc
     gs.log.writeToLog(Importance::info, "System call would have blocked! Replaying\n");
 
     gs.replayDueToBlocking++;
-    sched.preemptAndScheduleNext(preemptOptions::markAsBlocked);
+    sched.preemptAndScheduleNext();
     replaySystemCall(gs, t, t.getSystemCallNumber());
     return true;
   }else{

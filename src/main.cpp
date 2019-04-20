@@ -78,6 +78,7 @@ struct programArgs{
   // is a feature. So we handle this special case, by allowing dettrace to treat the
   // current enviornment as a chroot.
   bool currentAsChroot;
+  unsigned timeoutSeconds;
 };
 // =======================================================================================
 programArgs parseProgramArguments(int argc, char* argv[]);
@@ -99,6 +100,15 @@ static void proc_setgroups_write(pid_t pid, const char* str);
 
 // Default starting value used by our programArgs.
 static bool isDefault(string arg);
+
+// =======================================================================================
+static execution *globalExeObject = nullptr;
+void sigalrmHandler(int _) {
+  assert(nullptr != globalExeObject);
+  globalExeObject->killAllProcesses();
+  // TODO: print out message about timeout expiring
+  runtimeError("dettrace timeout expired\n");
+}
 // =======================================================================================
 
 struct CloneArgs {
@@ -141,7 +151,9 @@ const string usageMsg =
   "    inside a chroot, using that same chroot as the environnment. For some reason the\n"
   "    current mount namespace is polluted with our bind mounts (even though we create)\n"
   "    our own namespace. Therefore make sure to unshare -m before running dettrace with\n"
-  "    this command, either when chrooting or when calling dettrace.";
+  "    this command, either when chrooting or when calling dettrace.\n"
+  "  --timeoutSeconds\n"
+  "    Tear down all tracee processes with SIGKILL after this many seconds";
 
 /**
  * Given a program through the command line, spawn a child thread, call PTRACEME and exec
@@ -683,6 +695,15 @@ int spawnTracerTracee(void* voidArgs){
         args.logFile, args.printStatistics, 
         devRandomPthread, devUrandomPthread,
         cloneArgs->vdsoSyms};
+
+    globalExeObject = &exe;
+    struct sigaction sa;
+    sa.sa_handler = sigalrmHandler;
+    doWithCheck(sigemptyset(&sa.sa_mask), "sigemptyset");
+    sa.sa_flags = 0;
+    doWithCheck(sigaction(SIGALRM, &sa, NULL), "sigaction(SIGALRM)");
+    alarm(args.timeoutSeconds);
+    
     exe.runProgram();
   } else if (pid == 0) {
     runTracee(args);
@@ -712,6 +733,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
   args.printStatistics = false;
   args.convertUids = false;
   args.currentAsChroot = false;
+  args.timeoutSeconds = 0;
 
   // Command line options for our program.
   static struct option programOptions[] = {
@@ -725,6 +747,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     {"working-dir", required_argument, 0, 'w'},
     {"convert-uids", no_argument, 0, 'u'},
     {"currentAsChroot", no_argument, 0, 'a'},
+    {"timeoutSeconds", required_argument, 0, 't'},
     {0,        0,                  0, 0}    // Last must be filled with 0's.
   };
 
@@ -772,6 +795,12 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       break;
     case 'w':
       args.workingDir = string { optarg };
+      break;
+    case 't':
+      args.timeoutSeconds = parseNum(optarg);
+      if (0 == args.timeoutSeconds) {
+        runtimeError("timeout seconds must be > 0.");
+      }
       break;
     case '?':
       runtimeError("Invalid option passed to detTrace!");

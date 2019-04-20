@@ -61,22 +61,15 @@ void scheduler::markFinishedAndScheduleNext(pid_t process){
 }
 
 // CHECK
-void scheduler::preemptAndScheduleNext(preemptOptions p){
+void scheduler::preemptAndScheduleNext(){
   pid_t curr = runnableHeap.top();
   auto msg = log.makeTextColored(Color::blue, "Preempting process: [%d]\n");
   log.writeToLog(Importance::info, msg, curr);
 
   // We're now blocked.
-  if(p == preemptOptions::markAsBlocked){
-    runnableHeap.pop();
-    blockedHeap.push(curr);
-    log.writeToLog(Importance::extra, "Process marked as blocked.\n", curr);
-  }else if(p == preemptOptions::markAsBlocked){
-    // If the process is still runnable we don't need to do anything.
-    log.writeToLog(Importance::extra, "Process still runnable.\n", curr);
-  }else{
-    runtimeError("Unknown preemptOption!\n");
-  }
+  runnableHeap.pop();
+  blockedHeap.push(curr);
+  log.writeToLog(Importance::extra, "Process marked as blocked.\n", curr);
 
   nextPid = scheduleNextProcess();
 }

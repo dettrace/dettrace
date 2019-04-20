@@ -181,24 +181,6 @@ public:
   static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
   static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
 
-  const int syscallNumber = SYS_epoll_wait;
-  const string syscallName = "epoll_wait";
-};
-// =======================================================================================
-class epoll_waitSystemCall {
-public:
-  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
-  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
-
-  const int syscallNumber = SYS_epoll_pwait;
-  const string syscallName = "epoll_pwait";
-};
-// =======================================================================================
-class epoll_pwaitSystemCall {
-public:
-  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
-  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
-
   const int syscallNumber = SYS_dup2;
   const string syscallName = "dup2";
 };
@@ -210,6 +192,24 @@ public:
 
   const int syscallNumber = SYS_exit_group;
   const string syscallName = "exit_group";
+};
+// =======================================================================================
+class epoll_waitSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_epoll_wait;
+  const string syscallName = "epoll_wait";
+};
+// =======================================================================================
+class epoll_pwaitSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_epoll_pwait;
+  const string syscallName = "epoll_pwait";
 };
 // =======================================================================================
 /**

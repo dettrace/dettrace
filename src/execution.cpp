@@ -853,6 +853,12 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_epoll_ctl:
     return epoll_ctlSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_epoll_wait:
+    return epoll_waitSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_epoll_pwait:
+    return epoll_pwaitSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_execve:
     return execveSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -1142,6 +1148,15 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 
   case SYS_dup2:
     return dup2SystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_epoll_ctl:
+    return epoll_ctlSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_epoll_wait:
+    return epoll_waitSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_epoll_pwait:
+    return epoll_pwaitSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_faccessat:
     return faccessatSystemCall::handleDetPost(gs, s, t, sched);

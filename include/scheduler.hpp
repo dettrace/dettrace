@@ -10,13 +10,6 @@
 
 using namespace std;
 
-
-/**
- * Options for process being preempted.
- * Only markedAsBlocked makes sense with our PID priotiry queue based scheduler
- */
-enum class preemptOptions { markAsBlocked };
-
 /**
  * Stateful class to keep track of all currently running processes in our process tree.
  * Returns which process should run next based on our scheduling policy. Keeps track
@@ -58,10 +51,9 @@ public:
   /**
    * Preempt current process and get pid of process that ptrace should run next.
    * Throws exception if empty.
-   * @param p: Options for process we're preempting.
    * (No need to pass PID in.)
    */
-  void preemptAndScheduleNext(preemptOptions p);
+  void preemptAndScheduleNext();
 
   /**
    * Adds new process to scheduler.
@@ -90,6 +82,19 @@ public:
   // Keep track of how many times scheduleNextProcess was called:
   uint32_t callsToScheduleNextProcess = 0;
 
+  void killAllProcesses() {
+    while (!runnableHeap.empty()) {
+      pid_t pid = runnableHeap.top();
+      kill(pid, SIGKILL);
+      runnableHeap.pop();
+    }
+    while (!blockedHeap.empty()) {
+      pid_t pid = blockedHeap.top();
+      kill(pid, SIGKILL);
+      blockedHeap.pop();
+    }
+  }
+  
 private:
   logger& log; /**< log file wrapper */
 

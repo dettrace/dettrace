@@ -237,79 +237,65 @@ void dup2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
 }
 // =======================================================================================
 bool epoll_ctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  int epfd = (int) t.arg1();
-  int op = (int) t.arg2();
-  int fd = (int) t.arg3();
   struct epoll_event *traceeEvent = (struct epoll_event*) t.arg4();
-
   struct epoll_event epev;
+
   readVmTraceeRaw(traceePtr<struct epoll_event>(traceeEvent), &epev, sizeof(epev), s.traceePid);
-
-  string epollMsg = "epoll_ctl epfd="+to_string(epfd)+" fd="+to_string(fd);
-  string opStr;
-  if (EPOLL_CTL_ADD == op) {
-    opStr = "EPOLL_CTL_ADD";
-  } else if (EPOLL_CTL_MOD == op) {
-    opStr = "EPOLL_CTL_MOD";
-  } else if (EPOLL_CTL_DEL == op) {
-    opStr = "EPOLL_CTL_DEL";
-  }
-  string eventStr;
-  if ((epev.events & EPOLLIN) == EPOLLIN) {
-    eventStr += " EPOLLIN";
-  }
-  if ((epev.events & EPOLLOUT) == EPOLLOUT) {
-    eventStr += " EPOLLOUT";
-  }
-  if ((epev.events & EPOLLERR) == EPOLLERR) {
-    eventStr += " EPOLLERR";
-  }
-  if ((epev.events & EPOLLET) == EPOLLET) {
-    eventStr += " EPOLLET";
-  }
-  if ((epev.events & EPOLLRDHUP) == EPOLLRDHUP) {
-    eventStr += " EPOLLRDHUP";
-  }
-  if ((epev.events & EPOLLPRI) == EPOLLPRI) {
-    eventStr += " EPOLLPRI";
-  }
-  if ((epev.events & EPOLLHUP) == EPOLLHUP) {
-    eventStr += " EPOLLHUP";
-  }
-  if ((epev.events & EPOLLONESHOT) == EPOLLONESHOT) {
-    eventStr += " EPOLLONESHOT";
-  }
-  if ((epev.events & EPOLLWAKEUP) == EPOLLWAKEUP) {
-    eventStr += " EPOLLWAKEUP";
-  }
-  if ((epev.events & EPOLLEXCLUSIVE) == EPOLLEXCLUSIVE) {
-    eventStr += " EPOLLEXCLUSIVE";
+  if((epev.events & EPOLLONESHOT) == EPOLLONESHOT){
+    runtimeError("epoll_ctl call used EPOLLONESHOT flag!");
   }
 
-  runtimeError(epollMsg + " op="+opStr+" events="+eventStr);
-  return false; // unreachable
+  return false;
 }
+
 void epoll_ctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return; 
 }
 // =======================================================================================
-bool epoll_waitSystemCall::handleDetPre(globalState &gs, state &s, ptracer &t,
-                                        scheduler &sched) {
-
+bool epoll_waitSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  // Set the timeout to zero.
+  s.originalArg4 = t.arg4();
+  if((int) s.originalArg4 != 0){
+    t.writeArg4(0);
+  }
+  return true;
 }
 
-void epoll_waitSystemCall::handleDetPost(globalState &gs, state &s, ptracer &t,
-                                        scheduler &sched) {
-
+void epoll_waitSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if((int) s.originalArg4 < 0){
+    gs.log.writeToLog(Importance::info, "Blocking epoll_wait found\n");
+    bool replay = replaySyscallIfBlocked(gs, s, t, sched, 0);
+    if(replay){
+      t.writeArg4(s.originalArg4);
+    }
+  }else{
+    gs.log.writeToLog(Importance::info, "Non-blocking epoll found\n");
+    sched.preemptAndScheduleNext();
+  }
+  return;
 }
 // =======================================================================================
-bool epoll_pwaitSystemCall::handleDetPre(globalState &gs, state &s, ptracer &t,
-                                        scheduler &sched) {
-
+bool epoll_pwaitSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  // Set the timeout to zero.
+  s.originalArg4 = t.arg4();
+  if((int) s.originalArg4 != 0){
+    t.writeArg4(0);
+  }
+  return true;
 }
 
-void epoll_pwaitSystemCall::handleDetPost(globalState &gs, state &s, ptracer &t,
-                                        scheduler &sched) {
-
+void epoll_pwaitSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if((int) s.originalArg4 < 0){
+    gs.log.writeToLog(Importance::info, "Blocking epoll_wait found\n");
+    bool replay = replaySyscallIfBlocked(gs, s, t, sched, 0);
+    if(replay){
+      t.writeArg4(s.originalArg4);
+    }
+  }else{
+    gs.log.writeToLog(Importance::info, "Non-blocking epoll found\n");
+    sched.preemptAndScheduleNext();
+  }
+  return;
 }
 // =======================================================================================
 bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -573,6 +559,7 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
     gs.log.writeToLog(Importance::info, "Waking on address: %p\n", t.arg1());
     gs.log.writeToLog(Importance::info, "Trying to wake up to %d threads.\n", t.arg3());
     // No need to go into the post hook.
+    return false;
   }
 
   // Handle wait operations, by setting our timeout to zero, and seeing if time runs out.
@@ -628,7 +615,7 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     if(s.userDefinedTimeout){
       // Only preempt if we would have timeout out. Othewise let if continue running!
       if(t.getReturnValue() == -ETIMEDOUT){
-        sched.preemptAndScheduleNext(preemptOptions::markAsBlocked);
+        sched.preemptAndScheduleNext();
       }
       s.userDefinedTimeout = false;
       return;
@@ -1518,10 +1505,11 @@ bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 
 void selectSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(s.userDefinedTimeout){
+    s.userDefinedTimeout = false;
     if(t.getReturnValue() == 0){
       // Mark this is blocked because we don't want it to keep being picked to
       // run off the runnableHeap. It will eventually get to run when the heaps switch.
-      sched.preemptAndScheduleNext(preemptOptions::markAsBlocked);
+      sched.preemptAndScheduleNext();
     }
   } else {
     bool replayed = replaySyscallIfBlocked(gs, s, t, sched, 0);
