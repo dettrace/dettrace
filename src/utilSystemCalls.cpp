@@ -26,7 +26,7 @@ bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
   if(- errnoValue == t.getReturnValue()){
     gs.log.writeToLog(Importance::info, "Syscall would have blocked!\n");
 
-    sched.preemptAndScheduleNext(preemptOptions::runnable);
+    sched.preemptAndScheduleNext(preemptOptions::markAsBlocked);
     return true;
   }else{
     // Disambiguiate. Otherwise it's impossible to tell the difference between a

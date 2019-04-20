@@ -13,9 +13,9 @@ using namespace std;
 
 /**
  * Options for process being preempted.
- * Sometimes we want to mark it as blocked, sometimes we want to continue to let it run.
+ * Only markedAsBlocked makes sense with our PID priotiry queue based scheduler
  */
-enum class preemptOptions { runnable, markAsBlocked };
+enum class preemptOptions { markAsBlocked };
 
 /**
  * Stateful class to keep track of all currently running processes in our process tree.

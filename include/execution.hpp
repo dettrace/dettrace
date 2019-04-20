@@ -267,6 +267,17 @@ public:
     * @return ptrace event type
    */
   ptraceEvent getPtraceEvent(const int status);
+
+    /**
+   * Logic for unresponsive thread after exit group, basically, the kernel does not
+   * guarantee this thread will respond to ptrace events, it may already have exited
+   * we wait and see if it sends an exit message through wait.
+   */
+  ptraceEvent handleExitedThread(pid_t currentPid);
+
+
+  // Core looping logic used by handleExitedThread.
+  ptraceEvent loopOnWaitpid(pid_t currentPid);
 };
 
 #endif

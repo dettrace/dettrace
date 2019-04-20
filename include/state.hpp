@@ -245,6 +245,19 @@ public:
    * to know if this is a newly created file.
    */
   bool fileExisted = false;
+
+  /**
+   * Keeps track of whether this process just exit_group-ed, we need to remember this
+   * since there is no post-hook for exit group.
+   */
+  bool isExitGroup = false;
+
+  /**
+   * Keep track of places where it's okay to see a stuck thread versus where it's not.
+   * We should only see a stuck thread after a pre-hook where we skip the post-hook,
+   * or a post-hook, continuing to the next system call.
+   */
+  bool canGetStuck = false;
 };
 
 #endif

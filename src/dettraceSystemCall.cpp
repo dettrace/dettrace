@@ -192,7 +192,7 @@ void creatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   auto inode = readInodeFor(gs.log, s.traceePid, t.getReturnValue());
   gs.mtimeMap.addRealValue(inode);
   gs.inodeMap.addRealValue(inode);
-  
+
   return;
 }
 // =======================================================================================
@@ -244,7 +244,7 @@ bool epoll_ctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
 
   struct epoll_event epev;
   readVmTraceeRaw(traceePtr<struct epoll_event>(traceeEvent), &epev, sizeof(epev), s.traceePid);
-  
+
   string epollMsg = "epoll_ctl epfd="+to_string(epfd)+" fd="+to_string(fd);
   string opStr;
   if (EPOLL_CTL_ADD == op) {
@@ -294,26 +294,31 @@ void epoll_ctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
 // =======================================================================================
 bool epoll_waitSystemCall::handleDetPre(globalState &gs, state &s, ptracer &t,
                                         scheduler &sched) {
-  
+
 }
 
 void epoll_waitSystemCall::handleDetPost(globalState &gs, state &s, ptracer &t,
                                         scheduler &sched) {
-  
+
 }
 // =======================================================================================
 bool epoll_pwaitSystemCall::handleDetPre(globalState &gs, state &s, ptracer &t,
                                         scheduler &sched) {
-  
+
 }
 
 void epoll_pwaitSystemCall::handleDetPost(globalState &gs, state &s, ptracer &t,
                                         scheduler &sched) {
-  
+
 }
 // =======================================================================================
 bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
+
+  auto tgNumber = gs.threadGroupNumber.at(s.traceePid);
+  if (gs.threadGroups.count(tgNumber) != 1) {
+    runtimeError("We do not support exec from threaded process groups!");
+  }
 
   char** argv = (char**) t.arg2();
   char** envp = (char**) t.arg3();
@@ -334,7 +339,7 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
         execveArgs += " \"" + t.readTraceeCString(traceePtr<char>(address), t.getPid()) + "\" ";
       }
     }
-    
+
     if (envp != nullptr) {
       for(int i = 0; true; i++){
         // Make sure it's non null before reading to string.
@@ -355,6 +360,19 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   // WARNING: Never change this, there is no execve post-hook event. You will end up
   // and the next system call. In the past, we have seen a brk.
   return false;
+}
+
+// =======================================================================================
+bool exit_groupSystemCall::
+handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "Saw exit group!!\n");
+  s.isExitGroup = true;
+  return false;
+}
+
+void exit_groupSystemCall::
+handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "Saw exit group post hook!!\n");
 }
 // =======================================================================================
 bool fchownatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -555,7 +573,6 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
     gs.log.writeToLog(Importance::info, "Waking on address: %p\n", t.arg1());
     gs.log.writeToLog(Importance::info, "Trying to wake up to %d threads.\n", t.arg3());
     // No need to go into the post hook.
-    return false;
   }
 
   // Handle wait operations, by setting our timeout to zero, and seeing if time runs out.
@@ -769,7 +786,7 @@ void gettimeofdaySystemCall::handleDetPost(globalState& gs, state& s, ptracer& t
     struct timeval myTv = {};
     myTv.tv_sec = s.getLogicalTime();
     myTv.tv_usec = 0;
-    
+
     t.writeToTracee(traceePtr<struct timeval>(tp), myTv, t.getPid());
     s.incrementTime();
   }
@@ -1274,7 +1291,7 @@ void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
       gs.log.writeToLog(Importance::info, "sha1 checksum of %d bytes read: %s\n",
                         s.totalBytes, ss.str().c_str());
     }
-    
+
     resetState();
   } else {
     gs.log.writeToLog(Importance::info, "Got less bytes than requested.\n");
@@ -1502,7 +1519,7 @@ bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 void selectSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(s.userDefinedTimeout){
     if(t.getReturnValue() == 0){
-      // Mark this is blocked because we don't want it to keep being picked to 
+      // Mark this is blocked because we don't want it to keep being picked to
       // run off the runnableHeap. It will eventually get to run when the heaps switch.
       sched.preemptAndScheduleNext(preemptOptions::markAsBlocked);
     }

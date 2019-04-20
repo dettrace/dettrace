@@ -87,8 +87,7 @@ int parseNum(const char* const numToParse){
 int doWithCheck(int returnValue, string errorMessage){
   string reason = strerror(errno);
   if(returnValue == -1){
-    cerr << errorMessage + ":\n  " + reason << endl;
-    abort();
+    runtimeError(errorMessage + ":\n  " + reason);
   }
 
   return returnValue;

@@ -60,7 +60,7 @@ void seccomp::loadRules(bool debug, bool convertUids){
   // End process.
   noIntercept(SYS_exit);
   // End process group.
-  noIntercept(SYS_exit_group);
+  intercept(SYS_exit_group);
 
   // Epoll system calls.
   noIntercept(SYS_epoll_create1);

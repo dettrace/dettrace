@@ -71,7 +71,7 @@ void scheduler::preemptAndScheduleNext(preemptOptions p){
     runnableHeap.pop();
     blockedHeap.push(curr);
     log.writeToLog(Importance::extra, "Process marked as blocked.\n", curr);
-  }else if(p == preemptOptions::runnable){
+  }else if(p == preemptOptions::markAsBlocked){
     // If the process is still runnable we don't need to do anything.
     log.writeToLog(Importance::extra, "Process still runnable.\n", curr);
   }else{
