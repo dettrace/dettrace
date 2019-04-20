@@ -103,8 +103,7 @@ void sigalrmHandler(int _) {
   assert(nullptr != globalExeObject);
   globalExeObject->killAllProcesses();
   // TODO: print out message about timeout expiring
-  printf("dettrace timeout expired\n");
-  exit(5);
+  runtimeError("dettrace timeout expired\n");
 }
 // =======================================================================================
 
