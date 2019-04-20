@@ -1553,7 +1553,6 @@ pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process){
 // =======================================================================================
 
 void trapCPUID(globalState& gs, state& s, ptracer& t){
-  return;
   gs.log.writeToLog(Importance::info, "Injecting arch_prctl call to tracee to intercept CPUID!\n");
   // Save current register state to restore after arch_prctl
   s.regSaver.pushRegisterState(t.getRegs());
