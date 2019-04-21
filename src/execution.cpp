@@ -234,6 +234,7 @@ void execution::runProgram(){
   // events. To get post hook events we must call ptrace with PTRACE_SYSCALL intead.
   // This happens in @getNextEvent.
 
+  log.writeToLog(Importance::inter, "dettrace starting up\n");
 
   // Once all process' have ended. We exit.
   bool exitLoop = false;
