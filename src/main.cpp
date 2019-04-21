@@ -625,8 +625,9 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
   // Proc is special, we mount a new proc dir.
   doWithCheck(mount("/proc", (pathToChroot + "/proc/").c_str(), "proc", MS_MGC_VAL, nullptr),
               "Mounting proc failed");
-  // jld: determinize /proc/meminfo, to satisfy new read()/write() checksums
+  // jld: determinize various parts of /proc which our benchmarks read from
   mountDir(pathToExe+"/../root/proc/meminfo", pathToChroot+"/proc/meminfo");
+  mountDir(pathToExe+"/../root/proc/stat", pathToChroot+"/proc/stat");
 
   doWithCheck(chroot(pathToChroot.c_str()), "Failed to chroot");
   // set working directory to buildDir
