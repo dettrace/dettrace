@@ -421,6 +421,9 @@ void execution::runProgram(){
         msg = "clone";
         unsigned long flags = (unsigned long) tracer.arg1();
         isThread = (flags & CLONE_THREAD) != 0;
+        // if((flags & CLONE_FILES) != 0){
+          // runtimeError("We do not support CLONE_FILES\n");
+        // }
         break;
       }
       default:
@@ -543,8 +546,21 @@ pid_t execution::handleForkEvent(const pid_t traceesPid, bool isThread){
   // This is where we add new children to the thread group leader.
   processTree.insert(make_pair(threadGroup, newChildPid));
 
+  // Share fdStatus. Processes get their own, threads share with thread group.
+  if(isThread){
+    states.emplace(newChildPid, state {newChildPid, debugLevel,
+                                         states.at(threadGroup).fdStatus});
+  } else {
+    // Deep Copy!
+    unordered_map<int, descriptorType> fds = *states.at(threadGroup).fdStatus.get();
+    states.emplace(newChildPid, state {newChildPid, debugLevel, fds});
+  }
   // Add this new process to our states.
-  states.emplace(newChildPid, state {newChildPid, debugLevel} );
+
+  
+  // Inheret file descriptor set from our parent.
+  states.at(newChildPid).fdStatus = states.at(threadGroup).fdStatus;
+
   log.writeToLog(Importance::info,
                  log.makeTextColored(Color::blue,"Added process [%d] to states map.\n"),
                  newChildPid);
@@ -662,8 +678,13 @@ void execution::handleExecEvent(pid_t pid) {
       assert(nb == nbUpper);
     }
   }
-  if (states.find(pid) == states.end())
+
+  // TODO When does this ever happen?
+  if (states.find(pid) == states.end()){
       states.emplace(pid, state {pid, debugLevel} );
+  }
+  // Reset file descriptor state, it is wiped after execve.
+  states.at(pid).fdStatus = make_shared<unordered_map<int, descriptorType>>();
 
   states.at(pid).mmapMemory.doesExist = true;
   states.at(pid).mmapMemory.setAddr(traceePtr<void>((void*)mmapAddr));

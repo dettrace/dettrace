@@ -183,7 +183,7 @@ void replaceSystemCallWithNoop(globalState& gs, state& s, ptracer& t){
 }
 // =======================================================================================
 pair<int,int> getPipeFds(globalState& gs, state& s, ptracer& t){
-// Get values of both file descriptors.
+  // Get values of both file descriptors.
   int* pipefdTracee = (int*) t.arg1();
   traceePtr<int> fdPtr1 = traceePtr<int>(& pipefdTracee[0]);
   traceePtr<int> fdPtr2 = traceePtr<int>(& pipefdTracee[1]);
@@ -193,14 +193,6 @@ pair<int,int> getPipeFds(globalState& gs, state& s, ptracer& t){
 
   gs.log.writeToLog(Importance::info, "Got pipe fd1: " + to_string(fd1) + "\n");
   gs.log.writeToLog(Importance::info, "Got pipe fd2: " + to_string(fd2) + "\n");
-
-  // Track this file descriptor:
-  if(s.fdStatus.count(fd1) != 0){
-    runtimeError("Value already in map (fdStatus).");
-  }
-  if(s.fdStatus.count(fd2) != 0){
-    runtimeError("Value already in map (fdStatus).");
-  }
 
   return make_pair(fd1, fd2);
 }

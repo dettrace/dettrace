@@ -8,6 +8,7 @@
 #include <sys/vfs.h>
 #include <unordered_map>
 #include <sys/select.h>
+#include <memory>
 
 #include "ptracer.hpp"
 #include "ValueMapper.hpp"
@@ -62,11 +63,25 @@ public:
  /**
    * Constructor.
    * Initialize traceePid and debugLevel to the provided values, and
-   * clock is initialized to 0.
+   * clock is initialized to 0. Allocates memory for a  new shared pointer.
    * @param traceePid pid of tracee
    * @param debugLevel debug level to be used
    */
   state(pid_t traceePid, int debugLevel);
+
+  /**
+   * Same as a above, but takes in a fdStatus map to share. Used by threads to share
+   * map with parents.
+   */
+  state(pid_t traceePid, int debugLevel,
+        shared_ptr<unordered_map<int, descriptorType>> parentFdStatus);
+
+  /**
+   * Same as a above, but takes in a fdStatus map to deep copy. Used by child process to
+   * inheret from parents.
+   */
+  state(pid_t traceePid, int debugLevel,
+        unordered_map<int, descriptorType> fdStatus);
 
   /**
    * Keep track of file descriptor status for blocking descriptors, as set by the
@@ -78,7 +93,13 @@ public:
    * When reading/writing we check this status to know whether to block this process,
    * and replay, or simply preempt as Runnable by the scheduler.
    */
-  unordered_map<int, descriptorType> fdStatus;
+  shared_ptr<unordered_map<int, descriptorType>> fdStatus;
+
+  void setFdStatus(int fd, descriptorType dt);
+
+  descriptorType getFdStatus(int fd);
+
+  int countFdStatus(int fd);
 
   /**
    * Map from file descriptors to directory entries.
@@ -258,6 +279,8 @@ public:
    * or a post-hook, continuing to the next system call.
    */
   bool canGetStuck = false;
+
+  
 };
 
 #endif

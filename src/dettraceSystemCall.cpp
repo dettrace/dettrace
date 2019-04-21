@@ -158,9 +158,9 @@ void closeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   }
 
   // Remove entry from our fd set for pipes.
-  if(s.fdStatus.count(fd) != 0){
+  if(s.countFdStatus(fd) != 0){
     gs.log.writeToLog(Importance::info, "Removing pipe fd: %d!\n", fd);
-    s.fdStatus.erase(fd);
+    s.fdStatus.get()->erase(fd);
   }
 }
 // =======================================================================================
@@ -208,8 +208,8 @@ void dupSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedul
   }
 
   // dup succeeded.
-  if(s.fdStatus.count(fd) != 0){ // Only for pipes
-    s.fdStatus[newfd] = s.fdStatus[fd]; // copy over status.
+  if(s.countFdStatus(fd) != 0){ // Only for pipes
+    s.setFdStatus(newfd, s.getFdStatus(fd)); // copy over status.
     gs.log.writeToLog(Importance::info, "%d = dup(%d)\n", newfd, fd);
   }
 }
@@ -227,11 +227,11 @@ void dup2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
   }
 
   // dup2 succeeded.
-  if(s.fdStatus.count(fd) != 0){ // Only for pipes
+  if(s.countFdStatus(fd) != 0){ // Only for pipes
 
     // Semantics of dup2 say old fd could be closed and overwritten, we do that
     // implicitly here!
-    s.fdStatus[newfd] = s.fdStatus[fd]; // copy over status.
+    s.setFdStatus(newfd, s.getFdStatus(fd));
     gs.log.writeToLog(Importance::info, "%d = dup2(%d)\n", newfd, fd);
   }
 }
@@ -441,15 +441,14 @@ void fcntlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     int newfd = retval;
     gs.log.writeToLog(Importance::info, str, fd, newfd);
     // Same status as what it was duped from.
-    auto newStatus = s.fdStatus[fd];
-    s.fdStatus[newfd] = newStatus;
+    s.setFdStatus(newfd, s.getFdStatus(fd));
   }
   // User attempting to change blocked status.
   if(cmd == F_SETFL && ((arg & O_NONBLOCK) != 0)){
     auto str = "found fcntl setting %d to non blocking!\n";
-    if(s.fdStatus.count(fd) != 0){
+    if(s.countFdStatus(fd) != 0){
       gs.log.writeToLog(Importance::info, str, fd);
-      s.fdStatus[fd] = descriptorType::nonBlocking;
+      s.setFdStatus(fd, descriptorType::nonBlocking);
     }else{
       gs.log.writeToLog(Importance::info, str, fd);
       gs.log.writeToLog(Importance::info, "But this is not a pipe... ignoring.\n");
@@ -626,6 +625,7 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     }
 
   }
+
   return;
 }
 // =======================================================================================
@@ -1083,14 +1083,22 @@ void pipe2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   t.writeArg2(s.originalArg2);
   auto p = getPipeFds(gs, s, t);
 
+  // Track this file descriptor:
+  if(s.countFdStatus(p.first) != 0){
+    runtimeError("Value already in map (fdStatus): " + to_string(p.first));
+  }
+  if(s.countFdStatus(p.second) != 0){
+    runtimeError("Value already in map (fdStatus): " + to_string(p.second));
+  }
+
   // This was a pipe that got converted to a pipe2.
   if(s.syscallInjected){
     s.syscallInjected = false;
     gs.log.writeToLog(Importance::info, "This used to a pipe()!\n");
     gs.log.writeToLog(Importance::info, "Set pipe %d as blocking.\n", p.first);
     gs.log.writeToLog(Importance::info, "Set pipe %d as blocking.\n", p.second);
-    s.fdStatus[p.first] = descriptorType::blocking;
-    s.fdStatus[p.second] = descriptorType::blocking;
+    s.setFdStatus(p.first, descriptorType::blocking);
+    s.setFdStatus(p.second, descriptorType::blocking);
   }else{
     // Must be checked after resetting state.
     int flags = (int) t.arg2();
@@ -1099,13 +1107,13 @@ void pipe2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     if((flags & O_NONBLOCK) == 0){
       gs.log.writeToLog(Importance::info, "Set pipe %d as blocking.\n", p.first);
       gs.log.writeToLog(Importance::info, "Set pipe %d as blocking.\n", p.second);
-      s.fdStatus[p.first] = descriptorType::blocking;
-      s.fdStatus[p.second] = descriptorType::blocking;
+      s.setFdStatus(p.first, descriptorType::blocking);
+      s.setFdStatus(p.second, descriptorType::blocking);
     }else{
       gs.log.writeToLog(Importance::info, "Set pipe %d as non-blocking.\n", p.first);
       gs.log.writeToLog(Importance::info, "Set pipe %d as non-blocking.\n", p.second);
-      s.fdStatus[p.first] = descriptorType::nonBlocking;
-      s.fdStatus[p.second] = descriptorType::nonBlocking;
+      s.setFdStatus(p.first, descriptorType::nonBlocking);
+    s.setFdStatus(p.second, descriptorType::nonBlocking);
     }
   }
 }
@@ -1213,7 +1221,7 @@ void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     };
 
   // Pipe exists in our map and it's set to non blocking.
-  if(s.fdStatus.count(fd) != 0 && s.fdStatus[fd] == descriptorType::nonBlocking){
+  if(s.countFdStatus(fd) != 0 && s.getFdStatus(fd) == descriptorType::nonBlocking){
     gs.log.writeToLog(Importance::info,
                       "read found with non blocking pipe!\n");
     bool blocked = preemptIfBlocked(gs, s, t, sched, EAGAIN);
@@ -2178,7 +2186,7 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
                     };
 
   // Pipe exists in our map and it's set to non blocking.
-  if(s.fdStatus.count(fd) != 0 && s.fdStatus[fd] == descriptorType::nonBlocking){
+  if(s.countFdStatus(fd) != 0 && s.getFdStatus(fd) == descriptorType::nonBlocking){
     gs.log.writeToLog(Importance::info,
                       "read found with non-blocking pipe!\n");
     preemptAndTryLater = preemptIfBlocked(gs, s, t, sched, EAGAIN);
