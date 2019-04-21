@@ -135,6 +135,11 @@ void seccomp::loadRules(bool debug, bool convertUids){
   noIntercept(SYS_sync);
   noIntercept(SYS_umask);
 
+  // Okay to not intercept.
+  noIntercept(SYS_getsockname);
+  noIntercept(SYS_setsockopt);
+  noIntercept(SYS_socketpair);
+
   noIntercept(SYS_sched_yield);
   noIntercept(SYS_truncate);
   noIntercept(SYS_eventfd2);
