@@ -1489,7 +1489,8 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
     // starting process. Which we expect to be in a waiting state.
     // doWithCheck(ptrace(PTRACE_CONT, pidToContinue, 0, (void*) signalToDeliver),
     //             "dettrace ptrace continue failed on " + to_string(pidToContinue) + "\n");
-    doWithCheck(ptrace(PTRACE_CONT, pidToContinue, 0, (void*) signalToDeliver), "HERE!");
+    doWithCheck(ptrace(PTRACE_CONT, pidToContinue, 0, (void*) signalToDeliver),
+                "failed to PTRACE_CONT from getNextEvent()\n");
   }
 
   // Wait for next event to intercept.
