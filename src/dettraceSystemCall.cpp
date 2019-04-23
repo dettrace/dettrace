@@ -851,17 +851,24 @@ void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
       time_t logicalTime = s.getLogicalTime();
       struct tm tm = {};
 
+      s.incrementTime();
       gmtime_r(&logicalTime, &tm);
 
-      traceePtr<struct tm> rptr((struct tm*)t.arg3());
-      t.writeToTracee(rptr, tm, t.getPid());
+      if (t.arg3()) {
+	traceePtr<struct tm> rptr((struct tm*)t.arg3());
+	t.writeToTracee(rptr, tm, t.getPid());
+      }
     }
     break;
   case RTC_EPOCH_READ:
     {
       unsigned long logicalTime = s.getLogicalTime();
-      traceePtr<unsigned long> rptr((unsigned long*)t.arg3());
-      t.writeToTracee(rptr, logicalTime, t.getPid());
+      s.incrementTime();
+
+      if (t.arg3()) {
+	traceePtr<unsigned long> rptr((unsigned long*)t.arg3());
+	t.writeToTracee(rptr, logicalTime, t.getPid());
+      }
     }
     break;
   default:
