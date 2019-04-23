@@ -628,6 +628,7 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
   // jld: determinize various parts of /proc which our benchmarks read from
   mountDir(pathToExe+"/../root/proc/meminfo", pathToChroot+"/proc/meminfo");
   mountDir(pathToExe+"/../root/proc/stat", pathToChroot+"/proc/stat");
+  mountDir(pathToExe+"/../root/proc/filesystems", pathToChroot+"/proc/filesystems");
 
   doWithCheck(chroot(pathToChroot.c_str()), "Failed to chroot");
   // set working directory to buildDir
