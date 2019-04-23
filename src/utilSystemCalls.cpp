@@ -147,6 +147,9 @@ void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName)
 
     // Program will stall if we put some arbitrary value here: TODO.
     // myStat.st_size = 512;        /* Total size, in bytes */
+    if (S_ISDIR(myStat.st_mode)) {
+      myStat.st_size = 16384; // force directories to have a fixed size
+    }
     gs.log.writeToLog(Importance::info, "st_size:%u\n", myStat.st_size);
 
     myStat.st_blksize = 512;     /* Block size for filesystem I/O */
