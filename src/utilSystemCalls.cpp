@@ -182,6 +182,47 @@ void replaceSystemCallWithNoop(globalState& gs, state& s, ptracer& t){
   return;
 }
 // =======================================================================================
+void cancelSystemCall(globalState& gs, state& s, ptracer& t){
+  struct user_regs_struct regs = {};
+  long cancelled = t.getSystemCallNumber();
+  pid_t pid = t.getPid();
+  t.changeSystemCall(-1);
+  ptracer::doPtrace(PTRACE_GETREGS, pid, 0, &regs);
+
+  long rax = regs.rax;
+
+  regs.orig_rax = -1;
+  regs.rax = -1;
+
+  gs.log.writeToLog(Importance::info, "cancel pending syscall: " +
+		    to_string(cancelled) + "\n");
+
+  ptracer::doPtrace(PTRACE_SETREGS, pid, 0, &regs);
+  ptracer::doPtrace(PTRACE_SINGLESTEP, pid, 0, 0);
+
+  int status = 0;
+  waitpid(pid, &status, 0);
+  if (WIFSTOPPED(status)) {
+    int sig = WSTOPSIG(status);
+    if (sig == SIGTRAP || sig == SIGCHLD) {
+      // restore regs
+      regs.orig_rax = cancelled;
+      regs.rax = rax;
+      ptracer::doPtrace(PTRACE_SETREGS, pid, 0, &regs);
+      return;
+    }
+  }
+  runtimeError("cancelSystemCall, uknonwn waitpid state: " +
+	       to_string(status) + "\n");
+}
+
+void failSystemCall(globalState& gs, state& s, ptracer& t, int err){
+  cancelSystemCall(gs, s, t);
+  long ret = -err;
+  t.setReturnRegister(ret);
+}
+
+// =======================================================================================
 pair<int,int> getPipeFds(globalState& gs, state& s, ptracer& t){
   // Get values of both file descriptors.
   int* pipefdTracee = (int*) t.arg1();
