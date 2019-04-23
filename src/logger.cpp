@@ -114,6 +114,7 @@ void logger::writeToLog(Importance imp, std::string format, ...){
     } else {
       fwrite(format.c_str(), 1, format.length(), fin);
     }
+    fflush(fin);
   }
 
   return;
