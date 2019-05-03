@@ -2,6 +2,7 @@
 all: build
 
 build: bin initramfs
+	rm -rf bin/dettrace
 	cd src && ${MAKE}
 	cp src/dettrace bin/
 
@@ -9,6 +10,7 @@ bin:
 	mkdir -p ./bin
 
 static: bin
+	rm -rf bin/dettrace
 	cd src && ${MAKE} all-static
 	cp src/dettrace-static bin/dettrace
 
@@ -48,5 +50,3 @@ test-docker: clean docker
 clean:
 	$(RM) src/dettrace
 	make -C ./src/ clean
-	make -C ./test/unitTests/ clean
-	make -C ./test/samplePrograms/ clean

@@ -7,6 +7,9 @@ CXXFLAGS =-g -O3 -std=c++14 -Wall $(INCLUDE) $(DEFINES)
 CFLAGS =-g -O3 -Wall -Wshadow $(INCLUDE) $(DEFINES)
 LIBS = -pthread -lseccomp -L ../lib/lib64
 
+LIBCRYPTO=$(shell pkg-config --libs libcrypto)
+LIBCRYPTO_STATIC=$(shell pkg-config --static --libs libcrypto)
+
 LIBARCHIVE=$(shell pkg-config --libs libarchive)
 LIBARCHIVE_STATIC=$(shell pkg-config --static --libs libarchive)
 
@@ -28,10 +31,10 @@ all: dettrace
 all-static: dettrace-static
 
 dettrace: $(obj) $(libs)
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS) $(LIBARCHIVE) $(LIBELFIN)
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS) $(LIBARCHIVE) $(LIBELFIN) $(LIBCRYPTO)
 
 dettrace-static: $(obj) $(libs)
-	$(CXX) $(CXXFLAGS) -static $^ -o $@ $(LIBS) $(LIBARCHIVE_STATIC) $(LIBELFIN_STATIC)
+	$(CXX) $(CXXFLAGS) -static $^ -o $@ $(LIBS) $(LIBARCHIVE_STATIC) $(LIBELFIN_STATIC) $(LIBCRYPTO_STATIC)
 
 -include $(dep)
 

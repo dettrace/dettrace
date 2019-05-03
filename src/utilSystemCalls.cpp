@@ -5,12 +5,28 @@
 
 // File local functions.
 
+/** Run a command and return its output as a string 
+ * https://stackoverflow.com/questions/478898/how-do-i-execute-a-command-and-get-output-of-command-within-c-using-posix
+ */
+static string backtick(const char* cmd) {
+  array<char, 128> buffer;
+  string result;
+  unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
+  if (!pipe) {
+    throw runtime_error("popen() failed!");
+  }
+  while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+    result += buffer.data();
+  }
+  return result;
+}
+
 bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
                       int64_t errnoValue){
   if(- errnoValue == t.getReturnValue()){
     gs.log.writeToLog(Importance::info, "Syscall would have blocked!\n");
 
-    sched.preemptAndScheduleNext(preemptOptions::runnable);
+    sched.preemptAndScheduleNext();
     return true;
   }else{
     // Disambiguiate. Otherwise it's impossible to tell the difference between a
@@ -25,10 +41,10 @@ bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
 bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
                             int64_t errornoValue){
   if(- errornoValue == t.getReturnValue()){
-    gs.log.writeToLog(Importance::info, "System call would have blocked!\n");
+    gs.log.writeToLog(Importance::info, "System call would have blocked! Replaying\n");
 
     gs.replayDueToBlocking++;
-    sched.preemptAndScheduleNext(preemptOptions::markAsBlocked);
+    sched.preemptAndScheduleNext();
     replaySystemCall(gs, t, t.getSystemCallNumber());
     return true;
   }else{
@@ -167,7 +183,7 @@ void replaceSystemCallWithNoop(globalState& gs, state& s, ptracer& t){
 }
 // =======================================================================================
 pair<int,int> getPipeFds(globalState& gs, state& s, ptracer& t){
-// Get values of both file descriptors.
+  // Get values of both file descriptors.
   int* pipefdTracee = (int*) t.arg1();
   traceePtr<int> fdPtr1 = traceePtr<int>(& pipefdTracee[0]);
   traceePtr<int> fdPtr2 = traceePtr<int>(& pipefdTracee[1]);
@@ -177,14 +193,6 @@ pair<int,int> getPipeFds(globalState& gs, state& s, ptracer& t){
 
   gs.log.writeToLog(Importance::info, "Got pipe fd1: " + to_string(fd1) + "\n");
   gs.log.writeToLog(Importance::info, "Got pipe fd2: " + to_string(fd2) + "\n");
-
-  // Track this file descriptor:
-  if(s.fdStatus.count(fd1) != 0){
-    runtimeError("Value already in map (fdStatus).");
-  }
-  if(s.fdStatus.count(fd2) != 0){
-    runtimeError("Value already in map (fdStatus).");
-  }
 
   return make_pair(fd1, fd2);
 }

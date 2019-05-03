@@ -93,6 +93,7 @@ private:
    * 1 -> 3
    * 2 -> 4
    * (Process 1 has two children: 2 and 3. Process 2 has one child: 4).
+   * Threads are also counted as children of their thread group leader.
    */
   multimap<pid_t, pid_t> processTree;
 
@@ -168,7 +169,7 @@ public:
    * @return Exit status for runProgram
    * @see runProgram()
    */
-  bool handleExit(const pid_t traceesPid);
+  bool handleNonEventExit(const pid_t traceesPid);
 
   /**
    * Handles system call pre-hook.
@@ -206,7 +207,7 @@ public:
    * @param traceesPid the pid of the tracee
    * @see handleFork.
    */
-  pid_t handleForkEvent(const pid_t traceesPid);
+  pid_t handleForkEvent(const pid_t traceesPid, bool isThread);
 
   /**
    * Handle signal event in trace.
@@ -266,6 +267,21 @@ public:
     * @return ptrace event type
    */
   ptraceEvent getPtraceEvent(const int status);
+
+    /**
+   * Logic for unresponsive thread after exit group, basically, the kernel does not
+   * guarantee this thread will respond to ptrace events, it may already have exited
+   * we wait and see if it sends an exit message through wait.
+   */
+  ptraceEvent handleExitedThread(pid_t currentPid);
+
+
+  // Core looping logic used by handleExitedThread.
+  ptraceEvent loopOnWaitpid(pid_t currentPid);
+
+  void killAllProcesses() {
+    myScheduler.killAllProcesses();
+  }
 };
 
 #endif

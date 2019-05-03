@@ -185,6 +185,33 @@ public:
   const string syscallName = "dup2";
 };
 // =======================================================================================
+class exit_groupSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched);
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched);
+
+  const int syscallNumber = SYS_exit_group;
+  const string syscallName = "exit_group";
+};
+// =======================================================================================
+class epoll_waitSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_epoll_wait;
+  const string syscallName = "epoll_wait";
+};
+// =======================================================================================
+class epoll_pwaitSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_epoll_pwait;
+  const string syscallName = "epoll_pwait";
+};
+// =======================================================================================
 /**
  * int faccessat(int dirfd, const char *pathname, int mode, int flags);
  *
@@ -1439,6 +1466,19 @@ public:
 
   const int syscallNumber = SYS_futimesat;
   const string syscallName = "futimesat";
+};
+// =======================================================================================
+/**
+ * Many threaded packages use epoll_*
+ *
+ */
+class epoll_ctlSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_epoll_ctl;
+  const string syscallName = "epoll_ctl";
 };
 // =======================================================================================
 /**

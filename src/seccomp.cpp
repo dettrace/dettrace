@@ -40,8 +40,8 @@ void seccomp::loadRules(bool debug, bool convertUids){
   // sets architecture-specific process or thread state.
   intercept(SYS_arch_prctl);
   // Change location of the program break.
-  //noIntercept(SYS_brk);
-  intercept(SYS_brk);
+  noIntercept(SYS_brk);
+
   // Bind seems safe enough to let though, specially since user is stuck in chroot.
   // There might be some slight issues with permission denied if we set up our
   // bind mounts wrong and might need to allow for recursive mounting. But it will
@@ -60,9 +60,15 @@ void seccomp::loadRules(bool debug, bool convertUids){
   // End process.
   noIntercept(SYS_exit);
   // End process group.
-  noIntercept(SYS_exit_group);
+  intercept(SYS_exit_group);
+
+  // Epoll system calls.
   noIntercept(SYS_epoll_create1);
   noIntercept(SYS_epoll_create);
+  //noIntercept(SYS_epoll_ctl);
+  intercept(SYS_epoll_ctl);
+  intercept(SYS_epoll_wait);
+  intercept(SYS_epoll_pwait);
   // Advise on access patter by program of file.
   noIntercept(SYS_fadvise64);
   noIntercept(SYS_fallocate);
@@ -128,6 +134,13 @@ void seccomp::loadRules(bool debug, bool convertUids){
   noIntercept(SYS_socket);
   noIntercept(SYS_sync);
   noIntercept(SYS_umask);
+
+  // Okay to not intercept.
+  noIntercept(SYS_getsockname);
+  noIntercept(SYS_setsockopt);
+  noIntercept(SYS_socketpair);
+  noIntercept(SYS_mlock);
+  noIntercept(SYS_setsid);
 
   noIntercept(SYS_sched_yield);
   noIntercept(SYS_truncate);
@@ -233,7 +246,8 @@ void seccomp::loadRules(bool debug, bool convertUids){
 
   intercept(SYS_pipe);
   intercept(SYS_pipe2);
-  intercept(SYS_pselect6);
+  // TODO Not handled.
+  // intercept(SYS_pselect6);
   intercept(SYS_poll);
   intercept(SYS_prlimit64);
   intercept(SYS_read);

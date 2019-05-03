@@ -15,11 +15,10 @@
 
 #define MAKE_KERNEL_VERSION(x, y, z) ((x) << 16 | (y) << 8 | (z) )
 
-
+void deleteMultimapEntry(unordered_multimap<pid_t, pid_t>& mymap, pid_t key, pid_t value);
 pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process);
 bool kernelCheck(int a, int b, int c);
 void trapCPUID(globalState& gs, state& s, ptracer& t);
-
 
 bool kernelCheck(int a, int b, int c){
   struct utsname utsname = {};
@@ -70,32 +69,62 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
   vdsoFuncs(vdsoFuncs) {
     // Set state for first process.
     states.emplace(startingPid, state{startingPid, debugLevel});
+    myGlobalState.threadGroups.insert({startingPid, startingPid});
+    myGlobalState.threadGroupNumber.insert({startingPid, startingPid});
 
     // First process is special and we must set the options ourselves.
     // This is done everytime a new process is spawned.
     ptracer::setOptions(startingPid);
   }
 // =======================================================================================
-// We only call this function on a ptrace::nonEventExit. We only receive this event once
-// all the process' children have finished.
-bool execution::handleExit(const pid_t traceesPid){
-  auto msg = log.makeTextColored(Color::blue, "Process [%d] has completely  finished."
-                                     " (ptrace nonEventExit).\n");
-  log.writeToLog(Importance::inter, msg, traceesPid);
+// We only call this function on a ptrace::nonEventExit.
 
+// Notice it's the last-child-alive's job to schedule a finished parent to exit.
+// If this is the  last-child-alive, but the parent is not marked as finished, that's
+// fine, it still has more code to run, eventually it will spawn more children, or exit.
+
+// This is the base case. You may, be wondering what happens if the currentProcess itself
+// has children and got here, this can't happen. A process with live children will never
+// get a nonEventExit.
+bool execution::handleNonEventExit(const pid_t traceesPid){
   // We are done. Erase ourselves from our parent's list of children.
-  // Also do this for the scheduler's process tree.
   pid_t parent = eraseChildEntry(processTree, traceesPid);
-  myScheduler.eraseSchedChild(traceesPid);
+  auto tgNumber = myGlobalState.threadGroupNumber.at(traceesPid);
 
+  // Erase tracee from our state.
+  if (states.erase(traceesPid) != 1) {
+    runtimeError("Not such tracee to delete: " + to_string(traceesPid));
+  }
+
+  // if this is a thread, clean up the thread specific state that we save.
+  if (myGlobalState.liveThreads.count(traceesPid) != 0) {
+    if (myGlobalState.liveThreads.erase(traceesPid) != 1) {
+      runtimeError("Not such thread to delete from liveThreads: " +
+                   to_string(traceesPid));
+    }
+    if (myGlobalState.threadGroupNumber.erase(traceesPid) != 1) {
+      runtimeError("Not such thread to delete from threadGroupNumber: " +
+                   to_string(traceesPid));
+    }
+  }
+
+  // If thread, we should always be able to delete this entry.
+  // If process, then it should have their own thread group as well.
+  deleteMultimapEntry(myGlobalState.threadGroups, tgNumber, traceesPid);
+
+  // Parent has no childrent left, and want's to exit! Schedule for exit as it is
+  // no longer in our scheduler's heaps.
   if(parent != -1                   &&       // We have no parent, we're root.
      myScheduler.isFinished(parent) &&       // Check if our parent is marked as finished.
      processTree.count(parent) == 0){        // Parent has no children left.
-    
+    log.writeToLog(Importance::info,
+                   "All children of finished parent %d have exited"
+                   ", scheduling parent for exiting.\n", parent);
     myScheduler.removeAndScheduleParent(traceesPid, parent);
     return false;
   }
-  // Generic case, should happen most of the time.
+  // This is the base case for any process, we have no children, and no parent that
+  // we need to help exit.
   else{
     // Process done, schedule next process to run.
     bool empty = myScheduler.removeAndScheduleNext(traceesPid);
@@ -141,18 +170,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   // https://stackoverflow.com/questions/29997244/
   // occasionally-missing-ptrace-event-vfork-when-running-ptrace
   if(systemCall == "fork" || systemCall == "vfork" || systemCall == "clone"){
-
     processSpawnEvents++;
-
-    // Threads are not supported!
-    if(systemCall == "clone" ){
-      unsigned long flags = (unsigned long) tracer.arg1();
-      unsigned long threadBit = flags & CLONE_THREAD;
-      if(threadBit != 0){
-        runtimeError("Threads not supported!");
-      }
-    }
-
     int status;
     ptraceEvent e;
     pid_t newPid;
@@ -193,8 +211,14 @@ void execution::handlePostSystemCall(state& currState){
   string syscallName = systemCallMappings[syscallNum];
   log.writeToLog(Importance::info,"Calling post hook for: " + syscallName + "\n");
 
-  log.writeToLog(Importance::info,"Value before handler: %d\n",
-                 tracer.getReturnValue());
+  if (SYS_times == syscallNum || SYS_time == syscallNum) {
+    // for syscalls with a nondet return value, print it at Importance::extra
+    log.writeToLog(Importance::extra,"(nondet) Value before handler: %d\n",
+                   tracer.getReturnValue());
+  } else {
+    log.writeToLog(Importance::info,"Value before handler: %d\n",
+                   tracer.getReturnValue());
+  }
 
   callPostHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
 
@@ -210,6 +234,7 @@ void execution::runProgram(){
   // events. To get post hook events we must call ptrace with PTRACE_SYSCALL intead.
   // This happens in @getNextEvent.
 
+  log.writeToLog(Importance::inter, "dettrace starting up\n");
 
   // Once all process' have ended. We exit.
   bool exitLoop = false;
@@ -226,6 +251,7 @@ void execution::runProgram(){
 
     // Most common event. We handle the pre-hook for system calls here.
     if(ret == ptraceEvent::seccomp){
+      log.writeToLog(Importance::extra, "Is seccomp event!\n");
       systemCallsEvents++;
       states.at(traceesPid).callPostHook = handleSeccomp(traceesPid);
       continue;
@@ -258,15 +284,13 @@ void execution::runProgram(){
 
     // Current process was ended by signal.
     if(ret == ptraceEvent::terminatedBySignal){
-      // TODO: A Process terminated by signal might break some of the assumptions I make
-      // in handleExit (see function definition above) so we do not support it for now.
-      // runtimeError("Process terminated by signal. We currently do not support this.");
       auto msg =
         log.makeTextColored(Color::blue, "Process [%d] ended by signal %d.\n");
       log.writeToLog(Importance::inter, msg, traceesPid, WTERMSIG(status));
-      exitLoop = handleExit(traceesPid);
+      exitLoop = handleNonEventExit(traceesPid);
       continue;
     }
+
     /**
        A process needs to do two things before dying:
        1) eventExit through ptrace. This process is not truly done, it is stopped
@@ -283,52 +307,136 @@ void execution::runProgram(){
     */
     if(ret == ptraceEvent::eventExit){
       auto msg = log.makeTextColored(Color::blue, "Process [%d] has finished. "
-                                         "With ptrace exit event.\n");
+                                         "With ptraceEventExit.\n");
       log.writeToLog(Importance::inter, msg, traceesPid);
       states.at(traceesPid).callPostHook = false;
+
+      bool isExitGroup = states.at(traceesPid).isExitGroup;
+      pid_t threadGroup = myGlobalState.threadGroupNumber.at(traceesPid);
+      // there is three reasons this is necessary
+      // 1) case where may thread called exit group: this process goes on to
+      // exit like a normal non threaded non exit grouped process would, and we
+      // don't want the check in ptraceEvent::nonEventExit to kill it.
+      // 2) in the event where this process is the only process in the process
+      // group, it will do the same as #1. Only when we have a non-main thread call
+      // exit group, do we not need to set this flag, and that's only because this flag
+      // is per process/thread!
+      states.at(traceesPid).isExitGroup = false;
+
+      // Iterate through all threads in this exit group exiting them.
+      // Only go in here for exit groups where there is threads. By default,
+      // there is at least 1 (the process)
+      log.writeToLog(Importance::info, "thread group #%d\n", myGlobalState.threadGroups.count(threadGroup));
+      if (isExitGroup && myGlobalState.threadGroups.count(threadGroup) != 1) {
+        auto msg = "Caught exit group! Ending all thread in our process group %d.\n";
+        log.writeToLog(Importance::info, msg, threadGroup);
+
+        // Mark as finished so that handleNonEventExit function takes care of parent
+        // process.
+        myScheduler.markFinishedAndScheduleNext(threadGroup);
+
+        // Make a copy to avoid deleting entries in original (done in handleTraceeExit)
+        // while iterating through it.
+        auto copyThreadGroups = myGlobalState.threadGroups;
+        auto iterpair = copyThreadGroups.equal_range(threadGroup);
+
+        auto it = iterpair.first;
+        for (; it != iterpair.second; ++it) {
+          pid_t thread = it->second;
+
+          if (threadGroup == thread) {
+            // This is not a thread! This is the thread group leader (process), skip.
+            continue;
+          }
+
+          auto msg = "Manually exiting thread %d after exit_group.\n";
+          log.writeToLog(Importance::info, msg, thread);
+
+          ptraceEvent event;
+          int ret = ptrace(PTRACE_CONT, thread, 0, 0);
+
+          if (ret == -1 && errno == ESRCH) {
+            event = handleExitedThread(thread);
+          } else {
+            // Wait for next event to intercept.
+            doWithCheck(waitpid(thread, &status, 0), "waitpid");
+            event = getPtraceEvent(status);
+          }
+
+          if (event != ptraceEvent::nonEventExit) {
+            runtimeError("Unexpected ptrace event!" + to_string(int(event)) + "\n");
+          }
+          handleNonEventExit(thread);
+        }
+        continue;
+      }
 
       // We have children still, we cannot exit.
       if(processTree.count(traceesPid) != 0){
         myScheduler.markFinishedAndScheduleNext(traceesPid);
+      } else {
+        // We have no more children, nothing stops us from exiting, we continue
+        // to the next event, which we expect to be a nonEventExit
       }
       continue;
     }
 
     // Current process is finally truly done (unlike eventExit).
     if(ret == ptraceEvent::nonEventExit){
+      if (states.at(traceesPid).isExitGroup) {
+        // never seen this, don't know how to handle.
+        runtimeError("We should not see nonEventExit from a exitGroup event.\n");
+      }
+
+      auto msg = log.makeTextColored(Color::blue, "Process [%d] has finished. "
+                                         "With ptraceNonEventExit.\n");
+      log.writeToLog(Importance::inter, msg, traceesPid);
+
       states.at(traceesPid).callPostHook = false;
       if(processTree.count(traceesPid) != 0){
-        myScheduler.markFinishedAndScheduleNext(traceesPid);
+        runtimeError("We receieved a nonEventExit with children left."
+                     "This should be impossible!");
       }else{
-        exitLoop = handleExit(traceesPid);
+        exitLoop = handleNonEventExit(traceesPid);
       }
       continue;
     }
 
-
     // We have encountered a call to fork, vfork, clone.
     if (ret == ptraceEvent::fork || ret == ptraceEvent::vfork || ret == ptraceEvent::clone) {
-      string msg;
-      if (ret == ptraceEvent::fork){
+      tracer.updateState(traceesPid);
+      int syscallNumber = (int)tracer.getSystemCallNumber();
+      string msg = "none";
+      bool isThread = false;
+
+      // Per ptrace man page: we cannot reliably tell a clone syscall from it's event,
+      // so we check explicitly.
+      switch (syscallNumber) {
+      case SYS_fork:
         msg = "fork";
-      }
-      else if (ret == ptraceEvent::vfork){
+        break;
+      case SYS_vfork:
         msg = "vfork";
-      }
-      else if (ret == ptraceEvent::clone){
+        break;
+      case SYS_clone: {
         msg = "clone";
-        tracer.updateState(traceesPid);
         unsigned long flags = (unsigned long) tracer.arg1();
-        unsigned long threadBit = flags & CLONE_THREAD;
-        if(threadBit != 0){
-          runtimeError("Threads not supported!");
-        }
+        isThread = (flags & CLONE_THREAD) != 0;
+        // if((flags & CLONE_FILES) != 0){
+          // runtimeError("We do not support CLONE_FILES\n");
+        // }
+        break;
+      }
+      default:
+        runtimeError("Uknown syscall number from fork/clone event: " +
+                     to_string(syscallNumber));
       }
 
       log.writeToLog(Importance::inter,
                      log.makeTextColored(Color::blue, "[%d] caught %s event!\n"),
                      traceesPid, msg.c_str());
-      handleForkEvent(traceesPid);
+
+      handleForkEvent(traceesPid, isThread);
       states.at(traceesPid).callPostHook = false;
       continue;
     }
@@ -337,11 +445,9 @@ void execution::runProgram(){
       log.writeToLog(Importance::inter,
                      log.makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
                      traceesPid);
-
       //reset CPUID trap flag
       states.at(traceesPid).CPUIDTrapSet = false;
 
-  
       handleExecEvent(traceesPid);
       continue;
     }
@@ -359,7 +465,7 @@ void execution::runProgram(){
   // DEVRAND STEP 5: clean up /dev/[u]random fifo threads
   doWithCheck(pthread_cancel(devRandomPthread), "pthread_cancel /dev/random pthread");
   doWithCheck(pthread_cancel(devUrandomPthread), "pthread_cancel /dev/urandom pthread");
-  
+
   auto msg =
     log.makeTextColored(Color::blue, "All processes done. Finished successfully!\n");
   log.writeToLog(Importance::info, msg);
@@ -389,36 +495,86 @@ void execution::runProgram(){
     printStat("process_vm_reads: ", tracer.readVmCalls);
     printStat("process_vm_writes: ", tracer.writeVmCalls);
   }
+
+  if (!myGlobalState.liveThreads.empty()) {
+    cerr << "Live thread set is not empty! We miss counted the threads somewhere..."
+         << endl;
+    exit(1);
+  }
+
+  if (!myGlobalState.threadGroups.empty()) {
+    cerr << "threadGroups is not empty! We miss counted the threads somewhere..."
+         << endl;
+    exit(1);
+  }
+
+  // Add a check for states.empty(). Not adding it now since I don't want a bunch of packages.
+  // to fail over this :b
 }
 // =======================================================================================
-pid_t execution::handleForkEvent(const pid_t traceesPid){
-  log.writeToLog(Importance::inter, log.makeTextColored(Color::blue,
-                 "Fork event came!\n"));
-
+pid_t execution::handleForkEvent(const pid_t traceesPid, bool isThread){
   processSpawnEvents++;
 
   pid_t newChildPid = ptracer::getEventMessage(traceesPid);
+  auto threadGroup = myGlobalState.threadGroupNumber.at(traceesPid);
 
+  if(isThread){
+    myGlobalState.liveThreads.insert(newChildPid);
+    auto msg = log.makeTextColored(Color::blue, "Adding thread %d to thread group %d\n");
+    log.writeToLog(Importance::info, msg, newChildPid, threadGroup);
+
+    // Careful here, the thread group is not necessarily traceesPid, as traceesPid may
+    // be a thread, fetch the actual threadGroup by querying our (traceesPid) thread
+    // group number.
+    myGlobalState.threadGroups.insert({threadGroup, newChildPid});
+    myGlobalState.threadGroupNumber.insert({newChildPid, threadGroup});
+  } else {
+    auto msg = log.makeTextColored(Color::blue, "Creating new thread group: %d\n");
+    log.writeToLog(Importance::info, msg, newChildPid);
+
+    // This should not happen! (Pid recycling?)
+    if (myGlobalState.threadGroups.count(newChildPid) != 0) {
+      runtimeError("Thread group already existed.\n");
+    }
+
+    // This is a process it owns it's own process group, create it.
+    myGlobalState.threadGroups.insert({newChildPid, newChildPid});
+    myGlobalState.threadGroupNumber.insert({newChildPid, newChildPid});
+  }
+
+  // If a thread T1 spawns thread T2, then T1 is NOT the parent of T2. The parent is always
+  // the process (the thread group leader) that T1 belongs to.
+  // This is where we add new children to the thread group leader.
+  processTree.insert(make_pair(threadGroup, newChildPid));
+
+  // Share fdStatus. Processes get their own, threads share with thread group.
+  if(isThread){
+    states.emplace(newChildPid, state {newChildPid, debugLevel,
+                                         states.at(threadGroup).fdStatus});
+  } else {
+    // Deep Copy!
+    unordered_map<int, descriptorType> fds = *states.at(threadGroup).fdStatus.get();
+    states.emplace(newChildPid, state {newChildPid, debugLevel, fds});
+  }
   // Add this new process to our states.
-  states.emplace(newChildPid, state {newChildPid, debugLevel} );
+
+  
+  // Inheret file descriptor set from our parent.
+  states.at(newChildPid).fdStatus = states.at(threadGroup).fdStatus;
+
   log.writeToLog(Importance::info,
                  log.makeTextColored(Color::blue,"Added process [%d] to states map.\n"),
                  newChildPid);
 
-  // Tracee just had a child! It's a parent!
+  // Let child run instead of the parent, inform scheduler of new process.
   myScheduler.addAndScheduleNext(newChildPid);
 
   // during fork, the parent's mmaped memory are COWed, as we set the mapping
   // attributes to MAP_PRIVATE. new child's `mmapMemory` hence must be inherited
   // from parent process, to be consistent with fork() semantic.
+  // TODO for threads we may not need to do this?!
   states.at(newChildPid).mmapMemory.doesExist = true;
   states.at(newChildPid).mmapMemory.setAddr(states.at(traceesPid).mmapMemory.getAddr());
-
-  // This is where we add new children to our process tree.
-  // Also add it to the scheduler's process tree.
-  auto pair = make_pair(traceesPid, newChildPid);
-  processTree.insert(pair);
-  myScheduler.insertSchedChild(traceesPid, newChildPid);
 
   // Wait for child to be ready.
   log.writeToLog(Importance::info, log.makeTextColored(Color::blue,
@@ -523,8 +679,13 @@ void execution::handleExecEvent(pid_t pid) {
       assert(nb == nbUpper);
     }
   }
-  if (states.find(pid) == states.end())
+
+  // TODO When does this ever happen?
+  if (states.find(pid) == states.end()){
       states.emplace(pid, state {pid, debugLevel} );
+  }
+  // Reset file descriptor state, it is wiped after execve.
+  states.at(pid).fdStatus = make_shared<unordered_map<int, descriptorType>>();
 
   states.at(pid).mmapMemory.doesExist = true;
   states.at(pid).mmapMemory.setAddr(traceePtr<void>((void*)mmapAddr));
@@ -551,8 +712,7 @@ bool execution::handleSeccomp(const pid_t traceesPid){
   // Get registers from tracee.
   tracer.updateState(traceesPid);
 
-  if (!states.at(traceesPid).CPUIDTrapSet && !myGlobalState.kernelPre4_12)
-  {
+  if(!states.at(traceesPid).CPUIDTrapSet && !myGlobalState.kernelPre4_12){
     //check if CPUID needs to be set, if it does, set trap
     trapCPUID(myGlobalState, states.at(traceesPid), tracer);
   }
@@ -684,7 +844,7 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
 
   case SYS_arch_prctl:
     return arch_prctlSystemCall::handleDetPre(gs, s, t, sched);
-    
+
   case SYS_chdir:
     return chdirSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -708,6 +868,18 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
 
   case SYS_dup2:
     return dup2SystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_exit_group:
+    return exit_groupSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_epoll_ctl:
+    return epoll_ctlSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_epoll_wait:
+    return epoll_waitSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_epoll_pwait:
+    return epoll_pwaitSystemCall::handleDetPre(gs, s, t, sched);
 
   case SYS_execve:
     return execveSystemCall::handleDetPre(gs, s, t, sched);
@@ -865,8 +1037,6 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_select:
     return selectSystemCall::handleDetPre(gs, s, t, sched);
 
-  case SYS_brk:
-    return brkSystemCall::handleDetPre(gs, s, t, sched);
   case SYS_setitimer:
     return setitimerSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -1001,8 +1171,14 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
   case SYS_dup2:
     return dup2SystemCall::handleDetPost(gs, s, t, sched);
 
-  case SYS_execve:
-    return execveSystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_epoll_ctl:
+    return epoll_ctlSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_epoll_wait:
+    return epoll_waitSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_epoll_pwait:
+    return epoll_pwaitSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_faccessat:
     return faccessatSystemCall::handleDetPost(gs, s, t, sched);
@@ -1151,9 +1327,6 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
   case SYS_select:
     return selectSystemCall::handleDetPost(gs, s, t, sched);
 
-  case SYS_brk:
-    return brkSystemCall::handleDetPost(gs, s, t, sched);
-
   case SYS_setitimer:
     return setitimerSystemCall::handleDetPost(gs, s, t, sched);
 
@@ -1247,7 +1420,7 @@ tuple<ptraceEvent, pid_t, int>
 execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
   // fprintf(stderr, "Getting next event for pid %d\n", pidToContinue);
   // 3rd return value of this function. Holds the status after waitpid call.
-  int status;
+  int status = 0;
   // Pid of the process whose event we just intercepted through ptrace.
   pid_t traceesPid;
 
@@ -1283,11 +1456,17 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
       // at syscall exit like regular syscalls.
       ptracer::doPtrace(PTRACE_SINGLESTEP, pidToContinue, 0, (void*) signalToDeliver);
       // wait for our SIGTRAP
+      // TODO check return value of this!!
       waitpid(pidToContinue, &status, 0);
 
       // call our post-hook manually for vsyscall stops.
       tracer.updateState(pidToContinue);
+
+      // TODO this assumes we wanted to call the post-hook for this system call,
+      // is this always true?
       callPostHook(syscallNum, myGlobalState, states.at(pidToContinue), tracer, myScheduler);
+
+      // TODO What's the point of this second updateState call?
       tracer.updateState(pidToContinue);
 
       // 000000000009efe0 <time@@GLIBC_2.2.5>:
@@ -1299,15 +1478,20 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
       //
       // our expected rip is @9eff1. must resume with `PTRACE_CONT`
       // since our vsyscall has been *emulated*
+
       ptracer::doPtrace(PTRACE_CONT, pidToContinue, 0, (void*) signalToDeliver);
     } else {
-      ptracer::doPtrace(PTRACE_SYSCALL, pidToContinue, 0, (void*) signalToDeliver);
+      doWithCheck(ptrace(PTRACE_SYSCALL, pidToContinue, 0, (void*) signalToDeliver),
+                  "here at syscall!");
     }
   }else{
     // Tell the process that we just intercepted an event for to continue, with us tracking
     // it's system calls. If this is the first time this function is called, it will be the
     // starting process. Which we expect to be in a waiting state.
-    ptracer::doPtrace(PTRACE_CONT, pidToContinue, 0, (void*) signalToDeliver);
+    // doWithCheck(ptrace(PTRACE_CONT, pidToContinue, 0, (void*) signalToDeliver),
+    //             "dettrace ptrace continue failed on " + to_string(pidToContinue) + "\n");
+    doWithCheck(ptrace(PTRACE_CONT, pidToContinue, 0, (void*) signalToDeliver),
+                "failed to PTRACE_CONT from getNextEvent()\n");
   }
 
   // Wait for next event to intercept.
@@ -1332,25 +1516,25 @@ ptraceEvent execution::getPtraceEvent(const int status){
 
   // Check if tracee has exited.
   if (WIFEXITED(status)){
-    // log.writeToLog(Importance::extra, "nonEventExit\n");
+    log.writeToLog(Importance::extra, "nonEventExit\n");
     return ptraceEvent::nonEventExit;
   }
 
   // Condition for PTRACE_O_TRACEEXEC
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_EXEC) ){
-    // log.writeToLog(Importance::extra, "exec\n");
+    log.writeToLog(Importance::extra, "exec\n");
     return ptraceEvent::exec;
   }
 
   // Condition for PTRACE_O_TRACECLONE
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_CLONE) ){
-    // log.writeToLog(Importance::extra, "clone\n");
+    log.writeToLog(Importance::extra, "clone\n");
     return ptraceEvent::clone;
   }
 
   // Condition for PTRACE_O_TRACEVFORK
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_VFORK) ){
-    // log.writeToLog(Importance::extra, "vfork\n");
+    log.writeToLog(Importance::extra, "vfork\n");
     return ptraceEvent::vfork;
   }
 
@@ -1358,13 +1542,13 @@ ptraceEvent execution::getPtraceEvent(const int status){
   // SIGCHLD, ptrace calls that event a fork *sigh*.
   // Also requires PTRACE_O_FORK flag.
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_FORK) ){
-    // log.writeToLog(Importance::extra, "fork\n");
+    log.writeToLog(Importance::extra, "fork\n");
     return ptraceEvent::fork;
   }
 
 #ifdef PTRACE_EVENT_STOP
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_STOP) ){
-    // log.writeToLog(Importance::extra, "event stop\n");
+    log.writeToLog(Importance::extra, "event stop\n");
     runtimeError("Ptrace event stop.\n");
   }
 #endif
@@ -1407,7 +1591,6 @@ pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process){
 // =======================================================================================
 
 void trapCPUID(globalState& gs, state& s, ptracer& t){
-
   gs.log.writeToLog(Importance::info, "Injecting arch_prctl call to tracee to intercept CPUID!\n");
   // Save current register state to restore after arch_prctl
   s.regSaver.pushRegisterState(t.getRegs());
@@ -1430,4 +1613,72 @@ void trapCPUID(globalState& gs, state& s, ptracer& t){
   t.changeSystemCall(SYS_arch_prctl);
   t.writeIp((uint64_t) t.getRip().ptr - 2);
   gs.log.writeToLog(Importance::info, "arch_prctl(%d, 0)\n", ARCH_SET_CPUID);
+}
+
+void deleteMultimapEntry(unordered_multimap<pid_t, pid_t>& mymap, pid_t key, pid_t value) {
+    auto iterpair = mymap.equal_range(key);
+    auto it = iterpair.first;
+    for(; it != iterpair.second; ++it) {
+      if(it->second == value) {
+        mymap.erase(it);
+        return;
+      }
+    }
+
+    runtimeError("Unable to delete entry thread group entry for (" +
+                        to_string(key) + ", " + to_string(value) + ")\n");
+}
+
+
+ptraceEvent execution::handleExitedThread(pid_t currentPid) {
+  // This is a funky case. If we got here, it means we PTRACE_CONT on a exiting thread
+  // and it didn't respond (ESRCH), we were hoping to get to it's ptraceEventExit, but the
+  // thread is unresponsive. Instead, this event probably already arrived, the thread seems
+  // to be stuck until we waitpid() it's eventExit off the "waitpid event queue".
+  // After that, it seems to respond just fine to a new PTRACE_CONT, which will take us into
+  // the ptraceNonEventExit. I don't actually know that this will always work, but emperically
+  // this seems to be what's happening.
+  log.writeToLog(Importance::info,
+                 "No reponse from process, attempting to get exit even from waitpid.\n");
+  auto event = loopOnWaitpid(currentPid);
+
+  if (event != ptraceEvent::eventExit) {
+    runtimeError("Unexpected event from loopOnWaitpid() 1 : " + to_string(int(event)));
+  }
+
+  // Continue over to the ptraceEvenNonExit.
+  doWithCheck(ptrace(PTRACE_CONT, currentPid, 0 , 0),
+              "handleexitedThread(): Unable to continue thread to ptraceNonEventExit.\n");
+  event = loopOnWaitpid(currentPid);
+  return event;
+}
+
+ptraceEvent execution::loopOnWaitpid(pid_t currentPid) {
+  // Threads may not respond to ptrace calls since it has exited. Check waitpid to see
+  // if an exit status was delivered to us.
+  bool done = false;
+  int status;
+
+
+  for(int i = 0; i < 1000; i++){
+    // Set function wide status here! Used at very end to report the correct message!
+    int nextPid = waitpid(currentPid, &status, WNOHANG);
+    if(nextPid == currentPid){
+      done = true;
+      auto msg = log.makeTextColored(Color::blue, "Calls to waitpid (ptrace syscall): %d\n");
+      log.writeToLog(Importance::inter, msg, i + 1);
+      break;
+    } else if (nextPid == 0) {
+      // Still looping hoping for event to come... continue.
+      continue;
+    } else {
+      runtimeError("Unexpected return value from waitpid: " + to_string(nextPid));
+    }
+  }
+
+  if (!done) {
+    runtimeError("Failed to hear from tracee through waitpid, this process is lost.\n");
+  }
+
+  return getPtraceEvent(status);
 }

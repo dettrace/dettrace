@@ -172,7 +172,8 @@ long ptracer::doPtrace(enum __ptrace_request request, pid_t pid, void *addr, voi
       runtimeError("Ptrace_peek* failed with error: " + string { strerror(errno) } );
     }
   } else if (-1 == val) {
-    runtimeError("Ptrace failed with error: " + string { strerror(errno) } );
+    runtimeError("Ptrace failed with error: " + string { strerror(errno) } + "on thread " +
+                 to_string(pid) + " " + " with request " + to_string(request) + "\n");
   }
   return val;
 }
