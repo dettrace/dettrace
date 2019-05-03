@@ -28,6 +28,8 @@ build-tests:
 	$(MAKE) -C ./test/samplePrograms/ build
 
 run-tests: build-tests build
+	cat /proc/cpuinfo
+	uname -a
 	$(MAKE) -C ./test/unitTests/ run
 # NB: MAKEFLAGS= magic causes samplePrograms to run sequentially, which is
 # essential to avoid errors with bind mounting a directory simultaneously
