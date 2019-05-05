@@ -46,7 +46,11 @@ run-docker: docker
 	docker run -it --privileged --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG}
 
 test-docker: clean docker
+ifdef DETTRACE_NO_CPUID_INTERCEPTION
+	docker run --privileged --cap-add=SYS_ADMIN --env DETTRACE_NO_CPUID_INTERCEPTION=1  ${DOCKER_NAME}:${DOCKER_TAG} make -j tests
+else
 	docker run --privileged --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG} make -j tests
+endif
 
 .PHONY: clean docker run-docker tests build-tests run-tests initramfs
 clean:
