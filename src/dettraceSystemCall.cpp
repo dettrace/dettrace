@@ -78,7 +78,7 @@ void arch_prctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, 
                     t.getReturnValue());
 
   if (0 != t.getReturnValue()) {
-    //runtimeError("cpuid interception via arch_prctl failed");
+    runtimeError("cpuid interception via arch_prctl failed");
   }
   
   if (s.CPUIDTrapSet) {
