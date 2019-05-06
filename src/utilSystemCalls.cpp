@@ -133,6 +133,7 @@ void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName)
     // will think we don't have access to this file. Hence we keep our permissions
     // as part of the stat.
     // mode_t    st_mode;        /* File type and mode */
+    gs.log.writeToLog(Importance::info, "st_mode:0%o\n", myStat.st_mode);
 
     myStat.st_nlink = 1;       /* Number of hard links */
 
@@ -146,6 +147,15 @@ void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName)
 
     // Program will stall if we put some arbitrary value here: TODO.
     // myStat.st_size = 512;        /* Total size, in bytes */
+    if (S_ISDIR(myStat.st_mode)) {
+      // joe: I haven't seen irreproducible file sizes, but I have seen the same
+      // directory contents result in different sizes across machines (with
+      // different versions of Linux, 4.15 vs 4.18). The same filesystem type
+      // (ext4), same block size, tar --sort=name and --preserve-order weren't
+      // sufficient to determinize the directory st_size.
+      myStat.st_size = 16384;
+    }
+    gs.log.writeToLog(Importance::info, "st_size:%u\n", myStat.st_size);
 
     myStat.st_blksize = 512;     /* Block size for filesystem I/O */
 
