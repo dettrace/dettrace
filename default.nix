@@ -1,20 +1,39 @@
-{ system ? builtins.currentSystem }:
 
-let
-  # pkgs = import <nixpkgs> { inherit system; };
-  # Alternative pinned, strategy:
-  pkgs = import (fetchTarball "https://github.com/NixOS/nixpkgs-channels/archive/nixos-19.03.tar.gz") {};
+# Option (1): Use the user's default environment
+# with import <nixpkgs> { inherit system; };
 
-in
-rec {
-  libelfin = import ./deps/libelfin {
-    inherit (pkgs) stdenv fetchurl python3 git;
-  };
+# Option (2): Pinned, strategy:
+with import (fetchTarball "https://github.com/NixOS/nixpkgs-channels/archive/nixos-19.03.tar.gz") {};
+
+# A manually-packaged dependency:
+let libelfin = import ./deps/libelfin {
+      inherit (pkgs) stdenv fetchurl python3 git;
+   };
+in 
+
+stdenv.mkDerivation {
+  name = "dettrace";
+  buildInputs = [
+    clang
+    libseccomp
+    python3
+    libarchive
+    cpio
+    pkgconfig
+    openssl
+    libelf
+    libelfin # Custom dependency
+  ];
+
+  # Substract repo files that we don't actually need for the build:
+  src = nix-gitignore.gitignoreSourcePure [ ./.nixignores ./.gitignore ] ./. ;  
   
-  dettrace = import ./dettrace.nix {
-    # Use custom pkgconfig and gpm packages as dependencies
-    inherit libelfin;
-    # The remaining dependencies come from Nixpkgs
-    inherit (pkgs) stdenv clang gnumake less libseccomp python3 libarchive cpio pkgconfig openssl libelf;
-  };
+  buildPhase = ''
+    make
+  '';  
+  installPhase = ''
+    echo Copying dettrace binary;
+    mkdir -p "$out/bin";
+    cp bin/dettrace "$out/bin/";
+  '';  
 }

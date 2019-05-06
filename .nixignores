@@ -1,0 +1,15 @@
+# Ignore these files IN ADDITION to .gitignore
+#
+# Warning: this is always somewhat incomplete.
+# It's best to run `git clean -fxd` before `nix-build`.
+#
+deps
+.git*
+.nixignores
+result*
+*.nix
+.dockerignore
+*.yml
+Jenkinsfile
+Dockerfile
+README*

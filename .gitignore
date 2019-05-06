@@ -1,6 +1,8 @@
 *.o
 \#*\#
 *.d
+.#*
+*~
 GPATH
 GRTAGS
 GTAGS
