@@ -29,11 +29,17 @@ stdenv.mkDerivation {
   src = nix-gitignore.gitignoreSourcePure [ ./.nixignores ./.gitignore ] ./. ;  
   
   buildPhase = ''
-    make
+    make;
+    pushd test/samplePrograms/;
+    make -j;
+    popd;    
   '';  
   installPhase = ''
     echo Copying dettrace binary;
     mkdir -p "$out/bin";
     cp bin/dettrace "$out/bin/";
+    cp initramfs.cpio "$out/";
+    cp -a root "$out/root";
+    cp -a test/samplePrograms "$out/samplePrograms";
   '';  
 }
