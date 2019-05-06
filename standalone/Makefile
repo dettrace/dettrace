@@ -12,6 +12,6 @@ from_forum:
 	$(CC) -Wall -g -o cpuid cpuid.o utils.o
 
 clean:
-	rm trap_cpuid
+	$(RM) trap_cpuid
 
 .PHONY: all
