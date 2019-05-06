@@ -59,7 +59,9 @@ $(CXX_BINARIES): %.bin: %.cpp
 
 # NB: disable special cpu insn tests for now
 rdrand.ok: rdrand.bin
+#	./rdrand_run.sh
 	@echo "   **IGNORING** $^ test..."
+
 rdseed.ok: rdseed.bin
 	@echo "   **IGNORING** $^ test..."
 # cpuid.ok: cpuid
