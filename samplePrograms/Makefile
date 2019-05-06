@@ -57,11 +57,10 @@ $(RT_BINARIES): %.bin: %.c
 $(CXX_BINARIES): %.bin: %.cpp
 	$(CXX) $< -Wall -g -o $@ -std=gnu++11
 
-# NB: disable special cpu insn tests for now
 rdrand.ok: rdrand.bin
-#	./rdrand_run.sh
-	@echo "   **IGNORING** $^ test..."
+	./rdrand_run.sh
 
+# NB: disable special cpu insn test for now
 rdseed.ok: rdseed.bin
 	@echo "   **IGNORING** $^ test..."
 # cpuid.ok: cpuid
