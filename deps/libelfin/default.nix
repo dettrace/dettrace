@@ -12,26 +12,15 @@ stdenv.mkDerivation rec {
     sha256 = "1irs8i6q46gnivfr5nv8jqd0baaw2y9lpd8l6lmr50kmjqmr8f63";
   };
 
-#  doCheck = true;
-
-  configureFlags = [];
-       # Configure check for dynamic lib support is broken, see
-       # http://lists.uclibc.org/pipermail/uclibc-cvs/2005-August/019383.html
-#    ++ stdenv.lib.optional (stdenv.hostPlatform != stdenv.buildPlatform) "mr_cv_target_elf=yes"
-       # Libelf's custom NLS macros fail to determine the catalog file extension
-       # on Darwin, so disable NLS for now.
-#    ++ stdenv.lib.optional stdenv.hostPlatform.isDarwin "--disable-nls";
-  
-   buildInputs = [ python3 git ];
-#  nativeBuildInputs = [ gettext ]
-       # Need to regenerate configure script with newer version in order to pass
-       # "mr_cv_target_elf=yes", but `autoreconfHook` brings in `makeWrapper`
-       # which doesn't work with the bootstrapTools bash, so can only do this
-       # for cross builds when `stdenv.shell` is a newer bash.
-#    ++ stdenv.lib.optional (stdenv.hostPlatform != stdenv.buildPlatform) autoreconfHook;
+  configureFlags = [];  
+  buildInputs = [ python3 git ];
 
   installPhase = ''
     make PREFIX=$out install
+    echo "Hack regarding header paths:"
+    cd "$out/include"
+    ln -s ./libelfin/* ./;
+    echo "Finished with header hack."
   '';
    
   meta = {
