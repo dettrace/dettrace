@@ -1,9 +1,9 @@
 
 # Pin that sucker for reproducibility:
-with (import (fetchTarball "https://github.com/NixOS/nixpkgs-channels/archive/nixos-18.03.tar.gz") {});
+# with (import (fetchTarball "https://github.com/NixOS/nixpkgs-channels/archive/nixos-18.03.tar.gz") {});
 
 # OR use whatever the user makes default:
-# with (import <nixpkgs> { });
+with (import <nixpkgs> { });
 
 stdenv.mkDerivation {
   name = "dettrace";
@@ -15,8 +15,15 @@ stdenv.mkDerivation {
     less
     libseccomp
     python3
-    
+#    elfinfo
+    libarchive
+    cpio
+    pkgconfig
+    openssl
+    libelf
+
     # For development/testing
     which
+    git
   ];
 }
