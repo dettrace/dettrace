@@ -50,3 +50,7 @@ test-docker: clean docker
 clean:
 	$(RM) src/dettrace
 	make -C ./src/ clean
+	# Use `|| true` in case one forgets to check out submodules
+	make -C ./test/samplePrograms clean || true
+	make -C ./test/standalone clean || true
+	make -C ./test/unitTests clean || true
