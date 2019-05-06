@@ -26,7 +26,9 @@
 #include <sys/sysinfo.h>
 #include <sys/uio.h>
 #include <linux/futex.h>
+#include <linux/fiemap.h>
 #include <linux/fs.h>
+#include <linux/rtc.h>
 #include <sys/types.h>
 #include <utime.h>
 #include <unordered_map>
@@ -782,6 +784,36 @@ void gettimeofdaySystemCall::handleDetPost(globalState& gs, state& s, ptracer& t
 }
 // =======================================================================================
 bool ioctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  long request = t.arg2();
+  switch(request) {
+  // non-supported rtc ops
+  case RTC_AIE_ON:
+  case RTC_AIE_OFF:
+  case RTC_PIE_ON:
+  case RTC_PIE_OFF:
+  case RTC_UIE_ON:
+  case RTC_UIE_OFF:
+  case RTC_WKALM_RD:
+  case RTC_WKALM_SET:
+  case RTC_IRQP_READ:
+  case RTC_IRQP_SET:
+    {
+      int err = ENOTTY;
+      failSystemCall(gs, s, t, err);
+      return false;
+    }
+    break;
+  case RTC_SET_TIME:
+  case RTC_EPOCH_SET:
+    {
+      int err = EPERM;
+      failSystemCall(gs, s, t, err);
+      return false;
+    }
+  case RTC_RD_TIME:
+  case RTC_EPOCH_READ:
+    return true;
+  }
   return true;
 }
 void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -790,40 +822,59 @@ void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   gs.log.writeToLog(Importance::info, "File descriptor: %d\n", fd);
   gs.log.writeToLog(Importance::info, "Request %" PRId64 "\n", request);
 
+  switch (request) {
   // Even though we don't particularly like TCGETS, we will let it through as we need
   // it for some programs to work, like `more`.
-  if(TCGETS == request || 
-     TCSETS == request || 
-     FIOCLEX == request || 
-     FIONREAD == request ||
-     TCSETSF == request ||
-     TCGETA == request ||
-     FIONCLEX == request ||
-     SIOCGIFHWADDR == request ||
-     SIOCGIFADDR == request){
+  case TCGETS:
+  case TCSETS:
+  case FIOCLEX:
+  case FIONREAD:
+  case TCSETSF:
+  case TCGETA:
+  case FIONCLEX:
+  case SIOCGIFHWADDR:
+  case SIOCGIFADDR:
     return;
-  }
-
   // Do not suport querying for these.
-  if(TCGETS == request ||
-     TIOCGWINSZ == request // Window size of terminal.
-     ) {
+  case TIOCGWINSZ:
     t.setReturnRegister((uint64_t) -ENOTTY);
-  }
-
-  // These are fine, allow them through.
-  else if(TIOCGPGRP == request || // group pid of foreground process.
-          SIOCSIFMAP == request || // efficient reading of files.
-          0xC020660B /*FS_IOC_FIEMAP*/ == request // For some reason causes compiler
-          // error if I use the macro?
-#ifdef FICLONE
-          || FICLONE == request // Not avaliable in older kernel versions.
-#endif
-          ){ // clone file
     return;
-  }else{
+  case TIOCGPGRP:
+  case SIOCSIFMAP:
+  case FS_IOC_FIEMAP:
+#ifdef FICLONE
+  case FICLONE:
+#endif
+    return;
+  case RTC_RD_TIME:
+    {
+      time_t logicalTime = s.getLogicalTime();
+      struct tm tm = {};
+
+      s.incrementTime();
+      gmtime_r(&logicalTime, &tm);
+
+      if (t.arg3()) {
+	traceePtr<struct tm> rptr((struct tm*)t.arg3());
+	t.writeToTracee(rptr, tm, t.getPid());
+      }
+    }
+    break;
+  case RTC_EPOCH_READ:
+    {
+      unsigned long logicalTime = s.getLogicalTime();
+      s.incrementTime();
+
+      if (t.arg3()) {
+	traceePtr<unsigned long> rptr((unsigned long*)t.arg3());
+	t.writeToTracee(rptr, logicalTime, t.getPid());
+      }
+    }
+    break;
+  default:
     runtimeError("Unsupported ioctl call: fd=" + to_string(t.arg1()) +
                         " request=" + to_string(request));
+    break;
   }
   return;
 }

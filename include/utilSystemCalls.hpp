@@ -50,7 +50,18 @@ pair<int,int> getPipeFds(globalState& gs, state& s, ptracer& t);
  */
 void replaceSystemCallWithNoop(globalState& gs, state& s, ptracer& t);
 
-void appendEnvpLdPreload(globalState& gs, state& s, ptracer& t);
+/**
+ * cancel is pending SECCOMP syscall
+ * must be called on seccomp syscall enter
+ */
+void cancelSystemCall(globalState& gs, state& s, ptracer& t);
+
+/**
+ * force return failure on a pending syscall
+ * must be called on seccomp syscall enter
+ * errno is a positive integer defined in errno.h
+ */
+void failSystemCall(globalState& gs, state& s, ptracer& t, int err);
 
 /**
  * Go through "/proc/$tracee_pid/fd/$fd" to get the file descriptor represented by fd.
