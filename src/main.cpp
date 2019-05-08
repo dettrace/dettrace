@@ -474,13 +474,13 @@ static void checkPaths(string pathToChroot, string workingDir){
     free(trueWorkingDirC);
 }
 
-/** 
+/**
  * DEVRAND STEP 3: thread that writes pseudorandom output to a /dev/[u]random fifo
  */
 static void* devRandThread(void* fifoPath_) {
 
   char* fifoPath = (char*) fifoPath_;
-  
+
   // allow this thread to be unilaterally killed when tracer exits
   int oldCancelType;
   doWithCheck(pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldCancelType), "pthread_setcanceltype");
@@ -514,7 +514,7 @@ static void* devRandThread(void* fifoPath_) {
       perror("[devRandThread] error writing to fifo");
       // need to try writing these bytes again so that the fifo generates deterministic output
       getNewRandom = false;
-      
+
     } else {
       fsync(fd);
       getNewRandom = true;
@@ -522,7 +522,7 @@ static void* devRandThread(void* fifoPath_) {
       //printf("[devRandThread] wrote %u bytes so far...\n", totalBytesWritten);
     }
   }
-  
+
   close(fd);
   return NULL;
 }
@@ -614,11 +614,11 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
       mountDir("/dev/null", chrootDevNullPath);
     }
   }
-  
+
   // DEVRAND STEP 4: bind mount our /dev/[u]random fifos into the chroot
   createFileIfNotExist(pathToChroot + "/dev/random");
   mountDir(devrandFifoPath, pathToChroot + "/dev/random");
-    
+
   createFileIfNotExist(pathToChroot + "/dev/urandom");
   mountDir(devUrandFifoPath, pathToChroot + "/dev/urandom");
 
@@ -664,7 +664,7 @@ int spawnTracerTracee(void* voidArgs){
   // that their names are available to tracee
   char tmpnamBuffer[L_tmpnam];
   char* tmpnamResult = tmpnam(tmpnamBuffer);
-  assert(NULL != tmpnamResult); 
+  assert(NULL != tmpnamResult);
   devrandFifoPath = string{ tmpnamBuffer } + "-random.fifo";
   //fprintf(stderr, "%s\n", devrandFifoPath.c_str());
   devUrandFifoPath = string{ tmpnamBuffer } + "-urandom.fifo";
@@ -691,10 +691,10 @@ int spawnTracerTracee(void* voidArgs){
                  "pthread_create /dev/random pthread" );
     doWithCheck( pthread_create(&devUrandomPthread, NULL, devRandThread, (void*)strdup(devUrandFifoPath.c_str())),
                  "pthread_create /dev/urandom pthread" );
-    
+
     execution exe{
-        args.debugLevel, pid, args.useColor, 
-        args.logFile, args.printStatistics, 
+        args.debugLevel, pid, args.useColor,
+        args.logFile, args.printStatistics,
         devRandomPthread, devUrandomPthread,
         cloneArgs->vdsoSyms};
 
@@ -705,7 +705,7 @@ int spawnTracerTracee(void* voidArgs){
     sa.sa_flags = 0;
     doWithCheck(sigaction(SIGALRM, &sa, NULL), "sigaction(SIGALRM)");
     alarm(args.timeoutSeconds);
-    
+
     exe.runProgram();
   } else if (pid == 0) {
     runTracee(args);
@@ -880,16 +880,18 @@ static bool realDevNull(string path) {
   if (S_ISBLK(statDevNull.st_mode)) { fileType = "S_ISBLK"; }
   if (S_ISFIFO(statDevNull.st_mode)) { fileType = "S_ISFIFO"; }
   if (S_ISLNK(statDevNull.st_mode)) { fileType = "S_ISLNK"; }
-  if (S_ISSOCK(statDevNull.st_mode)) { fileType = "S_ISSOCK"; }  
+  if (S_ISSOCK(statDevNull.st_mode)) { fileType = "S_ISSOCK"; }
   cout << path
        << " " << fileType
        << " major:" << major(statDevNull.st_dev)
        << " minor:" << minor(statDevNull.st_dev)
        << endl;
   */
-  // NB: when running DT tests, /dev/null shows up as a 0,6 CHR device. Not sure
-  // what this is, but it seems to act like proper /dev/null as far as our
-  // readDevNull test is concerned.
+  // NB: on platforms where we run DT tests, /dev/null sometimes shows up as
+  // something besides a 1,3 CHR device. For example, it appears to show up
+  // with the version number 0,64 on Azure DevOps. Not sure what the
+  // significance of these numbers are, but they seem to act like proper
+  // /dev/null files as far as our readDevNull test is concerned.
   return S_ISCHR(statDevNull.st_mode) &&
     ((1 == major(statDevNull.st_dev) && 3 == minor(statDevNull.st_dev)) ||
      (0 == major(statDevNull.st_dev)));

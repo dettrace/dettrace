@@ -79,6 +79,10 @@ void arch_prctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, 
   gs.log.writeToLog(Importance::info, "post-hook for arch_prctl, returning %d\n",
                     t.getReturnValue());
 
+  if (0 != t.getReturnValue()) {
+    runtimeError("cpuid interception via arch_prctl failed");
+  }
+  
   if (s.CPUIDTrapSet) {
     // This should be impossible.
     runtimeError("Got to arch_prctl post-hook without it needing to have CPUID trap set.");
