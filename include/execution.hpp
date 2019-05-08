@@ -277,7 +277,7 @@ public:
 
 
   // Core looping logic used by handleExitedThread.
-  ptraceEvent loopOnWaitpid(pid_t currentPid);
+  pair<bool, ptraceEvent> loopOnWaitpid(pid_t currentPid);
 
   void killAllProcesses() {
     myScheduler.killAllProcesses();

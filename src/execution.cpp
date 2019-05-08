@@ -1640,8 +1640,16 @@ ptraceEvent execution::handleExitedThread(pid_t currentPid) {
   // this seems to be what's happening.
   log.writeToLog(Importance::info,
                  "No reponse from process, attempting to get exit even from waitpid.\n");
-  auto event = loopOnWaitpid(currentPid);
+  bool succ;
+  ptraceEvent event;
+  tie(succ, event) = loopOnWaitpid(currentPid);
 
+  if(!succ){
+    // assume we exited correctly.
+    return ptraceEvent::nonEventExit;
+  }
+
+  // we succeeded with the wrong event
   if (event != ptraceEvent::eventExit) {
     runtimeError("Unexpected event from loopOnWaitpid() 1 : " + to_string(int(event)));
   }
@@ -1649,18 +1657,23 @@ ptraceEvent execution::handleExitedThread(pid_t currentPid) {
   // Continue over to the ptraceEvenNonExit.
   doWithCheck(ptrace(PTRACE_CONT, currentPid, 0 , 0),
               "handleexitedThread(): Unable to continue thread to ptraceNonEventExit.\n");
-  event = loopOnWaitpid(currentPid);
+  tie(succ, event) = loopOnWaitpid(currentPid);
+  if(!succ){
+    // assume we exited correctly.
+    return ptraceEvent::nonEventExit;
+  }
+
   return event;
 }
 
-ptraceEvent execution::loopOnWaitpid(pid_t currentPid) {
+pair<bool, ptraceEvent> execution::loopOnWaitpid(pid_t currentPid) {
   // Threads may not respond to ptrace calls since it has exited. Check waitpid to see
   // if an exit status was delivered to us.
   bool done = false;
   int status;
 
 
-  for(int i = 0; i < 1000; i++){
+  for(int i = 0; i < 10000; i++){
     // Set function wide status here! Used at very end to report the correct message!
     int nextPid = waitpid(currentPid, &status, WNOHANG);
     if(nextPid == currentPid){
@@ -1677,8 +1690,10 @@ ptraceEvent execution::loopOnWaitpid(pid_t currentPid) {
   }
 
   if (!done) {
-    runtimeError("Failed to hear from tracee through waitpid, this process is lost.\n");
+    log.writeToLog(Importance::info, "Failed to hear from tracee through waitpid\n.");
+    // dummy ptrace event, you should ignore this field on false.
+    return make_pair(false, ptraceEvent::eventExit);
   }
 
-  return getPtraceEvent(status);
+  return make_pair(true, getPtraceEvent(status));
 }
