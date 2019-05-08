@@ -5,7 +5,7 @@
 #define MAX_ATTEMPTS 10
 
 int rdrand(long long unsigned int* result) {
-    int success;
+    int success = 0;
     int attempts = MAX_ATTEMPTS;
     while (!(success = _rdrand64_step(result)) && --attempts != 0) {
     }
@@ -14,13 +14,14 @@ int rdrand(long long unsigned int* result) {
 
 int main()
 {
-    long long unsigned int result;
-
+    long long unsigned int result = -1;
+    printf("RDRAND test starting.\n");
+    
     if(rdrand(&result)) {
       printf("RDRAND value: %llu\n", result);
     } else {
       printf("RDRAND Failure. Insufficient Entropy.");
     }
 
-
+    printf("RDRAND test finished.\n");
 }

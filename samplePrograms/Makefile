@@ -1,5 +1,9 @@
 # binaries that are simple to build (1 source file, same name as binary)
-SIMPLE_ROOTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat  sigsegv sigill sigabrt kill tgkill alarm-handler alarm-nohandler alarm-ignore selectWithoutTimeout selectWithTimeout getdents getdents64 pollWithoutTimeout pollWithPositiveTimeout pollWithNegativeTimeout rdtsc rdtscp cpuid nanosleep nanosleep-par alarm-resethand readDevRandom readDevRandomMultiple readDevUrandom exec-mkstemp complex_mkdirat_dirfd mkdir mkdirat_fdcwd mknod mknod_fullpath open_already_exists openat_already_exists simpleCreat simple_mkdirat_dirfd symlink symlinkat vdso-funcs multithreaded multipleThreads processAndThread processThreadProcess processThreadThread pthreadJoin pthreadNoJoin ptpThreadJoin ptpThreadNoJoin twoPthreadsJoin twoPthreadsNoJoin tenThreadJoin tenThreadNoJoin exitgroup exitgroupMainProcess # execveMainThread execveThreads open_tmpfile deadlockingPipe
+SIMPLE_ROOTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat  sigsegv sigill sigabrt kill tgkill alarm-handler alarm-nohandler alarm-ignore selectWithoutTimeout selectWithTimeout getdents getdents64 pollWithoutTimeout pollWithPositiveTimeout pollWithNegativeTimeout rdtsc rdtscp nanosleep nanosleep-par alarm-resethand readDevRandom readDevRandomMultiple readDevUrandom exec-mkstemp complex_mkdirat_dirfd mkdir mkdirat_fdcwd mknod mknod_fullpath open_already_exists openat_already_exists simpleCreat simple_mkdirat_dirfd symlink symlinkat vdso-funcs multithreaded multipleThreads processAndThread processThreadProcess processThreadThread pthreadJoin pthreadNoJoin ptpThreadJoin ptpThreadNoJoin twoPthreadsJoin twoPthreadsNoJoin tenThreadJoin tenThreadNoJoin exitgroup exitgroupMainProcess # execveMainThread execveThreads open_tmpfile deadlockingPipe
+
+ifndef DETTRACE_NO_CPUID_INTERCEPTION
+SIMPLE_ROOTS := $(SIMPLE_ROOTS) cpuid
+endif
 
 SIMPLE_BINARIES= $(addsuffix .bin,$(SIMPLE_ROOTS))
 
@@ -19,7 +23,11 @@ BROADWELL_BINARIES= $(addsuffix .bin,$(BROADWELL_ROOTS))
 RT_ROOTS= timer_create_default timer_create_sigvtalrm timer_gettime
 RT_BINARIES= $(addsuffix .bin,$(RT_ROOTS))
 
+ifdef DETTRACE_NO_CPUID_INTERCEPTION
+CXX_ROOTS=
+else
 CXX_ROOTS=random_device
+endif
 CXX_BINARIES= $(addsuffix .bin,$(CXX_ROOTS))
 
 DETTRACE=../../bin/dettrace
@@ -49,9 +57,10 @@ $(RT_BINARIES): %.bin: %.c
 $(CXX_BINARIES): %.bin: %.cpp
 	$(CXX) $< -Wall -g -o $@ -std=gnu++11
 
-# NB: disable special cpu insn tests for now
 rdrand.ok: rdrand.bin
-	@echo "   **IGNORING** $^ test..."
+	./rdrand_run.sh
+
+# NB: disable special cpu insn test for now
 rdseed.ok: rdseed.bin
 	@echo "   **IGNORING** $^ test..."
 # cpuid.ok: cpuid
