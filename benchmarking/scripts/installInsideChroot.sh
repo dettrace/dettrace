@@ -10,7 +10,7 @@ mount sysfs /sys -t sysfs
 
 cd /home/
 # Add to sources.list
-echo "deb-src http://deb.debian.org/debian wheezy main" >> /etc/apt/sources.list
+echo "deb-src http://archive.debian.org/debian-archive/debian wheezy main" >> /etc/apt/sources.list
 apt-get update
 
 apt-get install dpkg-dev time

@@ -29,10 +29,6 @@ bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
     sched.preemptAndScheduleNext();
     return true;
   }else{
-    // Disambiguiate. Otherwise it's impossible to tell the difference between a
-    // maybeRunnable process that made no progress vs the case where we were on
-    // maybeRunnable and we made progress, and eventually we hit another blocking
-    // system call.
     return false;
   }
 }
