@@ -313,7 +313,8 @@ void execution::runProgram(){
 
       bool isExitGroup = states.at(traceesPid).isExitGroup;
       pid_t threadGroup = myGlobalState.threadGroupNumber.at(traceesPid);
-      // there is three reasons this is necessary
+
+      // there is two reasons this is necessary
       // 1) case where may thread called exit group: this process goes on to
       // exit like a normal non threaded non exit grouped process would, and we
       // don't want the check in ptraceEvent::nonEventExit to kill it.
@@ -326,21 +327,23 @@ void execution::runProgram(){
       // Iterate through all threads in this exit group exiting them.
       // Only go in here for exit groups where there is threads. By default,
       // there is at least 1 (the process)
-      log.writeToLog(Importance::info, "thread group #%d\n", myGlobalState.threadGroups.count(threadGroup));
+      log.writeToLog(Importance::info, "thread group #%d\n",
+                     myGlobalState.threadGroups.count(threadGroup));
+
       if (isExitGroup && myGlobalState.threadGroups.count(threadGroup) != 1) {
         auto msg = "Caught exit group! Ending all thread in our process group %d.\n";
         log.writeToLog(Importance::info, msg, threadGroup);
 
-        // Mark as finished so that handleNonEventExit function takes care of parent
-        // process.
+        // Mark as finished so that handleNonEventExit function takes care of eventually
+        // deleting parent process.
         myScheduler.markFinishedAndScheduleNext(threadGroup);
 
         // Make a copy to avoid deleting entries in original (done in handleTraceeExit)
         // while iterating through it.
         auto copyThreadGroups = myGlobalState.threadGroups;
         auto iterpair = copyThreadGroups.equal_range(threadGroup);
-
         auto it = iterpair.first;
+
         for (; it != iterpair.second; ++it) {
           pid_t thread = it->second;
 
@@ -357,15 +360,21 @@ void execution::runProgram(){
 
           if (ret == -1 && errno == ESRCH) {
             event = handleExitedThread(thread);
+          } else if (ret == -1) {
+            runtimeError("Unexpected error from ptrace(CONT) on thread exit.");
+            exit(1); // we will never get here.
           } else {
-            // Wait for next event to intercept.
-            doWithCheck(waitpid(thread, &status, 0), "waitpid");
+            // Great, thread is still responding, let if continue to it's
+            // nonEventExit.
+            doWithCheck(waitpid(thread, &status, 0), "waitpid for nonEventExit failed.");
             event = getPtraceEvent(status);
           }
 
           if (event != ptraceEvent::nonEventExit) {
             runtimeError("Unexpected ptrace event!" + to_string(int(event)) + "\n");
           }
+          // We have allowed to process to exit through the OS. Now, clean up our state
+          // for this thread.
           handleNonEventExit(thread);
         }
         continue;
@@ -1635,6 +1644,7 @@ ptraceEvent execution::handleExitedThread(pid_t currentPid) {
   // and it didn't respond (ESRCH), we were hoping to get to it's ptraceEventExit, but the
   // thread is unresponsive. Instead, this event probably already arrived, the thread seems
   // to be stuck until we waitpid() it's eventExit off the "waitpid event queue".
+
   // After that, it seems to respond just fine to a new PTRACE_CONT, which will take us into
   // the ptraceNonEventExit. I don't actually know that this will always work, but emperically
   // this seems to be what's happening.
@@ -1655,6 +1665,8 @@ ptraceEvent execution::handleExitedThread(pid_t currentPid) {
   }
 
   // Continue over to the ptraceEvenNonExit.
+  // TODO in the future we may relax the assumption that if a process succeeded on the
+  // first event then we _have to_ hear back from ptrace(CONT).
   doWithCheck(ptrace(PTRACE_CONT, currentPid, 0 , 0),
               "handleexitedThread(): Unable to continue thread to ptraceNonEventExit.\n");
   tie(succ, event) = loopOnWaitpid(currentPid);
@@ -1672,14 +1684,16 @@ pair<bool, ptraceEvent> execution::loopOnWaitpid(pid_t currentPid) {
   bool done = false;
   int status;
 
-
+  // Wait for event for N times.
+  // TODO In the future a timeout-like event might be better than busy waiting.
   for(int i = 0; i < 10000; i++){
     // Set function wide status here! Used at very end to report the correct message!
     int nextPid = waitpid(currentPid, &status, WNOHANG);
     if(nextPid == currentPid){
       done = true;
-      auto msg = log.makeTextColored(Color::blue, "Calls to waitpid (ptrace syscall): %d\n");
-      log.writeToLog(Importance::inter, msg, i + 1);
+      auto msg = log.makeTextColored(Color::blue,
+                   "Total calls to waitpid (ptrace syscall): %d\n");
+      log.writeToLog(Importance::extra, msg, i + 1);
       break;
     } else if (nextPid == 0) {
       // Still looping hoping for event to come... continue.
