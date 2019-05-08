@@ -721,7 +721,7 @@ bool execution::handleSeccomp(const pid_t traceesPid){
   // Get registers from tracee.
   tracer.updateState(traceesPid);
 
-  if(!states.at(traceesPid).CPUIDTrapSet && !myGlobalState.kernelPre4_12){
+  if(!states.at(traceesPid).CPUIDTrapSet && !myGlobalState.kernelPre4_12 && NULL == getenv("DETTRACE_NO_CPUID_INTERCEPTION")){
     //check if CPUID needs to be set, if it does, set trap
     trapCPUID(myGlobalState, states.at(traceesPid), tracer);
   }
