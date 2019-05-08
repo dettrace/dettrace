@@ -1031,6 +1031,12 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_rt_sigaction:
     return rt_sigactionSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_rt_sigtimedwait:
+    return rt_sigtimedwaitSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_mount:
+    return mountSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_sendto:
     return sendtoSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -1320,6 +1326,12 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 
   case SYS_rt_sigaction:
     return rt_sigactionSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_rt_sigtimedwait:
+    return rt_sigtimedwaitSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_mount:
+    return mountSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_sendto:
     return sendtoSystemCall::handleDetPost(gs, s, t, sched);

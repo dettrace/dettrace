@@ -118,7 +118,7 @@ void seccomp::loadRules(bool debug, bool convertUids){
   noIntercept(SYS_sigaltstack);
 
   noIntercept(SYS_rt_sigreturn);
-  noIntercept(SYS_rt_sigtimedwait);
+  intercept(SYS_rt_sigtimedwait);
   noIntercept(SYS_setgid);
   noIntercept(SYS_setgroups);
   noIntercept(SYS_setrlimit);
@@ -127,6 +127,7 @@ void seccomp::loadRules(bool debug, bool convertUids){
   noIntercept(SYS_setresuid);
   noIntercept(SYS_setreuid);
   noIntercept(SYS_setuid);
+
   // This seems to be, surprisingly, deterministic. The affinity is set/get by
   // us so it should always be the same mask. User cannot actually observe differences.
   noIntercept(SYS_sched_getaffinity);
@@ -140,6 +141,10 @@ void seccomp::loadRules(bool debug, bool convertUids){
   noIntercept(SYS_setsockopt);
   noIntercept(SYS_socketpair);
   noIntercept(SYS_mlock);
+
+  noIntercept(SYS_unshare);
+  intercept(SYS_mount);
+
   noIntercept(SYS_setsid);
 
   noIntercept(SYS_sched_yield);

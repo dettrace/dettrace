@@ -16,6 +16,7 @@
 #include <asm/prctl.h>
 #include <sys/prctl.h>
 #include <sys/epoll.h>
+#include <sys/mount.h>
 
 #include <limits>
 #include <cstring>
@@ -1462,6 +1463,7 @@ struct kernel_sigaction {
   unsigned long sa_restorer;
   unsigned long sa_mask;
 };
+
 bool rt_sigactionSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                           scheduler& sched){
   gs.log.writeToLog(Importance::info, "rt_sigaction pre-hook for signal " +
@@ -1519,6 +1521,74 @@ void rt_sigactionSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t
     s.requestedSignalHandler = SIGHANDLER_INVALID;
     s.requestedSignalToHandle = -1;
   }
+  return;
+}
+// =======================================================================================
+bool rt_sigtimedwaitSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
+                                          scheduler& sched){
+  // The prototype for the actual system call seems to be:
+  // the man page is just a wrapper.
+  // long sys_rt_sigtimedwait (	const sigset_t __user * uthese,
+  //                             siginfo_t __user * uinfo,
+  //                             const struct timespec __user * uts,
+  //                             size_t sigsetsize);
+
+  // Set up our own timeout
+  struct timespec ourTimeout = { .tv_sec = 0, .tv_nsec = 0, };
+
+  // Create our timeout on mmapped page.
+  if ((timespec*) t.arg3() == nullptr) {
+    traceePtr<timespec> traceeMem  =
+      traceePtr<timespec>((timespec*) s.mmapMemory.getAddr().ptr);
+
+    t.writeToTracee(traceeMem, ourTimeout, s.traceePid);
+    // Point system call to new address.
+    t.writeArg3((uint64_t) traceeMem.ptr);
+  }
+  // User defined timeout
+  else {
+    // Remember original value.
+    s.userDefinedTimeout = true;
+    gs.log.writeToLog(Importance::info, "Address: %p\n", (timespec*)t.arg3());
+    t.writeToTracee(traceePtr<timespec>((timespec*) t.arg3()), ourTimeout, s.traceePid);
+  }
+
+  return true;
+}
+
+void rt_sigtimedwaitSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
+                                          scheduler& sched){
+  // TODO Handle user defined timeouts (polling)
+  if (s.userDefinedTimeout) {
+    // Only preempt if we would have timeout out. Othewise let if continue running!
+    if(t.getReturnValue() == -ETIMEDOUT){
+      sched.preemptAndScheduleNext();
+      runtimeError("it worked user defined!");
+    }
+    s.userDefinedTimeout = false;
+    return;
+  } else {
+    preemptIfBlocked(gs, s, t, sched, EAGAIN);
+    // Return value to original state.
+    t.writeArg3(0);
+  }
+
+
+}
+// =======================================================================================
+bool mountSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  printInfoString(t.arg1(), gs.log, s.traceePid, t, "source ");
+  printInfoString(t.arg2(), gs.log, s.traceePid, t, "target ");
+  printInfoString(t.arg3(), gs.log, s.traceePid, t, "fstype ");
+  gs.log.writeToLog(Importance::info, "mountflags: %#x\n", t.arg4());
+
+  t.writeArg4(t.arg4() | MS_REC);
+
+
+  return true;
+}
+
+void mountSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   return;
 }
 // =======================================================================================
@@ -2136,10 +2206,7 @@ bool utimesSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 
   // Create our own struct with our time.
   // TODO: In the future we might want to unify this with our mtimeMapper.
-  timeval clockTime = {
-    .tv_sec = 0,
-    .tv_usec = 0,
-  };
+  timeval clockTime = { .tv_sec = 0, .tv_usec = 0, };
 
   // Write our struct to the tracee's memory.
   t.writeToTracee(traceePtr<timeval>(& (ourTimeval[0])), clockTime, s.traceePid);

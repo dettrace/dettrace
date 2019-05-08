@@ -1077,6 +1077,28 @@ public:
 };
 // =======================================================================================
 /**
+ * We turn this signal into polling and let somebody else run by preempting.
+ */
+class rt_sigtimedwaitSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_rt_sigtimedwait;
+  const string syscallName = "rt_sigtimedwait";
+};
+// =======================================================================================
+
+class mountSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_mount;
+  const string syscallName = "mount";
+};
+
+/**
  * int stat(const char *pathname, struct stat *statbuf);
  *
  * stat() and retrieve information about the file pointed to by pathname.
