@@ -1,7 +1,6 @@
 
 # Determinism enforcement based on ptrace.
 
-[![Build Status](https://parfunc-ci.sice.indiana.edu/buildStatus/icon?job=detTrace/master)](https://parfunc-ci.sice.indiana.edu/job/detTrace/)
 [![Build Status](https://dev.azure.com/upenn-acg/detTrace/_apis/build/status/upenn-acg.detTrace?branchName=master)](https://dev.azure.com/upenn-acg/detTrace/_build/latest?definitionId=1&branchName=master)
 
 ## Overview
