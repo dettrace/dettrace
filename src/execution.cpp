@@ -517,7 +517,7 @@ void execution::runProgram(){
     exit(1);
   }
 
-  // Add a check for states.empty(). Not adding it now since I don't want a bunch of packages.
+  // TODO: Add a check for states.empty(). Not adding it now since I don't want a bunch of packages.
   // to fail over this :b
 }
 // =======================================================================================
