@@ -26,7 +26,5 @@ steps:
   displayName: 'Build the Docker image'
 
 - script: |
-    make
-    ls bin/
-    ./bin/dettrace --debug 4 test/samplePrograms/twoPthreadsNoJoin.bin
+    make test-docker
   displayName: 'Run the tests'
