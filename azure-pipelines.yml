@@ -26,5 +26,6 @@ steps:
   displayName: 'Build the Docker image'
 
 - script: |
-    bash findBug.sh
+    ls .
+    ./bin/dettrace --debug 4 test/samplePrograms/twoPthreadsNoJoin.bin
   displayName: 'Run the tests'
