@@ -26,5 +26,5 @@ steps:
   displayName: 'Build the Docker image'
 
 - script: |
-    make test-docker
+    bash findBug.sh
   displayName: 'Run the tests'
