@@ -260,6 +260,7 @@ int main(int argc, char** argv){
   // Propegate Child's exit status to use as our own exit status.
   doWithCheck(waitpid(-1, &status, 0), "cannot wait for child");
   if (WIFEXITED(status)) {
+    printf("Dettrace Child exit status: %d\n\n", WEXITSTATUS(status));
     return WEXITSTATUS(status);
   } else {
     return 1;
