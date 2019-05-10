@@ -315,14 +315,18 @@ void execution::runProgram(){
       pid_t threadGroup = myGlobalState.threadGroupNumber.at(traceesPid);
 
       // there is two reasons this is necessary
-      // 1) case where may thread called exit group: this process goes on to
-      // exit like a normal non threaded non exit grouped process would, and we
+      // 1) case where a thread called exit group: this process goes on to
+      // exit like a normal non-threaded non-exit grouped process would, and we
       // don't want the check in ptraceEvent::nonEventExit to kill it.
       // 2) in the event where this process is the only process in the process
       // group, it will do the same as #1. Only when we have a non-main thread call
       // exit group, do we not need to set this flag, and that's only because this flag
       // is per process/thread!
       states.at(traceesPid).isExitGroup = false;
+      // We state that the main process in a thread group was killed by an exit group,
+      // this way, the main process ever stops responding, we know why. This is needed
+      // as this process may get stuck in getNextEvent otherwise...
+      // states.at(threadGroup).killedByExitGroup = true;
 
       // Iterate through all threads in this exit group exiting them.
       // Only go in here for exit groups where there is threads. By default,
@@ -1449,6 +1453,7 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
   // a ptrace event on pre-system call events. Sometimes we need the system call to be
   // called and then we change it's arguments. So we call PTRACE_SYSCALL instead.
   if(ptraceSystemcall){
+    log.writeToLog(Importance::extra, "getNextEvent(): Waiting for next system call event.\n");
     struct user_regs_struct regs;
     ptracer::doPtrace(PTRACE_GETREGS, pidToContinue, 0, &regs);
     // old glibc (2.13) calls (buggy) vsyscall for certain syscalls
@@ -1457,6 +1462,7 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
     // for more details, see `Caveats` section of kernel document:
     // https://www.kernel.org/doc/Documentation/prctl/seccomp_filter.txt
     if ( (regs.rip & ~0xc00ULL) == 0xFFFFFFFFFF600000ULL) {
+      log.writeToLog(Importance::extra, "getNextEvent(): Looking at VDSO in old glibc.\n");
       int status;
       int syscallNum = regs.orig_rax;
       // vsyscall seccomp stop is a special case
@@ -1494,6 +1500,7 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
                   "here at syscall!");
     }
   }else{
+    log.writeToLog(Importance::extra, "getNextEvent(): Waiting at ptrace(CONT).\n");
     // Tell the process that we just intercepted an event for to continue, with us tracking
     // it's system calls. If this is the first time this function is called, it will be the
     // starting process. Which we expect to be in a waiting state.
@@ -1505,6 +1512,7 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
 
   // Wait for next event to intercept.
   traceesPid = doWithCheck(waitpid(pidToContinue, &status, 0), "waitpid");
+  log.writeToLog(Importance::extra, "getNextEvent(): Got event from waitpid().\n");
 
   return make_tuple(getPtraceEvent(status), traceesPid, status);
 }
@@ -1649,13 +1657,16 @@ ptraceEvent execution::handleExitedThread(pid_t currentPid) {
   // the ptraceNonEventExit. I don't actually know that this will always work, but emperically
   // this seems to be what's happening.
   log.writeToLog(Importance::info,
-                 "No reponse from process, attempting to get exit even from waitpid.\n");
+                 "No reponse from process, attempting to get exit event from waitpid.\n");
   bool succ;
   ptraceEvent event;
   tie(succ, event) = loopOnWaitpid(currentPid);
 
   if(!succ){
     // assume we exited correctly.
+    log.writeToLog(Importance::info,
+                   "Did not hear back from process after first loopOnWaitpid() "
+                   "assume it is done.\n");
     return ptraceEvent::nonEventExit;
   }
 
@@ -1671,10 +1682,14 @@ ptraceEvent execution::handleExitedThread(pid_t currentPid) {
               "handleexitedThread(): Unable to continue thread to ptraceNonEventExit.\n");
   tie(succ, event) = loopOnWaitpid(currentPid);
   if(!succ){
+    log.writeToLog(Importance::info,
+                   "Did not hear back from process after second loopOnWaitpid() "
+                   "assume it is done.\n");
     // assume we exited correctly.
     return ptraceEvent::nonEventExit;
   }
 
+  log.writeToLog(Importance::info, "Successfully received all events from thread.\n");
   return event;
 }
 
@@ -1684,30 +1699,44 @@ pair<bool, ptraceEvent> execution::loopOnWaitpid(pid_t currentPid) {
   bool done = false;
   int status;
 
-  // Wait for event for N times.
-  // TODO In the future a timeout-like event might be better than busy waiting.
-  for(int i = 0; i < 10000; i++){
-    // Set function wide status here! Used at very end to report the correct message!
-    int nextPid = waitpid(currentPid, &status, WNOHANG);
-    if(nextPid == currentPid){
-      done = true;
-      auto msg = log.makeTextColored(Color::blue,
-                   "Total calls to waitpid (ptrace syscall): %d\n");
-      log.writeToLog(Importance::extra, msg, i + 1);
-      break;
-    } else if (nextPid == 0) {
-      // Still looping hoping for event to come... continue.
-      continue;
-    } else {
-      runtimeError("Unexpected return value from waitpid: " + to_string(nextPid));
-    }
-  }
-
-  if (!done) {
+  // Attempt blocking wait. Will error if thread no longer responds.
+  if (waitpid(currentPid, &status, 0) != -1) {
+    return make_pair(true, getPtraceEvent(status));
+  } else {
     log.writeToLog(Importance::info, "Failed to hear from tracee through waitpid\n.");
     // dummy ptrace event, you should ignore this field on false.
     return make_pair(false, ptraceEvent::eventExit);
   }
 
-  return make_pair(true, getPtraceEvent(status));
+  // It seems we don't actually need to poll like this: but we leave in case it is needed
+  // in the future.
+  log.writeToLog(Importance::info,
+                 "Initial blocking waitpid failed, switching to polling?\n.");
+
+  // Wait for event for N times.
+  // TODO In the future a timeout-like event might be better than busy waiting.
+  // for(int i = 0; i < 100000; i++){
+  //   // Set function wide status here! Used at very end to report the correct message!
+  //   int nextPid = waitpid(currentPid, &status, WNOHANG);
+  //   if(nextPid == currentPid){
+  //     done = true;
+  //     auto msg = log.makeTextColored(Color::blue,
+  //                  "Total calls to waitpid (ptrace syscall): %d\n");
+  //     log.writeToLog(Importance::extra, msg, i + 1);
+  //     break;
+  //   } else if (nextPid == 0) {
+  //     // Still looping hoping for event to come... continue.
+  //     continue;
+  //   } else {
+  //     runtimeError("Unexpected return value from waitpid: " + to_string(nextPid));
+  //   }
+  // }
+
+  // if (!done) {
+  //   log.writeToLog(Importance::info, "Failed to hear from tracee through waitpid\n.");
+  //   // dummy ptrace event, you should ignore this field on false.
+  //   return make_pair(false, ptraceEvent::eventExit);
+  // }
+
+  // return make_pair(true, getPtraceEvent(status));
 }
