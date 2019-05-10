@@ -1702,34 +1702,41 @@ pair<bool, ptraceEvent> execution::loopOnWaitpid(pid_t currentPid) {
   // Attempt blocking wait. Will error if thread no longer responds.
   if (waitpid(currentPid, &status, 0) != -1) {
     return make_pair(true, getPtraceEvent(status));
-  }
-  log.writeToLog(Importance::info,
-                 "Initial blocking waitpid failed, switching to polling?\n.");
-
-  // Wait for event for N times.
-  // TODO In the future a timeout-like event might be better than busy waiting.
-  for(int i = 0; i < 100000; i++){
-    // Set function wide status here! Used at very end to report the correct message!
-    int nextPid = waitpid(currentPid, &status, WNOHANG);
-    if(nextPid == currentPid){
-      done = true;
-      auto msg = log.makeTextColored(Color::blue,
-                   "Total calls to waitpid (ptrace syscall): %d\n");
-      log.writeToLog(Importance::extra, msg, i + 1);
-      break;
-    } else if (nextPid == 0) {
-      // Still looping hoping for event to come... continue.
-      continue;
-    } else {
-      runtimeError("Unexpected return value from waitpid: " + to_string(nextPid));
-    }
-  }
-
-  if (!done) {
+  } else {
     log.writeToLog(Importance::info, "Failed to hear from tracee through waitpid\n.");
     // dummy ptrace event, you should ignore this field on false.
     return make_pair(false, ptraceEvent::eventExit);
   }
 
-  return make_pair(true, getPtraceEvent(status));
+  // It seems we don't actually need to poll like this: but we leave in case it is needed
+  // in the future.
+  log.writeToLog(Importance::info,
+                 "Initial blocking waitpid failed, switching to polling?\n.");
+
+  // Wait for event for N times.
+  // TODO In the future a timeout-like event might be better than busy waiting.
+  // for(int i = 0; i < 100000; i++){
+  //   // Set function wide status here! Used at very end to report the correct message!
+  //   int nextPid = waitpid(currentPid, &status, WNOHANG);
+  //   if(nextPid == currentPid){
+  //     done = true;
+  //     auto msg = log.makeTextColored(Color::blue,
+  //                  "Total calls to waitpid (ptrace syscall): %d\n");
+  //     log.writeToLog(Importance::extra, msg, i + 1);
+  //     break;
+  //   } else if (nextPid == 0) {
+  //     // Still looping hoping for event to come... continue.
+  //     continue;
+  //   } else {
+  //     runtimeError("Unexpected return value from waitpid: " + to_string(nextPid));
+  //   }
+  // }
+
+  // if (!done) {
+  //   log.writeToLog(Importance::info, "Failed to hear from tracee through waitpid\n.");
+  //   // dummy ptrace event, you should ignore this field on false.
+  //   return make_pair(false, ptraceEvent::eventExit);
+  // }
+
+  // return make_pair(true, getPtraceEvent(status));
 }
