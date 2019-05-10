@@ -1509,7 +1509,7 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
     doWithCheck(ptrace(PTRACE_CONT, pidToContinue, 0, (void*) signalToDeliver),
                 "failed to PTRACE_CONT from getNextEvent()\n");
   }
-
+  log.writeToLog(Importance::extra, "getNextEvent(): Before waitpid().\n");
   // Wait for next event to intercept.
   traceesPid = doWithCheck(waitpid(pidToContinue, &status, 0), "waitpid");
   log.writeToLog(Importance::extra, "getNextEvent(): Got event from waitpid().\n");
@@ -1701,7 +1701,7 @@ pair<bool, ptraceEvent> execution::loopOnWaitpid(pid_t currentPid) {
 
   // Wait for event for N times.
   // TODO In the future a timeout-like event might be better than busy waiting.
-  for(int i = 0; i < 10000; i++){
+  for(int i = 0; i < 100000; i++){
     // Set function wide status here! Used at very end to report the correct message!
     int nextPid = waitpid(currentPid, &status, WNOHANG);
     if(nextPid == currentPid){
