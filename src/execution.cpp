@@ -1699,9 +1699,16 @@ pair<bool, ptraceEvent> execution::loopOnWaitpid(pid_t currentPid) {
   bool done = false;
   int status;
 
+  // Attempt blocking wait. Will error if thread no longer responds.
+  if (waitpid(currentPid, &status, 0) != -1) {
+    return make_pair(true, getPtraceEvent(status));
+  }
+  log.writeToLog(Importance::info,
+                 "Initial blocking waitpid failed, switching to polling?\n.");
+
   // Wait for event for N times.
   // TODO In the future a timeout-like event might be better than busy waiting.
-  for(int i = 0; i < 10000; i++){
+  for(int i = 0; i < 100000; i++){
     // Set function wide status here! Used at very end to report the correct message!
     int nextPid = waitpid(currentPid, &status, WNOHANG);
     if(nextPid == currentPid){
