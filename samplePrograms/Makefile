@@ -75,7 +75,7 @@ setup:
 %.ok: %.bin setup
 	echo "   Testing $(basename $<)..."
 	python3 timeout.py 5s $(DETTRACE) ./$< #> ActualOutputs/$(basename $<).output
-	# $(DIFF_CMD) ActualOutputs/$(basename $<).output ExpectedOutputs/$(basename $<).output
+#	$(DIFF_CMD) ActualOutputs/$(basename $<).output ExpectedOutputs/$(basename $<).output
 
 # SHELL_SCRIPTS tests:
 %.ok: %.sh setup
@@ -289,6 +289,12 @@ tgkill.ok: tgkill.bin
 exec-mkstemp.ok: exec-mkstemp.bin
 	@echo "   Testing $(basename $<)..."
 	@$(DETTRACE) ./exec-mkstemp.bin test > ActualOutputs/$(basename $<).output && $(DIFF_CMD) ActualOutputs/$(basename $<).output ExpectedOutputs/$(basename $<).output
+
+shuf.ok:
+	@echo "   Testing shuf..."
+	@$(DETTRACE) shuf Makefile --output .shuf.1.Makefile
+	@$(DETTRACE) shuf Makefile --output .shuf.2.Makefile
+	@diff .shuf.1.Makefile .shuf.2.Makefile
 
 # Not a DetTrace test case per se. A small ptrace implementation that validates
 # that structs have the same size from the tracee and from ptrace, i.e., that
