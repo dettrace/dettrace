@@ -17,7 +17,7 @@ LINUX_UTILITIES=sshkeygen grep sed more less ls sh cat # relativeTimeStamps1 rel
 SHELL_SCRIPTS= bash1.sh test-compilation.sh
 
 # tests of random number generator insns, need special build flags
-BROADWELL_ROOTS= rdrand rdseed
+BROADWELL_ROOTS= rdinsn
 BROADWELL_BINARIES= $(addsuffix .bin,$(BROADWELL_ROOTS))
 
 RT_ROOTS= timer_create_default timer_create_sigvtalrm timer_gettime
@@ -57,12 +57,13 @@ $(RT_BINARIES): %.bin: %.c
 $(CXX_BINARIES): %.bin: %.cpp
 	$(CXX) $< -Wall -g -o $@ -std=gnu++11
 
-rdrand.ok: rdrand.bin
-	./rdrand_run.sh
+rdinsn.ok: rdinsn.bin
+	@echo "   Testing rdrand..."
+	./rdinsn.bin rdrand
+	@echo "   Testing rdseed..."
+	./rdinsn.bin rdseed
 
 # NB: disable special cpu insn test for now
-rdseed.ok: rdseed.bin
-	@echo "   **IGNORING** $^ test..."
 # cpuid.ok: cpuid
 # 	@echo "   **IGNORING** $^ test..."
 
