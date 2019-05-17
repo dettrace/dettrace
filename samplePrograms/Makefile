@@ -296,6 +296,7 @@ shuf.ok:
 	@$(DETTRACE) shuf Makefile --output .shuf.1.Makefile
 	@$(DETTRACE) shuf Makefile --output .shuf.2.Makefile
 	@diff .shuf.1.Makefile .shuf.2.Makefile
+	@rm -f .shuf.[12].Makefile
 
 # Not a DetTrace test case per se. A small ptrace implementation that validates
 # that structs have the same size from the tracee and from ptrace, i.e., that
