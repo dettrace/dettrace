@@ -161,7 +161,7 @@ child was killed by signal N. """
 
         assert self.subprocess.poll() is not None
         val = self.subprocess.poll()
-        print("timeout.py return value: {}".format(val))
+        #print("timeout.py return value: {}".format(val))
         return val
 
 

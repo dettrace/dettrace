@@ -44,18 +44,18 @@ test-scripts: $(patsubst %.sh, %.ok, $(SHELL_SCRIPTS))
 
 # compile each sample program binary
 $(SIMPLE_BINARIES): %.bin: %.c
-	$(CC) $< -Wall -g -o $@ -pthread -std=gnu99
+	@$(CC) $< -Wall -g -o $@ -pthread -std=gnu99
 
 # HW RNG tests need >=broadwell codegen
 $(BROADWELL_BINARIES): %.bin: %.c
-	$(CC) $< -Wall -g -o $@ -pthread -std=gnu99 -march=broadwell
+	@$(CC) $< -Wall -g -o $@ -pthread -std=gnu99 -march=broadwell
 
 # timer_create tests need to link with -lrt
 $(RT_BINARIES): %.bin: %.c
-	$(CC) $< -Wall -g -o $@ -std=gnu99 -lrt
+	@$(CC) $< -Wall -g -o $@ -std=gnu99 -lrt
 
 $(CXX_BINARIES): %.bin: %.cpp
-	$(CXX) $< -Wall -g -o $@ -std=gnu++11
+	@$(CXX) $< -Wall -g -o $@ -std=gnu++11
 
 rdinsn.ok: rdinsn.bin
 	@echo "   Testing rdrand..."
@@ -74,9 +74,9 @@ setup:
 # a "phony" target to run the program, capture its output and compare against expected output
 # this is used for programs that don't take any arguments or need fancy setup/teardown
 %.ok: %.bin setup
-	echo "   Testing $(basename $<)..."
-	python3 timeout.py 5s $(DETTRACE) ./$< #> ActualOutputs/$(basename $<).output
-#	$(DIFF_CMD) ActualOutputs/$(basename $<).output ExpectedOutputs/$(basename $<).output
+	@echo "   Testing $(basename $<)..."
+	@python3 timeout.py 5s $(DETTRACE) ./$< > ActualOutputs/$(basename $<).output
+	@$(DIFF_CMD) ActualOutputs/$(basename $<).output ExpectedOutputs/$(basename $<).output
 
 # SHELL_SCRIPTS tests:
 %.ok: %.sh setup
