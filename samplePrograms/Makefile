@@ -59,9 +59,9 @@ $(CXX_BINARIES): %.bin: %.cpp
 
 rdinsn.ok: rdinsn.bin
 	@echo "   Testing rdrand..."
-	./rdinsn.bin rdrand
+	@$(DETTRACE) ./rdinsn.bin rdrand > ActualOutputs/rdrand.output
 	@echo "   Testing rdseed..."
-	./rdinsn.bin rdseed
+	@$(DETTRACE) ./rdinsn.bin rdseed > ActualOutputs/rdseed.output
 
 # NB: disable special cpu insn test for now
 # cpuid.ok: cpuid
