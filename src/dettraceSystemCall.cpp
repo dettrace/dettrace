@@ -1761,7 +1761,7 @@ bool tgkillSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     // ok
   } else {
     gs.log.writeToLog(Importance::info, "tgkillSystemCall::handleDetPre: tracee vtgid="+to_string(tgid)+" vtid=" +to_string(tid)+ " ptgid="+to_string(s.traceePid)+" trying to send unsupported signal="+to_string(signal));
-    runtimeError("tgkillSystemCall::handleDetPre: tracee trying to send unsupported signal");
+    //runtimeError("tgkillSystemCall::handleDetPre: tracee trying to send unsupported signal");
   }
 
   return true;
