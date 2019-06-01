@@ -236,6 +236,9 @@ void execution::runProgram(){
 
   log.writeToLog(Importance::inter, "dettrace starting up\n");
 
+  log.writeToLog(Importance::inter, backtick("uname -a"));
+  log.writeToLog(Importance::inter, backtick("cat /proc/cpuinfo"));
+  
   // Once all process' have ended. We exit.
   bool exitLoop = false;
 
