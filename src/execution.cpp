@@ -1132,10 +1132,10 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
    return writevSystemCall::handleDetPre(gs, s, t, sched);
   }
 
-  // Generic system call. Throws error.
-  runtimeError("This is a bug. Missing case for system call: " +
-                      to_string(syscallNumber));
-  // Can never happen, here to avoid spurious warning.
+  // a system call we don't yet support
+  gs.log.writeToLog(Importance::inter, "unsupported system call # "+to_string(syscallNumber));
+  
+  // don't call the post-hook for unsupported system calls
   return false;
 }
 // =======================================================================================
@@ -1422,7 +1422,9 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
    return writevSystemCall::handleDetPost(gs, s, t, sched);
   }
 
-  // Generic system call. Throws error.
+  // Generic system call. Throws error.  NB: even for unsupported system calls
+  // we should never reach here, since we don't call the post-hook for
+  // unsupported system calls.
   runtimeError("This is a bug: "
                       "Missing case for system call: " +
                       to_string(syscallNumber));
