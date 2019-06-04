@@ -736,7 +736,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
   args.workingDir = "NONE";
   args.userChroot = false;
   args.pathToExe = "NONE";
-  args.useColor = true;
+  args.useColor = false; // no ANSI color codes
   args.logFile = "cloudseal-alpha.log"; // log to a file by default
   args.printStatistics = false;
   args.convertUids = false;
