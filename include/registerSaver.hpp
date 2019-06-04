@@ -29,7 +29,7 @@ public:
   void pushRegisterState(struct user_regs_struct newRegs){
     // error checking
     if (hasPushed) {
-      throw runtime_error("dettrace runtime exception: Attempting to push to a filed registerSaver.\n");
+      runtimeError("Attempting to push to a filed registerSaver.\n");
     }
 
     // hasn't pushed, so push state
@@ -44,7 +44,7 @@ public:
   struct user_regs_struct popRegisterState() {
     // error checking
     if (!hasPushed) {
-      throw runtime_error("dettrace runtime exception: Attempting to pop from an empty registerSaver.\n");
+      runtimeError("Attempting to pop from an empty registerSaver.\n");
     }
 
     // return saved state

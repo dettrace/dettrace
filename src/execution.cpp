@@ -234,7 +234,7 @@ void execution::runProgram(){
   // events. To get post hook events we must call ptrace with PTRACE_SYSCALL intead.
   // This happens in @getNextEvent.
 
-  log.writeToLog(Importance::inter, "dettrace starting up\n");
+  log.writeToLog(Importance::inter, "cloudseal starting up\n");
 
   log.writeToLog(Importance::inter, backtick("uname -a"));
   log.writeToLog(Importance::inter, backtick("cat /proc/cpuinfo"));
@@ -489,7 +489,7 @@ void execution::runProgram(){
   if(printStatistics){
     auto printStat =
       [&](string type, uint32_t value){
-        string preStr = "dettrace Statistic. ";
+        string preStr = "cloudseal Statistic. ";
         cerr << preStr + type + to_string(value) << endl;
       };
 
@@ -1592,7 +1592,7 @@ ptraceEvent execution::getPtraceEvent(const int status){
     return ptraceEvent::terminatedBySignal;
   }
 
-  runtimeError("Uknown event on dettrace::getNextEvent()");
+  runtimeError("Uknown event on execution::getPtraceEvent()");
   // Can never happen, here to avoid spurious warning.
   return ptraceEvent::nonEventExit;
 }

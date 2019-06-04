@@ -106,7 +106,7 @@ void sigalrmHandler(int _) {
   assert(nullptr != globalExeObject);
   globalExeObject->killAllProcesses();
   // TODO: print out message about timeout expiring
-  runtimeError("dettrace timeout expired\n");
+  runtimeError("cloudseal timeout expired\n");
 }
 // =======================================================================================
 
@@ -116,19 +116,19 @@ struct CloneArgs {
 };
 
 const string usageMsg =
-  "  Dettrace\n"
+  "  Cloudseal\n"
   "\n"
   "  A container for dynamic determinism enforcement. Arbitrary programs ran inside\n"
   "  will run deterministically."
   "\n"
-  "  ./detTrace [optionalArguments] ./exe [exeCmdArgs]\n"
-  "  ./detTrace --help\n"
+  "  ./cloudseal [optionalArguments] ./exe [exeCmdArgs]\n"
+  "  ./cloudseal --help\n"
   "\n"
   "  Optional Arguments:\n"
   "  --debug <debugLevel>\n"
-  "    Prints log information based on verbosity, useful to debug dettrace errors.\n"
+  "    Prints log information based on verbosity, useful to debug cloudseal errors.\n"
   "  --working-dir\n"
-  "     Specify the working directory that dettrace should use to build, by default\n"
+  "     Specify the working directory that cloudseal should use to build, by default\n"
   "     it is the current working directory.\n"
   "  --chroot <pathToRoot>\n"
   "    Specify root to use for chroot (such as one created by debootstrap).\n"
@@ -146,11 +146,11 @@ const string usageMsg =
   "    Print metadata about process that just ran including: number of system call events\n"
   "    read/write retries, rdtsc, rdtscp, cpuid.\n"
   "  --currentAsChroot\n"
-  "    Use the current enviornment as the chroot. This is useful for running dettrace\n"
+  "    Use the current enviornment as the chroot. This is useful for running cloudseal\n"
   "    inside a chroot, using that same chroot as the environnment. For some reason the\n"
   "    current mount namespace is polluted with our bind mounts (even though we create)\n"
-  "    our own namespace. Therefore make sure to unshare -m before running dettrace with\n"
-  "    this command, either when chrooting or when calling dettrace.\n"
+  "    our own namespace. Therefore make sure to unshare -m before running cloudseal with\n"
+  "    this command, either when chrooting or when calling cloudseal.\n"
   "  --timeoutSeconds\n"
   "    Tear down all tracee processes with SIGKILL after this many seconds";
 
@@ -593,7 +593,8 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
     mountDir("/usr/", pathToChroot + "/usr/");
     mountDir("/lib/", pathToChroot + "/lib/");
     mountDir("/lib64/", pathToChroot + "/lib64/");
-    mountDir("/etc/ld.so.cache", pathToChroot + "/etc/ld.so.cache");
+    //mountDir("/etc/ld.so.cache", pathToChroot + "/etc/ld.so.cache");
+    mountDir("/etc/", pathToChroot + "/etc/");
   }
 
   // make sure chroot has a real /dev/null
@@ -811,13 +812,13 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       }
       break;
     case '?':
-      runtimeError("Invalid option passed to detTrace!");
+      runtimeError("Invalid option passed to cloudseal!");
     }
   }
 
   // User did not pass exe arguments:
   if(argv[optind] == NULL){
-    fprintf(stderr, "Missing arguments to dettrace!\n");
+    fprintf(stderr, "Missing arguments to cloudseal!\n");
     fprintf(stderr, "Use --help\n");
     exit(1);
   }

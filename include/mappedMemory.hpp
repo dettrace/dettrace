@@ -33,7 +33,7 @@ public:
    */
   traceePtr<void> getAddr() {
     if(!doesExist){
-      throw runtime_error("Attempting to get address of non-existing MappedMemory.\n");
+      runtimeError("Attempting to get address of non-existing MappedMemory.\n");
     }
     return mmapAddr;
   }
