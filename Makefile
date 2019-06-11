@@ -35,14 +35,14 @@ run-tests: build-tests build
 # essential to avoid errors with bind mounting a directory simultaneously
 	MAKEFLAGS= make --keep-going -C ./test/samplePrograms/ run
 
-DOCKER_NAME=dettrace
+DOCKER_NAME=cloudseal-alpha
 # TODO: store version in one place in a file.
 DOCKER_TAG=0.0.1
 
 docker:
 	docker build -t ${DOCKER_NAME}:${DOCKER_TAG} .
 
-run-docker: docker
+run-docker:
 	docker run --rm -it --privileged --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG}
 
 test-docker: clean docker
@@ -66,5 +66,5 @@ clean:
 package: static
 	cp initramfs.cpio package/
 	mkdir -p package/bin
+	cp -a bin/dettrace package/bin/cloudseal
 	cp -a root package/root
-

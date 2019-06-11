@@ -24,6 +24,9 @@ RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-6.0 60 \
 		--slave /usr/bin/clang-cpp clang-cpp /usr/bin/clang-cpp-6.0 \
 		--slave /usr/bin/lldb lldb /usr/bin/lldb-6.0
 
+# This is odd, where does the -lnettle dependence come from? -RN [2019.06.10]
+RUN apt-get install -y nettle-dev rsync
+
 ADD ./ /detTrace/
 WORKDIR /detTrace/
 
@@ -35,5 +38,6 @@ RUN rsync -av ./package/ /usr/
 # STAGE 2:
 # Copy only the deployment files into the final image:
 FROM ubuntu:18.04
+RUN apt-get update -y && apt-get install -y python3
 COPY --from=0 /detTrace/package /usr
 WORKDIR /usr/examples
