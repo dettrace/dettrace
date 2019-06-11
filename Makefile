@@ -43,7 +43,9 @@ docker:
 	docker build -t ${DOCKER_NAME}:${DOCKER_TAG} .
 
 run-docker:
-	docker run --rm -it --privileged --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG}
+	mkdir -p /tmp/out
+	rm -rf /tmp/out/*
+	docker run --rm -it --privileged --cap-add=SYS_ADMIN -v "/tmp/out:/out" ${DOCKER_NAME}:${DOCKER_TAG}
 
 test-docker: clean docker
 ifdef DETTRACE_NO_CPUID_INTERCEPTION
