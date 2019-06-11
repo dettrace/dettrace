@@ -1,8 +1,10 @@
+# STAGE 1: Build the tool.
+
 FROM ubuntu:18.04
 
 # Icky nondeterminism:
 RUN apt-get update -y && \
-    apt-get install -y g++ make strace python3 libseccomp-dev openssh-server fuse libfuse-dev less valgrind
+    apt-get install -y g++ make strace python3 libseccomp-dev openssh-server fuse libfuse-dev 
 
 # RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
 RUN apt-get update -y
@@ -23,7 +25,15 @@ RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-6.0 60 \
 		--slave /usr/bin/lldb lldb /usr/bin/lldb-6.0
 
 ADD ./ /detTrace/
-
-RUN cd /detTrace/ && make -j build
-
 WORKDIR /detTrace/
+
+RUN make -j package
+
+# For now we just install everything under user:
+RUN rsync -av ./package/ /usr/
+
+# STAGE 2:
+# Copy only the deployment files into the final image:
+FROM ubuntu:18.04
+COPY --from=0 /detTrace/package /usr
+WORKDIR /usr/examples

@@ -56,7 +56,15 @@ endif
 clean:
 	$(RM) src/dettrace
 	make -C ./src/ clean
-	# Use `|| true` in case one forgets to check out submodules
+# Use `|| true` in case one forgets to check out submodules
 	make -C ./test/samplePrograms clean || true
 	make -C ./test/standalone clean || true
 	make -C ./test/unitTests clean || true
+
+# ----------------------------------------
+
+package: static
+	cp initramfs.cpio package/
+	mkdir -p package/bin
+	cp -a root package/root
+
