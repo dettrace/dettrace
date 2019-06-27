@@ -7,6 +7,7 @@
 #include <sys/user.h>
 #include <sys/vfs.h>
 #include <unordered_map>
+#include <unordered_set>
 #include <sys/select.h>
 #include <memory>
 
@@ -70,18 +71,14 @@ public:
   state(pid_t traceePid, int debugLevel);
 
   /**
-   * Same as a above, but takes in a fdStatus map to share. Used by threads to share
-   * map with parents.
+   * fork a new state when fork/vfork is called
    */
-  state(pid_t traceePid, int debugLevel,
-        shared_ptr<unordered_map<int, descriptorType>> parentFdStatus);
+  state forked(pid_t childPid) const;
 
   /**
-   * Same as a above, but takes in a fdStatus map to deep copy. Used by child process to
-   * inheret from parents.
+   * cloned a new state when clone is called
    */
-  state(pid_t traceePid, int debugLevel,
-        unordered_map<int, descriptorType> fdStatus);
+  state cloned(pid_t childPid) const;
 
   /**
    * Keep track of file descriptor status for blocking descriptors, as set by the
@@ -94,6 +91,9 @@ public:
    * and replay, or simply preempt as Runnable by the scheduler.
    */
   shared_ptr<unordered_map<int, descriptorType>> fdStatus;
+
+  shared_ptr<unordered_map<int, int>> pipe_read_fds;
+  shared_ptr<unordered_map<int, int>> pipe_write_fds;
 
   void setFdStatus(int fd, descriptorType dt);
 
@@ -203,10 +203,10 @@ public:
   int requestedSignalToHandle = -1;
 
   /** Track, for each signal, what kind of handler this tracee currently has registered. */
-  unordered_map<int, enum sighandler_type> currentSignalHandlers;
+  shared_ptr<unordered_map<int, enum sighandler_type>> currentSignalHandlers;
 
   /** track timers created via timer_create */
-  unordered_map<timerID_t, timerInfo> timerCreateTimers;
+  shared_ptr<unordered_map<timerID_t, timerInfo>> timerCreateTimers;
 
   bool rdfsNotNull = false; /**< Indicates whether rdfs is NULL. */
   bool wrfsNotNull = false; /**< Indicates whether wrfs is NULL. */
@@ -214,6 +214,10 @@ public:
   fd_set origRdfs; /**< Original file descriptors set to watch for read availability. */
   fd_set origWrfs; /**< Original file descriptors set to watch for write availability. */
   fd_set origExfs; /**< Original file descriptors set to watch for exceptions. */
+
+  shared_ptr<unordered_set<unsigned long>> epollin_ev;
+  shared_ptr<unordered_set<unsigned long>> epollout_ev;
+  shared_ptr<unordered_set<unsigned long>> epollpri_ev;
 
   /** Flag to differentiate between our injected timeout into a system call from a user one. */
   bool userDefinedTimeout = false;
@@ -238,6 +242,7 @@ public:
   uint64_t originalArg3 = 0; /**< original register arg 3 */
   uint64_t originalArg4 = 0; /**< original register arg 4 */
   uint64_t originalArg5 = 0; /**< original register arg 5 */
+  uint64_t originalArg6 = 0; /**< original register arg 5 */
 
   /**
    * Debug level. Mainly used by the dettraceSytemCall classes to avoid doing unnecesary
@@ -280,7 +285,12 @@ public:
    */
   bool canGetStuck = false;
 
-  
+  /**
+   * futex waiters
+   * @param: key: futex uaddr
+   * @param: value: Pids. postive: FUTEX_SHARED, negative: FUTEX_PRIVATE
+   */
+  shared_ptr<unordered_map<unsigned long, deque<long>>> futex_waiters;
 };
 
 #endif
