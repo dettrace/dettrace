@@ -560,20 +560,15 @@ pid_t execution::handleForkEvent(const pid_t traceesPid, bool isThread){
   // This is where we add new children to the thread group leader.
   processTree.insert(make_pair(threadGroup, newChildPid));
 
+  state& parent_state = states.at(traceesPid);
   // Share fdStatus. Processes get their own, threads share with thread group.
   if(isThread){
-    states.emplace(newChildPid, state {newChildPid, debugLevel,
-                                         states.at(threadGroup).fdStatus});
+    states.emplace(newChildPid, parent_state.cloned(newChildPid));
   } else {
     // Deep Copy!
-    unordered_map<int, descriptorType> fds = *states.at(threadGroup).fdStatus.get();
-    states.emplace(newChildPid, state {newChildPid, debugLevel, fds});
+    states.emplace(newChildPid, parent_state.forked(newChildPid));
   }
   // Add this new process to our states.
-
-  
-  // Inheret file descriptor set from our parent.
-  states.at(newChildPid).fdStatus = states.at(threadGroup).fdStatus;
 
   log.writeToLog(Importance::info,
                  log.makeTextColored(Color::blue,"Added process [%d] to states map.\n"),
@@ -586,8 +581,8 @@ pid_t execution::handleForkEvent(const pid_t traceesPid, bool isThread){
   // attributes to MAP_PRIVATE. new child's `mmapMemory` hence must be inherited
   // from parent process, to be consistent with fork() semantic.
   // TODO for threads we may not need to do this?!
-  states.at(newChildPid).mmapMemory.doesExist = true;
-  states.at(newChildPid).mmapMemory.setAddr(states.at(traceesPid).mmapMemory.getAddr());
+  //states.at(newChildPid).mmapMemory.doesExist = true;
+  //states.at(newChildPid).mmapMemory.setAddr(states.at(traceesPid).mmapMemory.getAddr());
 
   // Wait for child to be ready.
   log.writeToLog(Importance::info, log.makeTextColored(Color::blue,
@@ -1047,6 +1042,9 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_sendto:
     return sendtoSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_sendmsg:
+    return sendmsgSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_select:
     return selectSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -1336,6 +1334,9 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 
   case SYS_sendto:
     return sendtoSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_sendmsg:
+    return sendmsgSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_select:
     return selectSystemCall::handleDetPost(gs, s, t, sched);

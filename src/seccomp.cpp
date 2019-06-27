@@ -137,6 +137,7 @@ void seccomp::loadRules(bool debug, bool convertUids){
 
   // Okay to not intercept.
   noIntercept(SYS_getsockname);
+  noIntercept(SYS_getsockopt);
   noIntercept(SYS_setsockopt);
   noIntercept(SYS_socketpair);
   noIntercept(SYS_mlock);
@@ -255,6 +256,7 @@ void seccomp::loadRules(bool debug, bool convertUids){
   intercept(SYS_readlinkat, debug);
   // TODO
   intercept(SYS_recvmsg);
+  intercept(SYS_sendmsg);
 
   intercept(SYS_sendto);
   // Defintely not deteministic </3
