@@ -168,6 +168,11 @@ void closeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     gs.log.writeToLog(Importance::info, "Removing pipe fd: %d!\n", fd);
     s.fdStatus.get()->erase(fd);
   }
+
+  if (s.pipe_write_fds.get()->erase(fd) != 0
+      || s.pipe_read_fds.get()->erase(fd) != 0) {
+    sched.preemptAndScheduleNext();
+  }
 }
 // =======================================================================================
 // TODO
@@ -241,14 +246,60 @@ void dup2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     gs.log.writeToLog(Importance::info, "%d = dup2(%d)\n", newfd, fd);
   }
 }
+
+static const char* epoll_op(int op) {
+  switch (op) {
+  case EPOLL_CTL_ADD:
+    return "EPOLL_CTL_ADD";
+  case EPOLL_CTL_MOD:
+    return "EPOLL_CTL_MOD";
+  case EPOLL_CTL_DEL:
+    return "EPOLL_CTL_DEL";
+  default:
+    return "EPOLL_CTL_<ERROR>";
+  }
+}
+
 // =======================================================================================
 bool epoll_ctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   struct epoll_event *traceeEvent = (struct epoll_event*) t.arg4();
   struct epoll_event epev;
 
+  string op = epoll_op((int)t.arg2());
+
   readVmTraceeRaw(traceePtr<struct epoll_event>(traceeEvent), &epev, sizeof(epev), s.traceePid);
   if((epev.events & EPOLLONESHOT) == EPOLLONESHOT){
     runtimeError("epoll_ctl call used EPOLLONESHOT flag!");
+  }
+  if((epev.events & EPOLLIN) == EPOLLIN){
+    if (t.arg2() == EPOLL_CTL_ADD) {
+      s.epollin_ev.get()->insert(epev.data.u64);
+    } else if (t.arg2() == EPOLL_CTL_DEL) {
+      s.epollin_ev.get()->erase(epev.data.u64);
+    } else if (t.arg2() == EPOLL_CTL_MOD) {
+      s.epollin_ev.get()->insert(epev.data.u64);
+    }
+    gs.log.writeToLog(Importance::info, op + " EPOLLIN " + to_string(epev.data.u64) + "\n");
+  }
+  if((epev.events & EPOLLOUT) == EPOLLOUT){
+    if (t.arg2() == EPOLL_CTL_ADD) {
+      s.epollout_ev.get()->insert(epev.data.u64);
+    } else if (t.arg2() == EPOLL_CTL_DEL) {
+      s.epollout_ev.get()->erase(epev.data.u64);
+    } else if (t.arg2() == EPOLL_CTL_MOD) {
+      s.epollout_ev.get()->insert(epev.data.u64);
+    }
+    gs.log.writeToLog(Importance::info, op + " EPOLLOUT " + to_string(epev.data.u64) + "\n");
+  }
+  if((epev.events & EPOLLPRI) == EPOLLPRI){
+    if (t.arg2() == EPOLL_CTL_ADD) {
+      s.epollpri_ev.get()->insert(epev.data.u64);
+    } else if (t.arg2() == EPOLL_CTL_DEL) {
+      s.epollpri_ev.get()->erase(epev.data.u64);
+    } else if (t.arg2() == EPOLL_CTL_MOD) {
+      s.epollpri_ev.get()->insert(epev.data.u64);
+    }
+    gs.log.writeToLog(Importance::info, op + " EPOLLPRI " + to_string(epev.data.u64) + "\n");
   }
 
   return false;
@@ -536,6 +587,39 @@ void fstatfsSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
 
   return;
 }
+
+static void futex_add_waiter(state& s, unsigned long uaddr, pid_t pid, bool is_private) {
+    if (is_private) {
+      pid |= (1l << (8*sizeof(long)-1));
+    }
+
+    auto it = s.futex_waiters.get()->find(uaddr);
+    deque<long> q;
+    if (it != s.futex_waiters.get()->end()) {
+      q = it->second;
+    }
+    q.push_back(pid);
+    std::unique(q.begin(), q.end());
+    s.futex_waiters.get()->insert({uaddr, q});
+}
+
+static std::vector<pid_t> futex_remove_waiters(state& s, unsigned long uaddr, int val) {
+  std::vector<pid_t> res;
+  auto it = s.futex_waiters.get()->find(uaddr);
+  if (it != s.futex_waiters.get()->end()) {
+    auto q = it->second;
+    for (int i = 0; i < val && !q.empty(); i++) {
+      auto front = q.front();
+      q.pop_front();
+      pid_t pidToWakeup = (pid_t)(front & 0xffffffffl);
+      res.push_back(pidToWakeup);
+    }
+    s.futex_waiters.get()->insert({uaddr, q});
+  }
+
+  return res;
+}
+
 // =======================================================================================
 bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // If operation is a FUTEX_WAIT, set timeout to zero for polling instead of blocking.
@@ -561,8 +645,20 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   // Handle wake operations by notifying scheduler of progress.
   if(futexCmd == FUTEX_WAKE || futexCmd == FUTEX_REQUEUE || futexCmd == FUTEX_CMP_REQUEUE ||
      futexCmd == FUTEX_WAKE_BITSET || futexCmd == FUTEX_WAKE_OP){
-    gs.log.writeToLog(Importance::info, "Waking on address: %p\n", t.arg1());
-    gs.log.writeToLog(Importance::info, "Trying to wake up to %d threads.\n", t.arg3());
+    traceePtr<int> rptr( (int*)t.arg1());
+    int val = t.readFromTracee(rptr, t.getPid());
+    gs.log.writeToLog(Importance::info, "Waking on address: %p = %x, my pid: %u, traceesPid: %u\n", t.arg1(), val, t.getPid(), s.traceePid);
+    gs.log.writeToLog(Importance::info, "Trying to wake up to %d threads.\n", futexValue);
+
+    auto waiters = futex_remove_waiters(s, t.arg1(), futexValue);
+    for (auto pidToWakeup: waiters) {
+      if (pidToWakeup != t.getPid()) {
+	gs.log.writeToLog(Importance::info, "Scheduling task %d.\n", pidToWakeup);
+	sched.addAndScheduleNext(pidToWakeup);
+      } else {
+	gs.log.writeToLog(Importance::info, "Scheduling task %d ignored (already running)\n", pidToWakeup);
+      }
+    }
     // No need to go into the post hook.
     return false;
   }
@@ -583,8 +679,8 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
     // Overwrite the current value with our value. Restore value in post hook.
     s.originalArg4 = (uint64_t) timeoutPtr;
     // Our timespec value to copy over.
-    timespec ourTimeout = {0};
 
+    timespec ourTimeout = {0};
     if(timeoutPtr == nullptr){
        gs.log.writeToLog(Importance::extra,
                         "timeout null, writing our data to mmaped page...\n");
@@ -617,6 +713,13 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
      ){
 
     gs.log.writeToLog(Importance::info, "Futex post-hook, handling wait operation.\n");
+
+    // *uaddr != val
+    if (t.getReturnValue() == -EAGAIN) {
+      return;
+    }
+
+
     if(s.userDefinedTimeout){
       // Only preempt if we would have timeout out. Othewise let if continue running!
       if(t.getReturnValue() == -ETIMEDOUT){
@@ -625,6 +728,7 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
       s.userDefinedTimeout = false;
       return;
     } else {
+      futex_add_waiter(s, t.arg1(), t.getPid(), (futexOp & FUTEX_PRIVATE_FLAG) == FUTEX_PRIVATE_FLAG);
       gs.log.writeToLog(Importance::info, "Replaying futex system call.\n");
       t.writeArg4(s.originalArg4);
       replaySyscallIfBlocked(gs, s, t, sched, ETIMEDOUT);
@@ -831,6 +935,8 @@ void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   // it for some programs to work, like `more`.
   case TCGETS:
   case TCSETS:
+  case TCSETSW:
+  case TIOCSPGRP:
   case FIOCLEX:
   case FIONREAD:
   case TCSETSF:
@@ -1154,6 +1260,11 @@ void pipe2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     runtimeError("Value already in map (fdStatus): " + to_string(p.second));
   }
 
+  if (t.getReturnValue() == 0) {
+    s.pipe_read_fds.get()->insert({p.first, p.second});
+    s.pipe_write_fds.get()->insert({p.second, p.first});
+  }
+
   // This was a pipe that got converted to a pipe2.
   if(s.syscallInjected){
     s.syscallInjected = false;
@@ -1302,6 +1413,17 @@ void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     }
   }
 
+  auto it = s.pipe_read_fds.get()->find(fd);
+  if (it != s.pipe_read_fds.get()->end()) {
+    int writer = it->second;
+    auto it1 = s.epollout_ev.get()->find(writer);
+    if (it1 != s.epollout_ev.get()->end()) {
+      // someone is EPOLLOUT
+      sched.preemptAndScheduleNext();
+      return;
+    }
+  }
+
   ssize_t bytes_read = t.getReturnValue();
   if(bytes_read < 0){
     gs.log.writeToLog(Importance::info, "Returned negative: %d.",
@@ -1396,12 +1518,16 @@ readlinkatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 // =======================================================================================
 bool recvmsgSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                      scheduler& sched){
+  gs.log.writeToLog(Importance::info, "recvmsg from fd " + to_string(t.arg1()) + ", nonblock: " + to_string( (t.arg3() & MSG_DONTWAIT) == MSG_DONTWAIT) + "\n");
   return true;
 }
 
 void recvmsgSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                       scheduler& sched){
-  return;
+  bool replay = replaySyscallIfBlocked(gs, s, t, sched, EAGAIN);
+  if (replay) {
+    sched.preemptAndScheduleNext();
+  }
 }
 
 // =======================================================================================
@@ -1515,7 +1641,7 @@ void rt_sigactionSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t
   gs.log.writeToLog(Importance::info, "rt_sigaction post-hook\n");
   if (0 == t.getReturnValue()) {
     // signal handler installation was successful
-    s.currentSignalHandlers[s.requestedSignalToHandle] = s.requestedSignalHandler;
+    s.currentSignalHandlers.get()->insert({s.requestedSignalToHandle, s.requestedSignalHandler});
 
     gs.log.writeToLog(Importance::info, "signal "+to_string(s.requestedSignalToHandle)+
                       " handler of type "+to_string(s.requestedSignalHandler)+" installed\n");
@@ -1532,6 +1658,16 @@ bool sendtoSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 }
 
 void sendtoSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return;
+}
+// =======================================================================================
+// TODO
+bool sendmsgSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "sendmsg to fd " + to_string(t.arg1()) + "\n");
+  return false;
+}
+
+void sendmsgSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   return;
 }
 // =======================================================================================
@@ -1848,8 +1984,8 @@ timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sche
     ti.signalHandlerData = ti.sendSignal ? se.sigev_value.sival_ptr : nullptr ;
   }
 
-  timerID_t timerid = s.timerCreateTimers.size();
-  s.timerCreateTimers[timerid] = ti;
+  timerID_t timerid = s.timerCreateTimers.get()->size();
+  s.timerCreateTimers.get()->insert({timerid, ti});
 
   gs.log.writeToLog(Importance::info, "created new timer "+to_string(timerid)+"\n");
 
@@ -1876,7 +2012,7 @@ bool timer_deleteSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
   gs.log.writeToLog(Importance::info, "timer_delete pre-hook for timer " +
                     to_string(timerid) + "\n");
 
-  if(!s.timerCreateTimers.count(timerid)){
+  if(!s.timerCreateTimers.get()->count(timerid)){
     runtimeError("invalid timerid "+to_string(timerid));
   }
   return true;
@@ -1890,7 +2026,7 @@ void timer_deleteSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t
 bool timer_getoverrunSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   timerID_t timerid = t.arg1();
   gs.log.writeToLog(Importance::info, "timer_getoverrun pre-hook for timer "+to_string(timerid)+"\n");
-  if (!s.timerCreateTimers.count(timerid)) {
+  if (!s.timerCreateTimers.get()->count(timerid)) {
     runtimeError("invalid timerid "+to_string(timerid));
   }
   return true;
@@ -1905,7 +2041,7 @@ bool timer_gettimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t
   timerID_t timerid = t.arg1();
   gs.log.writeToLog(Importance::info, "timer_gettime pre-hook for timer "+to_string(timerid)+"\n");
 
-  if (!s.timerCreateTimers.count(timerid)) {
+  if (!s.timerCreateTimers.get()->count(timerid)) {
     runtimeError("invalid timerid "+to_string(timerid));
   }
 
@@ -1938,11 +2074,11 @@ bool timer_settimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t
 
   timerID_t timerid = t.arg1();
 
-  if (!s.timerCreateTimers.count(timerid)) {
+  if (!s.timerCreateTimers.get()->count(timerid)) {
     runtimeError("invalid timerid "+to_string(timerid));
   }
 
-  timerInfo tinfo = s.timerCreateTimers[timerid];
+  timerInfo tinfo = s.timerCreateTimers.get()->at(timerid);
   if (!tinfo.sendSignal) {
     replaceSystemCallWithNoop(gs, s, t);
     return true; // run getpid post-hook
@@ -2266,6 +2402,17 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     // will retry later.
     if(preemptAndTryLater){
       gs.writeRetryEvents++;
+      return;
+    }
+  }
+
+  auto it = s.pipe_write_fds.get()->find(fd);
+  if (it != s.pipe_write_fds.get()->end()) {
+    int reader = it->second;
+    auto it1 = s.epollin_ev.get()->find(reader);
+    if (it1 != s.epollin_ev.get()->end()) {
+      // someone is EPOLLIN
+      sched.preemptAndScheduleNext();
       return;
     }
   }
