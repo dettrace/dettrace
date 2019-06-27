@@ -1033,6 +1033,27 @@ public:
 };
 // =======================================================================================
 /**
+ *  ssize_t sendmsg(int sockfd, const struct msghdr* msg, int flags);
+ *
+ * If sendmsg() is used on a connection-mode (SOCK_STREAM, SOCK_SEQPACKET) socket,
+ * the arguments dest_addr and addrlen are ignored (and the error EISCONN may be
+ * returned when they are not NULL and 0), and the error ENOTCONN is returned when
+ * the socket was not actually connected. Otherwise, the address of the target is
+ * given by dest_addr with addrlen specifying its size.  For sendmsg(), the address
+ * of the target is given by msg.msg_name, with msg.msg_namelen specifying its size.
+ *
+ */
+class sendmsgSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_sendmsg;
+  const string syscallName = "sendmsg";
+};
+
+// =======================================================================================
+/**
  * int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
  *            struct timeval *timeout);
  *
