@@ -111,14 +111,16 @@ void seccomp::loadRules(bool debug, bool convertUids){
 
   //intercept(SYS_sigaction); // is mapped to SYS_rt_sigaction on cat16
   //intercept(SYS_signal); // is mapped to SYS_rt_sigaction on cat16
-  noIntercept(SYS_rt_sigsuspend);
+  noIntercept(SYS_rt_sigreturn);
+  intercept(SYS_rt_sigtimedwait);
+  intercept(SYS_rt_sigsuspend);
+  noIntercept(SYS_rt_sigpending);
+
   noIntercept(SYS_setpgid);
   noIntercept(SYS_set_tid_address);
   noIntercept(SYS_setxattr);
   noIntercept(SYS_sigaltstack);
 
-  noIntercept(SYS_rt_sigreturn);
-  noIntercept(SYS_rt_sigtimedwait);
   noIntercept(SYS_setgid);
   noIntercept(SYS_setgroups);
   noIntercept(SYS_setrlimit);
@@ -131,7 +133,7 @@ void seccomp::loadRules(bool debug, bool convertUids){
   // us so it should always be the same mask. User cannot actually observe differences.
   noIntercept(SYS_sched_getaffinity);
   noIntercept(SYS_sched_setaffinity);
-  noIntercept(SYS_socket);
+  intercept(SYS_socket);
   noIntercept(SYS_sync);
   noIntercept(SYS_umask);
 
@@ -240,7 +242,7 @@ void seccomp::loadRules(bool debug, bool convertUids){
   intercept(SYS_open);
   intercept(SYS_openat);
 
-  intercept(SYS_tgkill);
+  noIntercept(SYS_tgkill);
 
   intercept(SYS_link, debug);
   intercept(SYS_linkat, debug);
@@ -248,7 +250,7 @@ void seccomp::loadRules(bool debug, bool convertUids){
   intercept(SYS_pipe);
   intercept(SYS_pipe2);
   // TODO Not handled.
-  // intercept(SYS_pselect6);
+  intercept(SYS_pselect6);
   intercept(SYS_poll);
   intercept(SYS_prlimit64);
   intercept(SYS_read);
@@ -257,6 +259,9 @@ void seccomp::loadRules(bool debug, bool convertUids){
   // TODO
   intercept(SYS_recvmsg);
   intercept(SYS_sendmsg);
+  noIntercept(SYS_sendmmsg);
+
+  noIntercept(SYS_recvfrom);
 
   intercept(SYS_sendto);
   // Defintely not deteministic </3
@@ -277,7 +282,6 @@ void seccomp::loadRules(bool debug, bool convertUids){
 
   intercept(SYS_wait4);
   intercept(SYS_write);
-
 }
 
 void seccomp::noIntercept(uint16_t systemCall){

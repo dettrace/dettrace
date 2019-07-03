@@ -228,6 +228,7 @@ void execution::handlePostSystemCall(state& currState){
   log.unsetPadding();
   return;
 }
+
 // =======================================================================================
 void execution::runProgram(){
   // When using seccomp, we run with PTRACE_CONT, but seccomp only reports pre-hook
@@ -1039,6 +1040,15 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_rt_sigaction:
     return rt_sigactionSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_rt_sigtimedwait:
+    return rt_sigtimedwaitSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_rt_sigsuspend:
+    return rt_sigsuspendSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_rt_sigpending:
+    return rt_sigpendingSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_sendto:
     return sendtoSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -1128,6 +1138,8 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
 
   case SYS_writev:
    return writevSystemCall::handleDetPre(gs, s, t, sched);
+  case SYS_socket:
+    return socketSystemCall::handleDetPre(gs, s, t, sched);
   }
 
   // Generic system call. Throws error.
@@ -1332,6 +1344,15 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
   case SYS_rt_sigaction:
     return rt_sigactionSystemCall::handleDetPost(gs, s, t, sched);
 
+  case SYS_rt_sigtimedwait:
+    return rt_sigtimedwaitSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_rt_sigsuspend:
+    return rt_sigsuspendSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_rt_sigpending:
+    return rt_sigpendingSystemCall::handleDetPost(gs, s, t, sched);
+
   case SYS_sendto:
     return sendtoSystemCall::handleDetPost(gs, s, t, sched);
 
@@ -1421,6 +1442,8 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 
   case SYS_writev:
    return writevSystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_socket:
+    return socketSystemCall::handleDetPost(gs, s, t, sched);
   }
 
   // Generic system call. Throws error.

@@ -1098,6 +1098,49 @@ public:
 };
 // =======================================================================================
 /**
+ * int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
+ *
+ * Setup a signal handler. Currently only used for determinizing alarm()
+ */
+class rt_sigtimedwaitSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_rt_sigtimedwait;
+  const string syscallName = "rt_sigtimedwait";
+};
+
+// =======================================================================================
+/**
+ * int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
+ *
+ * Setup a signal handler. Currently only used for determinizing alarm()
+ */
+class rt_sigsuspendSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_rt_sigsuspend;
+  const string syscallName = "rt_sigsuspend";
+};
+// =======================================================================================
+/**
+ * int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
+ *
+ * Setup a signal handler. Currently only used for determinizing alarm()
+ */
+class rt_sigpendingSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_rt_sigpending;
+  const string syscallName = "rt_sigpending";
+};
+// =======================================================================================
+/**
  * int stat(const char *pathname, struct stat *statbuf);
  *
  * stat() and retrieve information about the file pointed to by pathname.
@@ -1592,6 +1635,24 @@ public:
   const int syscallNumber = SYS_write;
   const string syscallName = "write";
 };
+
+// =======================================================================================
+/**
+ * int socket(int domain, int type, int protocol);
+ *
+ * socket()  creates  an endpoint for communication and returns a file descriptor that refers to
+ * that endpoint.  The file descriptor returned by a successful call will be the lowest-numbered
+ * file descriptor not currently open for the process.
+ */
+class socketSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_socket;
+  const string syscallName = "socket";
+};
+
 // =======================================================================================
 // Iterate through our vector of entries, which represent the binary memory for linux_dirents
 // or linux_dirent64. We virtualize the inodes and add entries to our inodeMap.

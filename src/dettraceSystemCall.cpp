@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <arpa/inet.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,6 +50,9 @@
 // #define EXTRANEOUS_TRACEE_READS 0
 
 using namespace std;
+
+static bool fd_is_nonblocking(state& s, int fd);
+
 // =======================================================================================
 bool accessSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
@@ -168,15 +172,33 @@ void closeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     gs.log.writeToLog(Importance::info, "Removing pipe fd: %d!\n", fd);
     s.fdStatus.get()->erase(fd);
   }
-
-  if (s.pipe_write_fds.get()->erase(fd) != 0
-      || s.pipe_read_fds.get()->erase(fd) != 0) {
-    sched.preemptAndScheduleNext();
-  }
 }
 // =======================================================================================
 // TODO
 bool connectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  int sockfd = t.arg1();
+  socklen_t len = t.arg3();
+  char* buff;
+  char dst[128] = {0,};
+
+  if (len == INET6_ADDRSTRLEN) {
+    auto sockaddr = t.readFromTracee(traceePtr<struct sockaddr_in6>
+				     ((struct sockaddr_in6*)t.arg2()),
+				     t.getPid());
+    asprintf(&buff, "connect to sock fd %u %s#%u\n",
+	     sockfd, inet_ntop(AF_INET6, &sockaddr.sin6_addr, dst, 128),
+	     ntohs(sockaddr.sin6_port));
+  } else {
+    auto sockaddr = t.readFromTracee(traceePtr<struct sockaddr_in>
+				     ((struct sockaddr_in*)t.arg2()),
+				     t.getPid());
+    asprintf(&buff, "connect to sock fd %u %s#%u\n",
+	     sockfd, inet_ntop(AF_INET, &sockaddr.sin_addr, dst, 128),
+	     ntohs(sockaddr.sin_port));
+  }
+  gs.log.writeToLog(Importance::info, buff);
+  free(buff);
+
   return true;
 }
 
@@ -263,42 +285,26 @@ static const char* epoll_op(int op) {
 // =======================================================================================
 bool epoll_ctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   struct epoll_event *traceeEvent = (struct epoll_event*) t.arg4();
-  struct epoll_event epev;
+  struct epoll_event epev = {0,};
 
   string op = epoll_op((int)t.arg2());
+
+  gs.log.writeToLog(Importance::info, "epoll_ctl(" + to_string(t.arg1()) + "..)\n");
 
   readVmTraceeRaw(traceePtr<struct epoll_event>(traceeEvent), &epev, sizeof(epev), s.traceePid);
   if((epev.events & EPOLLONESHOT) == EPOLLONESHOT){
     runtimeError("epoll_ctl call used EPOLLONESHOT flag!");
   }
   if((epev.events & EPOLLIN) == EPOLLIN){
-    if (t.arg2() == EPOLL_CTL_ADD) {
-      s.epollin_ev.get()->insert(epev.data.u64);
-    } else if (t.arg2() == EPOLL_CTL_DEL) {
-      s.epollin_ev.get()->erase(epev.data.u64);
-    } else if (t.arg2() == EPOLL_CTL_MOD) {
-      s.epollin_ev.get()->insert(epev.data.u64);
-    }
     gs.log.writeToLog(Importance::info, op + " EPOLLIN " + to_string(epev.data.u64) + "\n");
   }
   if((epev.events & EPOLLOUT) == EPOLLOUT){
-    if (t.arg2() == EPOLL_CTL_ADD) {
-      s.epollout_ev.get()->insert(epev.data.u64);
-    } else if (t.arg2() == EPOLL_CTL_DEL) {
-      s.epollout_ev.get()->erase(epev.data.u64);
-    } else if (t.arg2() == EPOLL_CTL_MOD) {
-      s.epollout_ev.get()->insert(epev.data.u64);
-    }
     gs.log.writeToLog(Importance::info, op + " EPOLLOUT " + to_string(epev.data.u64) + "\n");
   }
+  if((epev.events & EPOLLPRI) == EPOLLERR){
+    gs.log.writeToLog(Importance::info, op + " EPOLLERR " + to_string(epev.data.u64) + "\n");
+  }
   if((epev.events & EPOLLPRI) == EPOLLPRI){
-    if (t.arg2() == EPOLL_CTL_ADD) {
-      s.epollpri_ev.get()->insert(epev.data.u64);
-    } else if (t.arg2() == EPOLL_CTL_DEL) {
-      s.epollpri_ev.get()->erase(epev.data.u64);
-    } else if (t.arg2() == EPOLL_CTL_MOD) {
-      s.epollpri_ev.get()->insert(epev.data.u64);
-    }
     gs.log.writeToLog(Importance::info, op + " EPOLLPRI " + to_string(epev.data.u64) + "\n");
   }
 
@@ -308,6 +314,27 @@ bool epoll_ctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
 void epoll_ctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   return; 
 }
+
+static void epoll_log_event(globalState& gs, ptracer& t) {
+  int epoll_fd = (int)t.arg1();
+  int maxevents = min(t.getReturnValue(), (int)t.arg3());
+
+  const int size = 8192;
+  char buffer[8192], *p = buffer;
+  int n = 0;
+
+  p += snprintf(p + n, size - n, "epoll_wait(%u, [", epoll_fd);
+  for (int i = 0; i < maxevents; i++) {
+    auto rptr = traceePtr<struct epoll_event>((struct epoll_event*)t.arg2()+i);
+    struct epoll_event ev = t.readFromTracee(rptr, t.getPid());
+    p += snprintf(p + n, size - n, " (%s, %lu)",
+		  epoll_op(ev.events),
+		  ev.data.u64);
+  }
+  p += snprintf(p + n, size - n, "]\n");
+  gs.log.writeToLogNoFormat(Importance::extra, buffer);
+}
+
 // =======================================================================================
 bool epoll_waitSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // Set the timeout to zero.
@@ -315,10 +342,16 @@ bool epoll_waitSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, s
   if((int) s.originalArg4 != 0){
     t.writeArg4(0);
   }
+
+  gs.log.writeToLog(Importance::info, "epoll_wait on fd: " + to_string(t.arg1()) + "\n");
   return true;
 }
 
 void epoll_waitSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if ((int)t.getReturnValue() > 0) {
+    epoll_log_event(gs, t);
+  }
+  
   if((int) s.originalArg4 < 0){
     gs.log.writeToLog(Importance::info, "Blocking epoll_wait found\n");
     bool replay = replaySyscallIfBlocked(gs, s, t, sched, 0);
@@ -481,35 +514,39 @@ void lchownSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
 }
 // =======================================================================================
 bool fcntlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  int cmd = t.arg2();
+
+  if (cmd == F_GETFD) {
+    return false;
+  }
   return true;
 }
 
 void fcntlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int retval = t.getReturnValue();
-  if(retval != 0){
-    return;
-  }
-
   int fd = t.arg1();
   int cmd = t.arg2();
   int arg = t.arg3();
+
+  gs.log.writeToLog(Importance::extra, "fcntl(" + to_string(fd) + ", "
+		    + to_string(cmd) + "..) = " + to_string(retval) + "\n");
+
   if(cmd == F_DUPFD || cmd == F_DUPFD_CLOEXEC){
     auto str = "found fcntl(%d, FDUPFD || F_DUPFD_CLOCEXEC) = %d\n";
     int newfd = retval;
     gs.log.writeToLog(Importance::info, str, fd, newfd);
-    // Same status as what it was duped from.
-    s.setFdStatus(newfd, s.getFdStatus(fd));
+    auto it = s.fdStatus.get()->find(fd);
+    auto end = s.fdStatus.get()->end();
+    if (it != end) {
+      // Same status as what it was duped from.
+      (*s.fdStatus.get())[newfd] = s.getFdStatus(fd);
+    }
   }
+
   // User attempting to change blocked status.
   if(cmd == F_SETFL && ((arg & O_NONBLOCK) != 0)){
-    auto str = "found fcntl setting %d to non blocking!\n";
-    if(s.countFdStatus(fd) != 0){
-      gs.log.writeToLog(Importance::info, str, fd);
-      s.setFdStatus(fd, descriptorType::nonBlocking);
-    }else{
-      gs.log.writeToLog(Importance::info, str, fd);
-      gs.log.writeToLog(Importance::info, "But this is not a pipe... ignoring.\n");
-    }
+    gs.log.writeToLog(Importance::info, "found fcntl setting %d to non blocking!\n", fd);
+    (*s.fdStatus.get())[fd] = descriptorType::nonBlocking;
   }
 }
   // =======================================================================================
@@ -588,38 +625,6 @@ void fstatfsSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
   return;
 }
 
-static void futex_add_waiter(state& s, unsigned long uaddr, pid_t pid, bool is_private) {
-    if (is_private) {
-      pid |= (1l << (8*sizeof(long)-1));
-    }
-
-    auto it = s.futex_waiters.get()->find(uaddr);
-    deque<long> q;
-    if (it != s.futex_waiters.get()->end()) {
-      q = it->second;
-    }
-    q.push_back(pid);
-    std::unique(q.begin(), q.end());
-    s.futex_waiters.get()->insert({uaddr, q});
-}
-
-static std::vector<pid_t> futex_remove_waiters(state& s, unsigned long uaddr, int val) {
-  std::vector<pid_t> res;
-  auto it = s.futex_waiters.get()->find(uaddr);
-  if (it != s.futex_waiters.get()->end()) {
-    auto q = it->second;
-    for (int i = 0; i < val && !q.empty(); i++) {
-      auto front = q.front();
-      q.pop_front();
-      pid_t pidToWakeup = (pid_t)(front & 0xffffffffl);
-      res.push_back(pidToWakeup);
-    }
-    s.futex_waiters.get()->insert({uaddr, q});
-  }
-
-  return res;
-}
-
 // =======================================================================================
 bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // If operation is a FUTEX_WAIT, set timeout to zero for polling instead of blocking.
@@ -650,6 +655,7 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
     gs.log.writeToLog(Importance::info, "Waking on address: %p = %x, my pid: %u, traceesPid: %u\n", t.arg1(), val, t.getPid(), s.traceePid);
     gs.log.writeToLog(Importance::info, "Trying to wake up to %d threads.\n", futexValue);
 
+    /*
     auto waiters = futex_remove_waiters(s, t.arg1(), futexValue);
     for (auto pidToWakeup: waiters) {
       if (pidToWakeup != t.getPid()) {
@@ -659,6 +665,7 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
 	gs.log.writeToLog(Importance::info, "Scheduling task %d ignored (already running)\n", pidToWakeup);
       }
     }
+    */
     // No need to go into the post hook.
     return false;
   }
@@ -670,7 +677,6 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
      ){
     gs.log.writeToLog(Importance::info, "Waiting on value at address: %p.\n", t.arg1());
     gs.log.writeToLog(Importance::info, "Against value: " + to_string(futexValue) + "\n");
-
     if (gs.log.getDebugLevel() > 0) {
       int actualValue = (int) t.readFromTracee(traceePtr<int>((int*) t.arg1()), t.getPid());
       gs.log.writeToLog(Importance::info, "Actual value: " + to_string(actualValue) + "\n");
@@ -711,14 +717,12 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
      futexCmd == FUTEX_WAIT_BITSET ||
      futexCmd == FUTEX_WAIT_REQUEUE_PI
      ){
-
     gs.log.writeToLog(Importance::info, "Futex post-hook, handling wait operation.\n");
 
     // *uaddr != val
     if (t.getReturnValue() == -EAGAIN) {
       return;
     }
-
 
     if(s.userDefinedTimeout){
       // Only preempt if we would have timeout out. Othewise let if continue running!
@@ -728,7 +732,6 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
       s.userDefinedTimeout = false;
       return;
     } else {
-      futex_add_waiter(s, t.arg1(), t.getPid(), (futexOp & FUTEX_PRIVATE_FLAG) == FUTEX_PRIVATE_FLAG);
       gs.log.writeToLog(Importance::info, "Replaying futex system call.\n");
       t.writeArg4(s.originalArg4);
       replaySyscallIfBlocked(gs, s, t, sched, ETIMEDOUT);
@@ -770,10 +773,12 @@ bool getpeernameSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, 
   return true;
 }
 void getpeernameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  int ret = t.getReturnValue();
+  // int ret = t.getReturnValue();
+  /*
   if(ret == 0){
     runtimeError("Call to getpeername with network socket not suported.\n");
   }
+  */
   return;
 }
 // =======================================================================================
@@ -1260,11 +1265,6 @@ void pipe2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     runtimeError("Value already in map (fdStatus): " + to_string(p.second));
   }
 
-  if (t.getReturnValue() == 0) {
-    s.pipe_read_fds.get()->insert({p.first, p.second});
-    s.pipe_write_fds.get()->insert({p.second, p.first});
-  }
-
   // This was a pipe that got converted to a pipe2.
   if(s.syscallInjected){
     s.syscallInjected = false;
@@ -1375,6 +1375,7 @@ void prlimit64SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
 // =======================================================================================
 bool readSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "File descriptor: %d\n", t.arg1());
+  gs.log.writeToLog(Importance::info, "non-blocking: %d\n", (int)fd_is_nonblocking(s, t.arg1()));
   gs.log.writeToLog(Importance::info, "Bytes to read %d\n", t.arg3());
 
   return true;
@@ -1398,28 +1399,17 @@ void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
   if(s.countFdStatus(fd) != 0 && s.getFdStatus(fd) == descriptorType::nonBlocking){
     gs.log.writeToLog(Importance::info,
                       "read found with non blocking pipe!\n");
-    bool blocked = preemptIfBlocked(gs, s, t, sched, EAGAIN);
-    // We cannot read more from this polling pipe, we're done. Looping over reads
-    // trying to read more.
-    if(blocked){
+    int retval = t.getReturnValue();
+    // returns -EAGAIN
+    if(retval == -EAGAIN){
       resetState();
+      t.setReturnRegister((uint64_t)-EAGAIN);
       return;
     }
   }else{
     bool preemptAndTryLater = replaySyscallIfBlocked(gs, s, t, sched, EAGAIN);
     if(preemptAndTryLater){
       gs.readRetryEvents++;
-      return;
-    }
-  }
-
-  auto it = s.pipe_read_fds.get()->find(fd);
-  if (it != s.pipe_read_fds.get()->end()) {
-    int writer = it->second;
-    auto it1 = s.epollout_ev.get()->find(writer);
-    if (it1 != s.epollout_ev.get()->end()) {
-      // someone is EPOLLOUT
-      sched.preemptAndScheduleNext();
       return;
     }
   }
@@ -1515,18 +1505,31 @@ void
 readlinkatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   runtimeError("readlinkat post-hook should never be called.");
 }
+
+static bool fd_is_nonblocking(state& s, int fd) {
+  auto it = s.fdStatus.get()->find(fd);
+  auto end = s.fdStatus.get()->end();
+  if (it != end) {
+    return it->second == descriptorType::nonBlocking;
+  }
+  return false;
+}
+
 // =======================================================================================
 bool recvmsgSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
                                      scheduler& sched){
-  gs.log.writeToLog(Importance::info, "recvmsg from fd " + to_string(t.arg1()) + ", nonblock: " + to_string( (t.arg3() & MSG_DONTWAIT) == MSG_DONTWAIT) + "\n");
+  int flags = (int)t.arg3();
+  int fd = (int)t.arg1();
+  bool nonblock = (flags & MSG_DONTWAIT) == MSG_DONTWAIT ||
+    fd_is_nonblocking(s, fd); 
+  gs.log.writeToLog(Importance::info, "recvmsg from fd " + to_string(t.arg1()) + ", nonblock: " + to_string(nonblock) + "\n");
   return true;
 }
 
 void recvmsgSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                       scheduler& sched){
-  bool replay = replaySyscallIfBlocked(gs, s, t, sched, EAGAIN);
-  if (replay) {
-    sched.preemptAndScheduleNext();
+  if (!fd_is_nonblocking(s, (int)t.arg1())) {
+    replaySyscallIfBlocked(gs, s, t, sched, EAGAIN);
   }
 }
 
@@ -1651,6 +1654,86 @@ void rt_sigactionSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t
   }
   return;
 }
+
+// =======================================================================================
+// TODO
+bool rt_sigtimedwaitSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  struct timespec ourTimeout = {0};
+  if (t.arg3() != 0) {
+    s.userDefinedTimeout = true;
+    s.originalArg3 = t.arg3();
+  }
+
+  struct timespec* timeoutPtr = (struct timespec*)t.arg3();
+  s.originalArg3 = (uint64_t)timeoutPtr;
+    
+  if(timeoutPtr == nullptr){
+    // Has to be created in memory.
+    struct timespec* newAddr = (struct timespec*) s.mmapMemory.getAddr().ptr;
+    t.writeToTracee(traceePtr<struct timespec>(newAddr), ourTimeout, s.traceePid);
+
+    t.writeArg3((uint64_t) newAddr);
+  }else{
+    // Already exists in memory.
+    // jld: useless read from tracee memory
+    //timeval timeout = t.readFromTracee(traceePtr<timeval>(timeoutPtr), t.getPid());
+    t.writeToTracee(traceePtr<struct timespec>(timeoutPtr), ourTimeout, s.traceePid);
+    s.userDefinedTimeout = true;
+  }
+
+  return true;
+}
+
+void rt_sigtimedwaitSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  int retval = t.getReturnValue();
+  bool replay;
+
+  if (retval == -ENOSYS) {
+    replay = replaySyscallIfBlocked(gs, s, t, sched, ENOSYS);
+  } else {
+    replay = replaySyscallIfBlocked(gs, s, t, sched, EAGAIN);
+  }
+  if (replay) {
+    gs.log.writeToLog(Importance::info, "replay rt_sigtimedwait\n");
+    t.writeArg3(s.originalArg3);
+  } else {
+    gs.log.writeToLog(Importance::info, "rt_sigtimedwait returned: " + to_string(retval) + "\n");
+    if (s.syscallInjected) {
+      if (retval > 0) {
+	kill(t.getPid(), retval);
+	t.setReturnRegister((uint64_t)-EINTR);
+      }
+    }
+  }
+
+  return;
+}
+
+// =======================================================================================
+// TODO
+bool rt_sigsuspendSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  //return true;
+  unsigned long mask;
+
+  traceePtr<unsigned long> rptr = traceePtr<unsigned long>((unsigned long*)t.arg1());
+  mask = t.readFromTracee(rptr, t.getPid());
+  gs.log.writeToLog(Importance::info, "rt_sigsuspend, mask = 0x%lx\n", mask);
+
+  cancelSystemCall(gs, s, t);
+  sched.preemptAndScheduleNext();
+  return false;
+}
+
+void rt_sigsuspendSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  runtimeError("rt_sigsuspend is not supposed to return\n");
+}
+
+bool rt_sigpendingSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+void rt_sigpendingSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+}
+
 // =======================================================================================
 // TODO
 bool sendtoSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -2387,13 +2470,12 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   // Pipe exists in our map and it's set to non blocking.
   if(s.countFdStatus(fd) != 0 && s.getFdStatus(fd) == descriptorType::nonBlocking){
     gs.log.writeToLog(Importance::info,
-                      "read found with non-blocking pipe!\n");
-    preemptAndTryLater = preemptIfBlocked(gs, s, t, sched, EAGAIN);
-    // We have looped, and cannot read any more bytes from the pipe... Return.
-    if(preemptAndTryLater){
-      gs.log.writeToLog(Importance::info,
-                      "All done with non-blocking pipe replay!\n");
+                      "write found with non-blocking pipe!\n");
+    int retval = t.getReturnValue();
+    // returns -EAGAIN
+    if(retval == -EAGAIN){
       resetState();
+      t.setReturnRegister((uint64_t)-EAGAIN);
       return;
     }
   }else{
@@ -2402,17 +2484,6 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     // will retry later.
     if(preemptAndTryLater){
       gs.writeRetryEvents++;
-      return;
-    }
-  }
-
-  auto it = s.pipe_write_fds.get()->find(fd);
-  if (it != s.pipe_write_fds.get()->end()) {
-    int reader = it->second;
-    auto it1 = s.epollin_ev.get()->find(reader);
-    if (it1 != s.epollin_ev.get()->end()) {
-      // someone is EPOLLIN
-      sched.preemptAndScheduleNext();
       return;
     }
   }
@@ -2433,6 +2504,7 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   }
   gs.log.writeToLog(Importance::info, "total bytes: %d.\n", bytes_written);
   gs.log.writeToLog(Importance::info, "before retry rdx: %d.\n", s.beforeRetry.rdx);
+
 
   // Finally wrote all bytes user wanted.
 
@@ -2498,6 +2570,22 @@ bool writevSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 
 void writevSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // TODO: Handle bytes written.
+  return;
+}
+// =======================================================================================
+
+// =======================================================================================
+bool socketSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+
+void socketSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  int fd = (int)t.getReturnValue();
+
+  if (fd >= 0) {
+    gs.log.writeToLog(Importance::info, "socket returned " + to_string(fd) + "\n");
+  }
+
   return;
 }
 // =======================================================================================

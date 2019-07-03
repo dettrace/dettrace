@@ -82,7 +82,6 @@ void scheduler::addAndScheduleNext(pid_t newProcess){
   msg = log.makeTextColored(Color::blue, "[%d] scheduled as next.\n");
   log.writeToLog(Importance::info, msg , newProcess);
 
-  removeElementFromHeap(blockedHeap, newProcess);
   // Add the process to the runnableHeap, and set nextPid ourselves.
   // (This is because the new process is always capable of running.)
   runnableHeap.push(newProcess);

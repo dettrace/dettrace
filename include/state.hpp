@@ -92,9 +92,6 @@ public:
    */
   shared_ptr<unordered_map<int, descriptorType>> fdStatus;
 
-  shared_ptr<unordered_map<int, int>> pipe_read_fds;
-  shared_ptr<unordered_map<int, int>> pipe_write_fds;
-
   void setFdStatus(int fd, descriptorType dt);
 
   descriptorType getFdStatus(int fd);
@@ -215,10 +212,6 @@ public:
   fd_set origWrfs; /**< Original file descriptors set to watch for write availability. */
   fd_set origExfs; /**< Original file descriptors set to watch for exceptions. */
 
-  shared_ptr<unordered_set<unsigned long>> epollin_ev;
-  shared_ptr<unordered_set<unsigned long>> epollout_ev;
-  shared_ptr<unordered_set<unsigned long>> epollpri_ev;
-
   /** Flag to differentiate between our injected timeout into a system call from a user one. */
   bool userDefinedTimeout = false;
 
@@ -284,13 +277,6 @@ public:
    * or a post-hook, continuing to the next system call.
    */
   bool canGetStuck = false;
-
-  /**
-   * futex waiters
-   * @param: key: futex uaddr
-   * @param: value: Pids. postive: FUTEX_SHARED, negative: FUTEX_PRIVATE
-   */
-  shared_ptr<unordered_map<unsigned long, deque<long>>> futex_waiters;
 };
 
 #endif
