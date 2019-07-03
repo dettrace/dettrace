@@ -332,7 +332,7 @@ bool sendTraceeSignalNow(int signum, globalState& gs,
     // TODO: JLD is this a race? the tracee isn't technically paused yet
     t.changeSystemCall(SYS_pause);
     s.signalInjected = true;
-    s.currentSignalHandlers.get()->insert({signum, SIGHANDLER_DEFAULT}); // go back to default next time
+    (*s.currentSignalHandlers.get())[signum] = SIGHANDLER_DEFAULT; // go back to default next time
     int retVal = syscall(SYS_tgkill, t.getPid(), t.getPid(), signum);
     if (0 != retVal) {
       runtimeError("sending myself signal "+to_string(signum)+" failed, tgkill returned " + to_string(retVal));
