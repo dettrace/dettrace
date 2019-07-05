@@ -1583,6 +1583,25 @@ void rmdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   // nothing to do, but return value may be useful for debugging (printed by
   // handlePostSystemCall)
 }
+
+bool rt_sigprocmaskSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
+					    scheduler& sched){
+  return true;
+}
+
+void rt_sigprocmaskSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
+					     scheduler& sched){
+  if (s.syscallInjected) {
+    s.syscallInjected = false;
+    traceePtr<unsigned long>oldset = traceePtr<unsigned long>((unsigned long*)(s.mmapMemory.getAddr().ptr) + 1);
+    t.writeArg1(SIG_SETMASK);
+    t.writeArg2((uint64_t)oldset.ptr);
+    t.writeArg3(0);
+    t.writeArg4(8);
+    replaySystemCall(gs, t, SYS_rt_sigprocmask);
+  }
+}
+
 // =======================================================================================
 // cribbed from strace, as using the standard struct sigaction does not yield
 // correct output. I guess libc internally translates from the new user-facing
@@ -1655,6 +1674,41 @@ void rt_sigactionSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t
   return;
 }
 
+struct PendingSignalInfo {
+  unsigned long pending;
+  unsigned long blocked;
+};
+
+int getPendingSignalInfo(pid_t pid, struct PendingSignalInfo* info) {
+  char fname[32];
+  char buff[4096];
+  snprintf(fname, 32, "/proc/%u/status", pid);
+  int fd = open(fname, O_RDONLY | O_CLOEXEC);
+  if (fd < 0) {
+    return -1;
+  }
+
+  ssize_t n = read(fd, buff, 4096);
+  if (n <= 0) {
+    return -1;
+  }
+
+  char* p = NULL, *q = buff;
+
+  while(1) {
+    p = strsep(&q, "\n");
+    if (!p) break;
+    if (strncmp(p, "SigPnd:\t", 8) == 0) {
+      info->pending = strtoul(8+p, NULL, 16);
+    } else if (strncmp(p, "SigBlk:\t", 8) == 0) {
+      info->blocked = strtoul(8+p, NULL, 16);
+      break;
+    }
+  }
+  close(fd);
+  return 0;
+}
+
 // =======================================================================================
 // TODO
 bool rt_sigtimedwaitSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
@@ -1688,11 +1742,7 @@ void rt_sigtimedwaitSystemCall::handleDetPost(globalState& gs, state& s, ptracer
   int retval = t.getReturnValue();
   bool replay;
 
-  if (retval == -ENOSYS) {
-    replay = replaySyscallIfBlocked(gs, s, t, sched, ENOSYS);
-  } else {
-    replay = replaySyscallIfBlocked(gs, s, t, sched, EAGAIN);
-  }
+  replay = replaySyscallIfBlocked(gs, s, t, sched, EAGAIN);
   if (replay) {
     gs.log.writeToLog(Importance::info, "replay rt_sigtimedwait\n");
     t.writeArg3(s.originalArg3);
@@ -1712,15 +1762,35 @@ void rt_sigtimedwaitSystemCall::handleDetPost(globalState& gs, state& s, ptracer
 // =======================================================================================
 // TODO
 bool rt_sigsuspendSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  //return true;
   unsigned long mask;
 
   traceePtr<unsigned long> rptr = traceePtr<unsigned long>((unsigned long*)t.arg1());
   mask = t.readFromTracee(rptr, t.getPid());
   gs.log.writeToLog(Importance::info, "rt_sigsuspend, mask = 0x%lx\n", mask);
 
+  struct PendingSignalInfo info = {0,};
+
+  // rt_sigsuspend would block until signal is received
+  // we'll change it to something else nonblocking.
   cancelSystemCall(gs, s, t);
-  sched.preemptAndScheduleNext();
+
+  getPendingSignalInfo(t.getPid(), &info);
+  unsigned long unmask = info.pending & ~mask;
+  if (unmask != 0) {
+    s.syscallInjected = true;
+    s.originalArg1 = t.arg1();
+    traceePtr<unsigned long>set = traceePtr<unsigned long>((unsigned long*)(s.mmapMemory.getAddr().ptr));
+    traceePtr<unsigned long>oldset = traceePtr<unsigned long>((unsigned long*)(s.mmapMemory.getAddr().ptr) + 1);
+    t.writeToTracee(set, unmask, t.getPid());
+    t.writeArg1(SIG_UNBLOCK);
+    t.writeArg2((uint64_t)set.ptr);
+    t.writeArg3((uint64_t)oldset.ptr);
+    t.writeArg4(8);
+
+    replaySystemCall(gs, t, SYS_rt_sigprocmask);
+  } else {
+    sched.preemptAndScheduleNext();
+  }
   return false;
 }
 
@@ -1974,14 +2044,6 @@ bool tgkillSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   int signal = (int) t.arg3();
   gs.log.writeToLog(Importance::info, "tgkill(tgid = %d, tid = %d, signal = %d)\n",
                     tgid, tid, signal);
-
-  if (signal == SIGABRT && tgid == s.traceePid &&
-      tgid == tid /* TODO: when we support threads, we should also compare against tracee's tid (from gettid) */) {
-    // ok
-  } else {
-    gs.log.writeToLog(Importance::info, "tgkillSystemCall::handleDetPre: tracee vtgid="+to_string(tgid)+" vtid=" +to_string(tid)+ " ptgid="+to_string(s.traceePid)+" trying to send unsupported signal="+to_string(signal));
-    runtimeError("tgkillSystemCall::handleDetPre: tracee trying to send unsupported signal");
-  }
 
   return true;
 }

@@ -107,7 +107,7 @@ void seccomp::loadRules(bool debug, bool convertUids){
 
   noIntercept(SYS_prctl);
   noIntercept(SYS_pread64);
-  noIntercept(SYS_rt_sigprocmask);
+  intercept(SYS_rt_sigprocmask);
 
   //intercept(SYS_sigaction); // is mapped to SYS_rt_sigaction on cat16
   //intercept(SYS_signal); // is mapped to SYS_rt_sigaction on cat16
@@ -242,7 +242,7 @@ void seccomp::loadRules(bool debug, bool convertUids){
   intercept(SYS_open);
   intercept(SYS_openat);
 
-  noIntercept(SYS_tgkill);
+  intercept(SYS_tgkill);
 
   intercept(SYS_link, debug);
   intercept(SYS_linkat, debug);

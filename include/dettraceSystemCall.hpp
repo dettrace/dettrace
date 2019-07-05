@@ -1084,6 +1084,20 @@ public:
 };
 // =======================================================================================
 /**
+ * int rt_sigprocmask(int how, const sigset_t* set, const sigset_t* oldset, size_t sigsetsize);
+ *
+ * change signal mask for calling thread.
+ */
+class rt_sigprocmaskSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_rt_sigprocmask;
+  const string syscallName = "rt_sigprocmask";
+};
+// =======================================================================================
+/**
  * int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
  *
  * Setup a signal handler. Currently only used for determinizing alarm()

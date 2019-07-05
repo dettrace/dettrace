@@ -1037,6 +1037,9 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_rmdir:
     return rmdirSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_rt_sigprocmask:
+    return rt_sigprocmaskSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_rt_sigaction:
     return rt_sigactionSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -1340,6 +1343,9 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 
   case SYS_rmdir:
     return rmdirSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_rt_sigprocmask:
+    return rt_sigprocmaskSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_rt_sigaction:
     return rt_sigactionSystemCall::handleDetPost(gs, s, t, sched);
