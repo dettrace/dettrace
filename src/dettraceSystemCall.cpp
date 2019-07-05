@@ -1790,6 +1790,7 @@ bool rt_sigsuspendSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t
     replaySystemCall(gs, t, SYS_rt_sigprocmask);
   } else {
     sched.preemptAndScheduleNext();
+    replaySystemCall(gs, t, SYS_rt_sigsuspend);
   }
   return false;
 }
