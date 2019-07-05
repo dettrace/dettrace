@@ -1,0 +1,3 @@
+1. suspend
+2. sending SIGTERM
+caught SIGTERM, preparing exit
