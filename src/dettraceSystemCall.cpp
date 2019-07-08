@@ -1304,7 +1304,7 @@ void pipe2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
       gs.log.writeToLog(Importance::info, "Set pipe %d as non-blocking.\n", p.first);
       gs.log.writeToLog(Importance::info, "Set pipe %d as non-blocking.\n", p.second);
       s.setFdStatus(p.first, descriptorType::nonBlocking);
-    s.setFdStatus(p.second, descriptorType::nonBlocking);
+      s.setFdStatus(p.second, descriptorType::nonBlocking);
     }
   }
 }
@@ -1318,29 +1318,38 @@ void pselect6SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sc
 }
 // =======================================================================================
 bool pollSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  s.originalArg3 = t.arg3();
-  // Make this call non blocking by setting timeout to zero!
+  if (!s.originalArg3 && t.arg3() != 0)
+    s.originalArg3 = t.arg3();
+
   if ((int) s.originalArg3 != 0){
     t.writeArg3(0);
+    s.userDefinedTimeout = true;
+
+    if (s.originalArg3 > 0)
+      s.poll_retry_maximum = s.originalArg3;
   }
   return true;
 }
 
 void pollSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // Check if user set to timeout to block forever.
-  if((int) s.originalArg3 < 0){
-    gs.log.writeToLog(Importance::info, "Blocking poll found\n");
-    bool replay = replaySyscallIfBlocked(gs, s, t, sched, 0);
-    if(replay){
-      // Restore state of argument 3.
-      t.writeArg3(s.originalArg3);
-    }
-  }else{
-    gs.log.writeToLog(Importance::info, "Non-blocking poll found\n");
-    preemptIfBlocked(gs, s, t, sched, EAGAIN);
+  int timeout = (int)s.originalArg3;
+  int retval = t.getReturnValue();
+  auto rptr = traceePtr<struct pollfd>((struct pollfd*)t.arg1());
+  int nfds = (int)t.arg2();
+
+  if (retval > 0 || rptr.ptr == NULL || nfds == 0 || timeout == 0) {
+    s.originalArg3 = 0;
+    s.poll_retry_count = 0;
+    s.poll_retry_maximum = LONG_MAX;
+    return;
   }
 
-
+  if (s.poll_retry_count++ < s.poll_retry_maximum) {
+    bool replay = replaySyscallIfBlocked(gs, s, t, sched, 0);
+    if (replay) {
+      t.writeArg3(s.originalArg3);
+    }
+  }
   return;
 }
 // =======================================================================================
