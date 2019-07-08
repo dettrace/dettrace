@@ -1058,6 +1058,12 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_sendmsg:
     return sendmsgSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_sendmmsg:
+    return sendmmsgSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_recvfrom:
+    return recvfromSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_select:
     return selectSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -1364,6 +1370,12 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 
   case SYS_sendmsg:
     return sendmsgSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_sendmmsg:
+    return sendmmsgSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_recvfrom:
+    return recvfromSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_select:
     return selectSystemCall::handleDetPost(gs, s, t, sched);

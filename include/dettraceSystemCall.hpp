@@ -1054,6 +1054,43 @@ public:
 
 // =======================================================================================
 /**
+ *  int sendmsg(int sockfd, struct mmsghdr* msgvec, unsigned int vlen,
+                int flags);
+ *
+ * The  sendmmsg()  system  call  is an extension of sendmsg(2) that allows
+ * the caller to transmit multiple messages on a socket using a single system
+ * call.  (This has performance benefits for some applications.)
+ */
+class sendmmsgSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_sendmmsg;
+  const string syscallName = "sendmmsg";
+};
+
+// =======================================================================================
+/**
+ *  ssize_t recvfrom(int sockfd, void* buf, size_t len, int flags,
+                     struct sockaddr* src_addr, socklen_t* addrlen);
+ *
+ * The  recv(),  recvfrom(),  and recvmsg() calls are used to receive messages
+ * from a socket. They may be used to receive data on both connectionless and 
+ * connection-oriented sockets.  This page first describes common features of
+ * all three system calls, and then describes the  differences between the calls.
+ */
+class recvfromSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_recvfrom;
+  const string syscallName = "recvfrom";
+};
+
+// =======================================================================================
+/**
  * int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
  *            struct timeval *timeout);
  *
