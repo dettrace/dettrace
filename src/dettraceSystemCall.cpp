@@ -986,6 +986,15 @@ void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
       }
     }
     break;
+  case FIONBIO:
+    {
+      int flag = t.readFromTracee(traceePtr<int>((int*)t.arg3()), t.getPid());
+      auto blocking_flag = flag? descriptorType::nonBlocking: descriptorType::blocking;
+      auto blocking_msg = flag? "non blocking": "blocking";
+      gs.log.writeToLog(Importance::info, "found ioctl(%d, FIONBIO, &%d), setting %d to %s!\n", fd, flag, fd, blocking_msg);
+      (*s.fdStatus.get())[fd] = blocking_flag;
+    }
+    break;
   default:
     runtimeError("Unsupported ioctl call: fd=" + to_string(t.arg1()) +
                         " request=" + to_string(request));
