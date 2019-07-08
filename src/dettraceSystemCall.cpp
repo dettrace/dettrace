@@ -1818,12 +1818,31 @@ void sendtoSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
 // TODO
 bool sendmsgSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   gs.log.writeToLog(Importance::info, "sendmsg to fd " + to_string(t.arg1()) + "\n");
-  return false;
+  return true;
 }
 
 void sendmsgSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   return;
 }
+
+bool sendmmsgSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "sendmmsg to fd " + to_string(t.arg1()) + "\n");
+  return true;
+}
+
+void sendmmsgSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return;
+}
+
+bool recvfromSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "recvfrom fd " + to_string(t.arg1()) + "\n");
+  return true;
+}
+
+void recvfromSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return;
+}
+
 // =======================================================================================
 bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   // Get the original set structs.
