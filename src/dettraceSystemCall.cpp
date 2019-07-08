@@ -1426,10 +1426,18 @@ void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     gs.log.writeToLog(Importance::info,
                       "read found with non blocking pipe!\n");
     int retval = t.getReturnValue();
-    // returns -EAGAIN
+
+    // for non-blocking io, if it returns -EAGAIN on the 1st try, let it through
+    // if it returns -EAGAIN after the retry logic, return bytes already read/wrote
     if(retval == -EAGAIN){
-      resetState();
-      t.setReturnRegister((uint64_t)-EAGAIN);
+      if (s.firstTrySystemcall) {
+	resetState();
+	t.setReturnRegister((uint64_t)-EAGAIN);
+      } else {
+	auto totalBytes = s.totalBytes;
+	resetState();
+	t.setReturnRegister(totalBytes);
+      }
       return;
     }
   }else{
@@ -2584,10 +2592,17 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     gs.log.writeToLog(Importance::info,
                       "write found with non-blocking pipe!\n");
     int retval = t.getReturnValue();
-    // returns -EAGAIN
+    // for non-blocking io, if it returns -EAGAIN on the 1st try, let it through
+    // if it returns -EAGAIN after the retry logic, return bytes already read/wrote
     if(retval == -EAGAIN){
-      resetState();
-      t.setReturnRegister((uint64_t)-EAGAIN);
+      if (s.firstTrySystemcall) {
+	resetState();
+	t.setReturnRegister((uint64_t)-EAGAIN);
+      } else {
+	auto totalBytes = s.totalBytes;
+	resetState();
+	t.setReturnRegister(totalBytes);
+      }
       return;
     }
   }else{
