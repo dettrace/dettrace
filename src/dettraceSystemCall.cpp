@@ -147,6 +147,10 @@ void clock_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& 
 
     t.writeToTracee(traceePtr<struct timespec>(tp), myTp, t.getPid());
     s.incrementTime();
+    // preempt current task avoid some task busy checking current time
+    // Since preemption can happen any place in Linux, we are not really
+    // breaking any assumptions..
+    sched.preemptAndScheduleNext();
   }
 
   return;
@@ -891,6 +895,10 @@ void gettimeofdaySystemCall::handleDetPost(globalState& gs, state& s, ptracer& t
 
     t.writeToTracee(traceePtr<struct timeval>(tp), myTv, t.getPid());
     s.incrementTime();
+    // preempt current task avoid some task busy checking current time
+    // Since preemption can happen any place in Linux, we are not really
+    // breaking any assumptions..
+    sched.preemptAndScheduleNext();
   }
 
   return;
@@ -2110,6 +2118,10 @@ void timeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     }
     // Tick up time.
     s.incrementTime();
+    // preempt current task avoid some task busy checking current time
+    // Since preemption can happen any place in Linux, we are not really
+    // breaking any assumptions..
+    sched.preemptAndScheduleNext();
   }
   return;
 }
