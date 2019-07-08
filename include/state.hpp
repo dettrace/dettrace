@@ -58,7 +58,7 @@ private:
    * information. The clock starts at this number to avoid seeing
    * files "in the future", if we were to start at zero.
    */
-  size_t clock = 744847200;
+  size_t clock = 1561870800;
 
 public:
  /**
@@ -277,6 +277,20 @@ public:
    * or a post-hook, continuing to the next system call.
    */
   bool canGetStuck = false;
+
+  /**
+   * poll retry count
+   * poll can choose a negative timeout for wait indefinitely
+   * or a positive timeout (in mili-seconds) to wait only certain amount of time
+   * we replay poll syscall for only `timeout` of times, by simply assume every
+   * retry is roughly 1-milli-sec.
+   */
+  long poll_retry_count;
+
+  /**
+   * poll retry maximum
+   */
+  long poll_retry_maximum;
 };
 
 #endif

@@ -1,7 +1,8 @@
 #include "state.hpp"
 
 state::state(pid_t traceePid, int debugLevel)
-  : clock(744847200), // avoid clock skew, see issue #24 for more details.
+  //  : clock(744847200), // avoid clock skew, see issue #24 for more details.
+  : clock(1561870800), // avoid clock skew, see issue #24 for more details.
                       // same value as of libdet.c
     fdStatus(new unordered_map<int, descriptorType>),
     traceePid(traceePid),
@@ -11,6 +12,9 @@ state::state(pid_t traceePid, int debugLevel)
 {
   currentSignalHandlers = std::make_shared<unordered_map<int, enum sighandler_type>>();
   timerCreateTimers = std::make_shared<unordered_map<timerID_t, timerInfo>>();
+
+  poll_retry_count = 0;
+  poll_retry_maximum = LONG_MAX;
 }
 
 int state::getLogicalTime(){
@@ -72,6 +76,9 @@ state state::forked(pid_t childPid) const {
   childState.userDefinedTimeout = false;
   childState.wait4Blocking = false;
 
+  childState.poll_retry_count = 0;
+  childState.poll_retry_maximum = LONG_MAX;
+
   return childState;
 }
 
@@ -114,6 +121,9 @@ state state::cloned(pid_t childPid) const {
   childState.traceePid = childPid;
   childState.userDefinedTimeout = false;
   childState.wait4Blocking = false;
+
+  childState.poll_retry_count = 0;
+  childState.poll_retry_maximum = LONG_MAX;
 
   return childState;
 }
