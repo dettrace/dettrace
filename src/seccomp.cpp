@@ -259,9 +259,8 @@ void seccomp::loadRules(bool debug, bool convertUids){
   // TODO
   intercept(SYS_recvmsg);
   intercept(SYS_sendmsg);
-  noIntercept(SYS_sendmmsg);
-
-  noIntercept(SYS_recvfrom);
+  intercept(SYS_sendmmsg);
+  intercept(SYS_recvfrom);
 
   intercept(SYS_sendto);
   // Defintely not deteministic </3
