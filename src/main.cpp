@@ -265,6 +265,34 @@ int main(int argc, char** argv){
     return 1;
   }
 }
+
+// get canonicalized exe path
+static string getExePath(pid_t pid = 0) {
+#define PROC_PID_EXE_LEN 32
+#define REAL_PATH_LEN 4095
+  char proc_pid_exe[PROC_PID_EXE_LEN];
+  char path[1+REAL_PATH_LEN] = {0,};
+  ssize_t nb;
+  if (pid == 0) {
+    snprintf(proc_pid_exe, PROC_PID_EXE_LEN, "/proc/self/exe");
+  } else {
+    snprintf(proc_pid_exe, PROC_PID_EXE_LEN, "/proc/%u/exe", pid);
+  }
+
+  if ((nb = readlink(proc_pid_exe, path, REAL_PATH_LEN)) < 0) {
+    return "";
+  }
+  // readlink doesn't put null byte
+  path[nb] = '\0';
+
+  while(nb >= 0 && path[nb] != '/')
+    --nb;
+  path[nb] = '\0';
+  return path;
+#undef REAL_PATH_LEN
+#undef PROC_PID_EXE_LEN
+}
+
 // =======================================================================================
 /**
  * Child will become the process the user wishes through call to execvpe.
@@ -827,13 +855,12 @@ programArgs parseProgramArguments(int argc, char* argv[]){
   // Find absolute path to our build directory relative to the dettrace binary.
   char argv0[strlen(argv[0])+1/*NULL*/];
   strcpy(argv0, argv[0]); // Use a copy since dirname may mutate contents.
-  string pathToExe{ dirname(argv0) };
-  args.pathToExe = pathToExe;
+  args.pathToExe = getExePath();
 
   if (isDefault(args.pathToChroot)) {
     args.userChroot = false;
     const string defaultRoot = "/../root/";
-    args.pathToChroot = pathToExe + defaultRoot;
+    args.pathToChroot = args.pathToExe + defaultRoot;
   } else {
     args.userChroot = true;
   }
