@@ -50,6 +50,7 @@ void seccomp::loadRules(bool debug, bool convertUids){
   noIntercept(SYS_splice);
   noIntercept(SYS_dup3);
   noIntercept(SYS_capget);
+  noIntercept(SYS_capset);
 
   noIntercept(SYS_clock_getres);
   noIntercept(SYS_getresgid);
