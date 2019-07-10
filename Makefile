@@ -66,7 +66,7 @@ clean:
 
 # ----------------------------------------
 
-package: static
+package: static build
 	cp initramfs.cpio package/
 	mkdir -p package/bin
 	cp -a bin/dettrace package/bin/cloudseal
