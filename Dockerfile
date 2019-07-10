@@ -38,7 +38,7 @@ RUN rsync -av ./package/ /usr/
 # STAGE 2:
 # Copy only the deployment files into the final image:
 FROM ubuntu:18.04
-RUN apt-get update -y && apt-get install -y python3
+RUN apt-get update -y && apt-get install -y python3 bsdmainutils dnsutils curl
 COPY --from=0 /detTrace/package /alpha_pkg
 RUN ln -s /alpha_pkg/bin/* /usr/bin/
 WORKDIR /alpha_pkg/examples
