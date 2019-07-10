@@ -37,10 +37,11 @@ run-tests: build-tests build
 
 DOCKER_NAME=cloudseal-alpha
 # TODO: store version in one place in a file.
-DOCKER_TAG=0.0.1
+DOCKER_TAG=0.1.651
 
 docker:
 	docker build -t ${DOCKER_NAME}:${DOCKER_TAG} .
+	docker run -i --rm --workdir /alpha_pkg ${DOCKER_NAME}:${DOCKER_TAG} tar cf - . | bzip2 > cloudseal_alpha_pkg_${DOCKER_TAG}.tbz
 
 run-docker:
 	mkdir -p /tmp/out

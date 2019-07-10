@@ -39,5 +39,6 @@ RUN rsync -av ./package/ /usr/
 # Copy only the deployment files into the final image:
 FROM ubuntu:18.04
 RUN apt-get update -y && apt-get install -y python3
-COPY --from=0 /detTrace/package /usr
-WORKDIR /usr/examples
+COPY --from=0 /detTrace/package /alpha_pkg
+RUN ln -s /alpha_pkg/bin/* /usr/bin/
+WORKDIR /alpha_pkg/examples
