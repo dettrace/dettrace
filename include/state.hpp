@@ -7,6 +7,7 @@
 #include <sys/user.h>
 #include <sys/vfs.h>
 #include <unordered_map>
+#include <unordered_set>
 #include <sys/select.h>
 #include <memory>
 
@@ -57,7 +58,7 @@ private:
    * information. The clock starts at this number to avoid seeing
    * files "in the future", if we were to start at zero.
    */
-  size_t clock = 744847200;
+  size_t clock = 1561870800;
 
 public:
  /**
@@ -70,18 +71,14 @@ public:
   state(pid_t traceePid, int debugLevel);
 
   /**
-   * Same as a above, but takes in a fdStatus map to share. Used by threads to share
-   * map with parents.
+   * fork a new state when fork/vfork is called
    */
-  state(pid_t traceePid, int debugLevel,
-        shared_ptr<unordered_map<int, descriptorType>> parentFdStatus);
+  state forked(pid_t childPid) const;
 
   /**
-   * Same as a above, but takes in a fdStatus map to deep copy. Used by child process to
-   * inheret from parents.
+   * cloned a new state when clone is called
    */
-  state(pid_t traceePid, int debugLevel,
-        unordered_map<int, descriptorType> fdStatus);
+  state cloned(pid_t childPid) const;
 
   /**
    * Keep track of file descriptor status for blocking descriptors, as set by the
@@ -203,10 +200,10 @@ public:
   int requestedSignalToHandle = -1;
 
   /** Track, for each signal, what kind of handler this tracee currently has registered. */
-  unordered_map<int, enum sighandler_type> currentSignalHandlers;
+  shared_ptr<unordered_map<int, enum sighandler_type>> currentSignalHandlers;
 
   /** track timers created via timer_create */
-  unordered_map<timerID_t, timerInfo> timerCreateTimers;
+  shared_ptr<unordered_map<timerID_t, timerInfo>> timerCreateTimers;
 
   bool rdfsNotNull = false; /**< Indicates whether rdfs is NULL. */
   bool wrfsNotNull = false; /**< Indicates whether wrfs is NULL. */
@@ -238,6 +235,7 @@ public:
   uint64_t originalArg3 = 0; /**< original register arg 3 */
   uint64_t originalArg4 = 0; /**< original register arg 4 */
   uint64_t originalArg5 = 0; /**< original register arg 5 */
+  uint64_t originalArg6 = 0; /**< original register arg 5 */
 
   /**
    * Debug level. Mainly used by the dettraceSytemCall classes to avoid doing unnecesary
@@ -280,7 +278,19 @@ public:
    */
   bool canGetStuck = false;
 
-  
+  /**
+   * poll retry count
+   * poll can choose a negative timeout for wait indefinitely
+   * or a positive timeout (in mili-seconds) to wait only certain amount of time
+   * we replay poll syscall for only `timeout` of times, by simply assume every
+   * retry is roughly 1-milli-sec.
+   */
+  long poll_retry_count;
+
+  /**
+   * poll retry maximum
+   */
+  long poll_retry_maximum;
 };
 
 #endif

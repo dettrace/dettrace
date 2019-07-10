@@ -320,8 +320,8 @@ ino_t readInodeFor(logger& log, pid_t traceePid, int fd){
 bool sendTraceeSignalNow(int signum, globalState& gs,
                                 state& s, ptracer& t, scheduler& sched) {
   enum sighandler_type sh = SIGHANDLER_DEFAULT;
-  if (s.currentSignalHandlers.count(signum)) {
-    sh = s.currentSignalHandlers[signum];
+  if (s.currentSignalHandlers.get()->count(signum)) {
+    sh = s.currentSignalHandlers.get()->at(signum);
   }
 
   switch (sh) {
@@ -332,7 +332,7 @@ bool sendTraceeSignalNow(int signum, globalState& gs,
     // TODO: JLD is this a race? the tracee isn't technically paused yet
     t.changeSystemCall(SYS_pause);
     s.signalInjected = true;
-    s.currentSignalHandlers[signum] = SIGHANDLER_DEFAULT; // go back to default next time
+    (*s.currentSignalHandlers.get())[signum] = SIGHANDLER_DEFAULT; // go back to default next time
     int retVal = syscall(SYS_tgkill, t.getPid(), t.getPid(), signum);
     if (0 != retVal) {
       runtimeError("sending myself signal "+to_string(signum)+" failed, tgkill returned " + to_string(retVal));

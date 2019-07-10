@@ -50,6 +50,7 @@ void seccomp::loadRules(bool debug, bool convertUids){
   noIntercept(SYS_splice);
   noIntercept(SYS_dup3);
   noIntercept(SYS_capget);
+  noIntercept(SYS_capset);
 
   noIntercept(SYS_clock_getres);
   noIntercept(SYS_getresgid);
@@ -107,18 +108,20 @@ void seccomp::loadRules(bool debug, bool convertUids){
 
   noIntercept(SYS_prctl);
   noIntercept(SYS_pread64);
-  noIntercept(SYS_rt_sigprocmask);
+  intercept(SYS_rt_sigprocmask);
 
   //intercept(SYS_sigaction); // is mapped to SYS_rt_sigaction on cat16
   //intercept(SYS_signal); // is mapped to SYS_rt_sigaction on cat16
-  noIntercept(SYS_rt_sigsuspend);
+  noIntercept(SYS_rt_sigreturn);
+  intercept(SYS_rt_sigtimedwait);
+  intercept(SYS_rt_sigsuspend);
+  noIntercept(SYS_rt_sigpending);
+
   noIntercept(SYS_setpgid);
   noIntercept(SYS_set_tid_address);
   noIntercept(SYS_setxattr);
   noIntercept(SYS_sigaltstack);
 
-  noIntercept(SYS_rt_sigreturn);
-  noIntercept(SYS_rt_sigtimedwait);
   noIntercept(SYS_setgid);
   noIntercept(SYS_setgroups);
   noIntercept(SYS_setrlimit);
@@ -131,12 +134,13 @@ void seccomp::loadRules(bool debug, bool convertUids){
   // us so it should always be the same mask. User cannot actually observe differences.
   noIntercept(SYS_sched_getaffinity);
   noIntercept(SYS_sched_setaffinity);
-  noIntercept(SYS_socket);
+  intercept(SYS_socket);
   noIntercept(SYS_sync);
   noIntercept(SYS_umask);
 
   // Okay to not intercept.
   noIntercept(SYS_getsockname);
+  noIntercept(SYS_getsockopt);
   noIntercept(SYS_setsockopt);
   noIntercept(SYS_socketpair);
   noIntercept(SYS_mlock);
@@ -247,7 +251,7 @@ void seccomp::loadRules(bool debug, bool convertUids){
   intercept(SYS_pipe);
   intercept(SYS_pipe2);
   // TODO Not handled.
-  // intercept(SYS_pselect6);
+  intercept(SYS_pselect6);
   intercept(SYS_poll);
   intercept(SYS_prlimit64);
   intercept(SYS_read);
@@ -255,6 +259,9 @@ void seccomp::loadRules(bool debug, bool convertUids){
   intercept(SYS_readlinkat, debug);
   // TODO
   intercept(SYS_recvmsg);
+  intercept(SYS_sendmsg);
+  intercept(SYS_sendmmsg);
+  intercept(SYS_recvfrom);
 
   intercept(SYS_sendto);
   // Defintely not deteministic </3
@@ -275,7 +282,6 @@ void seccomp::loadRules(bool debug, bool convertUids){
 
   intercept(SYS_wait4);
   intercept(SYS_write);
-
 }
 
 void seccomp::noIntercept(uint16_t systemCall){
