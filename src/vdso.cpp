@@ -97,16 +97,17 @@ std::ostream& operator<< (std::ostream &out, ProcMapEntry const& e) {
   return out;
 }
 
-int parseProcMapEntry(const std::string& line_, struct ProcMapEntry& res)
+static int parseProcMapEntry(char* line, struct ProcMapEntry& res)
 {
   char* p, *q;
-  char* line = strdupa(line_.c_str());
 
   p = line;
 
   res.procMapBase = strtoull(p, &q, 16);
   res.procMapSize = strtoull(1+q, &p, 16) - res.procMapBase;
   while(*p == ' ' || *p == '\t' ) ++p;
+
+  res.procMapPerms = 0;
 
   if(*p++ == 'r') res.procMapPerms |= ProcMapPermRead;
   if(*p++ == 'w') res.procMapPerms |= ProcMapPermWrite;
@@ -132,29 +133,23 @@ int parseProcMapEntry(const std::string& line_, struct ProcMapEntry& res)
 std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid)
 {
   int fd;
-  char* mapsFile;
+  char mapsFile[32];
   char* buffer;
   const int buffer_size = 2 << 20;
 
   std::vector<ProcMapEntry> res;
 
-  int ret = asprintf(&mapsFile, "/proc/%u/maps", pid);
-  if (-1 == ret) {
-    return {};
-  }
+  snprintf(mapsFile, 32, "/proc/%u/maps", pid);
 
   fd = open(mapsFile, O_RDONLY);
   if (fd < 0) {
-    free(mapsFile);
     return {};
   }
-
-  free(mapsFile);
 
   buffer = new char [buffer_size];
   if (!buffer) {
     close(fd);
-    return {};
+    return res;
   }
 
   unsigned long nr = 0;
@@ -162,29 +157,27 @@ std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid)
     auto nb = read(fd, buffer + nr, buffer_size - nr);
     if (nb < 0) {
       if (errno == EINTR) continue;
-      close(fd);
       delete [] buffer;
-      return {};
+      close(fd);
+      return res;
     } else if (nb == 0) {
       break;
     } else {
       nr += nb;
     }
   }
-
   close(fd);
+  buffer[nr] = '\0';
 
-  std::istringstream f(buffer);
-  std::string line;
-  delete [] buffer;
-  ProcMapEntry mapEntry;
-
-  while (std::getline(f, line)) {
+  char* line, *text = buffer;
+  struct ProcMapEntry mapEntry;
+  while((line = strsep(&text, "\n")) != NULL ) {
     if (parseProcMapEntry(line, mapEntry) == 0) {
       res.push_back(mapEntry);
     }
   }
 
+  delete [] buffer;
   return res;
 }
 
@@ -209,7 +202,7 @@ create_empty_loader(void* base, unsigned long size) {
   return std::make_shared<empty_loader>(base, size);
 }
 
-int vdsoGetMapEntry(pid_t pid, struct ProcMapEntry& entry)
+static int vdsoGetMapEntry(pid_t pid, struct ProcMapEntry& entry)
 {
   auto entries = parseProcMapEntries(pid);
 
