@@ -47,14 +47,11 @@ bool kernelCheck(int a, int b, int c){
 // =======================================================================================
 execution::execution(int debugLevel, pid_t startingPid, bool useColor,
                      string logFile, bool printStatistics,
-                     pthread_t devRandomPthread, pthread_t devUrandomPthread,
                      map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs):
   kernelPre4_8 {kernelCheck(4,8,0)},
   log {logFile, debugLevel, useColor},
   silentLogger {"NONE", 0},
   printStatistics{printStatistics},
-  devRandomPthread{devRandomPthread},
-  devUrandomPthread{devUrandomPthread},
   // Waits for first process to be ready!
   tracer{startingPid},
   // Create our global state once, share across class.
@@ -474,10 +471,6 @@ void execution::runProgram(){
     runtimeError(to_string(traceesPid) +
                         " Uknown return value for ptracer::getNextEvent()\n");
   }
-
-  // DEVRAND STEP 5: clean up /dev/[u]random fifo threads
-  doWithCheck(pthread_cancel(devRandomPthread), "pthread_cancel /dev/random pthread");
-  doWithCheck(pthread_cancel(devUrandomPthread), "pthread_cancel /dev/urandom pthread");
 
   auto msg =
     log.makeTextColored(Color::blue, "All processes done. Finished successfully!\n");

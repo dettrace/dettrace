@@ -79,6 +79,10 @@ struct programArgs{
   // current enviornment as a chroot.
   bool currentAsChroot;
   unsigned timeoutSeconds;
+
+  // NB: not to be passed by command line
+  string devRandFifoPath;
+  string devUrandFifoPath;
 };
 // =======================================================================================
 programArgs parseProgramArguments(int argc, char* argv[]);
@@ -90,7 +94,7 @@ static bool realDevNull(string path);
 static bool fileExists(string directory);
 static void deleteFile(string path);
 static void mountDir(string source, string target);
-static void setUpContainer(string pathToExe, string pathToChroot, string workingDir, bool userDefinedChroot, bool currentAsChroot);
+static void setUpContainer(string pathToExe, string pathToChroot, string workingDir, programArgs& args);
 static void mkdirIfNotExist(string dir);
 static void createFileIfNotExist(string path);
 
@@ -100,6 +104,9 @@ static void proc_setgroups_write(pid_t pid, const char* str);
 
 // Default starting value used by our programArgs.
 static bool isDefault(string arg);
+static void* devRandThread(void*);
+static void removeFile(string& path, bool is_dir = false);
+
 // =======================================================================================
 static execution *globalExeObject = nullptr;
 void sigalrmHandler(int _) {
@@ -114,6 +121,44 @@ struct CloneArgs {
   struct programArgs args;
   std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>> vdsoSyms;
 };
+
+static pair<string, string> devRandPair(void) {
+  // DEVRAND STEP 1: create unique /dev/[u]random fifos before we fork, so
+  // that their names are available to tracee
+  char devRandTemplate[] = "/tmp/devrandom-XXXXXX";
+  char devUrandTemplate[] = "/tmp/devurandom-XXXXXX";
+
+#define L_TMPNAM_MAX 63 /* NB: L_tmpnam is too small! */
+  char devRand[1 + L_TMPNAM_MAX] = {0,}, devUrand[1 + L_TMPNAM_MAX] = {0,};
+
+  int devRandFd = mkstemp(devRandTemplate);
+  int devUrandFd = mkstemp(devUrandTemplate);
+
+  string p1 = "/proc/self/fd/" + to_string(devRandFd);
+  string p2 = "/proc/self/fd/" + to_string(devUrandFd);
+
+  ssize_t n;
+
+  string msg = "readlink";
+  doWithCheck((n = readlink(p1.c_str(), devRand, L_TMPNAM_MAX)), msg + ": " + p1);
+  devRand[n] = '\0';
+  unlink(devRand);
+
+  doWithCheck((n = readlink(p2.c_str(), devUrand, L_TMPNAM_MAX)), msg + ": " + p1);
+  devUrand[n] = '\0';
+  unlink(devUrand);
+
+  strncat(devRand, ".fifo", L_TMPNAM_MAX);
+  doWithCheck(mkfifo(devRand, 0666), "mkfifo");
+  strncat(devUrand, ".fifo", L_TMPNAM_MAX);
+  doWithCheck(mkfifo(devUrand, 0666), "mkfifo");
+
+  close(devRandFd);
+  close(devUrandFd);
+
+#undef L_TMPNAM_MAX
+  return std::make_pair(devRand, devUrand);
+}
 
 const string usageMsg =
   "  Dettrace\n"
@@ -176,6 +221,24 @@ int main(int argc, char** argv){
       runtimeError("Debug level must be between [0,5].");
     }
   }
+
+  std::tie(args.devRandFifoPath, args.devUrandFifoPath) = devRandPair();
+
+  int devRandFd = open(args.devRandFifoPath.c_str(), O_RDWR | O_CLOEXEC);
+  doWithCheck(devRandFd, "open devRand fifo");
+
+  int devUrandFd = open(args.devUrandFifoPath.c_str(), O_RDWR | O_CLOEXEC);
+  doWithCheck(devUrandFd, "open devUrand fifo");
+
+  // DEVRAND STEP 2: spawn a thread to write to each fifo
+  //pthread_t devRandomPthread, devUrandomPthread;
+  // NB: we copy *FifoPath to the heap as our stack storage goes away: these allocations DO get leaked
+  // If we wanted to not leak them, devRandThread could copy to its stack and free the heap copy
+  pthread_t devUrandomPthread, devRandomPthread;
+  doWithCheck( pthread_create(&devRandomPthread, NULL, devRandThread, (void*)(long)devRandFd),
+	       "pthread_create /dev/random pthread" );
+  doWithCheck( pthread_create(&devUrandomPthread, NULL, devRandThread, (void*)(long)devUrandFd),
+	       "pthread_create /dev/urandom pthread" );
 
   // Set up new user namespace. This is needed as we will have root access withing
   // our own user namespace. Other namepspace commands require CAP_SYS_ADMIN to work.
@@ -259,11 +322,33 @@ int main(int argc, char** argv){
 
   // Propegate Child's exit status to use as our own exit status.
   doWithCheck(waitpid(-1, &status, 0), "cannot wait for child");
+
+  // DEVRAND STEP 5: clean up /dev/[u]random fifo threads
+  doWithCheck(pthread_cancel(devRandomPthread), "pthread_cancel /dev/random pthread");
+  doWithCheck(pthread_cancel(devUrandomPthread), "pthread_cancel /dev/urandom pthread");
+
+  int exit_status = 0;
+
   if (WIFEXITED(status)) {
-    return WEXITSTATUS(status);
+    exit_status = WEXITSTATUS(status);
+  } else if (WIFSIGNALED(status)) {
+    exit_status = WEXITSTATUS(status) | 0x80;
   } else {
-    return 1;
+    fprintf(stderr, "waitpid: unknown status: %d", exit_status);
+    exit(1);
   }
+
+  // should return PTHREAD_CANCELED
+  pthread_join(devRandomPthread, NULL);
+  pthread_join(devUrandomPthread, NULL);
+
+  if (!args.userChroot) {
+    removeFile(args.pathToChroot, true);
+  }
+  removeFile(args.devRandFifoPath);
+  removeFile(args.devUrandFifoPath);
+
+  exit(exit_status);
 }
 // =======================================================================================
 /**
@@ -281,7 +366,7 @@ int runTracee(programArgs args){
   string pathToExe = args.pathToExe;
 
   if(useContainer){
-    setUpContainer(pathToExe, pathToChroot, workingDir, args.userChroot, args.currentAsChroot);
+    setUpContainer(pathToExe, pathToChroot, workingDir, args);
   }
 
   doWithCheck(prctl(PR_SET_TSC, PR_TSC_SIGSEGV, 0, 0, 0), "Pre-clone prctl error");
@@ -480,12 +565,17 @@ static void checkPaths(string pathToChroot, string workingDir){
     free(trueWorkingDirC);
 }
 
+static void removeFile(string& path, bool is_dir) {
+  unlinkat(AT_FDCWD, path.c_str(), is_dir? AT_REMOVEDIR: 0);
+}
+
 /**
  * DEVRAND STEP 3: thread that writes pseudorandom output to a /dev/[u]random fifo
  */
-static void* devRandThread(void* fifoPath_) {
+static void* devRandThread(void* fd_) {
 
-  char* fifoPath = (char*) fifoPath_;
+  //char* fifoPath = (char*) fifoPath_;
+  int fd = (int)(long)fd_;
 
   // allow this thread to be unilaterally killed when tracer exits
   int oldCancelType;
@@ -508,8 +598,6 @@ static void* devRandThread(void* fifoPath_) {
   // will drain and our write() will get unblocked. However, no bytes should get
   // lost during this process, ensuring the tracee(s) always see(s) a
   // deterministic sequence of reads.
-  int fd = open(fifoPath, O_RDWR);
-  doWithCheck(fd, "open");
 
   while (true) {
     if (getNewRandom) {
@@ -529,18 +617,15 @@ static void* devRandThread(void* fifoPath_) {
     }
   }
 
-  close(fd);
   return NULL;
 }
-
-static string devrandFifoPath, devUrandFifoPath;
 
 /**
  * Jail our container under chootPath.
  * This directory must exist and be located inside the chroot if the user defined their own chroot!
  */
-static void setUpContainer(string pathToExe, string pathToChroot, string workingDir, bool userDefinedChroot, bool currentAsChroot){
-  if(userDefinedChroot && ! isDefault(workingDir)){
+static void setUpContainer(string pathToExe, string pathToChroot, string workingDir, programArgs& args){
+  if(args.userChroot && ! isDefault(workingDir)){
     checkPaths(pathToChroot, workingDir);
   }
 
@@ -548,22 +633,17 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
     {  "/dettrace", "/dettrace/bin", "/bin", "/usr", "/lib", "/lib64",
        "/dev", "/etc", "/proc", "/build", "/tmp", "/root" };
 
-  if (!userDefinedChroot) {
-    char buf[256];
-    snprintf(buf, 256, "%s", "/tmp/dtroot.XXXXXX");
-    string tempdir = string { mkdtemp(buf) };
-
+  if (!args.userChroot) {
     string cpio;
-    doWithCheck(mount("none", tempdir.c_str(), "tmpfs", 0, NULL), "mount initramfs");
+    doWithCheck(mount("none", pathToChroot.c_str(), "tmpfs", 0, NULL), "mount initramfs");
     cpio = pathToExe + "/../initramfs.cpio";
     char* cpioReal = realpath(cpio.c_str(), NULL);
     if (!cpioReal) {
       fprintf(stderr, "unable to find initramfs: %s\n", cpio.c_str());
       exit(1);
     }
-    populateInitramfs(cpioReal, tempdir.c_str());
+    populateInitramfs(cpioReal, pathToChroot.c_str());
     free(cpioReal);
-    pathToChroot = tempdir;
   }
 
   string buildDir = pathToChroot + "/build/";
@@ -588,7 +668,7 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
 
   // The user did not specify a chroot env, try to scrape a minimal filesystem from the
   // host OS'.
-  if(! userDefinedChroot){
+  if(! args.userChroot){
     mountDir("/bin/", pathToChroot + "/bin/");
     mountDir("/usr/", pathToChroot + "/usr/");
     mountDir("/lib/", pathToChroot + "/lib/");
@@ -604,7 +684,7 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
     if (fileExists(chrootDevNullPath)) {
       deleteFile(chrootDevNullPath);
     }
-    if (currentAsChroot) {
+    if (args.currentAsChroot) {
       // we're running under reprotest as sudo, so we can use real mknod
       // hat tip to: https://unix.stackexchange.com/questions/27279/how-to-create-dev-null
       dev_t dev = makedev(1,3);
@@ -623,10 +703,10 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
 
   // DEVRAND STEP 4: bind mount our /dev/[u]random fifos into the chroot
   createFileIfNotExist(pathToChroot + "/dev/random");
-  mountDir(devrandFifoPath, pathToChroot + "/dev/random");
+  mountDir(args.devRandFifoPath, pathToChroot + "/dev/random");
 
   createFileIfNotExist(pathToChroot + "/dev/urandom");
-  mountDir(devUrandFifoPath, pathToChroot + "/dev/urandom");
+  mountDir(args.devUrandFifoPath, pathToChroot + "/dev/urandom");
 
   // Proc is special, we mount a new proc dir.
   doWithCheck(mount("/proc", (pathToChroot + "/proc/").c_str(), "proc", MS_MGC_VAL, nullptr),
@@ -666,17 +746,6 @@ int spawnTracerTracee(void* voidArgs){
   // Switch to throw runtime exception.
   assert(getpid() == 1);
 
-  // DEVRAND STEP 1: create unique /dev/[u]random fifos before we fork, so
-  // that their names are available to tracee
-  char tmpnamBuffer[L_tmpnam];
-  char* tmpnamResult = tmpnam(tmpnamBuffer);
-  assert(NULL != tmpnamResult);
-  devrandFifoPath = string{ tmpnamBuffer } + "-random.fifo";
-  //fprintf(stderr, "%s\n", devrandFifoPath.c_str());
-  devUrandFifoPath = string{ tmpnamBuffer } + "-urandom.fifo";
-  doWithCheck(mkfifo(devrandFifoPath.c_str(), 0666), "mkfifo");
-  doWithCheck(mkfifo(devUrandFifoPath.c_str(), 0666), "mkfifo");
-
   pid_t pid = fork();
   if (pid < 0) {
     runtimeError("fork() failed.\n");
@@ -689,19 +758,9 @@ int spawnTracerTracee(void* voidArgs){
                   "tracer mounting proc failed");
     }
 
-    // DEVRAND STEP 2: spawn a thread to write to each fifo
-    pthread_t devRandomPthread, devUrandomPthread;
-    // NB: we copy *FifoPath to the heap as our stack storage goes away: these allocations DO get leaked
-    // If we wanted to not leak them, devRandThread could copy to its stack and free the heap copy
-    doWithCheck( pthread_create(&devRandomPthread, NULL, devRandThread, (void*)strdup(devrandFifoPath.c_str())),
-                 "pthread_create /dev/random pthread" );
-    doWithCheck( pthread_create(&devUrandomPthread, NULL, devRandThread, (void*)strdup(devUrandFifoPath.c_str())),
-                 "pthread_create /dev/urandom pthread" );
-
     execution exe{
         args.debugLevel, pid, args.useColor,
         args.logFile, args.printStatistics,
-        devRandomPthread, devUrandomPthread,
         cloneArgs->vdsoSyms};
 
     globalExeObject = &exe;
@@ -832,8 +891,8 @@ programArgs parseProgramArguments(int argc, char* argv[]){
 
   if (isDefault(args.pathToChroot)) {
     args.userChroot = false;
-    const string defaultRoot = "/../root/";
-    args.pathToChroot = pathToExe + defaultRoot;
+    char buf[] = "/tmp/dtroot.XXXXXX";
+    args.pathToChroot = string { mkdtemp(buf) };
   } else {
     args.userChroot = true;
   }
