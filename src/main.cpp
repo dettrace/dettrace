@@ -1011,8 +1011,10 @@ static void createFileIfNotExist(string path){
     return;
   }
 
-  doWithCheck(open(path.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH),
+  int fd;
+  doWithCheck((fd = open(path.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH)),
               "Unable to create file: " + path);
+  if (fd >= 0) close(fd);
 
   return;
 }
