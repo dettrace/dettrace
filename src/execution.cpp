@@ -1156,6 +1156,14 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
    return writevSystemCall::handleDetPre(gs, s, t, sched);
   case SYS_socket:
     return socketSystemCall::handleDetPre(gs, s, t, sched);
+  case SYS_listen:
+    return listenSystemCall::handleDetPre(gs, s, t, sched);
+  case SYS_accept:
+    return acceptSystemCall::handleDetPre(gs, s, t, sched);
+  case SYS_accept4:
+    return accept4SystemCall::handleDetPre(gs, s, t, sched);
+  case SYS_shutdown:
+    return shutdownSystemCall::handleDetPre(gs, s, t, sched);
   }
 
   // Generic system call. Throws error.
@@ -1469,6 +1477,14 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
    return writevSystemCall::handleDetPost(gs, s, t, sched);
   case SYS_socket:
     return socketSystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_listen:
+    return listenSystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_accept:
+    return acceptSystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_accept4:
+    return accept4SystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_shutdown:
+    return shutdownSystemCall::handleDetPost(gs, s, t, sched);
   }
 
   // Generic system call. Throws error.

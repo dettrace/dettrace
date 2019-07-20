@@ -263,6 +263,11 @@ void seccomp::loadRules(bool debug, bool convertUids){
   intercept(SYS_sendmmsg);
   intercept(SYS_recvfrom);
 
+  intercept(SYS_listen);
+  intercept(SYS_accept);
+  intercept(SYS_accept4);
+  intercept(SYS_shutdown);
+
   intercept(SYS_sendto);
   // Defintely not deteministic </3
   intercept(SYS_select);
@@ -282,6 +287,11 @@ void seccomp::loadRules(bool debug, bool convertUids){
 
   intercept(SYS_wait4);
   intercept(SYS_write);
+
+  // noIntercept(SYS_shmget);
+  // noIntercept(SYS_shmat);
+  // noIntercept(SYS_shmdt);
+  // noIntercept(SYS_shmctl);
 }
 
 void seccomp::noIntercept(uint16_t systemCall){
