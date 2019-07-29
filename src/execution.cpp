@@ -749,7 +749,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
       if ((curr_insn32 << 8) == 0xF9010F00) {
         rdtscpEvents++;
         tracer.writeRcx(tscpCounter);
-        tscpCounter++;
+	tscpCounter += RDTSC_STEPPING;
         ip_step = 3;
         msg = "[%d] Tracer: Received rdtscp: Reading next instruction.\n";
       }else{
@@ -758,16 +758,18 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
       tracer.writeRax(tscCounter);
       tracer.writeRdx(0);
-      tscCounter++;
+      tscCounter += RDTSC_STEPPING;
       tracer.writeIp((uint64_t) tracer.getRip().ptr + ip_step);
 
       // Signal is now suppressed.
       states.at(traceesPid).signalToDeliver = 0;
 
       auto coloredMsg = log.makeTextColored(Color::blue, msg);
+
+      // force a preemption to avoid possible busy reading TSCs.
+      myScheduler.preemptAndScheduleNext();
       log.writeToLog(Importance::inter, coloredMsg, traceesPid, sigNum);
       return;
-
     } else if ((curr_insn32 << 16) ==0xA20F0000) {
       struct user_regs_struct regs = tracer.getRegs();
 
@@ -792,10 +794,10 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
         //tracer.writeRcx( 0x6c6c6c6c ); // for debugging, returns "GenuineIllll" instead
         break;
       case 0x01: // basic features
-        tracer.writeRax( 0x0 );
-        tracer.writeRbx( 0x0 );
-        tracer.writeRdx( 0x0 );
-        tracer.writeRcx( 0x0 );
+        tracer.writeRax( 0x306c3 );
+        tracer.writeRbx( 0x4100800 );
+        tracer.writeRdx( 0xbfebfbff );
+        tracer.writeRcx( 0x7ffafbff );
         break;
       case 0x02: // TLB/Cache/Prefetch Information
         // say that we have no caches, TLBs or prefetchers
@@ -816,11 +818,29 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
         tracer.writeRdx( 0x0 );
         tracer.writeRcx( 0x0 );
         break;
+      case 0x07:
+        tracer.writeRax( 0x0 );
+        tracer.writeRbx( 0x0 );
+        tracer.writeRdx( (1ul << 10) | /* MD_CLEAR */
+			 (1ul << 26) | /* IBRS/IBPB */
+			 (1ul << 27) | /* STIBP */
+			 (1ul << 28) | /* L1D_FLUSH */
+			 (1ul << 29) | /* IA32_ARCH_CAPABILITIES */
+			 (1ul << 31) | /* SSBD */
+			 0 );
+        tracer.writeRcx( 0x0 );
+        break;
       case 0x80000000:
         tracer.writeRax( 0x80000000 );
         tracer.writeRbx( 0x0 );
         tracer.writeRdx( 0x0 );
         tracer.writeRcx( 0x0 );
+        break;
+      case 0x80000001:
+        tracer.writeRax( 0x0 );
+        tracer.writeRbx( 0x0 );
+        tracer.writeRcx( 0x21 );
+	tracer.writeRdx( 0x2c100800 );
         break;
       case 0x80000006: // L2 cache
         tracer.writeRax( 0x0 );
