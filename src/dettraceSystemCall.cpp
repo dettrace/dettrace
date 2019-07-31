@@ -1188,10 +1188,52 @@ void linkatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                      scheduler& sched){
   runtimeError("linkat post-hook should never be called.");
 }
+
+static const int devRandFd = 3;
+static const int devUrandFd = 4;
+static string devRandFifoPathHelper(int parentFd) {
+#define PIDNS_ROOT_PID 1
+  char fdPath[256], linkPath[256] = {0,};
+  snprintf(fdPath, 256, "/proc/%d/fd/%d", PIDNS_ROOT_PID, parentFd);
+
+#undef PIDNS_ROOT_PID
+
+  doWithCheck(readlink(fdPath, linkPath, 255), "readlink");
+  return linkPath;
+}
+
+static string devRandomFifoPath(void) {
+  return devRandFifoPathHelper(devRandFd);
+}
+
+static string devUrandomFifoPath(void) {
+  return devRandFifoPathHelper(devUrandFd);
+}
+
 // =======================================================================================
 bool openSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if((char*) t.arg1() != nullptr){
-    handlePreOpens(gs, s, t, -1, traceePtr<char>{(char*) t.arg1()}, t.arg2());
+    traceePtr<char> filePathPtr = traceePtr<char>((char*)t.arg1());
+    string oldPath = t.readTraceeCString(filePathPtr, s.traceePid);
+    handlePreOpens(gs, s, t, -1, oldPath, t.arg2());
+
+    if (!gs.useContainer) {
+      if (oldPath == "/dev/random") {
+	traceePtr<char> newFilePathPtr = traceePtr<char>((char*)s.mmapMemory.getAddr().ptr);
+	string newPath = devRandomFifoPath();
+	writeVmTraceeRaw((char*)newPath.c_str(), newFilePathPtr, newPath.size() + 1, t.getPid());
+	t.writeArg1((uint64_t)newFilePathPtr.ptr);
+	gs.log.writeToLog(Importance::extra, "redirect open %s => %s\n", oldPath.c_str(), newPath.c_str());
+      } else if (oldPath == "/dev/urandom") {
+	traceePtr<char> newFilePathPtr = traceePtr<char>((char*)s.mmapMemory.getAddr().ptr);
+	string newPath = devUrandomFifoPath();
+	writeVmTraceeRaw((char*)newPath.c_str(), newFilePathPtr, newPath.size() + 1, t.getPid());
+	t.writeArg1((uint64_t)newFilePathPtr.ptr);
+	gs.log.writeToLog(Importance::extra, "redirect open %s => %s\n", oldPath.c_str(), newPath.c_str());
+      } else {
+	;
+      }
+    }
     return true;
   }
   return false;
@@ -1204,7 +1246,27 @@ void openSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
 // =======================================================================================
 bool openatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if((char*) t.arg2() != nullptr){
-    handlePreOpens(gs, s, t, t.arg1(), traceePtr<char>{(char*) t.arg2()}, t.arg3());
+    traceePtr<char> filePathPtr = traceePtr<char>((char*)t.arg2());
+    string oldPath = t.readTraceeCString(filePathPtr, s.traceePid);
+    handlePreOpens(gs, s, t, t.arg1(), oldPath, t.arg3());
+
+    if (!gs.useContainer) {
+      if (oldPath == "/dev/random") {
+	traceePtr<char> newFilePathPtr = traceePtr<char>((char*)s.mmapMemory.getAddr().ptr);
+	string newPath = devRandomFifoPath();
+	writeVmTraceeRaw((char*)newPath.c_str(), newFilePathPtr, newPath.size() + 1, t.getPid());
+	t.writeArg2((uint64_t)newFilePathPtr.ptr);
+	gs.log.writeToLog(Importance::extra, "redirect open %s => %s\n", oldPath.c_str(), newPath.c_str());
+      } else if (oldPath == "/dev/urandom") {
+	traceePtr<char> newFilePathPtr = traceePtr<char>((char*)s.mmapMemory.getAddr().ptr);
+	string newPath = devUrandomFifoPath();
+	writeVmTraceeRaw((char*)newPath.c_str(), newFilePathPtr, newPath.size() + 1, t.getPid());
+	t.writeArg2((uint64_t)newFilePathPtr.ptr);
+	gs.log.writeToLog(Importance::extra, "redirect open %s => %s\n", oldPath.c_str(), newPath.c_str());
+      } else {
+	;
+      }
+    }
     return true;
   }
   return false;
