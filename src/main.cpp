@@ -86,6 +86,8 @@ int runTracee(programArgs args);
 int spawnTracerTracee(void* args);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 
+static string devrandFifoPath, devUrandFifoPath;
+
 static bool realDevNull(string path);
 static bool fileExists(string directory);
 static void deleteFile(string path);
@@ -282,6 +284,17 @@ int runTracee(programArgs args){
 
   if(useContainer){
     setUpContainer(pathToExe, pathToChroot, workingDir, args.userChroot, args.currentAsChroot);
+  } else {
+    if (!args.currentAsChroot) {
+      mountDir(devrandFifoPath, "/dev/random");
+      mountDir(devUrandFifoPath, "/dev/urandom");
+      // jld: determinize various parts of /proc which our benchmarks read from
+      mountDir(pathToExe+"/../root/proc/meminfo", "/proc/meminfo");
+      mountDir(pathToExe+"/../root/proc/stat", "/proc/stat");
+      mountDir(pathToExe+"/../root/proc/filesystems", "/proc/filesystems");
+      string home = secure_getenv("HOME");
+      mountDir(home, "/root");
+    }
   }
 
   doWithCheck(prctl(PR_SET_TSC, PR_TSC_SIGSEGV, 0, 0, 0), "Pre-clone prctl error");
@@ -532,8 +545,6 @@ static void* devRandThread(void* fifoPath_) {
   close(fd);
   return NULL;
 }
-
-static string devrandFifoPath, devUrandFifoPath;
 
 /**
  * Jail our container under chootPath.
