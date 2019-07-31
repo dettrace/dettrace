@@ -310,6 +310,15 @@ int runTracee(programArgs args){
 
   if(useContainer){
     setUpContainer(pathToExe, pathToChroot, workingDir, args.userChroot, args.currentAsChroot);
+  } else {
+    if (!args.currentAsChroot) {
+      // jld: determinize various parts of /proc which our benchmarks read from
+      mountDir(pathToExe+"/../root/proc/meminfo", "/proc/meminfo");
+      mountDir(pathToExe+"/../root/proc/stat", "/proc/stat");
+      mountDir(pathToExe+"/../root/proc/filesystems", "/proc/filesystems");
+      string home = secure_getenv("HOME");
+      mountDir(home, "/root");
+    }
   }
 
   doWithCheck(prctl(PR_SET_TSC, PR_TSC_SIGSEGV, 0, 0, 0), "Pre-clone prctl error");
