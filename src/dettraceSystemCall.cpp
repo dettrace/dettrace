@@ -276,7 +276,8 @@ void epoll_waitSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, 
     }
   }else{
     gs.log.writeToLog(Importance::info, "Non-blocking epoll found\n");
-    sched.preemptAndScheduleNext();
+    pid_t pid = t.getPid();
+    sched.preemptSyscall(pid);
   }
   return;
 }
@@ -299,7 +300,8 @@ void epoll_pwaitSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
     }
   }else{
     gs.log.writeToLog(Importance::info, "Non-blocking epoll found\n");
-    sched.preemptAndScheduleNext();
+    pid_t pid = t.getPid();
+    sched.preemptSyscall(pid);
   }
   return;
 }
@@ -618,9 +620,10 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 
     gs.log.writeToLog(Importance::info, "Futex post-hook, handling wait operation.\n");
     if(s.userDefinedTimeout){
-      // Only preempt if we would have timeout out. Othewise let if continue running!
+      // This call would not succeed. Move this pid to the end of the line.
       if(t.getReturnValue() == -ETIMEDOUT){
-        sched.preemptAndScheduleNext();
+        pid_t pid = t.getPid();
+        sched.preemptSyscall(pid);
       }
       s.userDefinedTimeout = false;
       return;
@@ -1578,9 +1581,10 @@ void selectSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   if(s.userDefinedTimeout){
     s.userDefinedTimeout = false;
     if(t.getReturnValue() == 0){
-      // Mark this is blocked because we don't want it to keep being picked to
-      // run off the runnableHeap. It will eventually get to run when the heaps switch.
-      sched.preemptAndScheduleNext();
+      // Move to the back of the syscallQueue.
+      // are ready yet, might as well let someone else go.
+      pid_t pid = t.getPid();
+      sched.preemptSyscall(pid);
     }
   } else {
     bool replayed = replaySyscallIfBlocked(gs, s, t, sched, 0);

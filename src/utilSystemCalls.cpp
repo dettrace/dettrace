@@ -26,9 +26,14 @@ bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
   if(- errnoValue == t.getReturnValue()){
     gs.log.writeToLog(Importance::info, "Syscall would have blocked!\n");
 
-    sched.preemptAndScheduleNext();
+    // Syscall would block.
+    pid_t pid = t.getPid();
+    sched.preemptSyscall(pid);
     return true;
   }else{
+    // Syscall succeeded.
+    pid_t pid = t.getPid();
+    sched.resumeParallel(pid);
     return false;
   }
 }
@@ -40,14 +45,15 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sc
     gs.log.writeToLog(Importance::info, "System call would have blocked! Replaying\n");
 
     gs.replayDueToBlocking++;
-    sched.preemptAndScheduleNext();
+    // Syscall would block.
+    pid_t pid = t.getPid();
+    sched.preemptSyscall(pid);
     replaySystemCall(gs, t, t.getSystemCallNumber());
     return true;
   }else{
-    // Disambiguiate. Otherwise it's impossible to tell the difference between a
-    // maybeRunnable process that made no progress vs the case where we were on
-    // maybeRunnable and we made progress, and eventually we hit another blocking
-    // system call.
+    // System call succeeded.
+    pid_t pid = t.getPid();
+    sched.resumeParallel(pid);
     return false;
   }
 }

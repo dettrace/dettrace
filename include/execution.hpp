@@ -198,6 +198,16 @@ public:
   bool handleSystemCall();
 
   /**
+   * Waits on all running parallel processes until one gives an event.
+   * Handles each of the events accordingly, or shifts work to helper functions.
+   * Events: seccomp, syscall, terminatedBySignal, eventExit, nonEventExit,
+   * fork/vfork/clone, exec, signal.
+   * @return pid of process that we got a seccomp event for 
+   * OR -1 in the case where there are no processes left.
+   */
+  pid_t waitOnAll();
+
+  /**
    * Launch initial process.
    * A program is defined as a tree of processes.
    */

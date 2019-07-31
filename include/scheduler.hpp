@@ -11,15 +11,23 @@
 using namespace std;
 
 /**
- * Stateful class to keep track of all currently running processes in our process tree.
- * Returns which process should run next based on our scheduling policy. Keeps track
- * of blocked/runnable processes.
-
- * Detects deadlocks in program and throws error, if this ever happens.
-
- * Current Scheduling policy: 2 Priority Queues: runnableHeap and blockedHeap.
- * Runs all runnable processes in order of highest PID first.
- * Then tries the blocked processes (and swaps the heaps).
+ * Scheduler class for hybrid scheduling policy.
+ * All processes run in parallel unless doing system calls.
+ * All system calls are run sequentially, so we need some of the 
+ * old scheduler for that (thankfully!).
+ *
+ * parallelProcesses: parallel process set that contains all processes currently 
+ * running in parallel.
+ *
+ * runnableQueue: queue of pids that want to do a syscall and aren't blocked on it.
+ *
+ * blockedQueue: queue of pids that are blocked on their syscall (it would have failed).
+ * 
+ * Start with all pids in the runnableQueue. Then try the blockedQueue. Then do a wait(-1).
+ * Whichever pid is at the front has highest priority 
+ * to do a system call. If it is successful, it is removed from
+ * its queue and put back into the parallelProcesses set. If it fails, 
+ * it is moved to the back of the blockedQueue.
  */
 
 class scheduler{
@@ -27,74 +35,82 @@ public:
   scheduler(pid_t startingPid, logger& log);
 
   /**
-   * Check if this process has been marked as finished.
-   * @param process pid of process to check
-   * @return whether the process is finished
+   * Returns true if the pid is in the parallelProcesses set.
+   * @param process to check.
    */
-  bool isFinished(pid_t process);
+  bool isInParallel(pid_t process);
 
   /**
-   * Mark this process as exited. Let other's run. We need our children to run
-   * and finish before we get a ptrace nonEventExit. We actually remove the process
-   * when our last child has itself ended.
-   * @param process pid of finished process
+   * The syscall would have failed. 
+   * Pop the pid from the front of the 
+   * runnableQueue or blockedQueue (depending where it happens to be)
+   * and move it to the end of the blockedQueue.
+   * @param pid to preempt.
    */
-  void markFinishedAndScheduleNext(pid_t process);
+  void preemptSyscall(pid_t pid);
 
   /**
-   * Get pid of process that ptrace should run next.
-   * Throws exception if empty.
-   * @return pid of next process
+   * The syscall succeeded. 
+   * Remove the pid from whichever queue it's on.
+   * Add it back to parallelProcesses.
+   * @param pid to be resumed.
    */
-  pid_t getNext();
+  void resumeParallel(pid_t pid);
 
   /**
-   * Preempt current process and get pid of process that ptrace should run next.
-   * Throws exception if empty.
-   * (No need to pass PID in.)
+   * Adds new process to parallelProcesses.
+   * @param newProcess to add to
+   * parallelProcesses.
    */
-  void preemptAndScheduleNext();
+  void addToParallelSet(pid_t newProcess);
 
   /**
-   * Adds new process to scheduler.
-   * This new process will be scheduled to run next.
-   * @param newProcess process to add and schedule next
+   * Run the process sequentially for the duration of a 
+   * system call.
+   * Add process to the runnableQueue to start.
+   * Remove the pid from parallelProcesses.
+   * @param pid to move to runnableQueue.
    */
-  void addAndScheduleNext(pid_t newProcess);
+  void addToRunnableQueue(pid_t pid);
 
   /**
-   * Removes process and schedules new process to run.
-   * @param process to remove
-   * @return return true if we're all done with all processes in the scheduler.
-   * This marks the end of the program.
+   * Process is completely done. Remove it from 
+   * parallelProcesses. I believe this is where it should
+   * always be, because syscalls are not the last thing a
+   * process does before exiting.
+   * @param pid to remove from scheduler
    */
-  bool removeAndScheduleNext(pid_t process);
+  void removeFromScheduler(pid_t pid);
 
-  /**
-   * Removes specified process, let our parent run to completion.
-   * Should only be called by the last child of parent, when parent has already
-   * been marked as finished.
-   * @param pid of process to remove from scheduler
-   * @param pid of parent process
-   */
-  void removeAndScheduleParent(pid_t child, pid_t parent);
+  // Keep track of how many times scheduleNextStopped was called:
+  // TODO: I don't know if this is relevant anymore.
+  uint32_t callsToScheduleNextStopped = 0;
 
-  // Keep track of how many times scheduleNextProcess was called:
-  uint32_t callsToScheduleNextProcess = 0;
-
+  //TODO: I don't know if I need this either.
+  // A function to kill all processes.
+  // It also clears parallelProcesses, runnableQueue, and
+  // blockedQueue.
+  // Have to iterate through all because pids can only
+  // be in one of the three at any given time.
   void killAllProcesses() {
-    while (!runnableHeap.empty()) {
-      pid_t pid = runnableHeap.top();
-      kill(pid, SIGKILL);
-      runnableHeap.pop();
+    for(auto proc : parallelProcesses) {
+      kill(proc, SIGKILL);
     }
-    while (!blockedHeap.empty()) {
-      pid_t pid = blockedHeap.top();
+    parallelProcesses.clear();
+
+    while(!runnableQueue.empty()){ 
+      pid_t pid = runnableQueue.front();
       kill(pid, SIGKILL);
-      blockedHeap.pop();
+      runnableQueue.pop();
+    }
+
+    while(!blockedQueue.empty()){ 
+      pid_t pid = blockedQueue.front();
+      kill(pid, SIGKILL);
+      blockedQueue.pop();
     }
   }
-  
+
 private:
   logger& log; /**< log file wrapper */
 
@@ -103,36 +119,9 @@ private:
    */
   pid_t nextPid = -1;
 
-  /**
-   * Two max heaps: runnableHeap and blockedHeap.
-   * Processes with higher PIDs go first.
-   * Run all runnable processes. When we run out of these, switch the names of the heaps,
-   * and continue.
-   */
-  priority_queue<pid_t> runnableHeap;
-  priority_queue<pid_t> blockedHeap;
-
-  /**
-   * Set of finished processes.
-   */
-  set<pid_t> finishedProcesses;
-
-  /** Remove process from scheduler.
-   * Calls deleteProcess, used to share code between
-   * removeAndScheduleNext and removeAndScheduleParent.
-   * @see deleteProcess
-   * @see removeAndScheduleNext
-   * @see removeAndScheduleParent
-   * @param process to remove from scheduler
-   */
-  void remove(pid_t process);
-
-  /**
-   * Get next process based on whether the runnableHeap is empty.
-   * If the runnableHeap is empty, swap the heaps, and continue.
-   * @return next process to schedule.
-   */
-  pid_t scheduleNextProcess();
+  set<pid_t> parallelProcesses;
+  queue<pid_t> runnableQueue;
+  queue<pid_t> blockedQueue;
 
   /**< Debug function to print all data about processes. */
   void printProcesses();
