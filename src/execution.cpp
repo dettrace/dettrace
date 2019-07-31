@@ -46,7 +46,7 @@ bool kernelCheck(int a, int b, int c){
 
 // =======================================================================================
 execution::execution(int debugLevel, pid_t startingPid, bool useColor,
-                     string logFile, bool printStatistics, bool useContainer,
+                     string logFile, bool printStatistics,
                      pthread_t devRandomPthread, pthread_t devUrandomPthread,
                      map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs):
   kernelPre4_8 {kernelCheck(4,8,0)},
@@ -62,8 +62,7 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
     log,
     ValueMapper<ino_t, ino_t> {log, "inode map", 1},
     ValueMapper<ino_t, time_t> {log, "mtime map", 1},
-    kernelCheck(4,12,0),
-    useContainer,
+    kernelCheck(4,12,0)
   },
   myScheduler {startingPid, log},
   debugLevel {debugLevel},
@@ -600,89 +599,6 @@ pid_t execution::handleForkEvent(const pid_t traceesPid, bool isThread){
   return newChildPid;
 }
 
-static inline unsigned long alignUp(unsigned long size, int align)
-{
-  return (size + align - 1) & ~(align -1);
-}
-
-void execution::disableVdso(pid_t pid) {
-  struct ProcMapEntry vdsoMap, vvarMap;
-  auto procMaps = parseProcMapEntries(pid);
-  //procMaps = parseProcMapEntries(pid);
-
-  memset(&vdsoMap, 0, sizeof(vdsoMap));
-  memset(&vvarMap, 0, sizeof(vvarMap));
-
-  for (auto ent: procMaps) {
-    if (ent.procMapName == "[vdso]") {
-      vdsoMap = ent;
-    } else if (ent.procMapName == "[vvar]") {
-      vvarMap = ent;
-    } else {
-    }
-  }
-
-  // vdso is enabled by kernel command line.
-  if (vdsoMap.procMapBase != 0) {
-    auto data = vdsoGetCandidateData();
-
-    for (auto func: vdsoFuncs) {
-      unsigned long offset, oldVdsoSize, vdsoAlignment;
-      tie(offset, oldVdsoSize, vdsoAlignment) = func.second;
-      unsigned long target  = vdsoMap.procMapBase + offset;
-      unsigned long nbUpper = alignUp(oldVdsoSize, vdsoAlignment);
-      unsigned long nb      = alignUp(data[func.first].size(), vdsoAlignment);
-      assert(nb <= nbUpper);
-
-      for (auto i = 0; i < nb / sizeof(long); i++) {
-	uint64_t val;
-	const unsigned char* z = data[func.first].c_str();
-	unsigned long to = target + 8*i;
-	memcpy(&val, &z[8*i], sizeof(val));
-	ptracer::doPtrace(PTRACE_POKETEXT, pid, (void*)to, (void*)val);
-      }
-
-      unsigned long off = target + nb;
-      unsigned long val = 0xccccccccccccccccUL;
-      while (nb < nbUpper) {
-	ptracer::doPtrace(PTRACE_POKETEXT, pid, (void*)off, (void*)val);
-	off += sizeof(long);
-	nb  += sizeof(long);
-      }
-      assert(nb == nbUpper);
-    }
-  }
-
-  if (vvarMap.procMapBase != 0) {
-    struct user_regs_struct regs;
-    ptracer::doPtrace(PTRACE_GETREGS, pid, 0, &regs);
-    auto oldRegs = regs;
-
-    regs.orig_rax = SYS_mprotect;
-    regs.rax = SYS_mprotect;
-    regs.rdi = vvarMap.procMapBase;
-    regs.rsi = vvarMap.procMapSize;
-    regs.rdx = PROT_NONE;
-    regs.r10 = 0;
-    regs.r8 = 0;
-    regs.r9 = 0;
-    regs.rip += 1;      /* 0xcc; syscall(0x0f05); 0xcc */
-
-    int status;
-
-    ptracer::doPtrace(PTRACE_SETREGS, pid, 0, &regs);
-    ptracer::doPtrace(PTRACE_CONT, pid, 0, 0);
-    assert(waitpid(pid, &status, 0) == pid);
-    assert(WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP);
-    ptracer::doPtrace(PTRACE_GETREGS, pid, 0, &regs);
-    if ((long)regs.rax < 0) {
-      string err = "unable to inject mprotect, error: \n";
-      runtimeError(err + strerror((long)-regs.rax));
-    }
-    ptracer::doPtrace(PTRACE_SETREGS, pid, 0, &oldRegs);
-  }
-}
-
 static unsigned long traceePreinitMmap(pid_t pid, ptracer& t) {
   struct user_regs_struct regs;
   unsigned long ret;
@@ -717,8 +633,14 @@ static unsigned long traceePreinitMmap(pid_t pid, ptracer& t) {
   return ret;
 }
 
+static inline unsigned long alignUp(unsigned long size, int align)
+{
+  return (size + align - 1) & ~(align -1);
+}
+
 void execution::handleExecEvent(pid_t pid) {
   struct user_regs_struct regs;
+  struct ProcMapEntry vdsoMap;
 
   ptracer::doPtrace(PTRACE_GETREGS, pid, 0, &regs);
   auto rip = regs.rip;
@@ -730,12 +652,42 @@ void execution::handleExecEvent(pid_t pid) {
   ptracer::doPtrace(PTRACE_CONT, pid, 0, 0);
 
   int status;
+
   assert(waitpid(pid, &status, 0) == pid);
   assert(WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP);
 
   unsigned long mmapAddr = traceePreinitMmap(pid, tracer);
 
-  disableVdso(pid);
+  // vdso is enabled by kernel command line.
+  if (vdsoGetMapEntry(pid, vdsoMap) == 0) {
+    auto data = vdsoGetCandidateData();
+
+    for (auto func: vdsoFuncs) {
+      unsigned long offset, oldVdsoSize, vdsoAlignment;
+      tie(offset, oldVdsoSize, vdsoAlignment) = func.second;
+      unsigned long target  = vdsoMap.procMapBase + offset;
+      unsigned long nbUpper = alignUp(oldVdsoSize, vdsoAlignment);
+      unsigned long nb      = alignUp(data[func.first].size(), vdsoAlignment);
+      assert(nb <= nbUpper);
+
+      for (auto i = 0; i < nb / sizeof(long); i++) {
+	uint64_t val;
+	const unsigned char* z = data[func.first].c_str();
+	unsigned long to = target + 8*i;
+	memcpy(&val, &z[8*i], sizeof(val));
+	ptracer::doPtrace(PTRACE_POKETEXT, pid, (void*)to, (void*)val);
+      }
+
+      unsigned long off = target + nb;
+      unsigned long val = 0xccccccccccccccccUL;
+      while (nb < nbUpper) {
+	ptracer::doPtrace(PTRACE_POKETEXT, pid, (void*)off, (void*)val);
+	off += sizeof(long);
+	nb  += sizeof(long);
+      }
+      assert(nb == nbUpper);
+    }
+  }
 
   // TODO When does this ever happen?
   if (states.find(pid) == states.end()){
@@ -746,7 +698,6 @@ void execution::handleExecEvent(pid_t pid) {
 
   states.at(pid).mmapMemory.doesExist = true;
   states.at(pid).mmapMemory.setAddr(traceePtr<void>((void*)mmapAddr));
-
   ptracer::doPtrace(PTRACE_POKETEXT, pid, (void*)rip, (void*)saved_insn);
 }
 

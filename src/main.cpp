@@ -310,15 +310,6 @@ int runTracee(programArgs args){
 
   if(useContainer){
     setUpContainer(pathToExe, pathToChroot, workingDir, args.userChroot, args.currentAsChroot);
-  } else {
-    if (!args.currentAsChroot) {
-      // jld: determinize various parts of /proc which our benchmarks read from
-      mountDir(pathToExe+"/../root/proc/meminfo", "/proc/meminfo");
-      mountDir(pathToExe+"/../root/proc/stat", "/proc/stat");
-      mountDir(pathToExe+"/../root/proc/filesystems", "/proc/filesystems");
-      string home = secure_getenv("HOME");
-      mountDir(home, "/root");
-    }
   }
 
   doWithCheck(prctl(PR_SET_TSC, PR_TSC_SIGSEGV, 0, 0, 0), "Pre-clone prctl error");
@@ -735,11 +726,11 @@ int spawnTracerTracee(void* voidArgs){
     doWithCheck( pthread_create(&devUrandomPthread, NULL, devRandThread, (void*)strdup(devUrandFifoPath.c_str())),
                  "pthread_create /dev/urandom pthread" );
 
-    execution exe { args.debugLevel, pid, args.useColor,
-		    args.logFile, args.printStatistics,
-		    args.useContainer,
-		    devRandomPthread, devUrandomPthread,
-		    cloneArgs->vdsoSyms };
+    execution exe{
+        args.debugLevel, pid, args.useColor,
+        args.logFile, args.printStatistics,
+        devRandomPthread, devUrandomPthread,
+        cloneArgs->vdsoSyms};
 
     globalExeObject = &exe;
     struct sigaction sa;
@@ -1047,10 +1038,8 @@ static void createFileIfNotExist(string path){
     return;
   }
 
-  int fd;
-  doWithCheck((fd = open(path.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH)),
+  doWithCheck(open(path.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH),
               "Unable to create file: " + path);
-  if (fd >= 0) close(fd);
 
   return;
 }

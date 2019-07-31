@@ -154,7 +154,7 @@ bool tracee_file_exists(string traceePath, pid_t traceePid, logger& log,
  * call suceeds.
  */
 void handlePreOpens(globalState& gs, state& s, ptracer& t, int dirfd,
-                    string& path, int flags);
+                    traceePtr<char> charpath, int flags);
 /**
  * Handler for open and openat. Checks if the file previously existed, if it didn't
  * and O_CREAT was set, we know a new file was created. Handles O_TMPFILE by knowing
