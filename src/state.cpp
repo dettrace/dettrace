@@ -2,7 +2,7 @@
 
 state::state(pid_t traceePid, int debugLevel)
   //  : clock(744847200), // avoid clock skew, see issue #24 for more details.
-  : clock(1564427431), // avoid clock skew, see issue #24 for more details.
+  : clock(1561870800), // avoid clock skew, see issue #24 for more details.
                       // same value as of libdet.c
     fdStatus(new unordered_map<int, descriptorType>),
     traceePid(traceePid),
