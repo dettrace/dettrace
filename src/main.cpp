@@ -698,11 +698,11 @@ int spawnTracerTracee(void* voidArgs){
     doWithCheck( pthread_create(&devUrandomPthread, NULL, devRandThread, (void*)strdup(devUrandFifoPath.c_str())),
                  "pthread_create /dev/urandom pthread" );
 
-    execution exe{
-        args.debugLevel, pid, args.useColor,
-        args.logFile, args.printStatistics,
-        devRandomPthread, devUrandomPthread,
-        cloneArgs->vdsoSyms};
+    execution exe { args.debugLevel, pid, args.useColor,
+		    args.logFile, args.printStatistics,
+		    args.useContainer,
+		    devRandomPthread, devUrandomPthread,
+		    cloneArgs->vdsoSyms };
 
     globalExeObject = &exe;
     struct sigaction sa;

@@ -159,7 +159,7 @@ public:
    */
 
   execution(int debugLevel, pid_t startingPid, bool useColor, 
-            string logFile, bool printStatistics, 
+            string logFile, bool printStatistics, bool useContainer,
             pthread_t devRandomPthread, pthread_t devUrandomPthread,
             map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs);
 
