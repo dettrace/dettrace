@@ -151,6 +151,8 @@ private:
 
   map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs;
 
+  void disableVdso(pid_t traceesPid);
+
 public:
 
   /**

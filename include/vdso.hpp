@@ -24,7 +24,7 @@ struct ProcMapEntry {
 
 std::ostream& operator<< (std::ostream &out, ProcMapEntry const& e);
 
-int vdsoGetMapEntry(pid_t pid, struct ProcMapEntry& entry);
+std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid);
 std::map<std::string, std::basic_string<unsigned char>> vdsoGetCandidateData(void);
 std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>> vdsoGetSymbols(pid_t pid);
 
