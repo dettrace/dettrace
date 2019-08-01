@@ -171,12 +171,8 @@ void execution::handlePostSystemCall(state& currState){
 }
 // =======================================================================================
 void execution::handleSingleSyscall(pid_t nextPid){
-  // We found a pid to do a syscall!
-  myScheduler.addToRunnableQueue(nextPid);
-    
   // We already know it's a seccomp event.
   // Go ahead and handle that.
-  log.writeToLog(Importance::extra, "Is seccomp event!\n");
   systemCallsEvents++;
 
   // Prehook [seccomp event]
@@ -235,31 +231,46 @@ void execution::handleSingleSyscall(pid_t nextPid){
 void execution::runProgram(){
   log.writeToLog(Importance::inter, "dettrace starting up\n");
 
-  // Once all processes have ended. We exit.
-  // In waitOnAll() we find the next pid who wants to do a syscall.
-  // It will return -1 when there are no processes left.
+  // Restart the startingPid and wait for the first event.
+  pid_t pid = myScheduler.getStartingPid();
+  int status;
+  int64_t signalToDeliver = states.at(pid).signalToDeliver;
+  states.at(pid).signalToDeliver = 0;
+
+  log.writeToLog(Importance::extra, "waiting at ptrace_cont for first pid\n");
+  doWithCheck(ptrace(PTRACE_CONT, pid, 0, (void*) signalToDeliver),
+      "failed to PTRACE_CONT first pid\n");
+  pid_t retPid = doWithCheck(waitpid(pid, &status, 0), "waitpid");
+  if(retPid != pid){
+    runtimeError("initial pid doesn't match after waitpid\n");
+  }
+  log.writeToLog(Importance::extra, "got event from waitpid() for first pid\n");
+ 
+  bool seccomp = handleEvent(pid, status); 
+  if(seccomp){
+    myScheduler.addToRunnableQueue(pid);
+  }
   
-  bool exitLoop = false;
-  
-  while(!exitLoop){
-    // Try everything currently in the runnableQueue. Each pid will either move back to
-    // parallelProcesses, or move to the blockedQueue. Then reset: runnableQueue = blockedQueue,
-    // and do a wait(-1).
-  
-    bool noRunnableProcs = myScheduler.emptyRunnableQueue();
-    if(noRunnableProcs){
-      pid_t nextPid = waitOnAll();
-      if(nextPid == -1){
-        // We are done.
-        exitLoop = true;
-      }else{
-        myScheduler.addToRunnableQueue(nextPid); 
-        continue;
+  // Run the program until there are no processes left to run.
+  while(!myScheduler.emptyScheduler()){
+    if(myScheduler.emptyRunnableQueue()){
+      // We have to find another pid that wants to do a syscall.
+      // Along the way, we must handle other events, as we don't know
+      // which pid will return from the wait.
+      bool seccomp = false;
+      while(!seccomp){
+        int stat;
+        retPid = doWithCheck(waitpid(-1, &stat, 0), "waitpid");
+        bool seccomp = handleEvent(retPid, stat);
+        if(seccomp){
+          myScheduler.addToRunnableQueue(retPid);  
+          break;
+        }
       }
     }else{
       while(!myScheduler.emptyRunnableQueue()){
         pid_t frontPid = myScheduler.getNextRunnable();
-        handleSingleSyscall(frontPid);      
+        handleSingleSyscall(frontPid);
       }
       myScheduler.swapQueues();
     }
@@ -315,133 +326,104 @@ void execution::runProgram(){
   // to fail over this :b
 }
 // =======================================================================================
-pid_t execution::waitOnAll(){
-  pid_t nextPid = -1;
-  bool seccompEvent = false;
-  bool allProcsDone = false;
+bool execution::handleEvent(pid_t nextPid, const int status){
+  ptraceEvent event = getPtraceEvent(status);
+  bool seccomp = false;
   
-  while(!seccompEvent || !allProcsDone){
-    log.writeToLog(Importance::info, "waiting on all potential processes!\n");
-
-    if(myScheduler.emptyScheduler()) {
-      // No more processes left!
-      allProcsDone = true;
-      nextPid = -1;
-      continue;
-    }else{
-      int status = 0;
-      nextPid = doWithCheck(waitpid(-1, &status, 0), "waitpid");
-      
-      if(nextPid == -1){
-        runtimeError("wait(-1) errored for some reason in waitOnAll()\n");
-      }
-
-      ptraceEvent event = getPtraceEvent(status);
-      if(event == ptraceEvent::seccomp){
-        log.writeToLog(Importance::extra, "Is seccomp event!\n");
-        systemCallsEvents++;
-        seccompEvent = true;
-        continue;
-      }
-
-      if(event == ptraceEvent::syscall){
-        runtimeError("Should not be seeing syscall event in waitOnAll\n");
-      }
-
-      if(event == ptraceEvent::terminatedBySignal){
-        auto msg =
-          log.makeTextColored(Color::blue, "Process [%d] ended by signal %d.\n");
-        log.writeToLog(Importance::inter, msg, nextPid, WTERMSIG(status));
-        myScheduler.removeFromScheduler(nextPid);
-        doWithCheck(ptracer::doPtrace(PTRACE_DETACH, nextPid, NULL, NULL),
-                                      "failed to ptrace detach process in signal\n");
-        continue;
-      }
-
-      // Process is about to exit.
-      if(event == ptraceEvent::eventExit){
-        auto msg = log.makeTextColored(Color::blue, "Process [%d] has finished. "
-                                           "With ptraceEventExit.\n");
-        log.writeToLog(Importance::inter, msg, nextPid);
-        myScheduler.removeFromScheduler(nextPid); 
-
-        doWithCheck(ptracer::doPtrace(PTRACE_DETACH, nextPid, NULL, NULL),
-                                      "failed to ptrace detach process in eventExit\n");
-        continue;
-      }
-
-      // TODO: may actually just never happen I don't know.
-      // That's why I have these prints!
-      // The process is fully dead. If it has not already been, remove
-      // it from the scheduler.
-      if(event == ptraceEvent::nonEventExit){
-        auto msg = log.makeTextColored(Color::blue, "Process [%d] has completely exited (nonEvent).\n");
-        log.writeToLog(Importance::inter, msg, nextPid);
-        myScheduler.removeFromScheduler(nextPid);
-
-        doWithCheck(ptracer::doPtrace(PTRACE_DETACH, nextPid, NULL, NULL),
-                                      "failed to ptrace detach process in nonEvent\n");
-        continue;
-      }
-
-      if(event == ptraceEvent::fork || event == ptraceEvent::vfork || event == ptraceEvent::clone){
-        tracer.updateState(nextPid);
-        int syscallNumber = (int)tracer.getSystemCallNumber();
-        string msg = "none";
-
-        // Per ptrace man page: we cannot reliably tell a clone syscall from it's event,
-        // so we check explicitly.
-        switch (syscallNumber) {
-        case SYS_fork:
-          msg = "fork";
-          break;
-        case SYS_vfork:
-          msg = "vfork";
-          break;
-        case SYS_clone: {
-          msg = "clone";
-          break;
-        }
-        default:
-          runtimeError("Unknown syscall number from fork/clone event: " +
-                       to_string(syscallNumber));
-        }
-
-        log.writeToLog(Importance::inter,
-                       log.makeTextColored(Color::blue, "[%d] caught %s event!\n"),
-                       nextPid, msg.c_str());
-
-        handleForkEvent(nextPid);
-        states.at(nextPid).callPostHook = false;
-        continue;
-      }
-
-      if(event == ptraceEvent::exec){
-        log.writeToLog(Importance::inter,
-                       log.makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
-                       nextPid);
-        //reset CPUID trap flag
-        states.at(nextPid).CPUIDTrapSet = false;
-
-        handleExecEvent(nextPid);
-        continue;
-      }
-
-      if(event == ptraceEvent::signal){
-        log.writeToLog(Importance::inter,
-                       log.makeTextColored(Color::blue, "[%d] Caught signal event!\n"),
-                       nextPid);
-        // TODO: ask joe if I should be handling signals
-        //int signalNum = WSTOPSIG(status);
-        //handleSignal(signalNum, traceesPid);
-        continue;
-      }
-
-      runtimeError(to_string(nextPid) +
-                        " Unknown return value for ptracer::getNextEvent()\n");
-    }
+  if(event == ptraceEvent::seccomp){
+    log.writeToLog(Importance::extra, "Is seccomp event!\n");
+    systemCallsEvents++;
+    seccomp = true;
   }
-  return nextPid;
+
+  if(event == ptraceEvent::syscall){
+    runtimeError("Should not be seeing syscall event in handleEvent\n");
+  }
+
+  if(event == ptraceEvent::terminatedBySignal){
+    auto msg =
+      log.makeTextColored(Color::blue, "Process [%d] ended by signal %d.\n");
+    log.writeToLog(Importance::inter, msg, nextPid, WTERMSIG(status));
+    myScheduler.removeFromScheduler(nextPid);
+    doWithCheck(ptracer::doPtrace(PTRACE_DETACH, nextPid, NULL, NULL),
+                                  "failed to ptrace detach process in signal\n");
+  }
+
+  // Process is about to exit.
+  if(event == ptraceEvent::eventExit){
+    auto msg = log.makeTextColored(Color::blue, "Process [%d] has finished. "
+                                       "With ptraceEventExit.\n");
+    log.writeToLog(Importance::inter, msg, nextPid);
+    myScheduler.removeFromScheduler(nextPid); 
+
+    doWithCheck(ptracer::doPtrace(PTRACE_DETACH, nextPid, NULL, NULL),
+                                  "failed to ptrace detach process in eventExit\n");
+  }
+
+  // TODO: may actually just never happen I don't know.
+  // That's why I have these prints!
+  // The process is fully dead. If it has not already been, remove
+  // it from the scheduler.
+  if(event == ptraceEvent::nonEventExit){
+    auto msg = log.makeTextColored(Color::blue, "Process [%d] has completely exited (nonEvent).\n");
+    log.writeToLog(Importance::inter, msg, nextPid);
+    myScheduler.removeFromScheduler(nextPid);
+
+    doWithCheck(ptracer::doPtrace(PTRACE_DETACH, nextPid, NULL, NULL),
+                                  "failed to ptrace detach process in nonEvent\n");
+  }
+
+  if(event == ptraceEvent::fork || event == ptraceEvent::vfork || event == ptraceEvent::clone){
+    tracer.updateState(nextPid);
+    int syscallNumber = (int)tracer.getSystemCallNumber();
+    string msg = "none";
+
+    // Per ptrace man page: we cannot reliably tell a clone syscall from it's event,
+    // so we check explicitly.
+    switch (syscallNumber) {
+    case SYS_fork:
+      msg = "fork";
+      break;
+    case SYS_vfork:
+      msg = "vfork";
+      break;
+    case SYS_clone: {
+      msg = "clone";
+      break;
+    }
+    default:
+      runtimeError("Unknown syscall number from fork/clone event: " +
+                   to_string(syscallNumber));
+    }
+
+    log.writeToLog(Importance::inter,
+                   log.makeTextColored(Color::blue, "[%d] caught %s event!\n"),
+                   nextPid, msg.c_str());
+
+    handleForkEvent(nextPid);
+    states.at(nextPid).callPostHook = false;
+  }
+
+  if(event == ptraceEvent::exec){
+    log.writeToLog(Importance::inter,
+                   log.makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
+                   nextPid);
+    //reset CPUID trap flag
+    states.at(nextPid).CPUIDTrapSet = false;
+
+    handleExecEvent(nextPid);
+  }
+
+  if(event == ptraceEvent::signal){
+    log.writeToLog(Importance::inter,
+                   log.makeTextColored(Color::blue, "[%d] Caught signal event!\n"),
+                   nextPid);
+    // TODO: ask joe if I should be handling signals
+    //int signalNum = WSTOPSIG(status);
+    //handleSignal(signalNum, traceesPid);
+  }
+
+  return seccomp;
 }
 // =======================================================================================
 void execution::handleForkEvent(const pid_t traceesPid){

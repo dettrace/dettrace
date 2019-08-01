@@ -36,6 +36,11 @@ public:
   scheduler(pid_t startingPid, logger& log);
 
   /**
+   * @return pid of root process in tracee.
+   */
+  pid_t getStartingPid();
+
+  /**
    * Returns true if the pid is in the parallelProcesses set.
    * @param process to check.
    */
@@ -140,7 +145,7 @@ private:
   /**
    * Pid for next process to run.
    */
-  pid_t nextPid = -1;
+  pid_t startingPid = -1;
 
   set<pid_t> parallelProcesses;
   queue<pid_t> runnableQueue;

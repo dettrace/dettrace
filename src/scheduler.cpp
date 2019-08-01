@@ -11,8 +11,12 @@
 
 scheduler::scheduler(pid_t startingPid, logger& log):
   log(log),
-  nextPid(startingPid){
+  startingPid(startingPid){
   parallelProcesses.insert(startingPid);
+}
+
+pid_t scheduler::getStartingPid(){
+  return startingPid;
 }
 
 bool scheduler::emptyRunnableQueue(){
