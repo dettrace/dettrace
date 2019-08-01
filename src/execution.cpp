@@ -170,181 +170,100 @@ void execution::handlePostSystemCall(state& currState){
   return;
 }
 // =======================================================================================
+void execution::handleSingleSyscall(pid_t nextPid){
+  // We found a pid to do a syscall!
+  myScheduler.addToRunnableQueue(nextPid);
+    
+  // We already know it's a seccomp event.
+  // Go ahead and handle that.
+  log.writeToLog(Importance::extra, "Is seccomp event!\n");
+  systemCallsEvents++;
+
+  // Prehook [seccomp event]
+  states.at(nextPid).callPostHook = handleSeccomp(nextPid);
+  // TODO: is this really dumb and unnecessary?
+  bool postHook = states.at(nextPid).callPostHook;
+ 
+  // Posthook [syscall event]
+  if(postHook){
+    int status;
+    ptraceEvent retEvent;
+    pid_t traceesPid;
+    tie(retEvent, traceesPid, status) = getNextEvent(nextPid, postHook);
+    if(retEvent != ptraceEvent::syscall){
+      throw runtime_error("retEvent was not ptrace syscall!");
+    }else{
+      state& currentState = states.at(traceesPid);
+      
+      // old-kernel-only ptrace system call event for pre exit hook.
+      if(kernelPre4_8 && currentState.onPreExitEvent){
+        states.at(traceesPid).callPostHook = true;
+        currentState.onPreExitEvent = false;
+      }else{
+        systemCallsEvents++;
+        tracer.updateState(traceesPid);
+
+        // Dealing with blocked syscalls, and replaying, and preempting
+        // is all handled in handlePostSystemCall().
+        int64_t signalToDeliver = states.at(traceesPid).signalToDeliver;
+        states.at(traceesPid).signalToDeliver = 0;
+        
+        handlePostSystemCall(currentState);
+        states.at(traceesPid).callPostHook = false;
+        if(myScheduler.isInParallel(traceesPid)){
+          doWithCheck(ptrace(PTRACE_CONT, traceesPid, 0, (void*) signalToDeliver),
+                      "failed to PTRACE_CONT after posthook\n");
+        }
+      }
+    }
+  }else{
+    // We don't need to do the posthook. We only need a subset of getNextEvent()
+    // so we will only use a small part of it here.
+    int64_t signalToDeliver = states.at(nextPid).signalToDeliver;
+    states.at(nextPid).signalToDeliver = 0;
+    
+    // Do PTRACE_CONT to get the process going again.
+    doWithCheck(ptrace(PTRACE_CONT, nextPid, 0, (void*) signalToDeliver),
+                "failed to PTRACE_CONT after prehook (no posthook)\n");
+
+    // Now that it has been restarted, remove it from either the runnableQueue and move it to 
+    // parallelProcesses set.
+    myScheduler.resumeParallel(nextPid);
+  }
+}
+// =======================================================================================
 void execution::runProgram(){
   log.writeToLog(Importance::inter, "dettrace starting up\n");
 
   // Once all processes have ended. We exit.
   // In waitOnAll() we find the next pid who wants to do a syscall.
   // It will return -1 when there are no processes left.
-  pid_t nextPid = waitOnAll();
-
-  while(nextPid > 0){
-    // We found a pid to do a syscall!
-    myScheduler.addToRunnableQueue(nextPid);
-      
-    // We already know it's a seccomp event.
-    // Go ahead and handle that.
-    log.writeToLog(Importance::extra, "Is seccomp event!\n");
-    systemCallsEvents++;
-
-    // Prehook [seccomp event]
-    states.at(nextPid).callPostHook = handleSeccomp(nextPid);
-    // TODO: is this really dumb and unnecessary?
-    bool postHook = states.at(nextPid).callPostHook;
-   
-    // Posthook [syscall event]
-    if(postHook){
-      int status;
-      ptraceEvent retEvent;
-      pid_t traceesPid;
-      tie(retEvent, traceesPid, status) = getNextEvent(nextPid, postHook);
-      if(retEvent != ptraceEvent::syscall){
-        throw runtime_error("retEvent was not ptrace syscall!");
+  
+  bool exitLoop = false;
+  
+  while(!exitLoop){
+    // Try everything currently in the runnableQueue. Each pid will either move back to
+    // parallelProcesses, or move to the blockedQueue. Then reset: runnableQueue = blockedQueue,
+    // and do a wait(-1).
+  
+    bool noRunnableProcs = myScheduler.emptyRunnableQueue();
+    if(noRunnableProcs){
+      pid_t nextPid = waitOnAll();
+      if(nextPid == -1){
+        // We are done.
+        exitLoop = true;
       }else{
-        state& currentState = states.at(traceesPid);
-        
-        // old-kernel-only ptrace system call event for pre exit hook.
-        if(kernelPre4_8 && currentState.onPreExitEvent){
-          states.at(traceesPid).callPostHook = true;
-          currentState.onPreExitEvent = false;
-        }else{
-          systemCallsEvents++;
-          tracer.updateState(traceesPid);
-
-          // Dealing with blocked syscalls, and replaying, and preempting
-          // is all handled in handlePostSystemCall().
-          int64_t signalToDeliver = states.at(traceesPid).signalToDeliver;
-          states.at(traceesPid).signalToDeliver = 0;
-          
-          handlePostSystemCall(currentState);
-          states.at(traceesPid).callPostHook = false;
-          if(myScheduler.isInParallel(traceesPid)){
-            doWithCheck(ptrace(PTRACE_CONT, traceesPid, 0, (void*) signalToDeliver),
-                        "failed to PTRACE_CONT after posthook\n");
-          }
-        }
+        myScheduler.addToRunnableQueue(nextPid); 
+        continue;
       }
     }else{
-      // We don't need to do the posthook. We only need a subset of getNextEvent()
-      // so we will only use a small part of it here.
-      int64_t signalToDeliver = states.at(nextPid).signalToDeliver;
-      states.at(nextPid).signalToDeliver = 0;
-      
-      // Do PTRACE_CONT to get the process going again.
-      doWithCheck(ptrace(PTRACE_CONT, nextPid, 0, (void*) signalToDeliver),
-                  "failed to PTRACE_CONT after prehook (no posthook)\n");
-
-      // Now that it has been restarted, remove it from either the runnableQueue and move it to 
-      // parallelProcesses set.
-      myScheduler.resumeParallel(nextPid);
-    }
-
-    // If there are no processes in syscallQueue, we have to find one.
-    // If the syscallQueue is not empty, try the processes in the queue.
-    // TODO: We may need to be fancier than this, but I don't want to implement
-    // it prematurely because it is complicated. We may need another way of 
-    // knowing that we should call waitOnAll(), even if the queue is nonempty.
-    // In the case where no process is yet able to make progress.
-    
-    if(myScheduler.emptySyscallQueue()){
-      // We need to find another pid to run a syscall because our queue
-      // is empty.
-      nextPid = waitOnAll();
-    }else{
-      // We have processes in the queue. Try these first, unless the pid
-      // at the front is the exact pid we just tried. 
-      pid_t frontOfQueue = myScheduler.getNext();
-      bool frontBlocked = myScheduler.frontIsBlocked();
-      if((frontOfQueue == nextPid) && frontBlocked){
-        nextPid = waitOnAll();
-      }else{
-        nextPid = frontOfQueue;
+      while(!myScheduler.emptyRunnableQueue()){
+        pid_t frontPid = myScheduler.getNextRunnable();
+        handleSingleSyscall(frontPid);      
       }
+      myScheduler.swapQueues();
     }
   }
-
-
-
-    /*// Current process is finally truly done (unlike eventExit).
-    if(ret == ptraceEvent::nonEventExit){
-      if (states.at(traceesPid).isExitGroup) {
-        // never seen this, don't know how to handle.
-        runtimeError("We should not see nonEventExit from a exitGroup event.\n");
-      }
-
-      auto msg = log.makeTextColored(Color::blue, "Process [%d] has finished. "
-                                         "With ptraceNonEventExit.\n");
-      log.writeToLog(Importance::inter, msg, traceesPid);
-
-      states.at(traceesPid).callPostHook = false;
-      if(processTree.count(traceesPid) != 0){
-        runtimeError("We receieved a nonEventExit with children left."
-                     "This should be impossible!");
-      }else{
-        exitLoop = handleNonEventExit(traceesPid);
-      }
-      continue;
-    }
-
-    // We have encountered a call to fork, vfork, clone.
-    if (ret == ptraceEvent::fork || ret == ptraceEvent::vfork || ret == ptraceEvent::clone) {
-      tracer.updateState(traceesPid);
-      int syscallNumber = (int)tracer.getSystemCallNumber();
-      string msg = "none";
-      bool isThread = false;
-
-      // Per ptrace man page: we cannot reliably tell a clone syscall from it's event,
-      // so we check explicitly.
-      switch (syscallNumber) {
-      case SYS_fork:
-        msg = "fork";
-        break;
-      case SYS_vfork:
-        msg = "vfork";
-        break;
-      case SYS_clone: {
-        msg = "clone";
-        unsigned long flags = (unsigned long) tracer.arg1();
-        isThread = (flags & CLONE_THREAD) != 0;
-        // if((flags & CLONE_FILES) != 0){
-          // runtimeError("We do not support CLONE_FILES\n");
-        // }
-        break;
-      }
-      default:
-        runtimeError("Uknown syscall number from fork/clone event: " +
-                     to_string(syscallNumber));
-      }
-
-      log.writeToLog(Importance::inter,
-                     log.makeTextColored(Color::blue, "[%d] caught %s event!\n"),
-                     traceesPid, msg.c_str());
-
-      handleForkEvent(traceesPid, isThread);
-      states.at(traceesPid).callPostHook = false;
-      continue;
-    }
-
-    if(ret == ptraceEvent::exec){
-      log.writeToLog(Importance::inter,
-                     log.makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
-                     traceesPid);
-      //reset CPUID trap flag
-      states.at(traceesPid).CPUIDTrapSet = false;
-
-      handleExecEvent(traceesPid);
-      continue;
-    }
-
-    if(ret == ptraceEvent::signal){
-      int signalNum = WSTOPSIG(status);
-      handleSignal(signalNum, traceesPid);
-      continue;
-    }
-
-    runtimeError(to_string(traceesPid) +
-                        " Uknown return value for ptracer::getNextEvent()\n");
-  */
 
   // DEVRAND STEP 5: clean up /dev/[u]random fifo threads
   doWithCheck(pthread_cancel(devRandomPthread), "pthread_cancel /dev/random pthread");
@@ -397,28 +316,27 @@ void execution::runProgram(){
 }
 // =======================================================================================
 pid_t execution::waitOnAll(){
-  // TODO: is checking if we got an ECHLD enough to know all procs are done?
   pid_t nextPid = -1;
   bool seccompEvent = false;
   bool allProcsDone = false;
   
   while(!seccompEvent || !allProcsDone){
     log.writeToLog(Importance::info, "waiting on all potential processes!\n");
-    int status = 0;
-    nextPid = doWithCheck(waitpid(-1, &status, 0), "waitpid");
-    
-    if(nextPid == -1) {
-      if(errno == ECHILD){
-        // No more processes left!
-        allProcsDone = true;
-        continue;
-      }else{
-        // Wait(-1) errored for an unexpected reason!
-        runtimeError("WaitOnAll() errored for non ECHILD reason!\n");
-      }
-    }else{
-      ptraceEvent event = getPtraceEvent(status);
 
+    if(myScheduler.emptyScheduler()) {
+      // No more processes left!
+      allProcsDone = true;
+      nextPid = -1;
+      continue;
+    }else{
+      int status = 0;
+      nextPid = doWithCheck(waitpid(-1, &status, 0), "waitpid");
+      
+      if(nextPid == -1){
+        runtimeError("wait(-1) errored for some reason in waitOnAll()\n");
+      }
+
+      ptraceEvent event = getPtraceEvent(status);
       if(event == ptraceEvent::seccomp){
         log.writeToLog(Importance::extra, "Is seccomp event!\n");
         systemCallsEvents++;
@@ -459,72 +377,105 @@ pid_t execution::waitOnAll(){
       if(event == ptraceEvent::nonEventExit){
         auto msg = log.makeTextColored(Color::blue, "Process [%d] has completely exited (nonEvent).\n");
         log.writeToLog(Importance::inter, msg, nextPid);
-        sched.removeFromScheduler(nextPid);
+        myScheduler.removeFromScheduler(nextPid);
 
         doWithCheck(ptracer::doPtrace(PTRACE_DETACH, nextPid, NULL, NULL),
                                       "failed to ptrace detach process in nonEvent\n");
         continue;
       }
 
-      // HERE!!!
       if(event == ptraceEvent::fork || event == ptraceEvent::vfork || event == ptraceEvent::clone){
-        // do stuff
+        tracer.updateState(nextPid);
+        int syscallNumber = (int)tracer.getSystemCallNumber();
+        string msg = "none";
+
+        // Per ptrace man page: we cannot reliably tell a clone syscall from it's event,
+        // so we check explicitly.
+        switch (syscallNumber) {
+        case SYS_fork:
+          msg = "fork";
+          break;
+        case SYS_vfork:
+          msg = "vfork";
+          break;
+        case SYS_clone: {
+          msg = "clone";
+          break;
+        }
+        default:
+          runtimeError("Unknown syscall number from fork/clone event: " +
+                       to_string(syscallNumber));
+        }
+
+        log.writeToLog(Importance::inter,
+                       log.makeTextColored(Color::blue, "[%d] caught %s event!\n"),
+                       nextPid, msg.c_str());
+
+        handleForkEvent(nextPid);
+        states.at(nextPid).callPostHook = false;
+        continue;
       }
+
+      if(event == ptraceEvent::exec){
+        log.writeToLog(Importance::inter,
+                       log.makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
+                       nextPid);
+        //reset CPUID trap flag
+        states.at(nextPid).CPUIDTrapSet = false;
+
+        handleExecEvent(nextPid);
+        continue;
+      }
+
+      if(event == ptraceEvent::signal){
+        log.writeToLog(Importance::inter,
+                       log.makeTextColored(Color::blue, "[%d] Caught signal event!\n"),
+                       nextPid);
+        // TODO: ask joe if I should be handling signals
+        //int signalNum = WSTOPSIG(status);
+        //handleSignal(signalNum, traceesPid);
+        continue;
+      }
+
+      runtimeError(to_string(nextPid) +
+                        " Unknown return value for ptracer::getNextEvent()\n");
     }
-  
-    return nextPid;
   }
+  return nextPid;
 }
 // =======================================================================================
-pid_t execution::handleForkEvent(const pid_t traceesPid, bool isThread){
+void execution::handleForkEvent(const pid_t traceesPid){
   processSpawnEvents++;
 
   pid_t newChildPid = ptracer::getEventMessage(traceesPid);
   auto threadGroup = myGlobalState.threadGroupNumber.at(traceesPid);
 
 
-  if(isThread){
-    myGlobalState.liveThreads.insert(newChildPid);
-    auto msg = log.makeTextColored(Color::blue, "Adding thread %d to thread group %d\n");
-    log.writeToLog(Importance::info, msg, newChildPid, threadGroup);
+  auto msg = log.makeTextColored(Color::blue, "Creating new thread group: %d\n");
+  log.writeToLog(Importance::info, msg, newChildPid);
 
-    // Careful here, the thread group is not necessarily traceesPid, as traceesPid may
-    // be a thread, fetch the actual threadGroup by querying our (traceesPid) thread
-    // group number.
-    myGlobalState.threadGroups.insert({threadGroup, newChildPid});
-    myGlobalState.threadGroupNumber.insert({newChildPid, threadGroup});
-  } else {
-    auto msg = log.makeTextColored(Color::blue, "Creating new thread group: %d\n");
-    log.writeToLog(Importance::info, msg, newChildPid);
-
-    // This should not happen! (Pid recycling?)
-    if (myGlobalState.threadGroups.count(newChildPid) != 0) {
-      runtimeError("Thread group already existed.\n");
-    }
-
-    // This is a process it owns it's own process group, create it.
-    myGlobalState.threadGroups.insert({newChildPid, newChildPid});
-    myGlobalState.threadGroupNumber.insert({newChildPid, newChildPid});
+  // This should not happen! (Pid recycling?)
+  if (myGlobalState.threadGroups.count(newChildPid) != 0) {
+    runtimeError("Thread group already existed.\n");
   }
+
+  // This is a process it owns it's own process group, create it.
+  myGlobalState.threadGroups.insert({newChildPid, newChildPid});
+  myGlobalState.threadGroupNumber.insert({newChildPid, newChildPid});
 
   // If a thread T1 spawns thread T2, then T1 is NOT the parent of T2. The parent is always
   // the process (the thread group leader) that T1 belongs to.
   // This is where we add new children to the thread group leader.
   processTree.insert(make_pair(threadGroup, newChildPid));
 
-  // Share fdStatus. Processes get their own, threads share with thread group.
-  if(isThread){
-    states.emplace(newChildPid, state {newChildPid, debugLevel,
-                                         states.at(threadGroup).fdStatus});
-  } else {
-    // Deep Copy!
-    unordered_map<int, descriptorType> fds = *states.at(threadGroup).fdStatus.get();
-    states.emplace(newChildPid, state {newChildPid, debugLevel, fds});
-  }
+  // Share fdStatus. Processes get their own.
+  // Deep Copy!
+  unordered_map<int, descriptorType> fds = *states.at(threadGroup).fdStatus.get();
+  states.emplace(newChildPid, state {newChildPid, debugLevel, fds});
   // Add this new process to our states.
 
   
-  // Inheret file descriptor set from our parent.
+  // Inherit file descriptor set from our parent.
   states.at(newChildPid).fdStatus = states.at(threadGroup).fdStatus;
 
   log.writeToLog(Importance::info,
@@ -533,7 +484,7 @@ pid_t execution::handleForkEvent(const pid_t traceesPid, bool isThread){
 
   // Once the child is ready for tracing, let it run in parallel until it wants to do
   // a system call. Inform the scheduler of its existance.
-  myScheduler.runInParallel(newChildPid);
+  myScheduler.addToParallelSet(newChildPid);
 
   // during fork, the parent's mmaped memory are COWed, as we set the mapping
   // attributes to MAP_PRIVATE. new child's `mmapMemory` hence must be inherited
@@ -553,7 +504,13 @@ pid_t execution::handleForkEvent(const pid_t traceesPid, bool isThread){
   }
   log.writeToLog(Importance::info,
                  log.makeTextColored(Color::blue, "Child ready!\n"));
-  return newChildPid;
+
+  // Restart the child process. Let it run until it needs to do a syscall.
+  doWithCheck(ptrace(PTRACE_CONT, newChildPid, 0, 0),
+      "failed to ptrace_cont from handleForkEvent() for child\n");
+  // Also restart the parent?
+  doWithCheck(ptrace(PTRACE_CONT, traceesPid, 0, 0),
+      "failed to ptrace_cont from handleForkEvent() for parent\n");
 }
 
 static inline unsigned long alignUp(unsigned long size, int align)
@@ -704,6 +661,9 @@ void execution::handleExecEvent(pid_t pid) {
   states.at(pid).mmapMemory.setAddr(traceePtr<void>((void*)mmapAddr));
 
   ptracer::doPtrace(PTRACE_POKETEXT, pid, (void*)rip, (void*)saved_insn);
+  
+  // Restart the stopped process.
+  ptracer::doPtrace(PTRACE_CONT, pid, 0, 0);
 }
 
 // =======================================================================================

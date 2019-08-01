@@ -192,6 +192,12 @@ public:
   void handlePostSystemCall(state& currState);
 
   /**
+   * Handles prehook and posthook of one system call for one process,
+   * then returns to the event loop.
+   * @param nextPid to execute a syscall.
+   */
+  void handleSingleSyscall(pid_t nextPid);
+  /**
    * REVIEW this function does not seem to be implemented
    * This function call both handlePostSystemCall and handlePostSystemCall.
    */
@@ -219,7 +225,7 @@ public:
    * @param traceesPid the pid of the tracee
    * @see handleFork.
    */
-  pid_t handleForkEvent(const pid_t traceesPid, bool isThread);
+  void handleForkEvent(const pid_t traceesPid);
 
   /**
    * Handle signal event in trace.

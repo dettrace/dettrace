@@ -13,8 +13,6 @@ using namespace std;
 /**
  * Scheduler class for hybrid scheduling policy.
  * All processes run in parallel unless doing system calls.
- * All system calls are run sequentially, so we need some of the 
- * old scheduler for that (thankfully!).
  *
  * parallelProcesses: parallel process set that contains all processes currently 
  * running in parallel.
@@ -23,7 +21,10 @@ using namespace std;
  *
  * blockedQueue: queue of pids that are blocked on their syscall (it would have failed).
  * 
- * Start with all pids in the runnableQueue. Then try the blockedQueue. Then do a wait(-1).
+ * Start with all pids in the runnableQueue. 
+ * Then swap the blockedQueue with the runnableQueue, so that next time,
+ * the blocked ones are tried first.
+ * Then do a wait(-1). Rinse and repeat.
  * Whichever pid is at the front has highest priority 
  * to do a system call. If it is successful, it is removed from
  * its queue and put back into the parallelProcesses set. If it fails, 
@@ -41,17 +42,39 @@ public:
   bool isInParallel(pid_t process);
 
   /**
+   * @return true if the runnableQueue is empty.
+   */
+  bool emptyRunnableQueue();
+
+  /**
+   * @return true if parallelProcesses, runnableQueue,
+   * and blockedQueue are empty.
+   */
+  bool emptyScheduler();
+
+  /**
+   * Put all pids in the blockedQueue into the runnableQueue
+   * (preserving the order). Remove them all from the
+   * blockedQueue as we go.
+   */
+  void swapQueues();
+  /**
+   * @return next runnable pid that needs to do a syscall.
+   * (Return the front of the runnableQueue)
+   */
+  pid_t getNextRunnable();
+
+  /**
    * The syscall would have failed. 
    * Pop the pid from the front of the 
-   * runnableQueue or blockedQueue (depending where it happens to be)
-   * and move it to the end of the blockedQueue.
+   * runnableQueue and move it to the end of the blockedQueue.
    * @param pid to preempt.
    */
   void preemptSyscall(pid_t pid);
 
   /**
    * The syscall succeeded. 
-   * Remove the pid from whichever queue it's on.
+   * Remove the pid from runnableQueue.
    * Add it back to parallelProcesses.
    * @param pid to be resumed.
    */

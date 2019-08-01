@@ -15,9 +15,36 @@ scheduler::scheduler(pid_t startingPid, logger& log):
   parallelProcesses.insert(startingPid);
 }
 
+bool scheduler::emptyRunnableQueue(){
+  return runnableQueue.empty();
+}
+
 bool scheduler::isInParallel(pid_t process){
   const bool parallel = parallelProcesses.find(process) != parallelProcesses.end();
   return parallel;
+}
+
+bool scheduler::emptyScheduler(){
+  bool emptyRunnable = runnableQueue.empty();
+  bool emptyBlocked = blockedQueue.empty();
+  bool emptyParallel = parallelProcesses.empty();
+  return emptyRunnable && emptyBlocked && emptyParallel;
+}
+
+void scheduler::swapQueues(){
+  if(!runnableQueue.empty()){
+    throw runtime_error("runnable not empty when swapping queues!");
+  }else{
+    while(!blockedQueue.empty()){
+      pid_t frontPid = blockedQueue.front();
+      runnableQueue.push(frontPid);
+      blockedQueue.pop();
+    }
+  }
+}
+
+pid_t scheduler::getNextRunnable(){
+  return runnableQueue.front();
 }
 
 // Should only have to remove from parallelProcesses.
@@ -33,44 +60,20 @@ void scheduler::removeFromScheduler(pid_t pid){
 }
 
 void scheduler::preemptSyscall(pid_t pid){
-  // Pop the pid from the front of the 
-  // runnableQueue or blockedQueue (depending where it happens to be)
-  // and move it to the end of the blockedQueue.
-  pid_t firstRunnable = runnableQueue.front();
-  pid_t firstBlocked = blockedQueue.front();
-  if(pid == firstRunnable){
-    auto msg = 
-      log.makeTextColored(Color::blue, "Process [%d] popped from runnableQueue\n");
-    log.writeToLog(Importance::info, msg, pid);
-    runnableQueue.pop();
-  }else if(pid == firstBlocked){
-    auto msg = 
-      log.makeTextColored(Color::blue, "Process [%d] popped from blockedQueue\n");
-    log.writeToLog(Importance::info, msg, pid);
-    blockedQueue.pop();
+  pid_t frontPid = runnableQueue.front();
+  if(frontPid != pid){
+    throw runtime_error("trying to preempt wrong pid!");
   }
+  runnableQueue.pop();
   blockedQueue.push(pid); 
 }
 
 void scheduler::resumeParallel(pid_t pid){
-  // Remove the pid from the proper queue.
-  pid_t firstRunnable = runnableQueue.front();
-  pid_t firstBlocked = blockedQueue.front();
-  if(pid == firstRunnable){
-    auto msg = 
-      log.makeTextColored(Color::blue, "Process [%d] popped from runnableQueue\n");
-    log.writeToLog(Importance::info, msg, pid);
-    runnableQueue.pop();
-  }else if(pid == firstBlocked){
-    auto msg = 
-      log.makeTextColored(Color::blue, "Process [%d] popped from blockedQueue\n");
-    log.writeToLog(Importance::info, msg, pid);
-    blockedQueue.pop();
-  }else{
-    throw runtime_error("Process not found in either queue, trying to resume");
+  pid_t frontPid = runnableQueue.front();
+  if(frontPid != pid){
+    throw runtime_error("trying to resume wrong pid!");
   }
-
-  // Add the process to the parallelProcesses set. 
+  runnableQueue.pop();
   parallelProcesses.insert(pid); 
 }
 
