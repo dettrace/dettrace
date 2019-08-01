@@ -418,9 +418,8 @@ bool execution::handleEvent(pid_t nextPid, const int status){
     log.writeToLog(Importance::inter,
                    log.makeTextColored(Color::blue, "[%d] Caught signal event!\n"),
                    nextPid);
-    // TODO: ask joe if I should be handling signals
-    //int signalNum = WSTOPSIG(status);
-    //handleSignal(signalNum, traceesPid);
+    int signalNum = WSTOPSIG(status);
+    handleSignal(signalNum, nextPid);
   }
 
   return seccomp;
@@ -493,6 +492,7 @@ void execution::handleForkEvent(const pid_t traceesPid){
   // Also restart the parent?
   doWithCheck(ptrace(PTRACE_CONT, traceesPid, 0, 0),
       "failed to ptrace_cont from handleForkEvent() for parent\n");
+  return;
 }
 
 static inline unsigned long alignUp(unsigned long size, int align)
@@ -779,9 +779,11 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
   }
 
-  // Remember to deliver this signal to the tracee for next event! Happens in
-  // getNextEvent.
   states.at(traceesPid).signalToDeliver = sigNum;
+  int64_t signalToDeliver = states.at(traceesPid).signalToDeliver;
+
+  doWithCheck(ptrace(PTRACE_CONT, traceesPid, 0, (void*)signalToDeliver),
+      "failed to ptrace_cont from handleSignal()\n");
 
   auto msg = "[%d] Tracer: Received signal: %d. Forwarding signal to tracee.\n";
   auto coloredMsg = log.makeTextColored(Color::blue, msg);
