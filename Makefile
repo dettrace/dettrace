@@ -43,13 +43,13 @@ docker:
 	docker build -t ${DOCKER_NAME}:${DOCKER_TAG} .
 
 run-docker: docker
-	docker run --rm -it --privileged --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG}
+	docker run --rm -it --privileged --userns=host --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG}
 
 test-docker: clean docker
 ifdef DETTRACE_NO_CPUID_INTERCEPTION
-	docker run --rm --privileged --cap-add=SYS_ADMIN --env DETTRACE_NO_CPUID_INTERCEPTION=1  ${DOCKER_NAME}:${DOCKER_TAG} make -j tests
+	docker run --rm --privileged --userns=host --cap-add=SYS_ADMIN --env DETTRACE_NO_CPUID_INTERCEPTION=1  ${DOCKER_NAME}:${DOCKER_TAG} make -j tests
 else
-	docker run --rm --privileged --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG} make -j tests
+	docker run --rm --privileged --userns=host --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG} make -j tests
 endif
 
 .PHONY: clean docker run-docker tests build-tests run-tests initramfs
