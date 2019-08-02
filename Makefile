@@ -37,7 +37,7 @@ run-tests: build-tests build
 
 DOCKER_NAME=cloudseal-alpha
 # TODO: store version in one place in a file.
-DOCKER_TAG=0.1.651
+DOCKER_TAG=0.1.663
 
 docker:
 	docker build -t ${DOCKER_NAME}:${DOCKER_TAG} .
