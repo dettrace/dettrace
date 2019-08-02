@@ -177,7 +177,6 @@ void execution::handleSingleSyscall(pid_t nextPid){
 
   // Prehook [seccomp event]
   states.at(nextPid).callPostHook = handleSeccomp(nextPid);
-  // TODO: is this really dumb and unnecessary?
   bool postHook = states.at(nextPid).callPostHook;
  
   // Posthook [syscall event]
@@ -187,7 +186,8 @@ void execution::handleSingleSyscall(pid_t nextPid){
     pid_t traceesPid;
     tie(retEvent, traceesPid, status) = getNextEvent(nextPid, postHook);
     if(retEvent != ptraceEvent::syscall){
-      throw runtime_error("retEvent was not ptrace syscall!");
+      //throw runtime_error("retEvent was not ptrace syscall!");
+      handleEvent(traceesPid, status);
     }else{
       state& currentState = states.at(traceesPid);
       
@@ -653,7 +653,6 @@ bool execution::handleSeccomp(const pid_t traceesPid){
   long syscallNum;
   ptracer::doPtrace(PTRACE_GETEVENTMSG, traceesPid, nullptr, &syscallNum);
 
-  // TODO This might be totally unnecessary
   // INT16_MAX is sent by seccomp by convention as for system calls with no rules.
   if(syscallNum == INT16_MAX){
     // Fetch real system call from register.
@@ -710,7 +709,11 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
       // Signal is now suppressed.
       states.at(traceesPid).signalToDeliver = 0;
-
+      
+      int64_t signalToDeliver = states.at(traceesPid).signalToDeliver;
+      doWithCheck(ptrace(PTRACE_CONT, traceesPid, 0, (void*)signalToDeliver),
+        "failed to ptrace_cont from handleSignal()\n");
+  
       auto coloredMsg = log.makeTextColored(Color::blue, msg);
       log.writeToLog(Importance::inter, coloredMsg, traceesPid, sigNum);
       return;
@@ -775,7 +778,6 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
       return;
     }
-
 
   }
 
