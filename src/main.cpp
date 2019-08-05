@@ -292,8 +292,10 @@ int runTracee(programArgs args){
       mountDir(pathToExe+"/../root/proc/meminfo", "/proc/meminfo");
       mountDir(pathToExe+"/../root/proc/stat", "/proc/stat");
       mountDir(pathToExe+"/../root/proc/filesystems", "/proc/filesystems");
-      string home = secure_getenv("HOME");
-      mountDir(home, "/root");
+      char* home = secure_getenv("HOME");
+      if (home) {
+	mountDir(home, "/root");
+      }
     }
   }
 
