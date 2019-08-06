@@ -187,6 +187,7 @@ void execution::handleSingleSyscall(pid_t nextPid){
     tie(retEvent, traceesPid, status) = getNextEvent(nextPid, postHook);
     if(retEvent != ptraceEvent::syscall){
       //throw runtime_error("retEvent was not ptrace syscall!");
+      cout << "does this ever happen?" << endl;
       handleEvent(traceesPid, status);
     }else{
       state& currentState = states.at(traceesPid);
@@ -205,6 +206,13 @@ void execution::handleSingleSyscall(pid_t nextPid){
         states.at(traceesPid).signalToDeliver = 0;
         
         handlePostSystemCall(currentState);
+        // Syscall was successful. Restart it in parallel.
+        if(!myScheduler.emptyRunnableQueue()){
+          if(myScheduler.getNextRunnable() == traceesPid) {
+            myScheduler.resumeParallel(traceesPid);
+          }
+        }
+
         states.at(traceesPid).callPostHook = false;
         if(myScheduler.isInParallel(traceesPid)){
           doWithCheck(ptrace(PTRACE_CONT, traceesPid, 0, (void*) signalToDeliver),
@@ -257,13 +265,15 @@ void execution::runProgram(){
       // We have to find another pid that wants to do a syscall.
       // Along the way, we must handle other events, as we don't know
       // which pid will return from the wait.
-      bool seccomp = false;
-      while(!seccomp){
+      while(true){
         int stat;
         retPid = doWithCheck(waitpid(-1, &stat, 0), "waitpid");
         bool seccomp = handleEvent(retPid, stat);
         if(seccomp){
           myScheduler.addToRunnableQueue(retPid);  
+          break;
+        }
+        if(myScheduler.emptyScheduler()){
           break;
         }
       }
@@ -360,15 +370,12 @@ bool execution::handleEvent(pid_t nextPid, const int status){
                                   "failed to ptrace detach process in eventExit\n");
   }
 
-  // TODO: may actually just never happen I don't know.
-  // That's why I have these prints!
   // The process is fully dead. If it has not already been, remove
   // it from the scheduler.
   if(event == ptraceEvent::nonEventExit){
     auto msg = log.makeTextColored(Color::blue, "Process [%d] has completely exited (nonEvent).\n");
     log.writeToLog(Importance::inter, msg, nextPid);
     myScheduler.removeFromScheduler(nextPid);
-
     doWithCheck(ptracer::doPtrace(PTRACE_DETACH, nextPid, NULL, NULL),
                                   "failed to ptrace detach process in nonEvent\n");
   }
@@ -776,6 +783,9 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
         runtimeError("CPUID unsupported %eax argument");
       }
 
+      int64_t signalToDeliver = states.at(traceesPid).signalToDeliver;
+      doWithCheck(ptrace(PTRACE_CONT, traceesPid, 0, (void*)signalToDeliver),
+        "failed to ptrace_cont from handleSignal()\n");
       return;
     }
 
@@ -1380,7 +1390,7 @@ tuple<ptraceEvent, pid_t, int>
 execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
   // fprintf(stderr, "Getting next event for pid %d\n", pidToContinue);
   // 3rd return value of this function. Holds the status after waitpid call.
-  int status = 0;
+  int status;
   // Pid of the process whose event we just intercepted through ptrace.
   pid_t traceesPid;
 
