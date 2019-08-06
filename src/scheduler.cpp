@@ -58,8 +58,6 @@ void scheduler::removeFromScheduler(pid_t pid){
       log.makeTextColored(Color::blue, "Process [%d] removed from parallelProcesses\n");
     log.writeToLog(Importance::info, msg, pid);
     parallelProcesses.erase(pid);
-  }else{
-    throw runtime_error("Process not found in parallelProcesses when trying to remove");
   }
 }
 

@@ -111,10 +111,8 @@ public:
   void removeFromScheduler(pid_t pid);
 
   // Keep track of how many times scheduleNextStopped was called:
-  // TODO: I don't know if this is relevant anymore.
   uint32_t callsToScheduleNextStopped = 0;
 
-  //TODO: I don't know if I need this either.
   // A function to kill all processes.
   // It also clears parallelProcesses, runnableQueue, and
   // blockedQueue.

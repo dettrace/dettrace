@@ -364,7 +364,15 @@ bool execution::handleEvent(pid_t nextPid, const int status){
     auto msg = log.makeTextColored(Color::blue, "Process [%d] has finished. "
                                        "With ptraceEventExit.\n");
     log.writeToLog(Importance::inter, msg, nextPid);
+
+    auto tgNumber = myGlobalState.threadGroupNumber.at(nextPid);
     myScheduler.removeFromScheduler(nextPid); 
+
+    // Also remove from these pieces of state.
+    eraseChildEntry(processTree, nextPid);
+    states.erase(nextPid);
+    myGlobalState.threadGroupNumber.erase(nextPid);
+    deleteMultimapEntry(myGlobalState.threadGroups, tgNumber, nextPid);
 
     doWithCheck(ptracer::doPtrace(PTRACE_DETACH, nextPid, NULL, NULL),
                                   "failed to ptrace detach process in eventExit\n");
@@ -375,9 +383,11 @@ bool execution::handleEvent(pid_t nextPid, const int status){
   if(event == ptraceEvent::nonEventExit){
     auto msg = log.makeTextColored(Color::blue, "Process [%d] has completely exited (nonEvent).\n");
     log.writeToLog(Importance::inter, msg, nextPid);
-    myScheduler.removeFromScheduler(nextPid);
-    doWithCheck(ptracer::doPtrace(PTRACE_DETACH, nextPid, NULL, NULL),
-                                  "failed to ptrace detach process in nonEvent\n");
+    if(myScheduler.isInParallel(nextPid)){
+      myScheduler.removeFromScheduler(nextPid);
+      doWithCheck(ptracer::doPtrace(PTRACE_DETACH, nextPid, NULL, NULL),
+                                    "failed to ptrace detach process in nonEvent\n");
+    }
   }
 
   if(event == ptraceEvent::fork || event == ptraceEvent::vfork || event == ptraceEvent::clone){
