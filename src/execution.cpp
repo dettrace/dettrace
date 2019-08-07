@@ -801,7 +801,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
       if ((curr_insn32 << 8) == 0xF9010F00) {
         rdtscpEvents++;
         tracer.writeRcx(tscpCounter);
-        tscpCounter++;
+        tscpCounter += RDTSC_STEPPING;
         ip_step = 3;
         msg = "[%d] Tracer: Received rdtscp: Reading next instruction.\n";
       }else{
@@ -810,7 +810,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
       tracer.writeRax(tscCounter);
       tracer.writeRdx(0);
-      tscCounter++;
+      tscCounter += RDTSC_STEPPING;
       tracer.writeIp((uint64_t) tracer.getRip().ptr + ip_step);
 
       // Signal is now suppressed.
