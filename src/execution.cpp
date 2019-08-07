@@ -187,7 +187,6 @@ void execution::handleSingleSyscall(pid_t nextPid){
     tie(retEvent, traceesPid, status) = getNextEvent(nextPid, postHook);
     if(retEvent != ptraceEvent::syscall){
       //throw runtime_error("retEvent was not ptrace syscall!");
-      cout << "does this ever happen?" << endl;
       handleEvent(traceesPid, status);
     }else{
       state& currentState = states.at(traceesPid);
