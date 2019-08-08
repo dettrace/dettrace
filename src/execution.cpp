@@ -170,7 +170,7 @@ void execution::handlePostSystemCall(state& currState){
   return;
 }
 // =======================================================================================
-void execution::handleSingleSyscall(pid_t nextPid){
+void execution::handleSingleSyscall(pid_t nextPid, bool pidIsBlocked){
   // We already know it's a seccomp event.
   // Go ahead and handle that.
   systemCallsEvents++;
@@ -206,9 +206,13 @@ void execution::handleSingleSyscall(pid_t nextPid){
         
         handlePostSystemCall(currentState);
         // Syscall was successful. Restart it in parallel.
-        if(!myScheduler.emptyRunnableQueue()){
-          if(myScheduler.getNextRunnable() == traceesPid) {
-            myScheduler.resumeParallel(traceesPid);
+        if(!myScheduler.emptyRunnableQueue() && !pidIsBlocked){
+          if(myScheduler.getNextRunnable() == traceesPid){
+            myScheduler.resumeParallel(traceesPid, pidIsBlocked);
+          }
+        }else if(myScheduler.numberBlocked() > 0 && pidIsBlocked){
+          if(myScheduler.getNextBlocked() == traceesPid){
+            myScheduler.resumeParallel(traceesPid, pidIsBlocked);
           }
         }
 
@@ -231,7 +235,7 @@ void execution::handleSingleSyscall(pid_t nextPid){
 
     // Now that it has been restarted, remove it from either the runnableQueue and move it to 
     // parallelProcesses set.
-    myScheduler.resumeParallel(nextPid);
+    myScheduler.resumeParallel(nextPid, pidIsBlocked);
   }
 }
 // =======================================================================================
@@ -260,7 +264,8 @@ void execution::runProgram(){
   
   // Run the program until there are no processes left to run.
   while(!myScheduler.emptyScheduler()){
-    if(myScheduler.emptyRunnableQueue()){
+    if(myScheduler.emptyRunnableQueue() &&
+       myScheduler.numberBlocked() == 0){
       // We have to find another pid that wants to do a syscall.
       // Along the way, we must handle other events, as we don't know
       // which pid will return from the wait.
@@ -275,13 +280,37 @@ void execution::runProgram(){
         if(myScheduler.emptyScheduler()){
           break;
         }
+        if(getPtraceEvent(stat) == ptraceEvent::eventExit){
+          break;
+        }
       }
     }else{
+      // Try runnableQueue.
       while(!myScheduler.emptyRunnableQueue()){
         pid_t frontPid = myScheduler.getNextRunnable();
-        handleSingleSyscall(frontPid);
+        handleSingleSyscall(frontPid, false);
       }
-      myScheduler.swapQueues();
+
+      int blockedTotal = myScheduler.numberBlocked();
+      int i = 0;
+      // Try blockedQueue.
+      if(blockedTotal > 0){
+        while(i < blockedTotal){
+          pid_t frontPid = myScheduler.getNextBlocked();
+          
+          int64_t signalToDeliver = states.at(frontPid).signalToDeliver;
+          states.at(frontPid).signalToDeliver = 0;
+          doWithCheck(ptrace(PTRACE_CONT, frontPid, 0, (void*) signalToDeliver),
+                        "failed to PTRACE_CONT for blocked pid in event loop \n");
+        
+          cout << "trying blocked" << endl; 
+          handleSingleSyscall(frontPid, true);
+          if(frontPid == myScheduler.getNextBlocked()){
+            myScheduler.resumeRetry(frontPid);
+          }
+          i++;
+        }
+      }
     }
   }
 
@@ -800,6 +829,9 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
   }
 
+  if(states.find(traceesPid) == states.end()){
+    cout << "pid not in states map" << endl;
+  }
   states.at(traceesPid).signalToDeliver = sigNum;
   int64_t signalToDeliver = states.at(traceesPid).signalToDeliver;
 

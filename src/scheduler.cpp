@@ -35,20 +35,24 @@ bool scheduler::emptyScheduler(){
   return emptyRunnable && emptyBlocked && emptyParallel;
 }
 
-void scheduler::swapQueues(){
-  if(!runnableQueue.empty()){
-    throw runtime_error("runnable not empty when swapping queues!");
-  }else{
-    while(!blockedQueue.empty()){
-      pid_t frontPid = blockedQueue.front();
-      runnableQueue.push(frontPid);
-      blockedQueue.pop();
-    }
-  }
+int scheduler::numberBlocked(){
+  return blockedQueue.size();
 }
 
 pid_t scheduler::getNextRunnable(){
   return runnableQueue.front();
+}
+
+pid_t scheduler::getNextBlocked(){
+  return blockedQueue.front();
+}
+
+void scheduler::resumeRetry(pid_t pid){
+  if(blockedQueue.front() != pid){
+    throw runtime_error("trying to resume retry with wrong pid");
+  }
+  blockedQueue.pop();
+  blockedQueue.push(pid);
 }
 
 // Should only have to remove from parallelProcesses.
@@ -70,12 +74,20 @@ void scheduler::preemptSyscall(pid_t pid){
   blockedQueue.push(pid); 
 }
 
-void scheduler::resumeParallel(pid_t pid){
-  pid_t frontPid = runnableQueue.front();
-  if(frontPid != pid){
-    throw runtime_error("trying to resume wrong pid!");
+void scheduler::resumeParallel(pid_t pid, bool pidIsBlocked){
+  if(pidIsBlocked){
+    pid_t frontPid = blockedQueue.front();
+    if(frontPid != pid){
+      throw runtime_error("trying to resume wrong pid from blockedQueue!");
+    }
+    blockedQueue.pop();
+  }else{
+    pid_t frontPid = runnableQueue.front();
+    if(frontPid != pid){
+      throw runtime_error("trying to resume wrong pid!");
+    }
+    runnableQueue.pop();
   }
-  runnableQueue.pop();
   parallelProcesses.insert(pid); 
 }
 

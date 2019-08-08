@@ -28,12 +28,21 @@ bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
 
     // Syscall would block.
     pid_t pid = t.getPid();
-    sched.preemptSyscall(pid);
+    if(sched.getNextRunnable() == pid){
+      sched.preemptSyscall(pid);
+    }else if(sched.getNextBlocked() == pid){
+      sched.resumeRetry(pid);
+    }
+
     return true;
   }else{
     // Syscall succeeded.
     pid_t pid = t.getPid();
-    sched.resumeParallel(pid);
+    bool pidIsBlocked = false;
+    if(sched.getNextBlocked() == pid){
+      pidIsBlocked = true;
+    }
+    sched.resumeParallel(pid, pidIsBlocked);
     return false;
   }
 }
@@ -47,13 +56,21 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sc
     gs.replayDueToBlocking++;
     // Syscall would block.
     pid_t pid = t.getPid();
-    sched.preemptSyscall(pid);
+    if(sched.getNextRunnable() == pid){
+      sched.preemptSyscall(pid);
+    }else if(sched.getNextBlocked() == pid){
+      sched.resumeRetry(pid);
+    }
     replaySystemCall(gs, t, t.getSystemCallNumber());
     return true;
   }else{
     // System call succeeded.
     pid_t pid = t.getPid();
-    sched.resumeParallel(pid);
+    bool pidIsBlocked = false;
+    if(sched.getNextBlocked() == pid){
+      pidIsBlocked = true;
+    }
+    sched.resumeParallel(pid, pidIsBlocked);
     return false;
   }
 }

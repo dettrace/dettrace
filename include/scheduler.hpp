@@ -58,16 +58,27 @@ public:
   bool emptyScheduler();
 
   /**
-   * Put all pids in the blockedQueue into the runnableQueue
-   * (preserving the order). Remove them all from the
-   * blockedQueue as we go.
+   * @return the number of pids in the blockedQueue.
    */
-  void swapQueues();
+  int numberBlocked();
+
   /**
    * @return next runnable pid that needs to do a syscall.
    * (Return the front of the runnableQueue)
    */
   pid_t getNextRunnable();
+
+  /**
+   * @return next blocked pid that needs to do a syscall.
+   * (Return the front of the blockedQueue)
+   */
+  pid_t getNextBlocked();
+
+  /**
+   * Move pid from the front of the blockedQueue to the back.
+   * @param pid to move.
+   */
+  void resumeRetry(pid_t pid);
 
   /**
    * The syscall would have failed. 
@@ -79,11 +90,12 @@ public:
 
   /**
    * The syscall succeeded. 
-   * Remove the pid from runnableQueue.
+   * Remove the pid from runnableQueue or blockedQueue.
    * Add it back to parallelProcesses.
    * @param pid to be resumed.
+   * @param true if pid is on the blockedQueue currently.
    */
-  void resumeParallel(pid_t pid);
+  void resumeParallel(pid_t pid, bool pidIsBlocked);
 
   /**
    * Adds new process to parallelProcesses.
