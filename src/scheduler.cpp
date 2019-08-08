@@ -86,6 +86,8 @@ void scheduler::resumeParallel(pid_t pid, bool pidIsBlocked){
     blockedQueue.pop();
   }else{
     pid_t frontPid = runnableQueue.front();
+    cout << "front pid on runnable queue is: " << frontPid << endl;
+    cout << "param pid is: " << pid << endl; 
     if(frontPid != pid){
       throw runtime_error("trying to resume wrong pid from runnableQueue!");
     }

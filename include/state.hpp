@@ -127,6 +127,12 @@ public:
    */
   bool callPostHook = false;
 
+  /*
+   * Per process bool to know if the syscall succeeded and the process should
+   * be resumed in parallel.
+   */
+  bool syscallSucceeded = true;
+
   /**
    * Signal to be delivered the next time this process runs. If 0, no signal
    * will be delivered. Otherwise the value represents the signal number.

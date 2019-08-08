@@ -1212,7 +1212,7 @@ void pollSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     }
   }else{
     gs.log.writeToLog(Importance::info, "Non-blocking poll found\n");
-    preemptIfBlocked(gs, s, t, sched, EAGAIN);
+    bool blocked = preemptIfBlocked(gs, s, t, sched, EAGAIN);
   }
 
 
@@ -2338,10 +2338,20 @@ bool wait4SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
 void wait4SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(s.wait4Blocking){
     gs.log.writeToLog(Importance::info, "Blocking wait4 found\n");
-    replaySyscallIfBlocked(gs, s, t, sched, 0);
+    bool blocked = replaySyscallIfBlocked(gs, s, t, sched, 0);
+    if(blocked){
+      s.syscallSucceeded = false;
+    }else{
+      s.syscallSucceeded = true;
+    }
   }else{
     gs.log.writeToLog(Importance::info, "Non-blocking wait4 found\n");
-    preemptIfBlocked(gs, s, t, sched, EAGAIN);
+    bool blocked = preemptIfBlocked(gs, s, t, sched, EAGAIN);
+    if(blocked){
+      s.syscallSucceeded = false;
+    }else{
+      s.syscallSucceeded = true;
+    }
   }
   // Reset.
   t.writeArg3(s.originalArg3);

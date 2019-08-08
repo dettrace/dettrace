@@ -42,7 +42,6 @@ bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
     if(sched.getNextBlocked() == pid){
       pidIsBlocked = true;
     }
-    sched.resumeParallel(pid, pidIsBlocked);
     return false;
   }
 }
@@ -70,7 +69,6 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sc
     if(sched.getNextBlocked() == pid){
       pidIsBlocked = true;
     }
-    sched.resumeParallel(pid, pidIsBlocked);
     return false;
   }
 }

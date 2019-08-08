@@ -206,12 +206,15 @@ void execution::handleSingleSyscall(pid_t nextPid, bool pidIsBlocked){
         
         handlePostSystemCall(currentState);
         // Syscall was successful. Restart it in parallel.
+        if(currentState.syscallSucceeded){
           if(myScheduler.getNextRunnable() == traceesPid){
-            cout << "next runnable is: " << myScheduler.getNextRunnable() << endl;
-            myScheduler.resumeParallel(traceesPid, pidIsBlocked);
+            cout << "about to resume in handleSingleSyscall after posthook for runnable" << endl;
+            myScheduler.resumeParallel(traceesPid, false);
           } else if(myScheduler.getNextBlocked() == traceesPid){
-            myScheduler.resumeParallel(traceesPid, pidIsBlocked);
+            cout << "about to resume in handleSingleSyscall after posthook for blocked" << endl;
+            myScheduler.resumeParallel(traceesPid, true);
           }
+        }
 
         states.at(traceesPid).callPostHook = false;
         if(myScheduler.isInParallel(traceesPid)){
@@ -232,6 +235,7 @@ void execution::handleSingleSyscall(pid_t nextPid, bool pidIsBlocked){
 
     // Now that it has been restarted, remove it from either the runnableQueue and move it to 
     // parallelProcesses set.
+    cout << "about to resume in handleSingleSyscall after prehook and pidIsBlocked is: " << pidIsBlocked << endl; 
     myScheduler.resumeParallel(nextPid, pidIsBlocked);
   }
 }
@@ -241,7 +245,6 @@ void execution::runProgram(){
 
   // Restart the startingPid and wait for the first event.
   pid_t pid = myScheduler.getStartingPid();
-  int status;
   int64_t signalToDeliver = states.at(pid).signalToDeliver;
   states.at(pid).signalToDeliver = 0;
 
@@ -255,30 +258,38 @@ void execution::runProgram(){
       int r = 0;
       // Try runnableQueue.
       while(r < runnableTotal){
+        cout << "handling runnable" << endl;
         pid_t frontPid = myScheduler.getNextRunnable();
         handleSingleSyscall(frontPid, false);
         r++;
+      }
+
+      // See if any parallel pids need to do a syscall.
+      int stat;
+      pid_t retPid = doWithCheck(waitpid(-1, &stat, 0), "waitpid");
+      cout << "finding another pid" << endl;
+      bool seccomp = handleEvent(retPid, stat);
+      if(seccomp){
+        myScheduler.addToRunnableQueue(retPid);  
       }
 
       int blockedTotal = myScheduler.numberBlocked();
       int b = 0;
       // Try blockedQueue.
       while(b < blockedTotal){
+        cout << "handling blocked" << endl;
         pid_t frontPid = myScheduler.getNextBlocked();
         int64_t signalToDeliver = states.at(frontPid).signalToDeliver;
         states.at(frontPid).signalToDeliver = 0;
         doWithCheck(ptrace(PTRACE_CONT, frontPid, 0, (void*) signalToDeliver),
                       "failed to PTRACE_CONT for blocked pid in event loop \n");
+        cout << "blocked: after ptrace cont , about to wait on specific pid " << frontPid << endl;
+        int s;
+        doWithCheck(waitpid(frontPid, &s, 0), "waitpid");
+        bool seccomp = handleEvent(frontPid, s);
+        if(seccomp) { cout << "it's seccomp" << endl; }
         handleSingleSyscall(frontPid, true);
         b++;
-      }
-
-      // See if any parallel pids need to do a syscall.
-      int stat;
-      pid_t retPid = doWithCheck(waitpid(-1, &stat, 0), "waitpid");
-      bool seccomp = handleEvent(retPid, stat);
-      if(seccomp){
-        myScheduler.addToRunnableQueue(retPid);  
       }
   }
 
