@@ -47,11 +47,6 @@ public:
   bool isInParallel(pid_t process);
 
   /**
-   * @return true if the runnableQueue is empty.
-   */
-  bool emptyRunnableQueue();
-
-  /**
    * @return true if parallelProcesses, runnableQueue,
    * and blockedQueue are empty.
    */
@@ -61,6 +56,11 @@ public:
    * @return the number of pids in the blockedQueue.
    */
   int numberBlocked();
+
+  /**
+   * @return the number of pids in the runnableQueue.
+   */
+  int numberRunnable();
 
   /**
    * @return next runnable pid that needs to do a syscall.

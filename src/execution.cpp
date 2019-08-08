@@ -206,15 +206,12 @@ void execution::handleSingleSyscall(pid_t nextPid, bool pidIsBlocked){
         
         handlePostSystemCall(currentState);
         // Syscall was successful. Restart it in parallel.
-        if(!myScheduler.emptyRunnableQueue() && !pidIsBlocked){
           if(myScheduler.getNextRunnable() == traceesPid){
+            cout << "next runnable is: " << myScheduler.getNextRunnable() << endl;
+            myScheduler.resumeParallel(traceesPid, pidIsBlocked);
+          } else if(myScheduler.getNextBlocked() == traceesPid){
             myScheduler.resumeParallel(traceesPid, pidIsBlocked);
           }
-        }else if(myScheduler.numberBlocked() > 0 && pidIsBlocked){
-          if(myScheduler.getNextBlocked() == traceesPid){
-            myScheduler.resumeParallel(traceesPid, pidIsBlocked);
-          }
-        }
 
         states.at(traceesPid).callPostHook = false;
         if(myScheduler.isInParallel(traceesPid)){
@@ -251,67 +248,38 @@ void execution::runProgram(){
   log.writeToLog(Importance::extra, "waiting at ptrace_cont for first pid\n");
   doWithCheck(ptrace(PTRACE_CONT, pid, 0, (void*) signalToDeliver),
       "failed to PTRACE_CONT first pid\n");
-  pid_t retPid = doWithCheck(waitpid(pid, &status, 0), "waitpid");
-  if(retPid != pid){
-    runtimeError("initial pid doesn't match after waitpid\n");
-  }
-  log.writeToLog(Importance::extra, "got event from waitpid() for first pid\n");
- 
-  bool seccomp = handleEvent(pid, status); 
-  if(seccomp){
-    myScheduler.addToRunnableQueue(pid);
-  }
   
   // Run the program until there are no processes left to run.
   while(!myScheduler.emptyScheduler()){
-    if(myScheduler.emptyRunnableQueue() &&
-       myScheduler.numberBlocked() == 0){
-      // We have to find another pid that wants to do a syscall.
-      // Along the way, we must handle other events, as we don't know
-      // which pid will return from the wait.
-      while(true){
-        int stat;
-        retPid = doWithCheck(waitpid(-1, &stat, 0), "waitpid");
-        bool seccomp = handleEvent(retPid, stat);
-        if(seccomp){
-          myScheduler.addToRunnableQueue(retPid);  
-          break;
-        }
-        if(myScheduler.emptyScheduler()){
-          break;
-        }
-        if(getPtraceEvent(stat) == ptraceEvent::eventExit){
-          break;
-        }
-      }
-    }else{
+      int runnableTotal = myScheduler.numberRunnable();
+      int r = 0;
       // Try runnableQueue.
-      while(!myScheduler.emptyRunnableQueue()){
+      while(r < runnableTotal){
         pid_t frontPid = myScheduler.getNextRunnable();
         handleSingleSyscall(frontPid, false);
+        r++;
       }
 
       int blockedTotal = myScheduler.numberBlocked();
-      int i = 0;
+      int b = 0;
       // Try blockedQueue.
-      if(blockedTotal > 0){
-        while(i < blockedTotal){
-          pid_t frontPid = myScheduler.getNextBlocked();
-          
-          int64_t signalToDeliver = states.at(frontPid).signalToDeliver;
-          states.at(frontPid).signalToDeliver = 0;
-          doWithCheck(ptrace(PTRACE_CONT, frontPid, 0, (void*) signalToDeliver),
-                        "failed to PTRACE_CONT for blocked pid in event loop \n");
-        
-          cout << "trying blocked" << endl; 
-          handleSingleSyscall(frontPid, true);
-          if(frontPid == myScheduler.getNextBlocked()){
-            myScheduler.resumeRetry(frontPid);
-          }
-          i++;
-        }
+      while(b < blockedTotal){
+        pid_t frontPid = myScheduler.getNextBlocked();
+        int64_t signalToDeliver = states.at(frontPid).signalToDeliver;
+        states.at(frontPid).signalToDeliver = 0;
+        doWithCheck(ptrace(PTRACE_CONT, frontPid, 0, (void*) signalToDeliver),
+                      "failed to PTRACE_CONT for blocked pid in event loop \n");
+        handleSingleSyscall(frontPid, true);
+        b++;
       }
-    }
+
+      // See if any parallel pids need to do a syscall.
+      int stat;
+      pid_t retPid = doWithCheck(waitpid(-1, &stat, 0), "waitpid");
+      bool seccomp = handleEvent(retPid, stat);
+      if(seccomp){
+        myScheduler.addToRunnableQueue(retPid);  
+      }
   }
 
   // DEVRAND STEP 5: clean up /dev/[u]random fifo threads

@@ -19,32 +19,35 @@ pid_t scheduler::getStartingPid(){
   return startingPid;
 }
 
-bool scheduler::emptyRunnableQueue(){
-  return runnableQueue.empty();
-}
-
 bool scheduler::isInParallel(pid_t process){
   const bool parallel = parallelProcesses.find(process) != parallelProcesses.end();
   return parallel;
 }
 
 bool scheduler::emptyScheduler(){
-  bool emptyRunnable = runnableQueue.empty();
-  bool emptyBlocked = blockedQueue.empty();
-  bool emptyParallel = parallelProcesses.empty();
-  return emptyRunnable && emptyBlocked && emptyParallel;
+  return runnableQueue.empty() && blockedQueue.empty() && parallelProcesses.empty();
 }
 
 int scheduler::numberBlocked(){
   return blockedQueue.size();
 }
 
+int scheduler::numberRunnable(){
+  return runnableQueue.size();
+}
+
 pid_t scheduler::getNextRunnable(){
-  return runnableQueue.front();
+  if(!runnableQueue.empty()){
+    return runnableQueue.front();
+  }
+  return -1;
 }
 
 pid_t scheduler::getNextBlocked(){
-  return blockedQueue.front();
+  if(!blockedQueue.empty()){
+    return blockedQueue.front();
+  }
+  return -1;
 }
 
 void scheduler::resumeRetry(pid_t pid){
@@ -84,7 +87,7 @@ void scheduler::resumeParallel(pid_t pid, bool pidIsBlocked){
   }else{
     pid_t frontPid = runnableQueue.front();
     if(frontPid != pid){
-      throw runtime_error("trying to resume wrong pid!");
+      throw runtime_error("trying to resume wrong pid from runnableQueue!");
     }
     runnableQueue.pop();
   }
