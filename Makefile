@@ -61,6 +61,9 @@ DOCKER_RUN_ARGS=--rm --privileged --userns=host --cap-add=SYS_ADMIN ${OTHER_DOCK
 run-docker: docker
 	docker run -it ${DOCKER_RUN_ARGS} ${DOCKER_RUN_COMMAND}
 
+run-docker-non-interactive: docker
+	docker run ${DOCKER_RUN_ARGS} ${DOCKER_RUN_COMMAND}
+
 test-docker: clean docker
 ifdef DETTRACE_NO_CPUID_INTERCEPTION
 	docker run --env DETTRACE_NO_CPUID_INTERCEPTION=1 ${DOCKER_RUN_ARGS} make -j tests
