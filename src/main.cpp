@@ -772,14 +772,15 @@ programArgs parseProgramArguments(int argc, char* argv[]){
   args.optIndex = 0;
   args.argc = argc;
   args.argv = argv;
-  args.debugLevel = 3; // print errors and intercepted system calls
+  args.debugLevel = 1; // Verbosity 1: 
+  // args.debugLevel = 3; // print errors and intercepted system calls
   args.pathToChroot = "NONE";
   args.useContainer = true;
   args.workingDir = "NONE";
   args.userChroot = false;
   args.pathToExe = "NONE";
   args.useColor = false; // no ANSI color codes
-  args.logFile = "cloudseal-alpha.log"; // log to a file by default
+  args.logFile = "/tmp/cloudseal-alpha.log"; // log to a file by default
   args.printStatistics = false;
   args.convertUids = false;
   args.currentAsChroot = false;
