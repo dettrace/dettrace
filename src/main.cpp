@@ -207,8 +207,8 @@ int main(int argc, char** argv){
   // we read it from tracer or tracee.
   CloneArgs cloneArgs;
   auto syms = vdsoGetSymbols(getpid());
-  if (4 != syms.size()) {
-    runtimeError("VDSO symbol map has only "+to_string(syms.size())+" entries instead of 4!");
+  if (4 > syms.size()) {
+    runtimeError("VDSO symbol map has only "+to_string(syms.size())+", expect at least 4!");
   }
   cloneArgs.args = args;
   cloneArgs.vdsoSyms = syms;
