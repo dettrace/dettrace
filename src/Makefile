@@ -7,6 +7,8 @@ CXXFLAGS =-g -O3 -std=c++14 -Wall $(INCLUDE) $(DEFINES)
 CFLAGS =-g -O3 -Wall -Wshadow $(INCLUDE) $(DEFINES)
 LIBS = -pthread -lseccomp -L ../lib/lib64
 
+INITRAMFS=$(shell ls "../initramfs.cpio")
+
 LIBCRYPTO=$(shell pkg-config --libs libcrypto)
 LIBCRYPTO_STATIC=$(shell pkg-config --static --libs libcrypto)
 
@@ -30,7 +32,10 @@ dep = $(obj:.o=.d)
 all: dettrace
 all-static: dettrace-static
 
-dettrace: $(obj) $(libs)
+initramfs.o: initramfs.S $(INITRAMFS)
+	$(CC) $< $(CFLAGS) -c -o $@ -D__INITRAMFS__='"$(INITRAMFS)"'
+
+dettrace: initramfs.o $(obj) $(libs)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS) $(LIBARCHIVE) $(LIBELFIN) $(LIBCRYPTO)
 
 dettrace-static: $(obj) $(libs)
@@ -48,6 +53,7 @@ dettrace-static: $(obj) $(libs)
 clean:
 	$(RM) $(obj)
 	$(RM) $(dep)
+	$(RM) initramfs.o
 	$(RM) dettrace
 # Credits to the awesome makefile guide:
 # http://nuclear.mutantstargoat.com/articles/make/
