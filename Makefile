@@ -56,14 +56,16 @@ DOCKER_TAG=0.0.1
 docker:
 	docker build -t ${DOCKER_NAME}:${DOCKER_TAG} .
 
+DOCKER_RUN_ARGS=--rm --privileged --userns=host --cap-add=SYS_ADMIN ${OTHER_DOCKER_ARGS} ${DOCKER_NAME}:${DOCKER_TAG}
+
 run-docker: docker
-	docker run --rm -it --privileged --userns=host --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG}
+	docker run -it ${DOCKER_RUN_ARGS} ${DOCKER_RUN_COMMAND}
 
 test-docker: clean docker
 ifdef DETTRACE_NO_CPUID_INTERCEPTION
-	docker run --rm --privileged --userns=host --cap-add=SYS_ADMIN --env DETTRACE_NO_CPUID_INTERCEPTION=1  ${DOCKER_NAME}:${DOCKER_TAG} make -j tests
+	docker run --env DETTRACE_NO_CPUID_INTERCEPTION=1 ${DOCKER_RUN_ARGS} make -j tests
 else
-	docker run --rm --privileged --userns=host --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG} make -j tests
+	docker run ${DOCKER_RUN_ARGS} make -j tests
 endif
 
 .PHONY: build clean docker run-docker tests build-tests run-tests initramfs
