@@ -1,18 +1,32 @@
 # Top-level Makefile to capture different actions you can take.
 all: build
 
-build: bin initramfs
-	rm -rf bin/dettrace
-	cd src && ${MAKE}
-	cp src/dettrace bin/
+# Shorthand for `dynamic`.
+build: dynamic
 
 bin:
 	mkdir -p ./bin
 
+# This only builds a dynamically linked binary.
+dynamic: bin initramfs
+	rm -rf bin/dettrace
+	cd src && ${MAKE}
+	cp src/dettrace bin/
+
+# This only builds a statically linked binary.
 static: bin
 	rm -rf bin/dettrace
 	cd src && ${MAKE} all-static
 	cp src/dettrace-static bin/dettrace
+
+# This builds both a dynamically linked binary (named bin/dettrace)
+# and a statically linked binary (named bin/dettrace-static)
+dynamic-and-static: bin initramfs
+	rm -rf bin/dettrace
+	cd src && ${MAKE}
+	cp src/dettrace bin/
+	cd src && ${MAKE} all-static
+	cp src/dettrace-static bin/dettrace-static
 
 templistfile := $(shell mktemp)
 initramfs: initramfs.cpio
@@ -52,7 +66,7 @@ else
 	docker run --rm --privileged --userns=host --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG} make -j tests
 endif
 
-.PHONY: clean docker run-docker tests build-tests run-tests initramfs
+.PHONY: build clean docker run-docker tests build-tests run-tests initramfs
 clean:
 	$(RM) bin/dettrace
 	make -C ./src/ clean
