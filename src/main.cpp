@@ -797,7 +797,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       // Help message.
     case 'h':
       fprintf(stderr, "%s\n", usageMsg.c_str());
-      exit(1);
+      exit(0);
       // no-container flag, used for testing
     case 'n':
       args.useContainer = false;
