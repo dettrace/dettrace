@@ -24,6 +24,11 @@ bool scheduler::isInParallel(pid_t process){
   return parallel;
 }
 
+bool scheduler::isFinished(pid_t process){
+  const bool finished = finishedProcesses.find(process) != finishedProcesses.end();
+  return finished;
+}
+
 bool scheduler::emptyScheduler(){
   return runnableQueue.empty() && blockedQueue.empty() && parallelProcesses.empty();
 }
@@ -65,7 +70,12 @@ void scheduler::removeFromScheduler(pid_t pid){
       log.makeTextColored(Color::blue, "Process [%d] removed from parallelProcesses\n");
     log.writeToLog(Importance::info, msg, pid);
     parallelProcesses.erase(pid);
+  }else{
+    // TODO: handle removing from blockedQueue 
+    // or runnableQueue if needed. 
   }
+
+  finishedProcesses.insert(pid);
 }
 
 void scheduler::preemptSyscall(pid_t pid){

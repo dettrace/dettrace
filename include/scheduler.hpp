@@ -47,6 +47,12 @@ public:
   bool isInParallel(pid_t process);
 
   /**
+   * Returns true if the pid is in the finishedProcesses set.
+   * @param process to check.
+   */
+  bool isFinished(pid_t process);
+
+  /**
    * @return true if parallelProcesses, runnableQueue,
    * and blockedQueue are empty.
    */
@@ -158,6 +164,7 @@ private:
   pid_t startingPid = -1;
 
   set<pid_t> parallelProcesses;
+  set<pid_t> finishedProcesses;
   queue<pid_t> runnableQueue;
   queue<pid_t> blockedQueue;
 

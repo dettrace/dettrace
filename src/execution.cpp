@@ -373,18 +373,20 @@ bool execution::handleEvent(pid_t nextPid, const int status){
                                        "With ptraceEventExit.\n");
     log.writeToLog(Importance::inter, msg, nextPid);
 
-    auto tgNumber = myGlobalState.threadGroupNumber.at(nextPid);
-    myScheduler.removeFromScheduler(nextPid); 
+    if(!myScheduler.isFinished(nextPid)){
+      auto tgNumber = myGlobalState.threadGroupNumber.at(nextPid);
+      myScheduler.removeFromScheduler(nextPid); 
 
-    // Also remove from these pieces of state.
-    eraseChildEntry(processTree, nextPid);
-    states.erase(nextPid);
-    myGlobalState.threadGroupNumber.erase(nextPid);
-    deleteMultimapEntry(myGlobalState.threadGroups, tgNumber, nextPid);
+      // Also remove from these pieces of state.
+      eraseChildEntry(processTree, nextPid);
+      states.erase(nextPid);
+      myGlobalState.threadGroupNumber.erase(nextPid);
+      deleteMultimapEntry(myGlobalState.threadGroups, tgNumber, nextPid);
 
-    cout << "about to detach in event exit" << endl;
-    doWithCheck(ptracer::doPtrace(PTRACE_DETACH, nextPid, NULL, NULL),
-                                  "failed to ptrace detach process in eventExit\n");
+      cout << "about to detach in event exit" << endl;
+      doWithCheck(ptracer::doPtrace(PTRACE_DETACH, nextPid, NULL, NULL),
+                                    "failed to ptrace detach process in eventExit\n");
+    }
   }
 
   // The process is fully dead. If it has not already been, remove
@@ -392,7 +394,7 @@ bool execution::handleEvent(pid_t nextPid, const int status){
   if(event == ptraceEvent::nonEventExit){
     auto msg = log.makeTextColored(Color::blue, "Process [%d] has completely exited (nonEvent).\n");
     log.writeToLog(Importance::inter, msg, nextPid);
-    if(myScheduler.isInParallel(nextPid)){
+    if(!myScheduler.isFinished(nextPid)){
       auto tgNumber = myGlobalState.threadGroupNumber.at(nextPid);
       myScheduler.removeFromScheduler(nextPid); 
 
