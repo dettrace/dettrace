@@ -27,9 +27,18 @@ RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-6.0 60 \
 # This is odd, where does the -lnettle dependence come from? -RN [2019.06.10]
 RUN apt-get install -y nettle-dev rsync
 
-ADD ./ /detTrace/
-WORKDIR /detTrace/
+# Lame attempt to improve caching, esp. re: examples:
+ADD ./src      /detTrace/src
+ADD ./include  /detTrace/include
+ADD ./Makefile /detTrace/Makefile
+ADD ./root     /detTrace/root
 
+WORKDIR /detTrace/
+RUN make -j build static
+
+# ADD ./ /detTrace/
+ADD ./initramfs.cpio /detTrace/initramfs.cpio
+ADD ./package        /detTrace/package
 RUN make -j package
 
 # For now we just install everything under user:
@@ -39,8 +48,10 @@ RUN rsync -av ./package/ /usr/
 # Copy only the deployment files into the final image:
 FROM ubuntu:18.04
 RUN apt-get update -y && apt-get install -y python3 bsdmainutils dnsutils curl
-RUN apt-get install -y fractalnow
+RUN apt-get install -y fractalnow libarchive
 COPY --from=0 /detTrace/package /alpha_pkg
 RUN ln -s /alpha_pkg/bin/* /usr/bin/
 
 WORKDIR /alpha_pkg/examples
+
+RUN echo 'export PS1="\[\033[1;36m\]$ \[\033[0m\]"' >> /root/.bashrc

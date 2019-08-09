@@ -1,0 +1,12 @@
+#!/bin/bash
+
+if ! [ "$1" == "run" ];
+then echo "Error, unknown verb: $1"; exit 1
+     echo ""
+     cloudseal --help
+else shift
+fi
+
+cloudseal --debug=0 $*
+
+
