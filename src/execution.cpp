@@ -208,10 +208,8 @@ void execution::handleSingleSyscall(pid_t nextPid, bool pidIsBlocked){
         // Syscall was successful. Restart it in parallel.
         if(currentState.syscallSucceeded){
           if(myScheduler.getNextRunnable() == traceesPid){
-            cout << "about to resume in handleSingleSyscall after posthook for runnable" << endl;
             myScheduler.resumeParallel(traceesPid, false);
           } else if(myScheduler.getNextBlocked() == traceesPid){
-            cout << "about to resume in handleSingleSyscall after posthook for blocked" << endl;
             myScheduler.resumeParallel(traceesPid, true);
           }
         }
@@ -235,7 +233,6 @@ void execution::handleSingleSyscall(pid_t nextPid, bool pidIsBlocked){
 
     // Now that it has been restarted, remove it from either the runnableQueue and move it to 
     // parallelProcesses set.
-    cout << "about to resume in handleSingleSyscall after prehook and pidIsBlocked is: " << pidIsBlocked << endl; 
     myScheduler.resumeParallel(nextPid, pidIsBlocked);
   }
 }
@@ -254,43 +251,47 @@ void execution::runProgram(){
   
   // Run the program until there are no processes left to run.
   while(!myScheduler.emptyScheduler()){
-      int runnableTotal = myScheduler.numberRunnable();
-      int r = 0;
-      // Try runnableQueue.
-      while(r < runnableTotal){
-        cout << "handling runnable" << endl;
-        pid_t frontPid = myScheduler.getNextRunnable();
-        handleSingleSyscall(frontPid, false);
-        r++;
-      }
+    cout << "just looped because scheduler isn't empty" << endl;
+    int runnableTotal = myScheduler.numberRunnable();
+    int r = 0;
+    // Try runnableQueue.
+    while(r < runnableTotal){
+      pid_t frontPid = myScheduler.getNextRunnable();
+      handleSingleSyscall(frontPid, false);
+      r++;
+    }
 
-      // See if any parallel pids need to do a syscall.
-      int stat;
-      pid_t retPid = doWithCheck(waitpid(-1, &stat, 0), "waitpid");
-      cout << "finding another pid" << endl;
-      bool seccomp = handleEvent(retPid, stat);
+    // See if any parallel pids need to do a syscall.
+    cout << "about to wait to see if any parallel processes need to do a syscall" << endl;
+    auto p = loopOnWaitpid(-1);
+    pid_t retPid = p.first;
+    int stat = p.second;
+    //pid_t retPid = doWithCheck(waitpid(-1, &stat, 0), "waitpid");
+    bool seccomp = handleEvent(retPid, stat);
+    if(seccomp){
+      myScheduler.addToRunnableQueue(retPid);  
+    }
+
+    int blockedTotal = myScheduler.numberBlocked();
+    cout << "blockedTotal: " << blockedTotal << endl;
+    cout << "next blocked is: " << myScheduler.getNextBlocked() << endl;
+    int b = 0;
+    // Try blockedQueue.
+    while(b < blockedTotal){
+      pid_t frontPid = myScheduler.getNextBlocked();
+      int64_t signalToDeliver = states.at(frontPid).signalToDeliver;
+      states.at(frontPid).signalToDeliver = 0;
+      doWithCheck(ptrace(PTRACE_CONT, frontPid, 0, (void*) signalToDeliver),
+                    "failed to PTRACE_CONT for blocked pid in event loop \n");
+      int s;
+      cout << "waiting after ptrace_cont'd a blocked pid" << endl;
+      doWithCheck(waitpid(frontPid, &s, 0), "waitpid");
+      bool seccomp = handleEvent(frontPid, s);
       if(seccomp){
-        myScheduler.addToRunnableQueue(retPid);  
-      }
-
-      int blockedTotal = myScheduler.numberBlocked();
-      int b = 0;
-      // Try blockedQueue.
-      while(b < blockedTotal){
-        cout << "handling blocked" << endl;
-        pid_t frontPid = myScheduler.getNextBlocked();
-        int64_t signalToDeliver = states.at(frontPid).signalToDeliver;
-        states.at(frontPid).signalToDeliver = 0;
-        doWithCheck(ptrace(PTRACE_CONT, frontPid, 0, (void*) signalToDeliver),
-                      "failed to PTRACE_CONT for blocked pid in event loop \n");
-        cout << "blocked: after ptrace cont , about to wait on specific pid " << frontPid << endl;
-        int s;
-        doWithCheck(waitpid(frontPid, &s, 0), "waitpid");
-        bool seccomp = handleEvent(frontPid, s);
-        if(seccomp) { cout << "it's seccomp" << endl; }
         handleSingleSyscall(frontPid, true);
-        b++;
       }
+      b++;
+    }
   }
 
   // DEVRAND STEP 5: clean up /dev/[u]random fifo threads
@@ -381,6 +382,7 @@ bool execution::handleEvent(pid_t nextPid, const int status){
     myGlobalState.threadGroupNumber.erase(nextPid);
     deleteMultimapEntry(myGlobalState.threadGroups, tgNumber, nextPid);
 
+    cout << "about to detach in event exit" << endl;
     doWithCheck(ptracer::doPtrace(PTRACE_DETACH, nextPid, NULL, NULL),
                                   "failed to ptrace detach process in eventExit\n");
   }
@@ -391,9 +393,14 @@ bool execution::handleEvent(pid_t nextPid, const int status){
     auto msg = log.makeTextColored(Color::blue, "Process [%d] has completely exited (nonEvent).\n");
     log.writeToLog(Importance::inter, msg, nextPid);
     if(myScheduler.isInParallel(nextPid)){
-      myScheduler.removeFromScheduler(nextPid);
-      doWithCheck(ptracer::doPtrace(PTRACE_DETACH, nextPid, NULL, NULL),
-                                    "failed to ptrace detach process in nonEvent\n");
+      auto tgNumber = myGlobalState.threadGroupNumber.at(nextPid);
+      myScheduler.removeFromScheduler(nextPid); 
+
+      // Also remove from these pieces of state.
+      eraseChildEntry(processTree, nextPid);
+      states.erase(nextPid);
+      myGlobalState.threadGroupNumber.erase(nextPid);
+      deleteMultimapEntry(myGlobalState.threadGroups, tgNumber, nextPid);
     }
   }
 
@@ -502,6 +509,7 @@ void execution::handleForkEvent(const pid_t traceesPid){
   log.writeToLog(Importance::info, log.makeTextColored(Color::blue,
                  "Waiting for child to be ready for tracing...\n"));
   int status;
+  cout << "waiting for child to be ready for tracing in fork event" << endl;
   int retPid = doWithCheck(waitpid(newChildPid, &status, 0), "waitpid");
   // This should never happen.
   if(retPid != newChildPid){
@@ -591,6 +599,7 @@ void execution::disableVdso(pid_t pid) {
 
     ptracer::doPtrace(PTRACE_SETREGS, pid, 0, &regs);
     ptracer::doPtrace(PTRACE_CONT, pid, 0, 0);
+    cout << "waiting in disable vdso" << endl;
     assert(waitpid(pid, &status, 0) == pid);
     assert(WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP);
     ptracer::doPtrace(PTRACE_GETREGS, pid, 0, &regs);
@@ -621,6 +630,7 @@ static unsigned long traceePreinitMmap(pid_t pid, ptracer& t) {
   int status;
   ptracer::doPtrace(PTRACE_SETREGS, pid, 0, &regs);
   ptracer::doPtrace(PTRACE_CONT, pid, 0, 0);
+  cout << "waiting in preinit mmap" << endl;
   assert(waitpid(pid, &status, 0) == pid);
   assert(WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP);
   ptracer::doPtrace(PTRACE_GETREGS, pid, 0, &regs);
@@ -649,6 +659,7 @@ void execution::handleExecEvent(pid_t pid) {
   ptracer::doPtrace(PTRACE_CONT, pid, 0, 0);
 
   int status;
+  cout << "waiting in handle exec event" << endl;
   assert(waitpid(pid, &status, 0) == pid);
   assert(WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP);
 
@@ -808,9 +819,6 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
   }
 
-  if(states.find(traceesPid) == states.end()){
-    cout << "pid not in states map" << endl;
-  }
   states.at(traceesPid).signalToDeliver = sigNum;
   int64_t signalToDeliver = states.at(traceesPid).signalToDeliver;
 
@@ -1449,6 +1457,7 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
       ptracer::doPtrace(PTRACE_SINGLESTEP, pidToContinue, 0, (void*) signalToDeliver);
       // wait for our SIGTRAP
       // TODO check return value of this!!
+      cout << "this should not happen!!" << endl;
       waitpid(pidToContinue, &status, 0);
 
       // call our post-hook manually for vsyscall stops.
@@ -1488,6 +1497,7 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
   }
 
   // Wait for next event to intercept.
+  cout << "about to wait in getNextEvent after ptrace cont/syscall" << endl;
   traceesPid = doWithCheck(waitpid(pidToContinue, &status, 0), "waitpid");
   log.writeToLog(Importance::extra, "getNextEvent(): Got event from waitpid().\n");
 
@@ -1622,49 +1632,27 @@ void deleteMultimapEntry(unordered_multimap<pid_t, pid_t>& mymap, pid_t key, pid
                         to_string(key) + ", " + to_string(value) + ")\n");
 }
 
-pair<bool, ptraceEvent> execution::loopOnWaitpid(pid_t currentPid) {
-  // Threads may not respond to ptrace calls since it has exited. Check waitpid to see
-  // if an exit status was delivered to us.
+pair<pid_t, int> execution::loopOnWaitpid(pid_t currentPid) {
   int status;
-
-  // Attempt blocking wait. Will error if thread no longer responds.
-  if (waitpid(currentPid, &status, 0) != -1) {
-    return make_pair(true, getPtraceEvent(status));
-  } else {
-    log.writeToLog(Importance::info, "Failed to hear from tracee through waitpid\n.");
-    // dummy ptrace event, you should ignore this field on false.
-    return make_pair(false, ptraceEvent::eventExit);
+  int retPid;
+  //Wait for event for N times.
+  //TODO In the future a timeout-like event might be better than busy waiting.
+  for(int i = 0; i < 100000; i++){
+    // Set function wide status here! Used at very end to report the correct message!
+    retPid = waitpid(currentPid, &status, WNOHANG);
+    if(retPid > 0){
+      auto msg = log.makeTextColored(Color::blue,
+                   "Total calls to waitpid (ptrace syscall): %d\n");
+      log.writeToLog(Importance::extra, msg, i + 1);
+      cout << "about to break from polling waitpid" << endl;
+      break;
+    } else if (retPid == 0) {
+      // Still looping hoping for event to come... continue.
+      continue;
+    } else {
+      runtimeError("Unexpected return value from waitpid: " + to_string(retPid));
+    }
   }
 
-  // It seems we don't actually need to poll like this: but we leave in case it is needed
-  // in the future.
-  log.writeToLog(Importance::info,
-                 "Initial blocking waitpid failed, switching to polling?\n.");
-
-  // Wait for event for N times.
-  // TODO In the future a timeout-like event might be better than busy waiting.
-  // for(int i = 0; i < 100000; i++){
-  //   // Set function wide status here! Used at very end to report the correct message!
-  //   int nextPid = waitpid(currentPid, &status, WNOHANG);
-  //   if(nextPid == currentPid){
-  //     done = true;
-  //     auto msg = log.makeTextColored(Color::blue,
-  //                  "Total calls to waitpid (ptrace syscall): %d\n");
-  //     log.writeToLog(Importance::extra, msg, i + 1);
-  //     break;
-  //   } else if (nextPid == 0) {
-  //     // Still looping hoping for event to come... continue.
-  //     continue;
-  //   } else {
-  //     runtimeError("Unexpected return value from waitpid: " + to_string(nextPid));
-  //   }
-  // }
-
-  // if (!done) {
-  //   log.writeToLog(Importance::info, "Failed to hear from tracee through waitpid\n.");
-  //   // dummy ptrace event, you should ignore this field on false.
-  //   return make_pair(false, ptraceEvent::eventExit);
-  // }
-
-  // return make_pair(true, getPtraceEvent(status));
+  return make_pair(retPid, status);
 }
