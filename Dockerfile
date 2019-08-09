@@ -37,7 +37,6 @@ WORKDIR /detTrace/
 RUN make -j build static
 
 # ADD ./ /detTrace/
-ADD ./initramfs.cpio /detTrace/initramfs.cpio
 ADD ./package        /detTrace/package
 RUN make -j package
 
@@ -48,7 +47,7 @@ RUN rsync -av ./package/ /usr/
 # Copy only the deployment files into the final image:
 FROM ubuntu:18.04
 RUN apt-get update -y && apt-get install -y python3 bsdmainutils dnsutils curl
-RUN apt-get install -y fractalnow libarchive
+RUN apt-get install -y fractalnow 
 COPY --from=0 /detTrace/package /alpha_pkg
 RUN ln -s /alpha_pkg/bin/* /usr/bin/
 

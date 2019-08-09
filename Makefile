@@ -10,9 +10,8 @@ bin:
 	mkdir -p ./bin
 
 static: bin
-	rm -rf bin/dettrace
-	cd src && ${MAKE} all-static
-	cp src/dettrace-static bin/dettrace
+	cd src && ${MAKE} clean all-static
+	cp src/dettrace-static bin/dettrace-static
 
 templistfile := $(shell mktemp)
 initramfs: initramfs.cpio
@@ -37,7 +36,7 @@ run-tests: build-tests build
 
 DOCKER_NAME=cloudseal-alpha
 # TODO: store version in one place in a file.
-DOCKER_TAG=0.1.663
+DOCKER_TAG=0.1.665
 
 docker:
 	docker build -t ${DOCKER_NAME}:${DOCKER_TAG} .
@@ -58,6 +57,7 @@ endif
 .PHONY: clean docker run-docker tests build-tests run-tests initramfs
 clean:
 	$(RM) bin/dettrace
+	$(RM) bin/dettrace-static
 	make -C ./src/ clean
 # Use `|| true` in case one forgets to check out submodules
 	make -C ./test/samplePrograms clean || true
@@ -66,8 +66,8 @@ clean:
 
 # ----------------------------------------
 
-package: build static
+package: build static initramfs
 	cp initramfs.cpio package/
 	mkdir -p package/bin
-	cp -a bin/dettrace package/bin/cloudseal
+	cp -a bin/dettrace-static package/bin/cloudseal
 	cp -a root package/root
