@@ -29,13 +29,15 @@ src = $(wildcard *.cpp)
 obj = $(src:.cpp=.o)
 dep = $(obj:.o=.d)
 
+obj += initramfs.o
+
 all: dettrace
 all-static: dettrace-static
 
 initramfs.o: initramfs.S $(INITRAMFS)
 	$(CC) $< $(CFLAGS) -c -o $@ -D__INITRAMFS__='"$(INITRAMFS)"'
 
-dettrace: initramfs.o $(obj) $(libs)
+dettrace: $(obj) $(libs)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS) $(LIBARCHIVE) $(LIBELFIN) $(LIBCRYPTO)
 
 dettrace-static: $(obj) $(libs)
