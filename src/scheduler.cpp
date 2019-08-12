@@ -63,19 +63,65 @@ void scheduler::resumeRetry(pid_t pid){
   blockedQueue.push(pid);
 }
 
-// Should only have to remove from parallelProcesses.
 void scheduler::removeFromScheduler(pid_t pid){
+  bool found = false;
   if(parallelProcesses.find(pid) != parallelProcesses.end()){
     auto msg = 
       log.makeTextColored(Color::blue, "Process [%d] removed from parallelProcesses\n");
     log.writeToLog(Importance::info, msg, pid);
     parallelProcesses.erase(pid);
+    found = true;
   }else{
-    // TODO: handle removing from blockedQueue 
-    // or runnableQueue if needed. 
+    queue<pid_t> blockedTemp;
+    queue<pid_t> runnableTemp;
+
+    // If the process was not in parallelProcesses, have to check the 
+    // blockedQueue and the runnableQueue. Throw an error if we don't find it.
+    while(!found){
+      pid_t frontPid = blockedQueue.front();
+      blockedQueue.pop();
+      if(frontPid == pid){
+        found = true;
+        break;
+      }else{
+        blockedTemp.push(frontPid);
+      }
+    }
+
+    while(!blockedQueue.empty()){
+      pid_t frontPid = blockedQueue.front();
+      blockedTemp.push(frontPid);
+      blockedQueue.pop();
+    }
+    blockedQueue = blockedTemp;
+
+    // We may need to look at the runnableQueue as well.    
+    if(!found){
+      while(!found){
+        pid_t frontPid = runnableQueue.front();
+        runnableQueue.pop();
+        if(frontPid == pid){
+          found = true;
+          break;
+        }else{
+          runnableTemp.push(frontPid);
+        }
+      }
+
+      while(!runnableQueue.empty()){
+        pid_t frontPid = runnableQueue.front();
+        runnableTemp.push(frontPid);
+        runnableQueue.pop();
+      }
+      runnableQueue = runnableTemp;
+    }
   }
 
-  finishedProcesses.insert(pid);
+  if(found){
+    finishedProcesses.insert(pid);
+  }else{
+    throw runtime_error("unable to find pid in scheduler when trying to remove");
+  }
 }
 
 void scheduler::preemptSyscall(pid_t pid){
@@ -96,8 +142,6 @@ void scheduler::resumeParallel(pid_t pid, bool pidIsBlocked){
     blockedQueue.pop();
   }else{
     pid_t frontPid = runnableQueue.front();
-    cout << "front pid on runnable queue is: " << frontPid << endl;
-    cout << "param pid is: " << pid << endl; 
     if(frontPid != pid){
       throw runtime_error("trying to resume wrong pid from runnableQueue!");
     }
