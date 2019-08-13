@@ -1,3 +1,19 @@
+/// parsing vDSO symbols based on vDSO entry found from /proc/<pid>/maps
+/// Note vDSO can be disabled by passing `vdso=0` kernel command line.
+/// The vDSO entry is loaded by Linux kernel before app return from execve
+/// Even statically linked app will have vDSO loaded (by Linux kernel).
+///
+/// vDSO is just a regular dynamic shared object (DSO), like any `.so` file
+/// in Linux, with the exception it doesn't have external dependencies.
+/// Typically it can be found at: /lib/modules/`uname -r`/vdso/vdso64.so
+///
+/// vDSO provides symbols like:
+///     clock_gettime, time, gettimeofday, getcpu
+/// more recent kernel also adds clock_getres
+/// The symbols can be found in .dynsym section of the DSO
+/// This file parse those symbols from .dynsym section, following the ELF
+/// spec defined at: https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.intro.html
+///
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -232,14 +248,17 @@ std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>> v
       strtab = (const char*)(base + sh -> sh_offset);
     }
   }
-  if (!dynsym) return res;
+  if (!dynsym || !strtab) return res;
 
   for (auto i = 0; i < dynsym->sh_size / dynsym->sh_entsize; i++) {
     Elf64_Sym* sym = (Elf64_Sym*)(base + dynsym->sh_offset + i * dynsym->sh_entsize);
     const char* name = (const char*)((unsigned long)strtab + sym->st_name);
     if (ELF64_ST_BIND(sym->st_info) == STB_GLOBAL &&
 	ELF64_ST_TYPE(sym->st_info) == STT_FUNC) {
-      res[name] = std::tie(sym->st_value, sym->st_size, shbase[sym->st_shndx].sh_addralign);
+      assert(sym->st_shndx < ehdr->e_shnum);
+      unsigned long alignment = sym->st_shndx < ehdr->e_shnum?
+	shbase[sym->st_shndx].sh_addralign: 16;
+      res[name] = std::tie(sym->st_value, sym->st_size, alignment);
     }
   }
   
