@@ -15,15 +15,11 @@ LIBCRYPTO_STATIC=$(shell pkg-config --static --libs libcrypto)
 LIBARCHIVE=$(shell pkg-config --libs libarchive)
 LIBARCHIVE_STATIC=$(shell pkg-config --static --libs libarchive)
 
-LIBELFIN=$(shell pkg-config --libs libelf++)
-LIBELFIN_STATIC=$(shell pkg-config --static --libs libelf++)
-
 # Libdet only.
 LIBDETFLAGS= -g -O2 -Wall -Wextra -Wconversion -fPIC -shared -Wl,--no-as-needed -std=c99
 LIBDETLIBS=-ldl -lm
 
-LIBELFIN_CFLAGS = $(shell pkg-config --cflags libelf++)
-INCLUDE = -I ../include/ -I ../lib/include $(LIBELFIN_CFLAGS)
+INCLUDE = -I ../include/ -I ../lib/include
 
 src = $(wildcard *.cpp)
 obj = $(src:.cpp=.o)
@@ -38,10 +34,10 @@ initramfs.o: initramfs.S $(INITRAMFS)
 	$(CC) $< $(CFLAGS) -c -o $@ -D__INITRAMFS__='"$(INITRAMFS)"'
 
 dettrace: $(obj) $(libs)
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS) $(LIBARCHIVE) $(LIBELFIN) $(LIBCRYPTO)
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS) $(LIBARCHIVE) $(LIBCRYPTO)
 
 dettrace-static: $(obj) $(libs)
-	$(CXX) $(CXXFLAGS) -static $^ -o $@ $(LIBS) $(LIBARCHIVE_STATIC) $(LIBELFIN_STATIC) $(LIBCRYPTO_STATIC)
+	$(CXX) $(CXXFLAGS) -static $^ -o $@ $(LIBS) $(LIBARCHIVE_STATIC) $(LIBCRYPTO_STATIC)
 
 -include $(dep)
 

@@ -14,9 +14,6 @@ RUN apt-get update -y && \
 RUN apt-get update -y && \
     apt-get install -y cpio
 
-RUN apt-get update -y && \
-    apt-get install -y libelfin-dev
-
 RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-6.0 60 \
 		--slave /usr/bin/clang++ clang++ /usr/bin/clang++-6.0 \
 		--slave /usr/bin/clang-cpp clang-cpp /usr/bin/clang-cpp-6.0 \
