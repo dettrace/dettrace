@@ -71,57 +71,54 @@ void scheduler::removeFromScheduler(pid_t pid){
     log.writeToLog(Importance::info, msg, pid);
     parallelProcesses.erase(pid);
     found = true;
-  }else{
-    queue<pid_t> blockedTemp;
-    queue<pid_t> runnableTemp;
+  }
+  queue<pid_t> blockedTemp;
+  queue<pid_t> runnableTemp;
 
-    // If the process was not in parallelProcesses, have to check the 
-    // blockedQueue and the runnableQueue. Throw an error if we don't find it.
-    while(!found){
-      pid_t frontPid = blockedQueue.front();
-      blockedQueue.pop();
-      if(frontPid == pid){
-        found = true;
-        break;
-      }else{
-        blockedTemp.push(frontPid);
-      }
-    }
-
-    while(!blockedQueue.empty()){
-      pid_t frontPid = blockedQueue.front();
+  // If the process was not in parallelProcesses, have to check the 
+  // blockedQueue and the runnableQueue. Throw an error if we don't find it.
+  while(!blockedQueue.empty()){
+    pid_t frontPid = blockedQueue.front();
+    blockedQueue.pop();
+    if(frontPid == pid){
+      auto msg = 
+        log.makeTextColored(Color::blue, "Process [%d] removed from blockedQueue\n");
+      log.writeToLog(Importance::info, msg, pid);
+      break;
+    }else{
       blockedTemp.push(frontPid);
-      blockedQueue.pop();
-    }
-    blockedQueue = blockedTemp;
-
-    // We may need to look at the runnableQueue as well.    
-    if(!found){
-      while(!found){
-        pid_t frontPid = runnableQueue.front();
-        runnableQueue.pop();
-        if(frontPid == pid){
-          found = true;
-          break;
-        }else{
-          runnableTemp.push(frontPid);
-        }
-      }
-
-      while(!runnableQueue.empty()){
-        pid_t frontPid = runnableQueue.front();
-        runnableTemp.push(frontPid);
-        runnableQueue.pop();
-      }
-      runnableQueue = runnableTemp;
     }
   }
 
-  if(found){
-    finishedProcesses.insert(pid);
-  }else{
-    throw runtime_error("unable to find pid in scheduler when trying to remove");
+  while(!blockedQueue.empty()){
+    pid_t frontPid = blockedQueue.front();
+    blockedTemp.push(frontPid);
+    blockedQueue.pop();
   }
+  blockedQueue = blockedTemp;
+
+  // We may need to look at the runnableQueue as well.    
+  while(!runnableQueue.empty()){
+    pid_t frontPid = runnableQueue.front();
+    runnableQueue.pop();
+    if(frontPid == pid){
+      auto msg = 
+        log.makeTextColored(Color::blue, "Process [%d] removed from runnableQueue\n");
+      log.writeToLog(Importance::info, msg, pid);
+      break;
+    }else{
+      runnableTemp.push(frontPid);
+    }
+  }
+
+  while(!runnableQueue.empty()){
+    pid_t frontPid = runnableQueue.front();
+    runnableTemp.push(frontPid);
+    runnableQueue.pop();
+  }
+  runnableQueue = runnableTemp;
+
+  finishedProcesses.insert(pid);
 }
 
 void scheduler::preemptSyscall(pid_t pid){

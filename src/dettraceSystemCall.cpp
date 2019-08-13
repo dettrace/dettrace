@@ -309,6 +309,7 @@ void epoll_pwaitSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
 bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
 
+  cout << "in execve prehook system call" << endl;
   auto tgNumber = gs.threadGroupNumber.at(s.traceePid);
   if (gs.threadGroups.count(tgNumber) != 1) {
     runtimeError("We do not support exec from threaded process groups!");
@@ -548,6 +549,7 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   // See definitions of variables here.
   // https://github.com/spotify/linux/blob/master/include/linux/futex.h
   int futexCmd = futexOp & FUTEX_CMD_MASK;
+  cout << "in futex" << endl;
   gs.log.writeToLog(Importance::info, "Operation: " + futexCommands.at(futexCmd) + "\n");
 
   if ((futexOp & FUTEX_PRIVATE_FLAG) != 0) {
