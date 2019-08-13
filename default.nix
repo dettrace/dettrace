@@ -15,7 +15,6 @@ stdenv.mkDerivation {
     cpio
     pkgconfig
     openssl
-    libelf
   ];
 
   # Substract repo files that we don't actually need for the build:
