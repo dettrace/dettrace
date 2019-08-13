@@ -178,7 +178,6 @@ void execution::handleSingleSyscall(pid_t nextPid, bool pidIsBlocked){
   // Prehook [seccomp event]
   bool postHook = handleSeccomp(nextPid);
   if(!myScheduler.isFinished(nextPid)){
-    cout << "handle single: setting posthook after seccomp" << endl;
     states.at(nextPid).callPostHook = postHook;
   }else{
     return;
@@ -194,12 +193,10 @@ void execution::handleSingleSyscall(pid_t nextPid, bool pidIsBlocked){
       //throw runtime_error("retEvent was not ptrace syscall!");
       handleEvent(traceesPid, status);
     }else{
-      cout << "the next event is a syscall" << endl;
       state& currentState = states.at(traceesPid);
       
       // old-kernel-only ptrace system call event for pre exit hook.
       if(kernelPre4_8 && currentState.onPreExitEvent){
-        cout << "weird pre kernel stuff" << endl;
         states.at(traceesPid).callPostHook = true;
         currentState.onPreExitEvent = false;
       }else{
@@ -208,7 +205,6 @@ void execution::handleSingleSyscall(pid_t nextPid, bool pidIsBlocked){
 
         // Dealing with blocked syscalls, and replaying, and preempting
         // is all handled in handlePostSystemCall().
-        cout << "not weird pre kernel stuff" << endl;
         int64_t signalToDeliver = states.at(traceesPid).signalToDeliver;
         states.at(traceesPid).signalToDeliver = 0;
         
@@ -216,13 +212,12 @@ void execution::handleSingleSyscall(pid_t nextPid, bool pidIsBlocked){
         // Syscall was successful. Restart it in parallel.
         if(currentState.syscallSucceeded){
           if(myScheduler.getNextRunnable() == traceesPid){
-            myScheduler.resumeParallel(traceesPid, false);
+            myScheduler.resumeParallel(traceesPid);
           } else if(myScheduler.getNextBlocked() == traceesPid){
-            myScheduler.resumeParallel(traceesPid, true);
+            myScheduler.resumeParallel(traceesPid);
           }
 
           if(states.find(traceesPid) != states.end()){
-            cout << "after checking syscall succeeded, setting post hook to false" << endl;
             states.at(traceesPid).callPostHook = false;
           }
           if(myScheduler.isInParallel(traceesPid)){
@@ -236,7 +231,6 @@ void execution::handleSingleSyscall(pid_t nextPid, bool pidIsBlocked){
     // We don't need to do the posthook. We only need a subset of getNextEvent()
     // so we will only use a small part of it here.
     if(!myScheduler.isFinished(nextPid)){
-      cout << "not gonna do the posthook" << endl;
       int64_t signalToDeliver = states.at(nextPid).signalToDeliver;
       states.at(nextPid).signalToDeliver = 0;
       
@@ -246,7 +240,7 @@ void execution::handleSingleSyscall(pid_t nextPid, bool pidIsBlocked){
 
       // Now that it has been restarted, remove it from either the runnableQueue and move it to 
       // parallelProcesses set.
-      myScheduler.resumeParallel(nextPid, pidIsBlocked);
+      myScheduler.resumeParallel(nextPid);
     }
   }
 }
@@ -256,7 +250,6 @@ void execution::runProgram(){
 
   // Restart the startingPid and wait for the first event.
   pid_t pid = myScheduler.getStartingPid();
-  cout << "checking starting pid" << endl;
   int64_t signalToDeliver = states.at(pid).signalToDeliver;
   states.at(pid).signalToDeliver = 0;
 
@@ -298,7 +291,6 @@ void execution::runProgram(){
     // Try blockedQueue.
     while(b < blockedTotal){
       pid_t frontPid = myScheduler.getNextBlocked();
-      cout << "handling blocked: " << frontPid << endl;
       int64_t signalToDeliver = states.at(frontPid).signalToDeliver;
       states.at(frontPid).signalToDeliver = 0;
       doWithCheck(ptrace(PTRACE_CONT, frontPid, 0, (void*) signalToDeliver),
@@ -438,7 +430,6 @@ bool execution::handleEvent(pid_t nextPid, const int status){
                    nextPid, msg.c_str());
 
     handleForkEvent(nextPid);
-    cout << "handling fork" << endl;
     states.at(nextPid).callPostHook = false;
   }
 
@@ -447,7 +438,6 @@ bool execution::handleEvent(pid_t nextPid, const int status){
                    log.makeTextColored(Color::blue, "[%d] Caught execve event!\n"),
                    nextPid);
     //reset CPUID trap flag
-    cout << "setting cpuid trap to false" << endl;
     states.at(nextPid).CPUIDTrapSet = false;
 
     handleExecEvent(nextPid);
@@ -490,14 +480,12 @@ void execution::handleForkEvent(const pid_t traceesPid){
 
   // Share fdStatus. Processes get their own.
 
-  cout << "fds" << endl;
   unordered_map<int, descriptorType> fds = *states.at(threadGroup).fdStatus.get();
   states.emplace(newChildPid, state {newChildPid, debugLevel, fds});
   // Add this new process to our states.
 
   
   // Inherit file descriptor set from our parent.
-  cout << "inheriting file descriptor" << endl;
   states.at(newChildPid).fdStatus = states.at(threadGroup).fdStatus;
 
   log.writeToLog(Importance::info,
@@ -512,7 +500,6 @@ void execution::handleForkEvent(const pid_t traceesPid){
   // attributes to MAP_PRIVATE. new child's `mmapMemory` hence must be inherited
   // from parent process, to be consistent with fork() semantic.
   // TODO for threads we may not need to do this?!
-  cout << "child proc mmap mem does exit / set addr" << endl;
   states.at(newChildPid).mmapMemory.doesExist = true;
   states.at(newChildPid).mmapMemory.setAddr(states.at(traceesPid).mmapMemory.getAddr());
 
@@ -679,7 +666,6 @@ void execution::handleExecEvent(pid_t pid) {
       states.emplace(pid, state {pid, debugLevel} );
   }
   // Reset file descriptor state, it is wiped after execve.
-  cout << "reset file descriptor state" << endl;
   states.at(pid).fdStatus = make_shared<unordered_map<int, descriptorType>>();
 
   states.at(pid).mmapMemory.doesExist = true;
@@ -719,14 +705,11 @@ bool execution::handleSeccomp(const pid_t traceesPid){
   // Get registers from tracee.
   tracer.updateState(traceesPid);
 
-  cout << "handle seccomp checking cpuidtrapset" << endl;
   if(!states.at(traceesPid).CPUIDTrapSet && !myGlobalState.kernelPre4_12 && NULL == getenv("DETTRACE_NO_CPUID_INTERCEPTION")){
     //check if CPUID needs to be set, if it does, set trap
-    cout << "trapcpuid about to be called" << endl;
     trapCPUID(myGlobalState, states.at(traceesPid), tracer);
   }
 
-  cout << "calling handle pre system call" << endl;
   auto callPostHook = handlePreSystemCall( states.at(traceesPid), traceesPid );
   return callPostHook;
 }
@@ -763,7 +746,6 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
       tracer.writeIp((uint64_t) tracer.getRip().ptr + ip_step);
 
       // Signal is now suppressed.
-      cout << "supressing signal" << endl;
       states.at(traceesPid).signalToDeliver = 0;
       
       int64_t signalToDeliver = states.at(traceesPid).signalToDeliver;
@@ -785,7 +767,6 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
       tracer.writeIp((uint64_t) tracer.getRip().ptr + 2);
 
       // suppress SIGSEGV from reaching the tracee
-      cout << "still suppressing" << endl;
       states.at(traceesPid).signalToDeliver = 0;
 
       // fill in canonical cpuid return values
@@ -833,22 +814,27 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
         runtimeError("CPUID unsupported %eax argument");
       }
 
-      cout << "finally done surpressing and going to do PTRACE_CONT" << endl;
       int64_t signalToDeliver = states.at(traceesPid).signalToDeliver;
       doWithCheck(ptrace(PTRACE_CONT, traceesPid, 0, (void*)signalToDeliver),
         "failed to ptrace_cont from handleSignal()\n");
+
+      if(!myScheduler.isInParallel(traceesPid)){
+        myScheduler.resumeParallel(traceesPid);
+      }
       return;
     }
 
   }
 
-  cout << "not sigsegv just going to deliver and PTRACE_CONT" << endl;
   states.at(traceesPid).signalToDeliver = sigNum;
   int64_t signalToDeliver = states.at(traceesPid).signalToDeliver;
 
   doWithCheck(ptrace(PTRACE_CONT, traceesPid, 0, (void*)signalToDeliver),
       "failed to ptrace_cont from handleSignal()\n");
 
+  if(!myScheduler.isInParallel(traceesPid)){
+    myScheduler.resumeParallel(traceesPid);
+  }
   auto msg = "[%d] Tracer: Received signal: %d. Forwarding signal to tracee.\n";
   auto coloredMsg = log.makeTextColored(Color::blue, msg);
   log.writeToLog(Importance::inter, coloredMsg, traceesPid, sigNum);
@@ -1451,7 +1437,6 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
   // never delivered to the tracee! This field is updated in @handleSignal
   //
   // 64 bit value to avoid warning when casting to void* below.
-  cout << "in get next event" << endl;
   int64_t signalToDeliver = states.at(pidToContinue).signalToDeliver;
 
   // Reset signal field after for next event.
@@ -1489,7 +1474,6 @@ execution::getNextEvent(pid_t pidToContinue, bool ptraceSystemcall){
 
       // TODO this assumes we wanted to call the post-hook for this system call,
       // is this always true?
-      cout << "after single stepping, going to call post hook" << endl;
       callPostHook(syscallNum, myGlobalState, states.at(pidToContinue), tracer, myScheduler);
 
       // TODO What's the point of this second updateState call?

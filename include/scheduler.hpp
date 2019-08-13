@@ -99,9 +99,8 @@ public:
    * Remove the pid from runnableQueue or blockedQueue.
    * Add it back to parallelProcesses.
    * @param pid to be resumed.
-   * @param true if pid is on the blockedQueue currently.
    */
-  void resumeParallel(pid_t pid, bool pidIsBlocked);
+  void resumeParallel(pid_t pid);
 
   /**
    * Adds new process to parallelProcesses.

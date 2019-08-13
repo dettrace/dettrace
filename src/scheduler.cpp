@@ -130,19 +130,15 @@ void scheduler::preemptSyscall(pid_t pid){
   blockedQueue.push(pid); 
 }
 
-void scheduler::resumeParallel(pid_t pid, bool pidIsBlocked){
-  if(pidIsBlocked){
-    pid_t frontPid = blockedQueue.front();
-    if(frontPid != pid){
-      throw runtime_error("trying to resume wrong pid from blockedQueue!");
-    }
+void scheduler::resumeParallel(pid_t pid){
+  pid_t frontBlocked = blockedQueue.front();
+  pid_t frontRunnable = runnableQueue.front();
+  if(frontBlocked == pid){
     blockedQueue.pop();
-  }else{
-    pid_t frontPid = runnableQueue.front();
-    if(frontPid != pid){
-      throw runtime_error("trying to resume wrong pid from runnableQueue!");
-    }
+  }else if(frontRunnable == pid){
     runnableQueue.pop();
+  }else{
+    throw runtime_error("trying to resume pid that is not front of either queue");
   }
   parallelProcesses.insert(pid); 
 }
