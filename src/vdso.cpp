@@ -1,3 +1,19 @@
+/// parsing vDSO symbols based on vDSO entry found from /proc/<pid>/maps
+/// Note vDSO can be disabled by passing `vdso=0` kernel command line.
+/// The vDSO entry is loaded by Linux kernel before app return from execve
+/// Even statically linked app will have vDSO loaded (by Linux kernel).
+///
+/// vDSO is just a regular dynamic shared object (DSO), like any `.so` file
+/// in Linux, with the exception it doesn't have external dependencies.
+/// Typically it can be found at: /lib/modules/`uname -r`/vdso/vdso64.so
+///
+/// vDSO provides symbols like:
+///     clock_gettime, time, gettimeofday, getcpu
+/// more recent kernel also adds clock_getres
+/// The symbols can be found in .dynsym section of the DSO
+/// This file parse those symbols from .dynsym section, following the ELF
+/// spec defined at: https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.intro.html
+///
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -18,8 +34,7 @@
 #include <cstdio>
 #include <cassert>
 #include <map>
-
-#include <elf/elf++.hh>
+#include <elf.h>
 
 #include "vdso.hpp"
 #include "util.hpp"
@@ -181,27 +196,6 @@ std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid)
   return res;
 }
 
-class empty_loader: public elf::loader {
-private:
-  void* base;
-  unsigned long lim;
-public:
-  empty_loader(void* base_, unsigned long size_): base(base_), lim(size_) {
-  }
-  ~empty_loader() {
-  }
-  const void* load(off_t offset, size_t size) {
-    if (offset + size > lim)
-      runtimeError("offset exceeds mapped size");
-    return ((const char*)base + offset);
-  }
-};
-
-std::shared_ptr<elf::loader>
-create_empty_loader(void* base, unsigned long size) {
-  return std::make_shared<empty_loader>(base, size);
-}
-
 static int vdsoGetMapEntry(pid_t pid, struct ProcMapEntry& entry)
 {
   auto entries = parseProcMapEntries(pid);
@@ -241,20 +235,32 @@ std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>> v
     return res;
   }
 
-  elf::elf elf(create_empty_loader(reinterpret_cast<void*>(vdsoMapEntry.procMapBase), vdsoMapEntry.procMapSize));
+  unsigned long base = vdsoMapEntry.procMapBase;
+  Elf64_Ehdr *ehdr = (Elf64_Ehdr*)base;
+  Elf64_Shdr* shbase = (Elf64_Shdr*)(base + ehdr->e_shoff), *dynsym = NULL;
+  const char* strtab = NULL;
 
-  for (auto &sec: elf.sections()) {
-    if (sec.get_hdr().type != elf::sht::symtab && sec.get_hdr().type != elf::sht::dynsym)
-      continue;
-    for (auto sym : sec.as_symtab()) {
-      auto &d = sym.get_data();
-      if ( (d.binding() == elf::stb::global) &&
-	   (d.type() == elf::stt::func) ) {
-	assert(d.shnxd >= 0 && d.shnxd < elf.sections().size());
-	auto alignment = elf.sections()[d.shnxd].get_hdr().addralign;
-	res[sym.get_name()] = std::tie(d.value, d.size, alignment);
-      }
-    }    
+  for (auto i = 0; i < ehdr->e_shnum; i++) {
+    auto sh = &shbase[i];
+    if (sh->sh_type == SHT_DYNSYM) {
+      dynsym = sh;
+    } else if (sh->sh_type == SHT_STRTAB && (sh->sh_flags & SHF_ALLOC)) {
+      strtab = (const char*)(base + sh -> sh_offset);
+    }
   }
+  if (!dynsym || !strtab) return res;
+
+  for (auto i = 0; i < dynsym->sh_size / dynsym->sh_entsize; i++) {
+    Elf64_Sym* sym = (Elf64_Sym*)(base + dynsym->sh_offset + i * dynsym->sh_entsize);
+    const char* name = (const char*)((unsigned long)strtab + sym->st_name);
+    if (ELF64_ST_BIND(sym->st_info) == STB_GLOBAL &&
+	ELF64_ST_TYPE(sym->st_info) == STT_FUNC) {
+      assert(sym->st_shndx < ehdr->e_shnum);
+      unsigned long alignment = sym->st_shndx < ehdr->e_shnum?
+	shbase[sym->st_shndx].sh_addralign: 16;
+      res[name] = std::tie(sym->st_value, sym->st_size, alignment);
+    }
+  }
+  
   return res;
 }
