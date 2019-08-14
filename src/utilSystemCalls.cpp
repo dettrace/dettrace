@@ -37,11 +37,6 @@ bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
     return true;
   }else{
     // Syscall succeeded.
-    pid_t pid = t.getPid();
-    bool pidIsBlocked = false;
-    if(sched.getNextBlocked() == pid){
-      pidIsBlocked = true;
-    }
     return false;
   }
 }
@@ -64,11 +59,6 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sc
     return true;
   }else{
     // System call succeeded.
-    pid_t pid = t.getPid();
-    bool pidIsBlocked = false;
-    if(sched.getNextBlocked() == pid){
-      pidIsBlocked = true;
-    }
     return false;
   }
 }

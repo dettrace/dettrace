@@ -1209,13 +1209,19 @@ void pollSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     if(replay){
       // Restore state of argument 3.
       t.writeArg3(s.originalArg3);
+      s.syscallSucceeded = false;
+    }else{
+      s.syscallSucceeded = true;
     }
   }else{
     gs.log.writeToLog(Importance::info, "Non-blocking poll found\n");
     bool blocked = preemptIfBlocked(gs, s, t, sched, EAGAIN);
+    if(blocked){
+      s.syscallSucceeded = false;
+    }else{
+      s.syscallSucceeded = true;
+    }
   }
-
-
   return;
 }
 // =======================================================================================
@@ -1295,13 +1301,17 @@ void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     // trying to read more.
     if(blocked){
       resetState();
+      s.syscallSucceeded = true;
       return;
     }
   }else{
     bool preemptAndTryLater = replaySyscallIfBlocked(gs, s, t, sched, EAGAIN);
     if(preemptAndTryLater){
       gs.readRetryEvents++;
+      s.syscallSucceeded = false;
       return;
+    }else{
+      s.syscallSucceeded = true;
     }
   }
 
@@ -1580,11 +1590,11 @@ bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
 void selectSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(s.userDefinedTimeout){
     s.userDefinedTimeout = false;
-    if(t.getReturnValue() == 0){
-      // Move to the back of the syscallQueue.
-      // are ready yet, might as well let someone else go.
-      pid_t pid = t.getPid();
-      sched.preemptSyscall(pid);
+    bool blocked = preemptIfBlocked(gs, s, t, sched, 0);
+    if(blocked){
+      s.syscallSucceeded = false;
+    }else{
+      s.syscallSucceeded = true;
     }
   } else {
     bool replayed = replaySyscallIfBlocked(gs, s, t, sched, 0);
@@ -1603,6 +1613,9 @@ void selectSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
       s.wrfsNotNull = false;
       s.exfsNotNull = false;
       t.writeArg5((uint64_t) s.originalArg5);
+      s.syscallSucceeded = false;
+    }else{
+      s.syscallSucceeded = true;
     }
   }
   return;
@@ -2262,6 +2275,7 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
       gs.log.writeToLog(Importance::info,
                       "All done with non-blocking pipe replay!\n");
       resetState();
+      s.syscallSucceeded = true;
       return;
     }
   }else{
@@ -2269,8 +2283,11 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     // We have not read all bytes, but pipe has nothing, set ourselves as blocked and we
     // will retry later.
     if(preemptAndTryLater){
+      s.syscallSucceeded = false;
       gs.writeRetryEvents++;
       return;
+    }else{
+      s.syscallSucceeded = true;
     }
   }
 
