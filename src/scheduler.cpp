@@ -63,6 +63,64 @@ void scheduler::resumeRetry(pid_t pid){
   blockedQueue.push(pid);
 }
 
+
+bool scheduler::isAlive(pid_t pid){
+  bool found = false;
+  if(parallelProcesses.find(pid) != parallelProcesses.end()){
+    auto msg = 
+      log.makeTextColored(Color::blue, "Process [%d] is in parallelProcesses\n");
+    log.writeToLog(Importance::info, msg, pid);
+    found = true;
+    return found;
+  }
+  queue<pid_t> blockedTemp;
+  queue<pid_t> runnableTemp;
+
+  while(!blockedQueue.empty()){
+    pid_t frontPid = blockedQueue.front();
+    blockedQueue.pop();
+    if(frontPid == pid){
+      auto msg = 
+        log.makeTextColored(Color::blue, "Process [%d] is in blockedQueue\n");
+      log.writeToLog(Importance::info, msg, pid);
+      found = true;
+      break;
+    }else{
+      blockedQueue.pop();
+      blockedTemp.push(frontPid);
+    }
+  }
+
+  while(!blockedQueue.empty()){
+    pid_t frontPid = blockedQueue.front();
+    blockedTemp.push(frontPid);
+    blockedQueue.pop();
+  }
+  blockedQueue = blockedTemp;
+  
+  while(!runnableQueue.empty()){
+    pid_t frontPid = runnableQueue.front();
+    if(frontPid == pid){
+      auto msg = 
+        log.makeTextColored(Color::blue, "Process [%d] is in runnableQueue\n");
+      log.writeToLog(Importance::info, msg, pid);
+      found = true;
+      break;
+    }else{
+      runnableTemp.push(frontPid);
+      runnableQueue.pop();
+    }
+  }
+
+  while(!runnableQueue.empty()){
+    pid_t frontPid = runnableQueue.front();
+    runnableTemp.push(frontPid);
+    runnableQueue.pop();
+  }
+  runnableQueue = runnableTemp;
+  return found;
+}
+
 void scheduler::removeFromScheduler(pid_t pid){
   bool found = false;
   if(parallelProcesses.find(pid) != parallelProcesses.end()){
