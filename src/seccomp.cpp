@@ -100,6 +100,7 @@ void seccomp::loadRules(bool debug, bool convertUids){
   noIntercept(SYS_madvise);
   noIntercept(SYS_munmap);
 
+  noIntercept(SYS_mbind);
   noIntercept(SYS_mprotect);
   noIntercept(SYS_mremap);
   noIntercept(SYS_msync);

@@ -810,6 +810,12 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
         tracer.writeRdx( 0x0 );
         tracer.writeRcx( 0x0 );
         break;
+      case 0x80000006:
+        tracer.writeRax( 0x80000006 );
+        tracer.writeRbx( 0x0 );
+        tracer.writeRdx( 0x0 );
+        tracer.writeRcx( 0x0 );
+        break;
       default:
         runtimeError("CPUID unsupported %eax argument");
       }

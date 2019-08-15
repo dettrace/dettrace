@@ -621,16 +621,23 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     gs.log.writeToLog(Importance::info, "Futex post-hook, handling wait operation.\n");
     if(s.userDefinedTimeout){
       // This call would not succeed. Move this pid to the end of the line.
-      if(t.getReturnValue() == -ETIMEDOUT){
-        pid_t pid = t.getPid();
-        sched.preemptSyscall(pid);
+      bool blocked = preemptIfBlocked(gs, s, t, sched, ETIMEDOUT);
+      if(blocked){
+        s.syscallSucceeded = false;
+      }else{
+        s.syscallSucceeded = true;
       }
       s.userDefinedTimeout = false;
       return;
     } else {
       gs.log.writeToLog(Importance::info, "Replaying futex system call.\n");
       t.writeArg4(s.originalArg4);
-      replaySyscallIfBlocked(gs, s, t, sched, ETIMEDOUT);
+      bool blocked = replaySyscallIfBlocked(gs, s, t, sched, ETIMEDOUT);
+      if(blocked){
+        s.syscallSucceeded = false;
+      }else{
+        s.syscallSucceeded = true;
+      }
     }
 
   }
