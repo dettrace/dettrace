@@ -207,8 +207,8 @@ int main(int argc, char** argv){
   // we read it from tracer or tracee.
   CloneArgs cloneArgs;
   auto syms = vdsoGetSymbols(getpid());
-  if (4 != syms.size()) {
-    runtimeError("VDSO symbol map has only "+to_string(syms.size())+" entries instead of 4!");
+  if (4 > syms.size()) {
+    runtimeError("VDSO symbol map has only "+to_string(syms.size())+", expect at least 4!");
   }
   cloneArgs.args = args;
   cloneArgs.vdsoSyms = syms;
@@ -382,7 +382,7 @@ copy_data(struct archive *ar, struct archive *aw)
 }
 
 static void
-extract(const char *filename, int do_extract, int flags)
+extract(const void* buffer, size_t size, int do_extract, int flags)
 {
   struct archive *a;
   struct archive *ext;
@@ -398,16 +398,8 @@ extract(const char *filename, int do_extract, int flags)
    * more to a static executable.
    */
   archive_read_support_format_cpio(a);
-  /*
-   * On my system, enabling other archive formats adds 20k-30k
-   * each.  Enabling gzip decompression adds about 20k.
-   * Enabling bzip2 is more expensive because the libbz2 library
-   * isn't very well factored.
-   */
-  if (filename != NULL && strcmp(filename, "-") == 0)
-    filename = NULL;
-  if ((r = archive_read_open_filename(a, filename, 10240))) {
-    fprintf(stderr, "archive_read_open_filename(): %s %d",
+  if ((r = archive_read_open_memory(a, buffer, size))) {
+    fprintf(stderr, "archive_read_open_fd(): %s %d",
 	    archive_error_string(a), r);
     exit(1);
   }
@@ -444,18 +436,22 @@ extract(const char *filename, int do_extract, int flags)
   archive_write_free(ext);
 }
 
+extern unsigned long __initramfs_start;
+extern unsigned long __initramfs_end;
+extern unsigned long __initramfs_size;
+
 // =======================================================================================
 /**
  *
  * populate initramfs into @path
  *
  */
-static void populateInitramfs(const char* initramfs, const char* path)
+static void populateInitramfs(const char* path)
 {
   string errmsg = "Failed to change direcotry to ";
   char* oldcwd = get_current_dir_name();
   doWithCheck(chdir(path), errmsg + path);
-  extract(initramfs, 1, 0);
+  extract((const void*)&__initramfs_start, __initramfs_size, 1, 0);
   doWithCheck(chdir(oldcwd), errmsg + oldcwd);
   free(oldcwd);
 }
@@ -569,14 +565,7 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
 
     string cpio;
     doWithCheck(mount("none", tempdir.c_str(), "tmpfs", 0, NULL), "mount initramfs");
-    cpio = pathToExe + "/../initramfs.cpio";
-    char* cpioReal = realpath(cpio.c_str(), NULL);
-    if (!cpioReal) {
-      fprintf(stderr, "unable to find initramfs: %s\n", cpio.c_str());
-      exit(1);
-    }
-    populateInitramfs(cpioReal, tempdir.c_str());
-    free(cpioReal);
+    populateInitramfs(tempdir.c_str());
     pathToChroot = tempdir;
   }
 
@@ -798,7 +787,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       // Help message.
     case 'h':
       fprintf(stderr, "%s\n", usageMsg.c_str());
-      exit(1);
+      exit(0);
       // no-container flag, used for testing
     case 'n':
       args.useContainer = false;
