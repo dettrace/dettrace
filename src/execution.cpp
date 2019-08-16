@@ -267,9 +267,9 @@ void execution::runProgram(){
     // Try runnableQueue.
     while(r < runnableTotal){
       pid_t frontPid = myScheduler.getNextRunnable();
-      int stat;
       auto msg = log.makeTextColored(Color::blue, "Trying to get an event from process [%d].\n");
       log.writeToLog(Importance::inter, msg, frontPid);
+      //int stat;
       //pid_t ret = waitpid(frontPid, &stat, WNOHANG);
       //if(ret == -1){
         
@@ -287,7 +287,11 @@ void execution::runProgram(){
     // If pid is zero, no processes in parallel need to do a syscall.
     pid_t retPid = p.first;
     int stat = p.second; 
+    bool alive = false;
     if(retPid > 0){
+      alive = myScheduler.isAlive(retPid);
+    }
+    if(alive){
       bool seccomp = handleEvent(retPid, stat);
       if(seccomp){
         myScheduler.addToRunnableQueue(retPid);  

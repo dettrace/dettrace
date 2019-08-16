@@ -6,8 +6,9 @@
 #include "ptracer.hpp"
 #include "scheduler.hpp"
 
-#include <queue>
+#include <deque>
 #include <set>
+#include <cassert>
 
 scheduler::scheduler(pid_t startingPid, logger& log):
   log(log),
@@ -49,6 +50,7 @@ pid_t scheduler::getNextRunnable(){
 }
 
 pid_t scheduler::getNextBlocked(){
+  assert(!blockedQueue.empty());
   if(!blockedQueue.empty()){
     return blockedQueue.front();
   }
@@ -56,11 +58,71 @@ pid_t scheduler::getNextBlocked(){
 }
 
 void scheduler::resumeRetry(pid_t pid){
+  assert(!blockedQueue.empty());
   if(blockedQueue.front() != pid){
     throw runtime_error("trying to resume retry with wrong pid");
   }
   blockedQueue.pop_front();
   blockedQueue.push_front(pid);
+}
+
+
+bool scheduler::isAlive(pid_t pid){
+  bool found = false;
+  if(parallelProcesses.find(pid) != parallelProcesses.end()){
+    auto msg = 
+      log.makeTextColored(Color::blue, "Process [%d] is in parallelProcesses\n");
+    log.writeToLog(Importance::info, msg, pid);
+    found = true;
+    return found;
+  }
+  deque<pid_t> blockedTemp;
+  deque<pid_t> runnableTemp;
+
+  while(!blockedQueue.empty()){
+    pid_t frontPid = blockedQueue.front();
+    blockedQueue.pop_front();
+    if(frontPid == pid){
+      auto msg = 
+        log.makeTextColored(Color::blue, "Process [%d] is in blockedQueue\n");
+      log.writeToLog(Importance::info, msg, pid);
+      found = true;
+      break;
+    }else{
+      assert(!blockedQueue.empty());
+      blockedQueue.pop_front();
+      blockedTemp.push_front(frontPid);
+    }
+  }
+
+  while(!blockedQueue.empty()){
+    pid_t frontPid = blockedQueue.front();
+    blockedTemp.push_front(frontPid);
+    blockedQueue.pop_front();
+  }
+  blockedQueue = blockedTemp;
+  
+  while(!runnableQueue.empty()){
+    pid_t frontPid = runnableQueue.front();
+    if(frontPid == pid){
+      auto msg = 
+        log.makeTextColored(Color::blue, "Process [%d] is in runnableQueue\n");
+      log.writeToLog(Importance::info, msg, pid);
+      found = true;
+      break;
+    }else{
+      runnableTemp.push_front(frontPid);
+      runnableQueue.pop_front();
+    }
+  }
+
+  while(!runnableQueue.empty()){
+    pid_t frontPid = runnableQueue.front();
+    runnableTemp.push_front(frontPid);
+    runnableQueue.pop_front();
+  }
+  runnableQueue = runnableTemp;
+  return found;
 }
 
 void scheduler::removeFromScheduler(pid_t pid){
@@ -122,6 +184,7 @@ void scheduler::removeFromScheduler(pid_t pid){
 }
 
 void scheduler::preemptSyscall(pid_t pid){
+  assert(!runnableQueue.empty());
   pid_t frontPid = runnableQueue.front();
   if(frontPid != pid){
     throw runtime_error("trying to preempt wrong pid!");
@@ -131,11 +194,13 @@ void scheduler::preemptSyscall(pid_t pid){
 }
 
 void scheduler::resumeParallel(pid_t pid){
-  pid_t frontBlocked = blockedQueue.front();
-  pid_t frontRunnable = runnableQueue.front();
-  if(frontBlocked == pid){
+  // assert(!runnableQueue.empty());
+  // assert(!blockedQueue.empty());
+  // pid_t frontBlocked = blockedQueue.front();
+  // pid_t frontRunnable = runnableQueue.front();
+  if(!blockedQueue.empty() && blockedQueue.front() == pid){
     blockedQueue.pop_front();
-  }else if(frontRunnable == pid){
+  }else if(!runnableQueue.empty() && runnableQueue.front() == pid){
     runnableQueue.pop_front();
   }else{
     throw runtime_error("trying to resume pid that is not front of either queue");

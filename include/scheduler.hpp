@@ -47,6 +47,11 @@ public:
   bool isInParallel(pid_t process);
 
   /**
+   * Returns true if pid is still in the scheduler.
+   */
+  bool isAlive(pid_t pid);
+
+  /**
    * Returns true if the pid is in the finishedProcesses set.
    * @param process to check.
    */
