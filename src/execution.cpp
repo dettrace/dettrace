@@ -515,9 +515,16 @@ void execution::handleForkEvent(const pid_t traceesPid){
   states.at(newChildPid).mmapMemory.doesExist = true;
   states.at(newChildPid).mmapMemory.setAddr(states.at(traceesPid).mmapMemory.getAddr());
 
+  // Also restart the parent?
+  log.writeToLog(Importance::info,
+                 log.makeTextColored(Color::blue, "CONTing parent %d...\n"), traceesPid);
+
+  doWithCheck(ptrace(PTRACE_CONT, traceesPid, 0, 0),
+      "failed to ptrace_cont from handleForkEvent() for parent\n");
+  
   // Wait for child to be ready.
-  log.writeToLog(Importance::info, log.makeTextColored(Color::blue,
-                 "Waiting for child to be ready for tracing...\n"));
+  log.writeToLog(Importance::info,
+                 log.makeTextColored(Color::blue, "Waiting for child %d to be ready for tracing...\n"), newChildPid);
   int status;
   int retPid = doWithCheck(waitpid(newChildPid, &status, 0), "waitpid");
   // This should never happen.
@@ -530,9 +537,6 @@ void execution::handleForkEvent(const pid_t traceesPid){
   // Restart the child process. Let it run until it needs to do a syscall.
   doWithCheck(ptrace(PTRACE_CONT, newChildPid, 0, 0),
       "failed to ptrace_cont from handleForkEvent() for child\n");
-  // Also restart the parent?
-  doWithCheck(ptrace(PTRACE_CONT, traceesPid, 0, 0),
-      "failed to ptrace_cont from handleForkEvent() for parent\n");
   return;
 }
 
@@ -902,6 +906,9 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_clock_gettime:
     return clock_gettimeSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_clone:
+    return cloneSystemCall::handleDetPre(gs, s, t, sched);
+    
   case SYS_close:
     return closeSystemCall::handleDetPre(gs, s, t, sched);
 

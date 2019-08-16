@@ -115,6 +115,23 @@ public:
 // =======================================================================================
 /**
 *
+* int clone(int (*fn)(void *), void *child_stack,
+*                 int flags, void *arg, ...
+*                 pid_t *ptid, void *newtls, pid_t *ctid);
+*
+*/
+class cloneSystemCall {
+public:
+
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched);
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_clone;
+  const string syscallName = "clone";
+};
+// =======================================================================================
+/**
+*
 * int close(int fd);
 *
 */

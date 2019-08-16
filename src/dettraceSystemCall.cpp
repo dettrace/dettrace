@@ -148,6 +148,14 @@ void clock_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& 
   return;
 }
 // =======================================================================================
+bool cloneSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  int flags = (int) t.arg3();
+  if (flags & CLONE_THREAD) {
+    runtimeError("threads currently unsupported with hybrid-scheduler");
+  }
+  return false;
+}
+// =======================================================================================
 bool closeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   return true;
 }

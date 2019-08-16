@@ -159,7 +159,7 @@ void seccomp::loadRules(bool debug, bool convertUids){
   noIntercept(SYS_fork);
   noIntercept(SYS_vfork);
 
-  noIntercept(SYS_clone);
+  intercept(SYS_clone);
 
   intercept(SYS_rename, debug);
   intercept(SYS_renameat, debug);

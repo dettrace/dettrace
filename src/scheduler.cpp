@@ -89,8 +89,8 @@ bool scheduler::isAlive(pid_t pid){
       found = true;
       break;
     }else{
-      assert(!blockedQueue.empty());
-      blockedQueue.pop_front();
+      //assert(!blockedQueue.empty());
+      //blockedQueue.pop_front();
       blockedTemp.push_front(frontPid);
     }
   }
