@@ -59,8 +59,8 @@ void scheduler::resumeRetry(pid_t pid){
   if(blockedQueue.front() != pid){
     throw runtime_error("trying to resume retry with wrong pid");
   }
-  blockedQueue.pop();
-  blockedQueue.push(pid);
+  blockedQueue.pop_front();
+  blockedQueue.push_front(pid);
 }
 
 void scheduler::removeFromScheduler(pid_t pid){
@@ -72,49 +72,49 @@ void scheduler::removeFromScheduler(pid_t pid){
     parallelProcesses.erase(pid);
     found = true;
   }
-  queue<pid_t> blockedTemp;
-  queue<pid_t> runnableTemp;
+  deque<pid_t> blockedTemp;
+  deque<pid_t> runnableTemp;
 
   // If the process was not in parallelProcesses, have to check the 
   // blockedQueue and the runnableQueue. Throw an error if we don't find it.
   while(!blockedQueue.empty()){
     pid_t frontPid = blockedQueue.front();
-    blockedQueue.pop();
+    blockedQueue.pop_front();
     if(frontPid == pid){
       auto msg = 
         log.makeTextColored(Color::blue, "Process [%d] removed from blockedQueue\n");
       log.writeToLog(Importance::info, msg, pid);
       break;
     }else{
-      blockedTemp.push(frontPid);
+      blockedTemp.push_front(frontPid);
     }
   }
 
   while(!blockedQueue.empty()){
     pid_t frontPid = blockedQueue.front();
-    blockedTemp.push(frontPid);
-    blockedQueue.pop();
+    blockedTemp.push_front(frontPid);
+    blockedQueue.pop_front();
   }
   blockedQueue = blockedTemp;
 
   // We may need to look at the runnableQueue as well.    
   while(!runnableQueue.empty()){
     pid_t frontPid = runnableQueue.front();
-    runnableQueue.pop();
+    runnableQueue.pop_front();
     if(frontPid == pid){
       auto msg = 
         log.makeTextColored(Color::blue, "Process [%d] removed from runnableQueue\n");
       log.writeToLog(Importance::info, msg, pid);
       break;
     }else{
-      runnableTemp.push(frontPid);
+      runnableTemp.push_front(frontPid);
     }
   }
 
   while(!runnableQueue.empty()){
     pid_t frontPid = runnableQueue.front();
-    runnableTemp.push(frontPid);
-    runnableQueue.pop();
+    runnableTemp.push_front(frontPid);
+    runnableQueue.pop_front();
   }
   runnableQueue = runnableTemp;
 
@@ -126,17 +126,17 @@ void scheduler::preemptSyscall(pid_t pid){
   if(frontPid != pid){
     throw runtime_error("trying to preempt wrong pid!");
   }
-  runnableQueue.pop();
-  blockedQueue.push(pid); 
+  runnableQueue.pop_front();
+  blockedQueue.push_front(pid); 
 }
 
 void scheduler::resumeParallel(pid_t pid){
   pid_t frontBlocked = blockedQueue.front();
   pid_t frontRunnable = runnableQueue.front();
   if(frontBlocked == pid){
-    blockedQueue.pop();
+    blockedQueue.pop_front();
   }else if(frontRunnable == pid){
-    runnableQueue.pop();
+    runnableQueue.pop_front();
   }else{
     throw runtime_error("trying to resume pid that is not front of either queue");
   }
@@ -151,7 +151,7 @@ void scheduler::addToRunnableQueue(pid_t pid){
   // Remove the pid from parallelProcesses.
   // Push it to the runnableQueue.
   parallelProcesses.erase(pid);
-  runnableQueue.push(pid);
+  runnableQueue.push_front(pid);
 }
 
 void scheduler::printProcesses(){
@@ -162,22 +162,16 @@ void scheduler::printProcesses(){
   }
 
   log.writeToLog(Importance::extra, "Printing runnableQueue\n");
-  // Print the runnableQueue. Their ordering is their current priority. 
-  queue<pid_t> runnableCopy = runnableQueue;  
-  while(!runnableCopy.empty()){
-    pid_t pid = runnableCopy.front();
+  // Print the runnableQueue. Their ordering is their current priority.
+  for (auto pid: runnableQueue) {
     log.writeToLog(Importance::extra, "Pid [%d]\n", pid);
-    runnableCopy.pop();
   }
-
 
   log.writeToLog(Importance::extra, "Printing blockedQueue\n");
   // Print the blockedQueue. Their ordering is their current priority. 
-  queue<pid_t> blockedCopy = blockedQueue;  
-  while(!blockedCopy.empty()){
-    pid_t pid = blockedCopy.front();
+  for (auto pid: blockedQueue) {
     log.writeToLog(Importance::extra, "Pid [%d]\n", pid);
-    blockedCopy.pop();
   }
+
   return;
 }

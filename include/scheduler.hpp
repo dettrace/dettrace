@@ -144,13 +144,13 @@ public:
     while(!runnableQueue.empty()){ 
       pid_t pid = runnableQueue.front();
       kill(pid, SIGKILL);
-      runnableQueue.pop();
+      runnableQueue.pop_front();
     }
 
     while(!blockedQueue.empty()){ 
       pid_t pid = blockedQueue.front();
       kill(pid, SIGKILL);
-      blockedQueue.pop();
+      blockedQueue.pop_front();
     }
   }
 
@@ -164,9 +164,10 @@ private:
 
   set<pid_t> parallelProcesses;
   set<pid_t> finishedProcesses;
-  queue<pid_t> runnableQueue;
-  queue<pid_t> blockedQueue;
+  deque<pid_t> runnableQueue;
+  deque<pid_t> blockedQueue;
 
+public:
   /**< Debug function to print all data about processes. */
   void printProcesses();
 };

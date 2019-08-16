@@ -260,16 +260,24 @@ void execution::runProgram(){
   // Run the program until there are no processes left to run.
   while(!myScheduler.emptyScheduler()){
 
+    //myScheduler.printProcesses();
+    
     int runnableTotal = myScheduler.numberRunnable();
     int r = 0;
     // Try runnableQueue.
     while(r < runnableTotal){
       pid_t frontPid = myScheduler.getNextRunnable();
       int stat;
+      auto msg = log.makeTextColored(Color::blue, "Trying to get an event from process [%d].\n");
+      log.writeToLog(Importance::inter, msg, frontPid);
       //pid_t ret = waitpid(frontPid, &stat, WNOHANG);
       //if(ret == -1){
+        
       //}
+      //bool seccomp = handleEvent(frontPid, stat);
+      //if(seccomp){
       handleSingleSyscall(frontPid, false);
+      //}
       r++;
     }
 
@@ -686,6 +694,9 @@ bool execution::handleSeccomp(const pid_t traceesPid){
   if(ret == -1 && errno == ESRCH){
     // process is already dead, we can clean up from the scheduler
     // and just return to the main loop.
+    auto msg = log.makeTextColored(Color::blue, "Process [%d] already dead, cleaning up.\n");
+    log.writeToLog(Importance::inter, msg, traceesPid);
+
     if(!myScheduler.isFinished(traceesPid)){
       myScheduler.removeFromScheduler(traceesPid); 
       return false;
