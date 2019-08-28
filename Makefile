@@ -1,3 +1,9 @@
+NAME=cloudseal-alpha
+VERSION=0.1.651
+BUILDID=1
+
+PKGNAME=${NAME}_${VERSION}-${BUILDID}
+
 # Top-level Makefile to capture different actions you can take.
 all: build
 
@@ -9,7 +15,7 @@ build: bin initramfs
 bin:
 	mkdir -p ./bin
 
-static: bin
+static: bin initramfs
 	rm -rf bin/dettrace
 	cd src && ${MAKE} all-static
 	cp src/dettrace-static bin/dettrace
@@ -35,13 +41,12 @@ run-tests: build-tests build
 # essential to avoid errors with bind mounting a directory simultaneously
 	MAKEFLAGS= make --keep-going -C ./test/samplePrograms/ run
 
-DOCKER_NAME=cloudseal-alpha
-# TODO: store version in one place in a file.
-DOCKER_TAG=0.1.651
+DOCKER_NAME=${NAME}
+DOCKER_TAG=${VERSION}
 
 docker:
-	docker build -t ${DOCKER_NAME}:${DOCKER_TAG} .
-	docker run -i --rm --workdir /alpha_pkg ${DOCKER_NAME}:${DOCKER_TAG} tar cf - . | bzip2 > cloudseal_alpha_pkg_${DOCKER_TAG}.tbz
+	docker build -t ${DOCKER_NAME}:${DOCKER_TAG} -t ${DOCKER_NAME}:latest .
+	docker run -i --rm --workdir /usr/share/cloudseal ${DOCKER_NAME}:${DOCKER_TAG} tar cf - . | bzip2 > cloudseal_alpha_pkg_${DOCKER_TAG}.tbz
 
 run-docker:
 	mkdir -p /tmp/out
@@ -55,19 +60,18 @@ else
 	docker run --rm --privileged --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG} true
 endif
 
-.PHONY: clean docker run-docker tests build-tests run-tests initramfs
+.PHONY: clean docker run-docker tests build-tests run-tests initramfs deb
 clean:
 	$(RM) bin/dettrace
+	$(RM) src/dettrace
+	$(RM) -rf -- "${PKGNAME}" *.deb
 	make -C ./src/ clean
 # Use `|| true` in case one forgets to check out submodules
 	make -C ./test/samplePrograms clean || true
 	make -C ./test/standalone clean || true
 	make -C ./test/unitTests clean || true
 
-# ----------------------------------------
+${PKGNAME}.deb: static
+	./ci/create_deb.sh "${NAME}" "${VERSION}-${BUILDID}"
 
-package: build static
-	cp initramfs.cpio package/
-	mkdir -p package/bin
-	cp -a bin/dettrace package/bin/cloudseal
-	cp -a root package/root
+deb: ${PKGNAME}.deb
