@@ -46,5 +46,5 @@ RUN make -j deb
 FROM ubuntu:18.04
 RUN apt-get update -y && apt-get install -y python3 bsdmainutils dnsutils curl
 COPY --from=0 /detTrace/*.deb /root/
-RUN dpkg --install /root/*.deb && rm -f -- /root/*.deb
+RUN dpkg --install /root/*.deb
 WORKDIR /usr/share/cloudseal/examples

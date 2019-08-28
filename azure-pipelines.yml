@@ -2,19 +2,9 @@ variables:
     DETTRACE_NO_CPUID_INTERCEPTION: 1
 
 pool:
-  vmImage: 'Ubuntu-16.04'
+  vmImage: 'ubuntu-16.04'
 
 steps:
-- task: InstallSSHKey@0
-  inputs:
-    hostName: github.com,192.30.253.112 ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==
-    sshPublicKey: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC6ct9I/yYiKggYjSMCcDMDzHZi6c3akSHiWy93vq9KuDBox1jd/bDk9knyOM3oBVWcL4tzxqfvWqddiByofdEnLs9WPmFkGMxGvNZ6APzcRC2FrP2QZVZDcIzslbmjw5KaxzUoAur6VwP9d4B3sZnyuMUWMTTNbGAW+r67pG4E/Ionc8q0Fu08IE28wddXwV27fWZmVf1dTgb+VnHr5y8U6Ja0I6hlyUy7A4OlyuWkNMcGzfjNESsyWSYxjFk1Ajfxl01i78APtJyjo+xWqFBcgl6UKBD0ogoGZRHXiu8ZAsKhls2ePuuP5N9R3Pim7EoIBWwK7sPjmEhbr39ez+o+wGxhAgTlAesc6zNCx3kQUHtMK2pjfK6ciLgh+l3Rv5wr7CusTAO5NUa2H+z3owldM1tg4QYDVk4oSJQ2sjZEeBC+PBB0tWDWN6R+gJRBfQ5rLcZw5yUbUwDAaRM3wopMRNR3anSQAVa0I3+N6k/bObzqRi+BDetDS608HieUChEPSUmUCIHFeOddFmAnsDkHuNJXajGhFTrbmcaARbGZBI/ssr7E0vXZcWkzjoHitf/SQCMuhWoC6wXuvEvODmOlkWGbFAU6P/aLfizWAXS60GjMPkQbQbCJyP5FXOewbJ9kcpbXzf4QAuRc3eP4+bhIf+ushp0Gcl5KtwfYAaqajQ== ryanglscott@azure
-    sshKeySecureFile: id_rsa_azure
-
-- checkout: self
-  submodules: true
-  persistCredentials: true
-
 - script: |
     lsb_release -a
     uname -a

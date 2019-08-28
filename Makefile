@@ -47,17 +47,18 @@ DOCKER_TAG=${VERSION}
 docker:
 	docker build -t ${DOCKER_NAME}:${DOCKER_TAG} -t ${DOCKER_NAME}:latest .
 	docker run -i --rm --workdir /usr/share/cloudseal ${DOCKER_NAME}:${DOCKER_TAG} tar cf - . | bzip2 > cloudseal_alpha_pkg_${DOCKER_TAG}.tbz
+	docker run -i --rm --workdir /usr/share/cloudseal ${DOCKER_NAME}:${DOCKER_TAG} cat "/root/${PKGNAME}.deb" > "${PKGNAME}.deb"
 
 run-docker:
 	mkdir -p /tmp/out
 	rm -rf /tmp/out/*
-	docker run --rm -it --privileged --cap-add=SYS_ADMIN -v "/tmp/out:/out" ${DOCKER_NAME}:${DOCKER_TAG}
+	docker run --rm -it --privileged -v "/tmp/out:/out" ${DOCKER_NAME}:${DOCKER_TAG}
 
-test-docker: clean docker
+test-docker: docker
 ifdef DETTRACE_NO_CPUID_INTERCEPTION
-	docker run --rm --privileged --cap-add=SYS_ADMIN --env DETTRACE_NO_CPUID_INTERCEPTION=1  ${DOCKER_NAME}:${DOCKER_TAG} true
+	docker run --rm --privileged --env DETTRACE_NO_CPUID_INTERCEPTION=1 ${DOCKER_NAME}:${DOCKER_TAG} true
 else
-	docker run --rm --privileged --cap-add=SYS_ADMIN ${DOCKER_NAME}:${DOCKER_TAG} true
+	docker run --rm --privileged ${DOCKER_NAME}:${DOCKER_TAG} true
 endif
 
 .PHONY: clean docker run-docker tests build-tests run-tests initramfs deb

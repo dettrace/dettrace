@@ -35,3 +35,5 @@ test/samplePrograms/multipleThreads
 test/samplePrograms/simpleThreads
 .git
 ./benchmarking
+*.deb
+*.tbz
