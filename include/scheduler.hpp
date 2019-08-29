@@ -5,7 +5,6 @@
 #include "state.hpp"
 
 #include <queue>
-#include <set>
 #include <map>
 
 using namespace std;
@@ -14,22 +13,33 @@ using namespace std;
  * Scheduler class for hybrid scheduling policy.
  * All processes run in parallel unless doing system calls.
  *
- * parallelProcesses: parallel process set that contains all processes currently 
- * running in parallel.
+ * processQueue: queue of all pids currently running. 
  *
- * runnableQueue: queue of pids that want to do a syscall and aren't blocked on it.
+ * Processes can be in one of 4 states: 
+ * - blocked (on a syscall)
+ * - running (in parallel)
+ * - waiting (to do a syscall)
+ * - finished (has exited)
  *
- * blockedQueue: queue of pids that are blocked on their syscall (it would have failed).
- * 
  * Start with all pids in the runnableQueue. 
  * Then swap the blockedQueue with the runnableQueue, so that next time,
  * the blocked ones are tried first.
+ *
+ * Go through queue. Try all waiting pids and blocked pids.
  * Then do a wait(-1). Rinse and repeat.
  * Whichever pid is at the front has highest priority 
- * to do a system call. If it is successful, it is removed from
- * its queue and put back into the parallelProcesses set. If it fails, 
- * it is moved to the back of the blockedQueue.
+ * to do a system call. If it is successful or if it would block on
+ * the syscall, it is moved to the end of the processQueue. Basically,
+ * when a pid gets to the front of the queue, it stays there until it
+ * successfully does a syscall or would block from one.
  */
+
+enum class processState{
+  running,
+  blocked,
+  waiting,
+  finished
+};
 
 class scheduler{
 public:
@@ -41,10 +51,10 @@ public:
   pid_t getStartingPid();
 
   /**
-   * Returns true if the pid is in the parallelProcesses set.
-   * @param process to check.
+   * @return pid at the given position in the processQueue.
+   * @param position in processQueue.
    */
-  bool isInParallel(pid_t process);
+  pid_t getPidAt(int pos);
 
   /**
    * Returns true if pid is still in the scheduler.
@@ -52,83 +62,48 @@ public:
   bool isAlive(pid_t pid);
 
   /**
-   * Returns true if the pid is in the finishedProcesses set.
-   * @param process to check.
+   * Returns the number of processes currently alive in the 
+   * scheduler.
+   * @return number of processes.
    */
-  bool isFinished(pid_t process);
+  int processCount();
 
   /**
-   * @return true if parallelProcesses, runnableQueue,
-   * and blockedQueue are empty.
-   */
-  bool emptyScheduler();
-
-  /**
-   * @return the number of pids in the blockedQueue.
-   */
-  int numberBlocked();
-
-  /**
-   * @return the number of pids in the runnableQueue.
-   */
-  int numberRunnable();
-
-  /**
-   * @return next runnable pid that needs to do a syscall.
-   * (Return the front of the runnableQueue)
-   */
-  pid_t getNextRunnable();
-
-  /**
-   * @return next blocked pid that needs to do a syscall.
-   * (Return the front of the blockedQueue)
-   */
-  pid_t getNextBlocked();
-
-  /**
-   * Move pid from the front of the blockedQueue to the back.
-   * @param pid to move.
-   */
-  void resumeRetry(pid_t pid);
-
-  /**
-   * The syscall would have failed. 
-   * Pop the pid from the front of the 
-   * runnableQueue and move it to the end of the blockedQueue.
-   * @param pid to preempt.
-   */
-  void preemptSyscall(pid_t pid);
-
-  /**
-   * The syscall succeeded. 
-   * Remove the pid from runnableQueue or blockedQueue.
-   * Add it back to parallelProcesses.
-   * @param pid to be resumed.
-   */
-  void resumeParallel(pid_t pid);
-
-  /**
-   * Adds new process to parallelProcesses.
+   * Creates new process struct (default state
+   * "running") and adds it to the end of the 
+   * processQueue.
    * @param newProcess to add to
-   * parallelProcesses.
+   * processQueue.
    */
-  void addToParallelSet(pid_t newProcess);
+  void addToQueue(pid_t pid);
+  //void addToParallelSet(pid_t newProcess);
 
   /**
-   * Run the process sequentially for the duration of a 
-   * system call.
-   * Add process to the runnableQueue to start.
-   * Remove the pid from parallelProcesses.
-   * @param pid to move to runnableQueue.
+   * Moves process from wherever it is in the queue
+   * to the end of it.
+   * @param pid to move to the end of the queue.
    */
-  void addToRunnableQueue(pid_t pid);
+  void moveToEnd(pid_t pid);
+
+  /**
+   * Changes process state.
+   * @param pid to change.
+   * @enum processState newState for the pid.
+   */
+  void changeProcessState(pid_t pid, processState newState);
+
+  /**
+   * Get process state.
+   * @param pid.
+   * @return pid's state (enum value).
+   */
+  enum processState getProcessState(pid_t pid);
 
   /**
    * Process is completely done. Remove it from 
-   * parallelProcesses. I believe this is where it should
-   * always be, because syscalls are not the last thing a
-   * process does before exiting.
-   * @param pid to remove from scheduler
+   * processQueue. Change its state to "finished" in the
+   * procStateMap.
+   * @param pid to remove from scheduler.
    */
   void removeFromScheduler(pid_t pid);
 
@@ -136,26 +111,14 @@ public:
   uint32_t callsToScheduleNextStopped = 0;
 
   // A function to kill all processes.
-  // It also clears parallelProcesses, runnableQueue, and
-  // blockedQueue.
-  // Have to iterate through all because pids can only
-  // be in one of the three at any given time.
+  // It also clears the processQueue.
   void killAllProcesses() {
-    for(auto proc : parallelProcesses) {
-      kill(proc, SIGKILL);
-    }
-    parallelProcesses.clear();
-
-    while(!runnableQueue.empty()){ 
-      pid_t pid = runnableQueue.front();
-      kill(pid, SIGKILL);
-      runnableQueue.pop_front();
-    }
-
-    while(!blockedQueue.empty()){ 
-      pid_t pid = blockedQueue.front();
-      kill(pid, SIGKILL);
-      blockedQueue.pop_front();
+    while(!processQueue.empty()){ 
+      pid_t pid = processQueue.front();
+      if(procStateMap[pid] != processState::finished){
+        kill(pid, SIGKILL);
+      }
+      processQueue.pop_front();
     }
   }
 
@@ -167,13 +130,13 @@ private:
    */
   pid_t startingPid = -1;
 
-  set<pid_t> parallelProcesses;
-  set<pid_t> finishedProcesses;
-  deque<pid_t> runnableQueue;
-  deque<pid_t> blockedQueue;
+  deque<pid_t> processQueue;
+  unordered_map<pid_t, processState> procStateMap;
 
 public:
   /**< Debug function to print all data about processes. */
+  // Prints pids and their current state (either blocked, running,
+  // or waiting to do a syscall)
   void printProcesses();
 };
 

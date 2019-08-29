@@ -196,7 +196,7 @@ public:
    * then returns to the event loop.
    * @param nextPid to execute a syscall.
    */
-  void handleSingleSyscall(pid_t nextPid, bool pidIsBlocked);
+  void handleSingleSyscall(pid_t nextPid);
   /**
    * REVIEW this function does not seem to be implemented
    * This function call both handlePostSystemCall and handlePostSystemCall.

@@ -86,7 +86,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   int syscallNum = tracer.getSystemCallNumber();
 
   if(syscallNum < 0 || syscallNum > SYSTEM_CALL_COUNT){
-    runtimeError("Unkown system call number: " +
+    runtimeError("Unknown system call number: " +
                         to_string(syscallNum));
   }
 
@@ -170,14 +170,14 @@ void execution::handlePostSystemCall(state& currState){
   return;
 }
 // =======================================================================================
-void execution::handleSingleSyscall(pid_t nextPid, bool pidIsBlocked){
+void execution::handleSingleSyscall(pid_t nextPid){
   // We already know it's a seccomp event.
   // Go ahead and handle that.
   systemCallsEvents++;
 
   // Prehook [seccomp event]
   bool postHook = handleSeccomp(nextPid);
-  if(!myScheduler.isFinished(nextPid)){
+  if(myScheduler.getProcessState(nextPid) != processState::finished){
     states.at(nextPid).callPostHook = postHook;
   }else{
     return;
@@ -209,28 +209,22 @@ void execution::handleSingleSyscall(pid_t nextPid, bool pidIsBlocked){
         states.at(traceesPid).signalToDeliver = 0;
         
         handlePostSystemCall(currentState);
-        // Syscall was successful. Restart it in parallel.
-        if(currentState.syscallSucceeded){
-          if(myScheduler.getNextRunnable() == traceesPid){
-            myScheduler.resumeParallel(traceesPid);
-          } else if(myScheduler.getNextBlocked() == traceesPid){
-            myScheduler.resumeParallel(traceesPid);
-          }
-
+        if(myScheduler.getProcessState(traceesPid) == processState::running){
           if(states.find(traceesPid) != states.end()){
             states.at(traceesPid).callPostHook = false;
           }
-          if(myScheduler.isInParallel(traceesPid)){
-            doWithCheck(ptrace(PTRACE_CONT, traceesPid, 0, (void*) signalToDeliver),
-                        "failed to PTRACE_CONT after posthook\n");
-          }
+
+          // Syscall was successful. Restart it in parallel.
+          doWithCheck(ptrace(PTRACE_CONT, traceesPid, 0, (void*) signalToDeliver),
+                      "failed to PTRACE_CONT after posthook\n");
         }
       }
     }
   }else{
     // We don't need to do the posthook. We only need a subset of getNextEvent()
     // so we will only use a small part of it here.
-    if(!myScheduler.isFinished(nextPid)){
+    processState state = myScheduler.getProcessState(nextPid);
+    if(state != processState::finished){
       int64_t signalToDeliver = states.at(nextPid).signalToDeliver;
       states.at(nextPid).signalToDeliver = 0;
       
@@ -238,9 +232,10 @@ void execution::handleSingleSyscall(pid_t nextPid, bool pidIsBlocked){
       doWithCheck(ptrace(PTRACE_CONT, nextPid, 0, (void*) signalToDeliver),
                   "failed to PTRACE_CONT after prehook (no posthook)\n");
 
-      // Now that it has been restarted, remove it from either the runnableQueue and move it to 
-      // parallelProcesses set.
-      myScheduler.resumeParallel(nextPid);
+      // Now that it has been restarted, change its state to running and 
+      // move it to the end of the processQueue.
+      myScheduler.changeProcessState(nextPid, processState::running);
+      myScheduler.moveToEnd(nextPid);
     }
   }
 }
@@ -258,30 +253,37 @@ void execution::runProgram(){
       "failed to PTRACE_CONT first pid\n");
   
   // Run the program until there are no processes left to run.
-  while(!myScheduler.emptyScheduler()){
-
-    //myScheduler.printProcesses();
+  while(myScheduler.processCount() > 0){
     
-    int runnableTotal = myScheduler.numberRunnable();
-    int r = 0;
-    // Try runnableQueue.
-    while(r < runnableTotal){
-      pid_t frontPid = myScheduler.getNextRunnable();
-      auto msg = log.makeTextColored(Color::blue, "Trying to get an event from process [%d].\n");
-      log.writeToLog(Importance::inter, msg, frontPid);
-      //int stat;
-      //pid_t ret = waitpid(frontPid, &stat, WNOHANG);
-      //if(ret == -1){
-        
-      //}
-      //bool seccomp = handleEvent(frontPid, stat);
-      //if(seccomp){
-      handleSingleSyscall(frontPid, false);
-      //}
-      r++;
+    // Iterate through processQueue. Try each pid that is in either the 
+    // blocked or waiting state.
+    int total = myScheduler.processCount();
+    for(int i = 0; i < total; i++){
+      pid_t frontPid = myScheduler.getPidAt(i);
+      processState s = myScheduler.getProcessState(frontPid);
+      if(s == processState::waiting){
+        auto msg = 
+          log.makeTextColored(Color::blue, "Trying to get an event from waiting process [%d].\n");
+        log.writeToLog(Importance::inter, msg, frontPid);
+        handleSingleSyscall(frontPid);
+      }else if(s == processState::blocked){
+        int64_t signalToDeliver = states.at(frontPid).signalToDeliver;
+        states.at(frontPid).signalToDeliver = 0;
+        doWithCheck(ptrace(PTRACE_CONT, frontPid, 0, (void*) signalToDeliver),
+                            "failed to PTRACE_CONT for blocked pid in event loop \n");
+        int s;
+        doWithCheck(waitpid(frontPid, &s, 0), "waitpid");
+        bool seccomp = handleEvent(frontPid, s);
+        if(seccomp){
+          auto msg = 
+            log.makeTextColored(Color::blue, "Trying to get an event from blocked process [%d].\n");
+          log.writeToLog(Importance::inter, msg, frontPid);
+          handleSingleSyscall(frontPid);
+        }
+      }
     }
 
-    // See if any parallel pids need to do a syscall.
+    // Then, see if any parallel pids need to do a syscall.
     auto p = loopOnWaitpid(-1);
 
     // If pid is zero, no processes in parallel need to do a syscall.
@@ -294,26 +296,8 @@ void execution::runProgram(){
     if(alive){
       bool seccomp = handleEvent(retPid, stat);
       if(seccomp){
-        myScheduler.addToRunnableQueue(retPid);  
+        myScheduler.changeProcessState(retPid, processState::waiting);  
       }
-    }
-
-    int blockedTotal = myScheduler.numberBlocked();
-    int b = 0;
-    // Try blockedQueue.
-    while(b < blockedTotal){
-      pid_t frontPid = myScheduler.getNextBlocked();
-      int64_t signalToDeliver = states.at(frontPid).signalToDeliver;
-      states.at(frontPid).signalToDeliver = 0;
-      doWithCheck(ptrace(PTRACE_CONT, frontPid, 0, (void*) signalToDeliver),
-                    "failed to PTRACE_CONT for blocked pid in event loop \n");
-      int s;
-      doWithCheck(waitpid(frontPid, &s, 0), "waitpid");
-      bool seccomp = handleEvent(frontPid, s);
-      if(seccomp){
-        handleSingleSyscall(frontPid, true);
-      }
-      b++;
     }
   }
 
@@ -371,6 +355,7 @@ void execution::runProgram(){
 bool execution::handleEvent(pid_t nextPid, const int status){
   ptraceEvent event = getPtraceEvent(status);
   bool seccomp = false;
+  processState state = myScheduler.getProcessState(nextPid);
   
   if(event == ptraceEvent::seccomp){
     log.writeToLog(Importance::extra, "Is seccomp event!\n");
@@ -397,7 +382,7 @@ bool execution::handleEvent(pid_t nextPid, const int status){
                                        "With ptraceEventExit.\n");
     log.writeToLog(Importance::inter, msg, nextPid);
 
-    if(!myScheduler.isFinished(nextPid)){
+    if(state != processState::finished){
       myScheduler.removeFromScheduler(nextPid); 
       doWithCheck(ptracer::doPtrace(PTRACE_DETACH, nextPid, NULL, NULL),
                                     "failed to ptrace detach process in eventExit\n");
@@ -409,7 +394,8 @@ bool execution::handleEvent(pid_t nextPid, const int status){
   if(event == ptraceEvent::nonEventExit){
     auto msg = log.makeTextColored(Color::blue, "Process [%d] has completely exited (nonEvent).\n");
     log.writeToLog(Importance::inter, msg, nextPid);
-    if(!myScheduler.isFinished(nextPid)){
+
+    if(state != processState::finished){
       myScheduler.removeFromScheduler(nextPid); 
     }
   }
@@ -506,7 +492,8 @@ void execution::handleForkEvent(const pid_t traceesPid){
 
   // Once the child is ready for tracing, let it run in parallel until it wants to do
   // a system call. Inform the scheduler of its existance.
-  myScheduler.addToParallelSet(newChildPid);
+  //myScheduler.addToParallelSet(newChildPid);
+  myScheduler.addToQueue(newChildPid);
 
   // during fork, the parent's mmaped memory are COWed, as we set the mapping
   // attributes to MAP_PRIVATE. new child's `mmapMemory` hence must be inherited
@@ -515,7 +502,7 @@ void execution::handleForkEvent(const pid_t traceesPid){
   states.at(newChildPid).mmapMemory.doesExist = true;
   states.at(newChildPid).mmapMemory.setAddr(states.at(traceesPid).mmapMemory.getAddr());
 
-  // Also restart the parent?
+  // Also restart the parent.
   log.writeToLog(Importance::info,
                  log.makeTextColored(Color::blue, "CONTing parent %d...\n"), traceesPid);
 
@@ -696,7 +683,6 @@ void execution::handleExecEvent(pid_t pid) {
 // =======================================================================================
 bool execution::handleSeccomp(const pid_t traceesPid){
   long syscallNum;
-  //ptracer::doPtrace(PTRACE_GETEVENTMSG, traceesPid, nullptr, &syscallNum);
   long ret = ptrace(PTRACE_GETEVENTMSG, traceesPid, nullptr, &syscallNum);
 
   if(ret == -1 && errno == ESRCH){
@@ -705,7 +691,7 @@ bool execution::handleSeccomp(const pid_t traceesPid){
     auto msg = log.makeTextColored(Color::blue, "Process [%d] already dead, cleaning up.\n");
     log.writeToLog(Importance::inter, msg, traceesPid);
 
-    if(!myScheduler.isFinished(traceesPid)){
+    if(myScheduler.getProcessState(traceesPid) != processState::finished){
       myScheduler.removeFromScheduler(traceesPid); 
       return false;
     }
@@ -862,8 +848,12 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
       doWithCheck(ptrace(PTRACE_CONT, traceesPid, 0, (void*)signalToDeliver),
         "failed to ptrace_cont from handleSignal()\n");
 
-      if(!myScheduler.isInParallel(traceesPid)){
+      /*if(!myScheduler.isInParallel(traceesPid)){
         myScheduler.resumeParallel(traceesPid);
+      }*/
+
+      if(myScheduler.getProcessState(traceesPid) != processState::running){
+        myScheduler.changeProcessState(traceesPid, processState::running);
       }
       return;
     }
@@ -876,8 +866,8 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
   doWithCheck(ptrace(PTRACE_CONT, traceesPid, 0, (void*)signalToDeliver),
       "failed to ptrace_cont from handleSignal()\n");
 
-  if(!myScheduler.isInParallel(traceesPid)){
-    myScheduler.resumeParallel(traceesPid);
+  if(myScheduler.getProcessState(traceesPid) != processState::running){
+    myScheduler.changeProcessState(traceesPid, processState::running);
   }
   auto msg = "[%d] Tracer: Received signal: %d. Forwarding signal to tracee.\n";
   auto coloredMsg = log.makeTextColored(Color::blue, msg);

@@ -23,20 +23,22 @@ static string backtick(const char* cmd) {
 
 bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
                       int64_t errnoValue){
+  pid_t pid = t.getPid();
   if(- errnoValue == t.getReturnValue()){
     gs.log.writeToLog(Importance::info, "Syscall would have blocked!\n");
 
     // Syscall would block.
-    pid_t pid = t.getPid();
-    if(sched.getNextRunnable() == pid){
-      sched.preemptSyscall(pid);
-    }else if(sched.getNextBlocked() == pid){
-      sched.resumeRetry(pid);
-    }
-
+    // Mark it as blocked in the procStateMap.
+    // Move it to the end of the processQueue.
+    sched.changeProcessState(pid, processState::blocked);
+    sched.moveToEnd(pid);
     return true;
   }else{
     // Syscall succeeded.
+    // Mark it as running in the procStateMap.
+    // Move it to the end of the processQueue.
+    sched.changeProcessState(pid, processState::running);
+    sched.moveToEnd(pid);
     return false;
   }
 }
@@ -44,21 +46,19 @@ bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
 // =======================================================================================
 bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
                             int64_t errornoValue){
+  pid_t pid = t.getPid();
   if(- errornoValue == t.getReturnValue()){
     gs.log.writeToLog(Importance::info, "System call would have blocked! Replaying\n");
-
     gs.replayDueToBlocking++;
     // Syscall would block.
-    pid_t pid = t.getPid();
-    if(sched.getNextRunnable() == pid){
-      sched.preemptSyscall(pid);
-    }else if(sched.getNextBlocked() == pid){
-      sched.resumeRetry(pid);
-    }
+    sched.changeProcessState(pid, processState::blocked);
+    sched.moveToEnd(pid);
     replaySystemCall(gs, t, t.getSystemCallNumber());
     return true;
   }else{
     // System call succeeded.
+    sched.changeProcessState(pid, processState::running);
+    sched.moveToEnd(pid);
     return false;
   }
 }

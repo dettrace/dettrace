@@ -7,236 +7,159 @@
 #include "scheduler.hpp"
 
 #include <deque>
-#include <set>
 #include <cassert>
 
 scheduler::scheduler(pid_t startingPid, logger& log):
   log(log),
   startingPid(startingPid){
-  parallelProcesses.insert(startingPid);
+  processQueue.push_back(startingPid);
 }
 
 pid_t scheduler::getStartingPid(){
   return startingPid;
 }
 
-bool scheduler::isInParallel(pid_t process){
-  const bool parallel = parallelProcesses.find(process) != parallelProcesses.end();
-  return parallel;
-}
-
-bool scheduler::isFinished(pid_t process){
-  const bool finished = finishedProcesses.find(process) != finishedProcesses.end();
-  return finished;
-}
-
-bool scheduler::emptyScheduler(){
-  return runnableQueue.empty() && blockedQueue.empty() && parallelProcesses.empty();
-}
-
-int scheduler::numberBlocked(){
-  return blockedQueue.size();
-}
-
-int scheduler::numberRunnable(){
-  return runnableQueue.size();
-}
-
-pid_t scheduler::getNextRunnable(){
-  if(!runnableQueue.empty()){
-    return runnableQueue.front();
+pid_t scheduler::getPidAt(int pos){
+  if(pos >= processQueue.size() ||
+     pos < 0){
+    throw runtime_error("accessing invalid index in processQueue");
   }
-  return -1;
+
+  return processQueue[pos];
 }
 
-pid_t scheduler::getNextBlocked(){
-  assert(!blockedQueue.empty());
-  if(!blockedQueue.empty()){
-    return blockedQueue.front();
+int scheduler::processCount(){
+  return processQueue.size();
+}
+
+void scheduler::addToQueue(pid_t pid){
+  processQueue.push_back(pid);
+  auto p = make_pair(pid, processState::running);
+  procStateMap.insert(p);
+}
+
+void scheduler::moveToEnd(pid_t proc){
+  assert(!processQueue.empty());
+ 
+  bool found = false;
+  deque<pid_t> tempQueue;
+  while(!processQueue.empty()){
+    pid_t frontPid = processQueue.front();
+    processQueue.pop_front();
+    if(frontPid == proc){
+      // we found it!
+      found = true;
+      break;
+    }else{
+      tempQueue.push_front(frontPid); 
+    }
   }
-  return -1;
-}
 
-void scheduler::resumeRetry(pid_t pid){
-  assert(!blockedQueue.empty());
-  if(blockedQueue.front() != pid){
-    throw runtime_error("trying to resume retry with wrong pid");
+  if(!found){
+    throw runtime_error("Could not find proc to move to end of processQueue");
   }
-  blockedQueue.pop_front();
-  blockedQueue.push_front(pid);
+
+  while(!tempQueue.empty()){
+    pid_t frontPid = tempQueue.front();
+    tempQueue.pop_front();
+    processQueue.push_front(frontPid);
+  }
+
+  processQueue.push_back(proc);
 }
 
+void scheduler::changeProcessState(pid_t pid, processState newState){
+  if(procStateMap.find(pid) == procStateMap.end()){
+    throw runtime_error("cannot change state of nonexistent pid");
+  }
+  procStateMap[pid] = newState;
+}
+
+enum processState scheduler::getProcessState(pid_t pid){
+  if(procStateMap.find(pid) == procStateMap.end()){
+    throw runtime_error("cannot get state of nonexistent pid");
+  }
+
+  return procStateMap[pid];
+}
 
 bool scheduler::isAlive(pid_t pid){
   bool found = false;
-  if(parallelProcesses.find(pid) != parallelProcesses.end()){
-    auto msg = 
-      log.makeTextColored(Color::blue, "Process [%d] is in parallelProcesses\n");
-    log.writeToLog(Importance::info, msg, pid);
-    found = true;
-    return found;
-  }
-  deque<pid_t> blockedTemp;
-  deque<pid_t> runnableTemp;
+  deque<pid_t> tempQueue;
 
-  while(!blockedQueue.empty()){
-    pid_t frontPid = blockedQueue.front();
-    blockedQueue.pop_front();
+  while(!processQueue.empty()){
+    pid_t frontPid = processQueue.front();
     if(frontPid == pid){
       auto msg = 
-        log.makeTextColored(Color::blue, "Process [%d] is in blockedQueue\n");
+        log.makeTextColored(Color::blue, "Process [%d] is in processQueue\n");
       log.writeToLog(Importance::info, msg, pid);
       found = true;
       break;
     }else{
-      //assert(!blockedQueue.empty());
-      //blockedQueue.pop_front();
-      blockedTemp.push_front(frontPid);
+      assert(!processQueue.empty());
+      processQueue.pop_front();
+      tempQueue.push_back(frontPid);
     }
   }
 
-  while(!blockedQueue.empty()){
-    pid_t frontPid = blockedQueue.front();
-    blockedTemp.push_front(frontPid);
-    blockedQueue.pop_front();
+  while(!processQueue.empty()){
+    pid_t frontPid = processQueue.front();
+    tempQueue.push_back(frontPid);
+    processQueue.pop_front();
   }
-  blockedQueue = blockedTemp;
+  processQueue = tempQueue;
   
-  while(!runnableQueue.empty()){
-    pid_t frontPid = runnableQueue.front();
-    if(frontPid == pid){
-      auto msg = 
-        log.makeTextColored(Color::blue, "Process [%d] is in runnableQueue\n");
-      log.writeToLog(Importance::info, msg, pid);
-      found = true;
-      break;
-    }else{
-      runnableTemp.push_front(frontPid);
-      runnableQueue.pop_front();
-    }
-  }
-
-  while(!runnableQueue.empty()){
-    pid_t frontPid = runnableQueue.front();
-    runnableTemp.push_front(frontPid);
-    runnableQueue.pop_front();
-  }
-  runnableQueue = runnableTemp;
   return found;
 }
 
 void scheduler::removeFromScheduler(pid_t pid){
-  bool found = false;
-  if(parallelProcesses.find(pid) != parallelProcesses.end()){
-    auto msg = 
-      log.makeTextColored(Color::blue, "Process [%d] removed from parallelProcesses\n");
-    log.writeToLog(Importance::info, msg, pid);
-    parallelProcesses.erase(pid);
-    found = true;
-  }
-  deque<pid_t> blockedTemp;
-  deque<pid_t> runnableTemp;
+  deque<pid_t> tempQueue;
 
-  // If the process was not in parallelProcesses, have to check the 
-  // blockedQueue and the runnableQueue. Throw an error if we don't find it.
-  while(!blockedQueue.empty()){
-    pid_t frontPid = blockedQueue.front();
-    blockedQueue.pop_front();
+  // Remove the pid from the processQueue.
+  while(!processQueue.empty()){
+    pid_t frontPid = processQueue.front();
+    processQueue.pop_front();
     if(frontPid == pid){
       auto msg = 
-        log.makeTextColored(Color::blue, "Process [%d] removed from blockedQueue\n");
+        log.makeTextColored(Color::blue, "Process [%d] removed from processQueue\n");
       log.writeToLog(Importance::info, msg, pid);
       break;
     }else{
-      blockedTemp.push_front(frontPid);
+      tempQueue.push_back(frontPid);
     }
   }
 
-  while(!blockedQueue.empty()){
-    pid_t frontPid = blockedQueue.front();
-    blockedTemp.push_front(frontPid);
-    blockedQueue.pop_front();
+  while(!processQueue.empty()){
+    pid_t frontProc = processQueue.front();
+    tempQueue.push_back(frontProc);
+    processQueue.pop_front();
   }
-  blockedQueue = blockedTemp;
+  processQueue = tempQueue;
 
-  // We may need to look at the runnableQueue as well.    
-  while(!runnableQueue.empty()){
-    pid_t frontPid = runnableQueue.front();
-    runnableQueue.pop_front();
-    if(frontPid == pid){
-      auto msg = 
-        log.makeTextColored(Color::blue, "Process [%d] removed from runnableQueue\n");
-      log.writeToLog(Importance::info, msg, pid);
-      break;
-    }else{
-      runnableTemp.push_front(frontPid);
-    }
-  }
-
-  while(!runnableQueue.empty()){
-    pid_t frontPid = runnableQueue.front();
-    runnableTemp.push_front(frontPid);
-    runnableQueue.pop_front();
-  }
-  runnableQueue = runnableTemp;
-
-  finishedProcesses.insert(pid);
-}
-
-void scheduler::preemptSyscall(pid_t pid){
-  assert(!runnableQueue.empty());
-  pid_t frontPid = runnableQueue.front();
-  if(frontPid != pid){
-    throw runtime_error("trying to preempt wrong pid!");
-  }
-  runnableQueue.pop_front();
-  blockedQueue.push_front(pid); 
-}
-
-void scheduler::resumeParallel(pid_t pid){
-  // assert(!runnableQueue.empty());
-  // assert(!blockedQueue.empty());
-  // pid_t frontBlocked = blockedQueue.front();
-  // pid_t frontRunnable = runnableQueue.front();
-  if(!blockedQueue.empty() && blockedQueue.front() == pid){
-    blockedQueue.pop_front();
-  }else if(!runnableQueue.empty() && runnableQueue.front() == pid){
-    runnableQueue.pop_front();
+  // Remove from state map as well.
+  unordered_map<pid_t, processState>::iterator it = procStateMap.find(pid);
+  if(it != procStateMap.end()){
+    it->second = processState::finished;
   }else{
-    throw runtime_error("trying to resume pid that is not front of either queue");
+    throw runtime_error("tried to remove nonexistent pid from procStateMap");
   }
-  parallelProcesses.insert(pid); 
-}
 
-void scheduler::addToParallelSet(pid_t newProcess){
-  parallelProcesses.insert(newProcess); 
-}
-
-void scheduler::addToRunnableQueue(pid_t pid){
-  // Remove the pid from parallelProcesses.
-  // Push it to the runnableQueue.
-  parallelProcesses.erase(pid);
-  runnableQueue.push_front(pid);
 }
 
 void scheduler::printProcesses(){
-  log.writeToLog(Importance::extra, "Printing parallelProcesses set\n");
-  // Print the parallelProcesses set.
-  for(auto pid : parallelProcesses){ 
+  log.writeToLog(Importance::extra, "Printing processQueue\n");
+  // Print the processQueue. Their ordering is their current priority. 
+  for (int i = 0; i < processQueue.size(); i++) {
+    pid_t pid = processQueue[i];
+    enum processState s = procStateMap[pid];
     log.writeToLog(Importance::extra, "Pid [%d]\n", pid);
+    if(s == processState::running){
+      log.writeToLog(Importance::extra, "State: Running\n");
+    }else if(s == processState::blocked){
+      log.writeToLog(Importance::extra, "State: Blocked\n");
+    }else{
+      log.writeToLog(Importance::extra, "State: Waiting\n");
+    }
   }
-
-  log.writeToLog(Importance::extra, "Printing runnableQueue\n");
-  // Print the runnableQueue. Their ordering is their current priority.
-  for (auto pid: runnableQueue) {
-    log.writeToLog(Importance::extra, "Pid [%d]\n", pid);
-  }
-
-  log.writeToLog(Importance::extra, "Printing blockedQueue\n");
-  // Print the blockedQueue. Their ordering is their current priority. 
-  for (auto pid: blockedQueue) {
-    log.writeToLog(Importance::extra, "Pid [%d]\n", pid);
-  }
-
   return;
 }
