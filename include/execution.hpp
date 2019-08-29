@@ -168,7 +168,8 @@ public:
   execution(int debugLevel, pid_t startingPid, bool useColor, 
             string logFile, bool printStatistics, 
             pthread_t devRandomPthread, pthread_t devUrandomPthread,
-            map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs);
+            map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs,
+	    bool allow_network = false);
 
 
   /**

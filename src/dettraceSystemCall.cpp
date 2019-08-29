@@ -176,6 +176,10 @@ void closeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     gs.log.writeToLog(Importance::info, "Removing pipe fd: %d!\n", fd);
     s.fdStatus.get()->erase(fd);
   }
+
+  if (s.fd_is_remote(fd)) {
+    s.remote_sockfds->erase(fd);
+  }
 }
 // =======================================================================================
 // TODO
@@ -247,6 +251,9 @@ void dupSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedul
   // dup succeeded.
   if(s.countFdStatus(fd) != 0){ // Only for pipes
     s.setFdStatus(newfd, s.getFdStatus(fd)); // copy over status.
+    if (s.fd_is_remote(fd)) {
+      s.remote_sockfds->insert(newfd);
+    }
     gs.log.writeToLog(Importance::info, "%d = dup(%d)\n", newfd, fd);
   }
 }
@@ -269,6 +276,9 @@ void dup2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     // Semantics of dup2 say old fd could be closed and overwritten, we do that
     // implicitly here!
     s.setFdStatus(newfd, s.getFdStatus(fd));
+    if (s.fd_is_remote(fd)) {
+      s.remote_sockfds->insert(newfd);
+    }
     gs.log.writeToLog(Importance::info, "%d = dup2(%d)\n", newfd, fd);
   }
 }
@@ -544,6 +554,9 @@ void fcntlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     if (it != end) {
       // Same status as what it was duped from.
       (*s.fdStatus.get())[newfd] = s.getFdStatus(fd);
+      if (s.fd_is_remote(fd)) {
+	s.remote_sockfds->insert(newfd);
+      }
     }
   }
 
@@ -2703,17 +2716,38 @@ void writevSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
 
 // =======================================================================================
 bool socketSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  int domain = t.arg1();
+
+  if (domain == AF_INET || domain == AF_INET6) {
+    if (!gs.allow_network) {
+      gs.log.writeToLog(Importance::inter, "socket syscall disabled, add `--allow-network` to enable socket syscall\n");
+      cancelSystemCall(gs, s, t);
+      t.setReturnRegister(-ENOSYS);
+      return false;
+    }
+  }
+
   return true;
 }
 
 void socketSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int fd = (int)t.getReturnValue();
-
-  if (fd >= 0) {
-    gs.log.writeToLog(Importance::info, "socket returned " + to_string(fd) + "\n");
+  if (fd < 0) {
+    return;
   }
 
-  return;
+  int domain = t.arg1();
+  int type = t.arg2();
+
+  if (domain == AF_INET || domain == AF_INET6) {
+    s.remote_sockfds->insert(fd);
+  }
+
+  if (type & SOCK_NONBLOCK) {
+    (*s.fdStatus)[fd] = descriptorType::nonBlocking;
+  }
+
+  gs.log.writeToLog(Importance::info, "socket returned " + to_string(fd) + "\n");
 }
 // =======================================================================================
 
@@ -2852,6 +2886,14 @@ void shutdownSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sc
   int retval = (int)t.getReturnValue();
 
   gs.log.writeToLog(Importance::info, "shutdown returned " + to_string(retval) + "\n");
+
+  if (retval == 0) {
+    int fd = t.arg1();
+    int how = t.arg2();
+    if (how == SHUT_RDWR) {
+      s.remote_sockfds->erase(fd);
+    }
+  }
 
   return;
 }

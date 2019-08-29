@@ -48,7 +48,8 @@ bool kernelCheck(int a, int b, int c){
 execution::execution(int debugLevel, pid_t startingPid, bool useColor,
                      string logFile, bool printStatistics,
                      pthread_t devRandomPthread, pthread_t devUrandomPthread,
-                     map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs):
+                     map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs,
+		     bool allow_network):
   kernelPre4_8 {kernelCheck(4,8,0)},
   log {logFile, debugLevel, useColor},
   silentLogger {"NONE", 0},
@@ -62,7 +63,8 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
     log,
     ValueMapper<ino_t, ino_t> {log, "inode map", 1},
     ValueMapper<ino_t, time_t> {log, "mtime map", 1},
-    kernelCheck(4,12,0)
+    kernelCheck(4,12,0),
+    allow_network
   },
   myScheduler {startingPid, log},
   debugLevel {debugLevel},

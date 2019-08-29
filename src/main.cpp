@@ -79,6 +79,7 @@ struct programArgs{
   // current enviornment as a chroot.
   bool currentAsChroot;
   unsigned timeoutSeconds;
+  bool allow_network;
 };
 // =======================================================================================
 programArgs parseProgramArguments(int argc, char* argv[]);
@@ -154,7 +155,9 @@ const string usageMsg =
   "    our own namespace. Therefore make sure to unshare -m before running dettrace with\n"
   "    this command, either when chrooting or when calling dettrace.\n"
   "  --timeoutSeconds\n"
-  "    Tear down all tracee processes with SIGKILL after this many seconds";
+  "    Tear down all tracee processes with SIGKILL after this many seconds\n"
+  "  --allow-network\n"
+  "    Allow netowrking related syscalls like socket/send/recv, which could be non-deterministic\n";
 
 /**
  * Given a program through the command line, spawn a child thread, call PTRACEME and exec
@@ -732,7 +735,8 @@ int spawnTracerTracee(void* voidArgs){
         args.debugLevel, pid, args.useColor,
         args.logFile, args.printStatistics,
         devRandomPthread, devUrandomPthread,
-        cloneArgs->vdsoSyms};
+        cloneArgs->vdsoSyms,
+        args.allow_network};
 
     globalExeObject = &exe;
     struct sigaction sa;
@@ -786,6 +790,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     {"convert-uids", no_argument, 0, 'u'},
     {"currentAsChroot", no_argument, 0, 'a'},
     {"timeoutSeconds", required_argument, 0, 't'},
+    {"allow-network", no_argument, 0, 1},
     {0,        0,                  0, 0}    // Last must be filled with 0's.
   };
 
@@ -839,6 +844,9 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       if (0 == args.timeoutSeconds) {
         runtimeError("timeout seconds must be > 0.");
       }
+      break;
+    case 1:
+      args.allow_network = true;
       break;
     case '?':
       runtimeError("Invalid option passed to detTrace!");

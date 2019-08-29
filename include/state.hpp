@@ -291,6 +291,18 @@ public:
    * poll retry maximum
    */
   long poll_retry_maximum;
+
+  /**
+   * remote socket file descriptors, unix domain sockets excluded.
+   */
+  std::shared_ptr<std::unordered_set<int>> remote_sockfds;
+
+  /**
+   * check whether a file descriptor is a remote socket fd
+   */
+  bool fd_is_remote(int fd) const {
+    return remote_sockfds->find(fd) != remote_sockfds->end();
+  }
 };
 
 #endif
