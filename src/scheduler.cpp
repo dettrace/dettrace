@@ -13,6 +13,7 @@ scheduler::scheduler(pid_t startingPid, logger& log):
   log(log),
   startingPid(startingPid){
   processQueue.push_back(startingPid);
+  procStateMap.insert(pair<pid_t, processState>(startingPid, processState::running));
 }
 
 pid_t scheduler::getStartingPid(){
