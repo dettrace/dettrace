@@ -810,7 +810,8 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     case 'd':
       args.debugLevel = parseNum(optarg);
       if(args.debugLevel < 0 || args.debugLevel > 5){
-        runtimeError("Debug level must be between [0,5].");
+        fprintf(stderr, "Debug level must be between [0,5].");
+        exit(1);
       }
       break;
       // Help message.
@@ -839,11 +840,13 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     case 't':
       args.timeoutSeconds = parseNum(optarg);
       if (0 == args.timeoutSeconds) {
-        runtimeError("timeout seconds must be > 0.");
+        fprintf(stderr, "Timeout seconds must be > 0.");
+        exit(1);
       }
       break;
     case '?':
-      runtimeError("Invalid option passed to cloudseal!");
+      fprintf(stderr, "Invalid option specified. (See `%s --help`)\n", argv[0]);
+      exit(1);
     }
   }
 
