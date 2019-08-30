@@ -14,7 +14,7 @@ rm -rf -- "${PKGNAME}"
 mkdir -p -- "${PKGNAME}/usr/bin"
 mkdir -p -- "${PKGNAME}/usr/share/cloudseal/bin"
 
-cp -a bin/dettrace "${PKGNAME}/usr/share/cloudseal/bin/cloudseal"
+cp -a bin/dettrace-static "${PKGNAME}/usr/share/cloudseal/bin/cloudseal"
 ln -sf "../share/cloudseal/bin/cloudseal" "${PKGNAME}/usr/bin/cloudseal"
 cp -a root "${PKGNAME}/usr/share/cloudseal/root"
 find "${PKGNAME}/usr/share/cloudseal/root" -type f -name .gitignore -exec rm '{}' \+
