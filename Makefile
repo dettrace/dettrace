@@ -7,18 +7,32 @@ PKGNAME=${NAME}_${VERSION}-${BUILDID}
 # Top-level Makefile to capture different actions you can take.
 all: build
 
-build: bin initramfs
-	rm -rf bin/dettrace
-	cd src && ${MAKE}
-	cp src/dettrace bin/
+# Shorthand for `dynamic`.
+build: dynamic
 
 bin:
 	mkdir -p ./bin
 
+# This only builds a dynamically linked binary.
+dynamic: bin initramfs
+	rm -rf bin/dettrace
+	cd src && ${MAKE}
+	cp src/dettrace bin/
+
+# This only builds a statically linked binary.
 static: bin initramfs
 	rm -rf bin/dettrace
 	cd src && ${MAKE} all-static
-	cp src/dettrace-static bin/dettrace
+	cp src/dettrace-static bin/dettrace-static
+
+# This builds both a dynamically linked binary (named bin/dettrace)
+# and a statically linked binary (named bin/dettrace-static)
+dynamic-and-static: bin initramfs
+	rm -rf bin/dettrace
+	cd src && ${MAKE}
+	cp src/dettrace bin/
+	cd src && ${MAKE} all-static
+	cp src/dettrace-static bin/dettrace-static
 
 templistfile := $(shell mktemp)
 initramfs: initramfs.cpio
@@ -49,19 +63,22 @@ docker:
 	docker run -i --rm --workdir /usr/share/cloudseal ${DOCKER_NAME}:${DOCKER_TAG} tar cf - . | bzip2 > cloudseal_alpha_pkg_${DOCKER_TAG}.tbz
 	docker run -i --rm --workdir /usr/share/cloudseal ${DOCKER_NAME}:${DOCKER_TAG} cat "/root/${PKGNAME}.deb" > "${PKGNAME}.deb"
 
-run-docker:
-	mkdir -p /tmp/out
-	rm -rf /tmp/out/*
-	docker run --rm -it --privileged -v "/tmp/out:/out" ${DOCKER_NAME}:${DOCKER_TAG}
+DOCKER_RUN_ARGS=--rm --privileged --userns=host --cap-add=SYS_ADMIN ${OTHER_DOCKER_ARGS} ${DOCKER_NAME}:${DOCKER_TAG}
+
+run-docker: docker
+	docker run -it ${DOCKER_RUN_ARGS} ${DOCKER_RUN_COMMAND}
+
+run-docker-non-interactive: docker
+	docker run ${DOCKER_RUN_ARGS} ${DOCKER_RUN_COMMAND}
 
 test-docker: docker
 ifdef DETTRACE_NO_CPUID_INTERCEPTION
-	docker run --rm --privileged --env DETTRACE_NO_CPUID_INTERCEPTION=1 ${DOCKER_NAME}:${DOCKER_TAG} true
+	docker run --env DETTRACE_NO_CPUID_INTERCEPTION=1 ${DOCKER_RUN_ARGS} true
 else
-	docker run --rm --privileged ${DOCKER_NAME}:${DOCKER_TAG} true
+	docker run ${DOCKER_RUN_ARGS} true
 endif
 
-.PHONY: clean docker run-docker tests build-tests run-tests initramfs deb
+.PHONY: build clean docker run-docker tests build-tests run-tests initramfs deb
 clean:
 	$(RM) bin/dettrace
 	$(RM) src/dettrace

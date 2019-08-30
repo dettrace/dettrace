@@ -8,10 +8,10 @@ RUN apt-get -qq update && apt-get install -y \
     cpio \
     fuse \
     g++ \
+    less \
     libacl1-dev \
     libarchive-dev \
     libbz2-dev \
-    libelfin-dev \
     libfuse-dev \
     liblz4-dev \
     liblzma-dev \
@@ -22,19 +22,18 @@ RUN apt-get -qq update && apt-get install -y \
     lld-6.0 \
     lldb-6.0 \
     make \
+    nettle-dev \
     openssh-server \
     pkg-config \
     python3 \
     software-properties-common \
-    strace
+    strace \
+    valgrind
 
 RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-6.0 60 \
     --slave /usr/bin/clang++ clang++ /usr/bin/clang++-6.0 \
     --slave /usr/bin/clang-cpp clang-cpp /usr/bin/clang-cpp-6.0 \
     --slave /usr/bin/lldb lldb /usr/bin/lldb-6.0
-
-# This is odd, where does the -lnettle dependence come from? -RN [2019.06.10]
-RUN apt-get install -y nettle-dev
 
 ADD ./ /detTrace/
 WORKDIR /detTrace/
