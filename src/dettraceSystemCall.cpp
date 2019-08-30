@@ -95,6 +95,8 @@ void arch_prctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, 
   t.setRegs(s.regSaver.popRegisterState());
 
   gs.log.writeToLog(Importance::info, "restored register state from arch_prctl post-hook\n");
+  pid_t pid = t.getPid();
+  sched.changeProcessState(pid, processState::running);
   replaySystemCall(gs, t, t.getSystemCallNumber());
 }
 // =======================================================================================
