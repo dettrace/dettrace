@@ -799,7 +799,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
       if ((curr_insn32 << 8) == 0xF9010F00) {
         rdtscpEvents++;
         tracer.writeRcx(tscpCounter);
-	tscpCounter += RDTSC_STEPPING;
+        tscpCounter += RDTSC_STEPPING;
         ip_step = 3;
         msg = "[%d] Tracer: Received rdtscp: Reading next instruction.\n";
       }else{
@@ -872,12 +872,12 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
         tracer.writeRax( 0x0 );
         tracer.writeRbx( 0x0 );
         tracer.writeRdx( (1ul << 10) | /* MD_CLEAR */
-			 (1ul << 26) | /* IBRS/IBPB */
-			 (1ul << 27) | /* STIBP */
-			 (1ul << 28) | /* L1D_FLUSH */
-			 (1ul << 29) | /* IA32_ARCH_CAPABILITIES */
-			 (1ul << 31) | /* SSBD */
-			 0 );
+                         (1ul << 26) | /* IBRS/IBPB */
+                         (1ul << 27) | /* STIBP */
+                         (1ul << 28) | /* L1D_FLUSH */
+                         (1ul << 29) | /* IA32_ARCH_CAPABILITIES */
+                         (1ul << 31) | /* SSBD */
+                         0 );
         tracer.writeRcx( 0x0 );
         break;
       case 0x80000000:
@@ -890,13 +890,13 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
         tracer.writeRax( 0x0 );
         tracer.writeRbx( 0x0 );
         tracer.writeRcx( 0x21 );
-	tracer.writeRdx( 0x2c100800 );
+        tracer.writeRdx( 0x2c100800 );
         break;
       case 0x80000006: // L2 cache
         tracer.writeRax( 0x0 );
         tracer.writeRbx( 0x0 );
         tracer.writeRdx( 0x0 );
-	// size=2MB, 16-way set associative, line size = 64B
+        // size=2MB, 16-way set associative, line size = 64B
         tracer.writeRcx( 0x08008140 );
         break;
       default:
@@ -905,8 +905,6 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
       return;
     }
-
-
   }
 
   // Remember to deliver this signal to the tracee for next event! Happens in

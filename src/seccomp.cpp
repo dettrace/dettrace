@@ -289,7 +289,6 @@ void seccomp::loadRules(bool debug, bool convertUids){
   intercept(SYS_write);
 
   noIntercept(SYS_mbind);
-
   // noIntercept(SYS_shmget);
   // noIntercept(SYS_shmat);
   // noIntercept(SYS_shmdt);

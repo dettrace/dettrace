@@ -1,29 +1,35 @@
 #include "state.hpp"
 
-state::state(pid_t traceePid, int debugLevel)
-  //  : clock(744847200), // avoid clock skew, see issue #24 for more details.
-  : clock(0x5d683529), // avoid clock skew, see issue #24 for more details.
-                      // same value as of libdet.c
+state::state(pid_t traceePid, int debugLevel) :
     fdStatus(new unordered_map<int, descriptorType>),
     traceePid(traceePid),
     signalToDeliver(0),
     mmapMemory(2048),
     debugLevel(debugLevel)
 {
-  currentSignalHandlers = std::make_shared<unordered_map<int, enum sighandler_type>>();
-  timerCreateTimers = std::make_shared<unordered_map<timerID_t, timerInfo>>();
-  remote_sockfds = std::make_shared<unordered_set<int>>();
-
-  poll_retry_count = 0;
-  poll_retry_maximum = LONG_MAX;
+  return;
 }
 
-int state::getLogicalTime(){
-  return clock;
+state::state(pid_t traceePid, int debugLevel,
+             shared_ptr<unordered_map<int, descriptorType>> parentFdStatus):
+    fdStatus(parentFdStatus),
+    traceePid(traceePid),
+    signalToDeliver(0),
+    mmapMemory(2048),
+    debugLevel(debugLevel)
+{
+  return;
 }
 
-void state::incrementTime(){
-  clock++;
+state::state(pid_t traceePid, int debugLevel,
+             unordered_map<int, descriptorType> fdStatus):
+    fdStatus(new unordered_map<int, descriptorType>{fdStatus}),
+    traceePid(traceePid),
+    signalToDeliver(0),
+    mmapMemory(2048),
+    debugLevel(debugLevel)
+{
+  return;
 }
 
 void state::setFdStatus(int fd, descriptorType dt){
