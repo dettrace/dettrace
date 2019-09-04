@@ -1,15 +1,15 @@
 gettimeofday: tv_sec: 744847200, tv_usec: 0
 getcpu: cpu: 0
-clock_gettime CLOCK_REALTIME: tv_sec: 744847201, tv_nsec: 0
-clock_gettime CLOCK_MONOTONIC: tv_sec: 744847202, tv_nsec: 0
-clock_gettime CLOCK_PROCESS_CPUTIME_ID: tv_sec: 744847203, tv_nsec: 0
-clock_gettime CLOCK_THREAD_CPUTIME_ID: tv_sec: 744847204, tv_nsec: 0
-clock_gettime CLOCK_MONOTONIC_RAW: tv_sec: 744847205, tv_nsec: 0
-clock_gettime CLOCK_REALTIME_COARSE: tv_sec: 744847206, tv_nsec: 0
-clock_gettime CLOCK_MONOTONIC_COARSE: tv_sec: 744847207, tv_nsec: 0
-clock_gettime CLOCK_BOOTTIME: tv_sec: 744847208, tv_nsec: 0
-clock_gettime CLOCK_REALTIME_ALARM: tv_sec: 744847209, tv_nsec: 0
-clock_gettime CLOCK_BOOTTIME_ALARM: tv_sec: 744847210, tv_nsec: 0
-clock_gettime CLOCK_TAI: tv_sec: 744847211, tv_nsec: 0
-time(NULL): 744847212
-time(&s): returned: 744847213, tloc: 744847213
+clock_gettime CLOCK_REALTIME: tv_sec: 744847200, tv_nsec: 1000
+clock_gettime CLOCK_MONOTONIC: tv_sec: 744847200, tv_nsec: 2000
+clock_gettime CLOCK_PROCESS_CPUTIME_ID: tv_sec: 744847200, tv_nsec: 3000
+clock_gettime CLOCK_THREAD_CPUTIME_ID: tv_sec: 744847200, tv_nsec: 4000
+clock_gettime CLOCK_MONOTONIC_RAW: tv_sec: 744847200, tv_nsec: 5000
+clock_gettime CLOCK_REALTIME_COARSE: tv_sec: 744847200, tv_nsec: 6000
+clock_gettime CLOCK_MONOTONIC_COARSE: tv_sec: 744847200, tv_nsec: 7000
+clock_gettime CLOCK_BOOTTIME: tv_sec: 744847200, tv_nsec: 8000
+clock_gettime CLOCK_REALTIME_ALARM: tv_sec: 744847200, tv_nsec: 9000
+clock_gettime CLOCK_BOOTTIME_ALARM: tv_sec: 744847200, tv_nsec: 10000
+clock_gettime CLOCK_TAI: tv_sec: 744847200, tv_nsec: 11000
+time(NULL): 744847200
+time(&s): returned: 744847200, tloc: 744847200

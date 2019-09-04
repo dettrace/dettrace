@@ -40,7 +40,7 @@ using namespace std;
 TEST_CASE("time system call", "time"){
   time_t tloc;
   syscall(SYS_time, &tloc);
-  REQUIRE(744847201 == tloc);
+  REQUIRE(744847200 == tloc);
 }
 
 TEST_CASE("statfs system call", "statfs"){
@@ -102,7 +102,7 @@ TEST_CASE("getrusage", "getrusage"){
 
   REQUIRE(usage.ru_maxrss == LONG_MAX);
   REQUIRE(usage.ru_nsignals == LONG_MAX);
-  REQUIRE(usage.ru_utime.tv_sec == 744847212);
+  REQUIRE(usage.ru_utime.tv_usec == 12);
 }
 
 TEST_CASE("getuid", "getuid"){
@@ -260,7 +260,7 @@ TEST_CASE("times", "times"){
   struct tms buf;
   clock_t time = times(&buf);
   // Nobody.
-  REQUIRE(time == 744847238);
+  REQUIRE(time == 744847200000038);
   REQUIRE(buf.tms_utime == 0);
   REQUIRE(buf.tms_stime == 0);
   REQUIRE(buf.tms_cutime == 0);
