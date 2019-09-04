@@ -282,6 +282,9 @@ void seccomp::loadRules(bool debug, bool convertUids){
 
   intercept(SYS_wait4);
   intercept(SYS_write);
+
+  noIntercept(SYS_mbind);
+
 }
 
 void seccomp::noIntercept(uint16_t systemCall){

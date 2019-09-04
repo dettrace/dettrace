@@ -1,5 +1,5 @@
 *.o
-\#*\#
+[#]*[#]
 *.d
 .#*
 *~
@@ -14,3 +14,5 @@ initramfs.cpio
 src/dettrace-static
 *.bin
 benchmarking/*.time
+*.deb
+*.tbz

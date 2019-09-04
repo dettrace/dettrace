@@ -37,4 +37,5 @@ test/samplePrograms/simpleThreads
 ./benchmarking
 Dockerfile
 .gitignore
+*.deb
 *.tbz

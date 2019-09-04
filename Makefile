@@ -1,3 +1,10 @@
+NAME=cloudseal-alpha
+# TODO: store version in one place in a file.
+VERSION=0.1.651
+BUILDID=1
+
+PKGNAME=${NAME}_${VERSION}-${BUILDID}
+
 # Top-level Makefile to capture different actions you can take.
 all: build
 
@@ -14,8 +21,9 @@ dynamic: bin initramfs
 	cp src/dettrace bin/
 
 # This only builds a statically linked binary.
-static: bin
-	cd src && ${MAKE} clean all-static
+static: bin initramfs
+	rm -rf bin/dettrace
+	cd src && ${MAKE} all-static
 	cp src/dettrace-static bin/dettrace-static
 
 # This builds both a dynamically linked binary (named bin/dettrace)
@@ -49,14 +57,16 @@ run-tests: build-tests build
 	MAKEFLAGS= make --keep-going -C ./test/samplePrograms/ run
 
 DOCKER_NAME=cloudseal-alpha
-# TODO: store version in one place in a file.
 DOCKER_TAG=0.1.667
+DOCKER_NAME=${NAME}
+DOCKER_TAG=${VERSION}
 
 docker:
-	docker build -t ${DOCKER_NAME}:${DOCKER_TAG} .
-	docker run -i --rm --workdir /alpha_pkg ${DOCKER_NAME}:${DOCKER_TAG} tar cf - . | bzip2 > cloudseal_alpha_pkg_${DOCKER_TAG}.tbz
+	docker build -t ${DOCKER_NAME}:${DOCKER_TAG} -t ${DOCKER_NAME}:latest .
+	docker run -i --rm --workdir /usr/share/cloudseal ${DOCKER_NAME}:${DOCKER_TAG} tar cf - . | bzip2 > cloudseal_alpha_pkg_${DOCKER_TAG}.tbz
+	docker run -i --rm --workdir /usr/share/cloudseal ${DOCKER_NAME}:${DOCKER_TAG} cat "/root/${PKGNAME}.deb" > "${PKGNAME}.deb"
 
-DOCKER_RUN_ARGS= --rm --privileged --userns=host --cap-add=SYS_ADMIN ${OTHER_DOCKER_ARGS} ${DOCKER_NAME}:${DOCKER_TAG}
+DOCKER_RUN_ARGS=--rm --privileged --userns=host --cap-add=SYS_ADMIN ${OTHER_DOCKER_ARGS} ${DOCKER_NAME}:${DOCKER_TAG}
 
 # For convenience, we create an output portal to produce example output:
 run-docker:
@@ -67,27 +77,27 @@ run-docker:
 run-docker-non-interactive: docker
 	docker run ${DOCKER_RUN_ARGS} ${DOCKER_RUN_COMMAND}
 
-test-docker: clean docker
+test-docker: docker
 ifdef DETTRACE_NO_CPUID_INTERCEPTION
-	docker run --env DETTRACE_NO_CPUID_INTERCEPTION=1 ${DOCKER_RUN_ARGS} make -j tests
+	docker run --env DETTRACE_NO_CPUID_INTERCEPTION=1 ${DOCKER_RUN_ARGS} true
 else
 	docker run ${DOCKER_RUN_ARGS} make -j tests
 endif
 
-.PHONY: build clean docker run-docker tests build-tests run-tests initramfs
+.PHONY: build clean docker run-docker tests build-tests run-tests initramfs deb
 clean:
 	$(RM) bin/dettrace
 	$(RM) bin/dettrace-static
+	$(RM) src/dettrace
+	$(RM) -rf -- "${PKGNAME}" *.deb
+
 	make -C ./src/ clean
 # Use `|| true` in case one forgets to check out submodules
 	make -C ./test/samplePrograms clean || true
 	make -C ./test/standalone clean || true
 	make -C ./test/unitTests clean || true
 
-# ----------------------------------------
+${PKGNAME}.deb: static
+	./ci/create_deb.sh "${NAME}" "${VERSION}-${BUILDID}"
 
-package: build static initramfs
-	cp initramfs.cpio package/
-	mkdir -p package/bin
-	cp -a bin/dettrace-static package/bin/cloudseal
-	cp -a root package/root
+deb: ${PKGNAME}.deb

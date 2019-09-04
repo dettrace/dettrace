@@ -17,6 +17,13 @@
 #define ARCH_GET_CPUID		0x1011
 #define ARCH_SET_CPUID		0x1012
 
+/**
+ * rdtsc minimal incrementals
+ * some program might do rdtsc in a loop mainly for profiling purposes, keep
+ * our counter increment a more realistic value to avoid application busy
+ * reading rdtsc.
+ */
+#define RDTSC_STEPPING          0x8000
 
 /**
  * Execution class.
@@ -112,12 +119,12 @@ private:
    * Atomic counter for rdtsc instruction.
    * Emulates IA32_TSC MSR.
   */
-  uint32_t tscCounter = 0;
+  uint64_t tscCounter = 0;
   /**
    * Atomic counter for rdtscp instruction.
    * Emulates IA32_TSC_AUX MSR.
   */
-  uint32_t tscpCounter = 0;
+  uint64_t tscpCounter = 0;
 
   // Statistic Counters start here!
 
