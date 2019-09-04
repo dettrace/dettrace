@@ -139,7 +139,7 @@ void clock_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& 
     struct timespec myTp = {};
     // TODO: One day, unify time.
     myTp.tv_sec = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
-    myTp.tv_nsec = 1000*(s.getLogicalTime() % state::MICRO_SECS_PER_SEC);
+    myTp.tv_nsec = 1000UL*(s.getLogicalTime() % state::MICRO_SECS_PER_SEC);
 
     t.writeToTracee(traceePtr<struct timespec>(tp), myTp, t.getPid());
     s.incrementTime();
