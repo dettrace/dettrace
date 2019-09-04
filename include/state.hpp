@@ -58,7 +58,7 @@ private:
    * information. The clock starts at this number to avoid seeing
    * files "in the future", if we were to start at zero.
    */
-  unsigned long clock = 1561870800UL * state::MCIRO_SECS_PER_SEC;
+  unsigned long clock = 1567628600UL * state::MICRO_SECS_PER_SEC;
 public:
   static const long MICRO_SECS_PER_SEC = 1000000L;
  /**

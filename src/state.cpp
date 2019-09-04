@@ -7,28 +7,12 @@ state::state(pid_t traceePid, int debugLevel) :
     mmapMemory(2048),
     debugLevel(debugLevel)
 {
-  return;
-}
+  currentSignalHandlers = std::make_shared<unordered_map<int, enum sighandler_type>>();
+  timerCreateTimers = std::make_shared<unordered_map<timerID_t, timerInfo>>();
+  remote_sockfds = std::make_shared<unordered_set<int>>();
 
-state::state(pid_t traceePid, int debugLevel,
-             shared_ptr<unordered_map<int, descriptorType>> parentFdStatus):
-    fdStatus(parentFdStatus),
-    traceePid(traceePid),
-    signalToDeliver(0),
-    mmapMemory(2048),
-    debugLevel(debugLevel)
-{
-  return;
-}
-
-state::state(pid_t traceePid, int debugLevel,
-             unordered_map<int, descriptorType> fdStatus):
-    fdStatus(new unordered_map<int, descriptorType>{fdStatus}),
-    traceePid(traceePid),
-    signalToDeliver(0),
-    mmapMemory(2048),
-    debugLevel(debugLevel)
-{
+  poll_retry_count = 0;
+  poll_retry_maximum = LONG_MAX;
   return;
 }
 
