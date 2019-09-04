@@ -1,4 +1,4 @@
-RDTSCP: 9 ticks
+RDTSCP: 294912 ticks
 TSC_AUX was 0
-RDTSCP: 10 ticks
-TSC_AUX was 1
+RDTSCP: 327680 ticks
+TSC_AUX was 8000
