@@ -138,8 +138,8 @@ void clock_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& 
   if (tp != nullptr) {
     struct timespec myTp = {};
     // TODO: One day, unify time.
-    myTp.tv_sec = s.getLogicalTime() / 1000000000;
-    myTp.tv_nsec = s.getLogicalTime() % 1000000000;
+    myTp.tv_sec = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
+    myTp.tv_nsec = 1000UL*(s.getLogicalTime() % state::MICRO_SECS_PER_SEC);
 
     t.writeToTracee(traceePtr<struct timespec>(tp), myTp, t.getPid());
     s.incrementTime();
@@ -738,11 +738,11 @@ void getrusageSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
     // are overwritten below
     struct rusage usage; // = t.readFromTracee(traceePtr<struct rusage>(usagePtr), t.getPid());
     /* user CPU time used */
-    usage.ru_utime = timeval { .tv_sec =  (long) s.getLogicalTime(),
-                               .tv_usec = (long )s.getLogicalTime() };
+    usage.ru_utime = timeval { .tv_sec =  (long) s.getLogicalTime() / state::MICRO_SECS_PER_SEC,
+                               .tv_usec = (long )s.getLogicalTime() % state::MICRO_SECS_PER_SEC};
     /* system CPU time used */
-    usage.ru_stime = timeval { .tv_sec =  (long) s.getLogicalTime(),
-                               .tv_usec = (long )s.getLogicalTime() };
+    usage.ru_stime = timeval { .tv_sec =  (long) s.getLogicalTime() / state::MICRO_SECS_PER_SEC,
+                               .tv_usec = (long )s.getLogicalTime() % state::MICRO_SECS_PER_SEC};
     usage.ru_maxrss = LONG_MAX;                    /* maximum resident set size */
     usage.ru_ixrss = LONG_MAX;                     /* integral shared memory size */
     usage.ru_idrss = LONG_MAX;    		   /* integral unshared data size */
@@ -772,13 +772,14 @@ bool gettimeofdaySystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
 
 void gettimeofdaySystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                            scheduler& sched){
-  gs.log.writeToLog(Importance::info, "Inside gettimeofday post-hook, sending tv_sec=%d\n", s.getLogicalTime());
+  gs.log.writeToLog(Importance::info, "Inside gettimeofday post-hook, sending tv_sec=%d\n",
+		    s.getLogicalTime() / state::MICRO_SECS_PER_SEC);
   gs.timeCalls++;
   struct timeval* tp = (struct timeval*) t.arg1();
   if (nullptr != tp) {
     struct timeval myTv = {};
-    myTv.tv_sec = s.getLogicalTime() / 1000000;
-    myTv.tv_usec = s.getLogicalTime() % 1000000;
+    myTv.tv_sec = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
+    myTv.tv_usec = s.getLogicalTime() % state::MICRO_SECS_PER_SEC;
 
     t.writeToTracee(traceePtr<struct timeval>(tp), myTv, t.getPid());
     s.incrementTime();
@@ -852,7 +853,7 @@ void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     return;
   case RTC_RD_TIME:
     {
-      time_t logicalTime = s.getLogicalTime();
+      time_t logicalTime = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
       struct tm tm = {};
 
       s.incrementTime();
@@ -866,7 +867,7 @@ void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     break;
   case RTC_EPOCH_READ:
     {
-      unsigned long logicalTime = s.getLogicalTime();
+      unsigned long logicalTime = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
       s.incrementTime();
 
       if (t.arg3()) {
@@ -1793,10 +1794,11 @@ void timeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     }
 
     time_t* timePtr = (time_t*) t.arg1();
-    gs.log.writeToLog(Importance::info, "time: tloc is null, returning %d\n", s.getLogicalTime());
-    t.writeRax(s.getLogicalTime());
+    time_t secs_since_epoch = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
+    gs.log.writeToLog(Importance::info, "time: tloc is null, returning %d\n", secs_since_epoch);
+    t.writeRax(secs_since_epoch);
     if(timePtr != nullptr){
-      t.writeToTracee(traceePtr<time_t>(timePtr), (time_t) s.getLogicalTime(), s.traceePid);
+      t.writeToTracee(traceePtr<time_t>(timePtr), secs_since_epoch, s.traceePid);
     }
     // Tick up time.
     s.incrementTime();
