@@ -135,8 +135,6 @@ const string usageMsg =
   "     it is the current working directory.\n"
   "  --chroot <pathToRoot>\n"
   "    Specify root to use for chroot (such as one created by debootstrap).\n"
-  "  --no-container\n"
-  "    Do not use any sort of containerization (May not be deterministic!).\n"
   "  --no-color\n"
   "    Do not use colored output for log. Useful when piping log to a file.\n"
   "  --log\n"
@@ -157,7 +155,9 @@ const string usageMsg =
   "  --timeoutSeconds\n"
   "    Tear down all tracee processes with SIGKILL after this many seconds\n"
   "  --allow-network\n"
-  "    Allow netowrking related syscalls like socket/send/recv, which could be non-deterministic\n";
+  "    Allow netowrking related syscalls like socket/send/recv, which could be non-deterministic\n"
+  "  --with-container\n"
+  "    setup mount points for mount namespace (not recomended)\n";
 
 /**
  * Given a program through the command line, spawn a child thread, call PTRACEME and exec
@@ -767,7 +767,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
   args.argv = argv;
   args.debugLevel = 0;
   args.pathToChroot = "NONE";
-  args.useContainer = true;
+  args.useContainer = false;
   args.workingDir = "NONE";
   args.userChroot = false;
   args.pathToExe = "NONE";
@@ -783,7 +783,6 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     {"debug" , required_argument,  0, 'd'},
     {"help"  , no_argument,        0, 'h'},
     {"chroot", required_argument,  0, 'c'},
-    {"no-container", no_argument, 0, 'n'},
     {"no-color", no_argument, 0, 'r'},
     {"log", required_argument, 0, 'l'},
     {"print-statistics", no_argument, 0, 'p'},
@@ -792,6 +791,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     {"currentAsChroot", no_argument, 0, 'a'},
     {"timeoutSeconds", required_argument, 0, 't'},
     {"allow-network", no_argument, 0, 1},
+    {"with-container", no_argument, 0, 2},
     {0,        0,                  0, 0}    // Last must be filled with 0's.
   };
 
@@ -821,9 +821,8 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     case 'h':
       fprintf(stderr, "%s\n", usageMsg.c_str());
       exit(0);
-      // no-container flag, used for testing
-    case 'n':
-      args.useContainer = false;
+    case 2:
+      args.useContainer = true;
       break;
     case 'r':
       args.useColor = false;
