@@ -203,17 +203,18 @@ void execution::handleSingleSyscall(pid_t nextPid){
         systemCallsEvents++;
         tracer.updateState(traceesPid);
 
-        // Dealing with blocked syscalls, and replaying, and preempting
-        // is all handled in handlePostSystemCall().
         int64_t signalToDeliver = states.at(traceesPid).signalToDeliver;
         states.at(traceesPid).signalToDeliver = 0;
         
         handlePostSystemCall(currentState);
-        if(myScheduler.getProcessState(traceesPid) == processState::running){
+        // if(myScheduler.getProcessState(traceesPid) == processState::running){
+        if(myScheduler.getProcessState(traceesPid) == processState::waiting){
           if(states.find(traceesPid) != states.end()){
             states.at(traceesPid).callPostHook = false;
           }
 
+          myScheduler.changeProcessState(traceesPid, processState::running);
+          myScheduler.moveToEnd(traceesPid);
           // Syscall was successful. Restart it in parallel.
           doWithCheck(ptrace(PTRACE_CONT, traceesPid, 0, (void*) signalToDeliver),
                       "failed to PTRACE_CONT after posthook\n");

@@ -37,8 +37,8 @@ bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
     // Syscall succeeded.
     // Mark it as running in the procStateMap.
     // Move it to the end of the processQueue.
-    sched.changeProcessState(pid, processState::running);
-    sched.moveToEnd(pid);
+    // sched.changeProcessState(pid, processState::running);
+    // sched.moveToEnd(pid);
     return false;
   }
 }
@@ -57,8 +57,8 @@ bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sc
     return true;
   }else{
     // System call succeeded.
-    sched.changeProcessState(pid, processState::running);
-    sched.moveToEnd(pid);
+    // sched.changeProcessState(pid, processState::running);
+    // sched.moveToEnd(pid);
     return false;
   }
 }
