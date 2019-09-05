@@ -321,6 +321,8 @@ int runTracee(programArgs args){
     setUpContainer(pathToExe, pathToChroot, workingDir, args.userChroot, args.currentAsChroot);
   } else {
     if (!args.currentAsChroot) {
+      // Disable ASLR for our child
+      doWithCheck(personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");
       mountDir(devrandFifoPath, "/dev/random");
       mountDir(devUrandFifoPath, "/dev/urandom");
       // jld: determinize various parts of /proc which our benchmarks read from
