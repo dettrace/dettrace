@@ -1,5 +1,5 @@
 # binaries that are simple to build (1 source file, same name as binary)
-SIMPLE_ROOTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat  sigsegv sigill sigabrt kill alarm-handler alarm-nohandler alarm-ignore selectWithoutTimeout selectWithTimeout getdents getdents64 pollWithoutTimeout pollWithPositiveTimeout pollWithNegativeTimeout rdtsc rdtscp nanosleep nanosleep-par alarm-resethand readDevRandom readDevRandomMultiple readDevUrandom exec-mkstemp complex_mkdirat_dirfd mkdir mkdirat_fdcwd mknod mknod_fullpath open_already_exists openat_already_exists simpleCreat simple_mkdirat_dirfd symlink symlinkat vdso-funcs multithreaded multipleThreads processAndThread processThreadProcess processThreadThread pthreadJoin pthreadNoJoin ptpThreadJoin ptpThreadNoJoin twoPthreadsJoin twoPthreadsNoJoin tenThreadJoin tenThreadNoJoin exitgroup exitgroupMainProcess condvar-parent-wait condvar-thread-wait # sigsuspend sigtimedwait-no-timeout sigtimedwait-timeout-0s sigtimedwait-timeout-1s # execveMainThread execveThreads open_tmpfile deadlockingPipe
+SIMPLE_ROOTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat  sigsegv sigill sigabrt kill alarm-handler alarm-nohandler alarm-ignore selectWithoutTimeout selectWithTimeout getdents getdents64 pollWithoutTimeout pollWithPositiveTimeout pollWithNegativeTimeout rdtsc rdtscp nanosleep nanosleep-par alarm-resethand readDevRandom readDevRandomMultiple readDevUrandom exec-mkstemp complex_mkdirat_dirfd mkdir mkdirat_fdcwd mknod mknod_fullpath open_already_exists openat_already_exists simpleCreat simple_mkdirat_dirfd symlink symlinkat vdso-funcs multithreaded multipleThreads processAndThread processThreadProcess processThreadThread pthreadJoin pthreadNoJoin ptpThreadJoin ptpThreadNoJoin twoPthreadsJoin twoPthreadsNoJoin tenThreadJoin tenThreadNoJoin exitgroup exitgroupMainProcess condvar-parent-wait condvar-thread-wait sigsuspend sigtimedwait-no-timeout sigtimedwait-timeout-0s sigtimedwait-timeout-1s # execveMainThread execveThreads open_tmpfile deadlockingPipe
 
 ifndef DETTRACE_NO_CPUID_INTERCEPTION
 SIMPLE_ROOTS := $(SIMPLE_ROOTS) cpuid
@@ -30,7 +30,7 @@ CXX_ROOTS=random_device
 endif
 CXX_BINARIES= $(addsuffix .bin,$(CXX_ROOTS))
 
-DETTRACE=../../bin/dettrace
+DETTRACE=../../bin/dettrace --epoch=1993-08-08,15:00:00
 DIFF_CMD=diff
 
 build: $(SIMPLE_BINARIES) $(PARAM_BINARIES) $(BROADWELL_BINARIES) $(RT_BINARIES) $(CXX_BINARIES)
@@ -233,7 +233,7 @@ fuse-%.ok: fuse-%.bin partialfs
 	@echo "   Testing fuse variant: $(basename $<)..."
 	@truncate --size=0 $(FUSE_FILE)
 	@./partialfs -o direct_io $(FUSE_FILE) # launch FUSE filesystem
-	@python3 timeout.py 5s $(DETTRACE) --no-container ./$< $(FUSE_FILE) > ActualOutputs/$(basename $<).output
+	@python3 timeout.py 5s $(DETTRACE) ./$< $(FUSE_FILE) > ActualOutputs/$(basename $<).output
 	@fusermount -q -u $(FUSE_FILE) # tear down FUSE filesystem
 	@$(DIFF_CMD) ActualOutputs/$(basename $<).output ExpectedOutputs/$(basename $<).output
 
