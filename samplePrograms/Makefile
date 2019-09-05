@@ -277,7 +277,7 @@ setitimer-prof.bin: setitimer.c
 alarm-ignore.ok: alarm-ignore.bin
 	@echo "   Testing $(basename $<)..."
 #	HACK: check that we time out as expected (247 == -9 means received SIGKILL due to timeout)
-	@python3 timeout.py 2s ../../bin/dettrace ./$< || [ $$? -eq 247 ]
+	@python3 timeout.py 2s $(DETTRACE) ./$< || [ $$? -eq 247 ]
 
 kill.ok: kill.bin
 	@for s in $$(seq 1 64); do echo "   Testing $(basename $<) $$s..." && (python3 timeout.py 5s $(DETTRACE) ./$< $$s 2> ActualOutputs/$(basename $<)-$$s.output || true) && $(DIFF_CMD) ActualOutputs/$(basename $<)-$$s.output ExpectedOutputs/$(basename $<).output ; done
