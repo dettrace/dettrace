@@ -49,7 +49,7 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
                      string logFile, bool printStatistics,
                      pthread_t devRandomPthread, pthread_t devUrandomPthread,
                      map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs,
-		     bool allow_network):
+		     bool allow_network, unsigned long epoch):
   kernelPre4_8 {kernelCheck(4,8,0)},
   log {logFile, debugLevel, useColor},
   silentLogger {"NONE", 0},
@@ -68,9 +68,11 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
   },
   myScheduler {startingPid, log},
   debugLevel {debugLevel},
-  vdsoFuncs(vdsoFuncs) {
+  vdsoFuncs(vdsoFuncs),
+  epoch(epoch)
+  {
     // Set state for first process.
-    states.emplace(startingPid, state{startingPid, debugLevel});
+    states.emplace(startingPid, state{startingPid, debugLevel, epoch});
     myGlobalState.threadGroups.insert({startingPid, startingPid});
     myGlobalState.threadGroupNumber.insert({startingPid, startingPid});
 
@@ -740,7 +742,7 @@ void execution::handleExecEvent(pid_t pid) {
 
   // TODO When does this ever happen?
   if (states.find(pid) == states.end()){
-      states.emplace(pid, state {pid, debugLevel} );
+    states.emplace(pid, state {pid, debugLevel, epoch} );
   }
   // Reset file descriptor state, it is wiped after execve.
   states.at(pid).fdStatus = make_shared<unordered_map<int, descriptorType>>();
@@ -817,7 +819,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
       auto coloredMsg = log.makeTextColored(Color::blue, msg);
 
       // force a preemption to avoid possible busy reading TSCs.
-      myScheduler.preemptAndScheduleNext();
+      // myScheduler.preemptAndScheduleNext();
       log.writeToLog(Importance::inter, coloredMsg, traceesPid, sigNum);
       return;
     } else if ((curr_insn32 << 16) ==0xA20F0000) {

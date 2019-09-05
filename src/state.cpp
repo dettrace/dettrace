@@ -1,6 +1,8 @@
 #include "state.hpp"
 
-state::state(pid_t traceePid, int debugLevel) :
+state::state(pid_t traceePid, int debugLevel, unsigned long epoch) :
+    clock(epoch * state::MICRO_SECS_PER_SEC),
+    epoch(epoch),    
     fdStatus(new unordered_map<int, descriptorType>),
     traceePid(traceePid),
     signalToDeliver(0),
@@ -13,6 +15,7 @@ state::state(pid_t traceePid, int debugLevel) :
 
   poll_retry_count = 0;
   poll_retry_maximum = LONG_MAX;
+
   return;
 }
 
@@ -29,8 +32,7 @@ int state::countFdStatus(int fd){
 }
 
 state state::forked(pid_t childPid) const {
-  state childState(childPid, this->debugLevel);
-  childState.clock = this->clock;
+  state childState(childPid, this->debugLevel, this->epoch);
   childState.CPUIDTrapSet = this->CPUIDTrapSet;
   childState.currentSignalHandlers = make_shared<unordered_map<int, enum sighandler_type>>(*(this->currentSignalHandlers));
   childState.dirEntries = this->dirEntries;
@@ -71,12 +73,12 @@ state state::forked(pid_t childPid) const {
   childState.poll_retry_maximum = LONG_MAX;
 
   childState.remote_sockfds = make_shared<unordered_set<int>>(*(this->remote_sockfds));
+  childState.clock = this->epoch * state::MICRO_SECS_PER_SEC;
   return childState;
 }
 
 state state::cloned(pid_t childPid) const {
-  state childState(childPid, this->debugLevel);
-  childState.clock = this->clock;
+  state childState(childPid, this->debugLevel, this->epoch);
   childState.CPUIDTrapSet = this->CPUIDTrapSet;
   childState.currentSignalHandlers = this->currentSignalHandlers;
   childState.dirEntries = this->dirEntries;
@@ -118,5 +120,6 @@ state state::cloned(pid_t childPid) const {
   childState.poll_retry_maximum = LONG_MAX;
 
   childState.remote_sockfds = this->remote_sockfds;
+  childState.clock = this->epoch * state::MICRO_SECS_PER_SEC;
   return childState;
 }

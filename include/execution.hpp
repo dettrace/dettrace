@@ -18,14 +18,6 @@
 #define ARCH_SET_CPUID		0x1012
 
 /**
- * rdtsc minimal incrementals
- * some program might do rdtsc in a loop mainly for profiling purposes, keep
- * our counter increment a more realistic value to avoid application busy
- * reading rdtsc.
- */
-#define RDTSC_STEPPING          0x8000
-
-/**
  * Execution class.
  * This class handles the event driven loop that is a process execution. Events from
  * a running program are intercepted, and a handler is called for that event.
@@ -43,6 +35,14 @@
 class execution{
 
 private:
+  /**
+   * rdtsc minimal incrementals
+   * some program might do rdtsc in a loop mainly for profiling purposes, keep
+   * our counter increment a more realistic value to avoid application busy
+   * reading rdtsc.
+   */
+  static const unsigned long RDTSC_STEPPING = 0x8000;
+
   /**
    * Using kernel version < 4.8 . Needed as semantics of ptrace + seccomp have changed.
    * See `man 2 ptrace`
@@ -153,7 +153,15 @@ private:
 
   void disableVdso(pid_t traceesPid);
 
+  /**
+   * starting epoch
+   */
+  unsigned long epoch = execution::default_epoch;
 public:
+  /**
+   * default epoch
+   */
+  static const unsigned long default_epoch = 744847200UL;
 
   /**
    * Constructor.
@@ -169,7 +177,8 @@ public:
             string logFile, bool printStatistics, 
             pthread_t devRandomPthread, pthread_t devUrandomPthread,
             map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs,
-	    bool allow_network = false);
+	    bool allow_network = false,
+	    unsigned long epoch = execution::default_epoch);
 
 
   /**

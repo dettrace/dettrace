@@ -58,7 +58,12 @@ private:
    * information. The clock starts at this number to avoid seeing
    * files "in the future", if we were to start at zero.
    */
-  unsigned long clock = 1567628600UL * state::MICRO_SECS_PER_SEC;
+  unsigned long clock;
+
+  /**
+   * epoch in seconds passed from execution environment
+   */
+  unsigned long epoch;
 public:
   static const long MICRO_SECS_PER_SEC = 1000000L;
  /**
@@ -68,7 +73,7 @@ public:
    * @param traceePid pid of tracee
    * @param debugLevel debug level to be used
    */
-  state(pid_t traceePid, int debugLevel);
+  explicit state(pid_t traceePid, int debugLevel, unsigned long epoch);
 
   /**
    * fork a new state when fork/vfork is called

@@ -30,6 +30,7 @@
 #include <sys/mount.h>
 #include <sys/prctl.h>
 #include <archive.h>
+#include <time.h>
 
 #include <iostream>
 #include <tuple>
@@ -80,6 +81,7 @@ struct programArgs{
   bool currentAsChroot;
   unsigned timeoutSeconds;
   bool allow_network;
+  unsigned long epoch;
 };
 // =======================================================================================
 programArgs parseProgramArguments(int argc, char* argv[]);
@@ -153,11 +155,13 @@ const string usageMsg =
   "    our own namespace. Therefore make sure to unshare -m before running dettrace with\n"
   "    this command, either when chrooting or when calling dettrace.\n"
   "  --timeoutSeconds\n"
-  "    Tear down all tracee processes with SIGKILL after this many seconds\n"
+  "    Tear down all tracee processes with SIGKILL after this many seconds.\n"
   "  --allow-network\n"
-  "    Allow netowrking related syscalls like socket/send/recv, which could be non-deterministic\n"
+  "    Allow netowrking related syscalls like socket/send/recv, which could be non-deterministic.\n"
   "  --with-container\n"
-  "    setup mount points for mount namespace (not recomended)\n";
+  "    setup mount points for mount namespace (not recomended).\n"
+  "  --epoch=<EPOCH>\n"
+  "    set system epoch (start) time \"now|yyyy-mm-dd,HH:MM:SS\" (localtime).\n";
 
 /**
  * Given a program through the command line, spawn a child thread, call PTRACEME and exec
@@ -737,7 +741,8 @@ int spawnTracerTracee(void* voidArgs){
         args.logFile, args.printStatistics,
         devRandomPthread, devUrandomPthread,
         cloneArgs->vdsoSyms,
-        args.allow_network};
+        args.allow_network,
+        args.epoch};
 
     globalExeObject = &exe;
     struct sigaction sa;
@@ -777,6 +782,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
   args.convertUids = false;
   args.currentAsChroot = false;
   args.timeoutSeconds = 0;
+  args.epoch = execution::default_epoch;
 
   // Command line options for our program.
   static struct option programOptions[] = {
@@ -792,6 +798,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     {"timeoutSeconds", required_argument, 0, 't'},
     {"allow-network", no_argument, 0, 1},
     {"with-container", no_argument, 0, 2},
+    {"epoch", required_argument, 0, 3},
     {0,        0,                  0, 0}    // Last must be filled with 0's.
   };
 
@@ -821,9 +828,6 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     case 'h':
       fprintf(stderr, "%s\n", usageMsg.c_str());
       exit(0);
-    case 2:
-      args.useContainer = true;
-      break;
     case 'r':
       args.useColor = false;
       break;
@@ -847,6 +851,26 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       break;
     case 1:
       args.allow_network = true;
+      break;
+    case 2:
+      args.useContainer = true;
+      break;
+    case 3:
+      {
+	string ts = string { optarg };
+	if (ts == "now") {
+	  args.epoch = time(NULL);
+	} else {
+	  struct tm tm = {0,};
+	  if (!strptime(ts.c_str(), "%Y-%m-%d,%H:%M:%S", &tm)) {
+	    string errmsg("invalid time for --epoch: ");
+	    errmsg += ts;
+	    runtimeError(errmsg);
+	  }
+	  tm.tm_isdst = -1; /* dst auto detect */
+	  args.epoch = mktime(&tm);
+	}
+      }
       break;
     case '?':
       runtimeError("Invalid option passed to detTrace!");
