@@ -42,8 +42,9 @@ build-tests:
 	$(MAKE) -C ./test/samplePrograms/ build
 
 run-tests: build-tests build
-	cat /proc/cpuinfo
+	@echo "Running tests on this Linux platform:"
 	uname -a
+	cat /proc/cpuinfo | head -n 20
 	$(MAKE) -C ./test/unitTests/ run
 # NB: MAKEFLAGS= magic causes samplePrograms to run sequentially, which is
 # essential to avoid errors with bind mounting a directory simultaneously
