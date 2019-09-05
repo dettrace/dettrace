@@ -74,6 +74,7 @@ endif
 .PHONY: build clean docker run-docker tests build-tests run-tests initramfs
 clean:
 	$(RM) bin/dettrace
+	$(RM) initramfs.cpio
 	make -C ./src/ clean
 	# Use `|| true` in case one forgets to check out submodules
 	make -C ./test/samplePrograms clean || true

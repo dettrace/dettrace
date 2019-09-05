@@ -35,3 +35,4 @@ test/samplePrograms/multipleThreads
 test/samplePrograms/simpleThreads
 .git
 ./benchmarking
+*.tbz
