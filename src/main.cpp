@@ -161,7 +161,7 @@ const string usageMsg =
   "  --with-container\n"
   "    setup mount points for mount namespace (not recomended).\n"
   "  --epoch=<EPOCH>\n"
-  "    set system epoch (start) time \"now|yyyy-mm-dd,HH:MM:SS\" (localtime).\n";
+  "    set system epoch (start) time \"now|yyyy-mm-dd,HH:MM:SS\" (utc).\n";
 
 /**
  * Given a program through the command line, spawn a child thread, call PTRACEME and exec
@@ -868,7 +868,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
 	    runtimeError(errmsg);
 	  }
 	  tm.tm_isdst = -1; /* dst auto detect */
-	  args.epoch = mktime(&tm);
+	  args.epoch = timegm(&tm);
 	}
       }
       break;
