@@ -30,7 +30,7 @@ CXX_ROOTS=random_device
 endif
 CXX_BINARIES= $(addsuffix .bin,$(CXX_ROOTS))
 
-DETTRACE=../../bin/dettrace --epoch=1993-08-08,15:00:00
+DETTRACE=../../bin/dettrace --epoch=1993-08-08,22:00:00
 DIFF_CMD=diff
 
 build: $(SIMPLE_BINARIES) $(PARAM_BINARIES) $(BROADWELL_BINARIES) $(RT_BINARIES) $(CXX_BINARIES)
