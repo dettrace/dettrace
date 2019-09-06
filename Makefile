@@ -14,7 +14,7 @@ dynamic: bin initramfs
 	cp src/dettrace bin/
 
 # This only builds a statically linked binary.
-static: bin
+static: bin initramfs
 	rm -rf bin/dettrace
 	cd src && ${MAKE} all-static
 	cp src/dettrace-static bin/dettrace
