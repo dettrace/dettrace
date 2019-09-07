@@ -31,7 +31,7 @@ dynamic-and-static: bin initramfs
 templistfile := $(shell mktemp)
 initramfs: initramfs.cpio
 initramfs.cpio: root
-	cd root && find . > $(templistfile) && cpio -o > ../initramfs.cpio < $(templistfile) 2>/dev/null
+	cd root && find . > $(templistfile) && cpio -o > ../initramfs.cpio < $(templistfile)
 	$(RM) $(templistfile)
 
 tests: run-tests
