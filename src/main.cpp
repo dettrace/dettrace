@@ -50,6 +50,7 @@
 
 #include <seccomp.h>
 
+#include <cxxopts.hpp>
 
 /**
  * Useful link for understanding ptrace as it works with execve.
@@ -60,32 +61,65 @@
 using namespace std;
 
 struct programArgs{
-  int optIndex;
-  int argc;
-  char** argv;
+  std::vector<std::string> args;
   int debugLevel;
   string pathToChroot;
-  bool useContainer;
   string workingDir;
+  string pathToExe;
+  string logFile;
+
+  bool useColor;
+  bool printStatistics;
   // User is using --chroot flag.
   bool userChroot;
-  string pathToExe;
-  bool useColor;
-  string logFile;
-  bool printStatistics;
-  bool convertUids;
   // We sometimes want to run dettrace inside a chrooted enviornment. Annoyingly, Linux
   // does not let us create a user namespace if the current process is chrooted. This
   // is a feature. So we handle this special case, by allowing dettrace to treat the
   // current enviornment as a chroot.
   bool alreadyInChroot;
-  unsigned timeoutSeconds;
+  bool convertUids;
+  bool useContainer;
   bool allow_network;
+  bool with_aslr;
+
+  bool with_proc_overrides;
+  bool with_devrand_overrides;
+
+  bool with_host_envs;
+  std::vector<std::pair<std::string, std::string>> envs;
+
+  std::string tracee;
+  std::vector<std::string> traceeArgs;
+
+  unsigned timeoutSeconds;
   unsigned long epoch;
+  unsigned long clone_ns_flags;
+
+  programArgs(int argc, char* argv[]) {
+    this->debugLevel = 0;
+    this->pathToChroot = "";
+    this->useContainer = false;
+    this->workingDir = "";
+    this->userChroot = false;
+    this->pathToExe = "";
+    this->useColor = true;
+    this->logFile = "";
+    this->printStatistics = false;
+    this->convertUids = false;
+    this->alreadyInChroot = false;
+    this->timeoutSeconds = 0;
+    this->epoch = execution::default_epoch;
+    this->allow_network = false;
+    this->with_aslr = false;
+    this->with_host_envs = false;
+    this->clone_ns_flags = 0;
+    this->with_proc_overrides = true;
+    this->with_devrand_overrides = true;
+  }
 };
 // =======================================================================================
 programArgs parseProgramArguments(int argc, char* argv[]);
-int runTracee(programArgs args);
+int runTracee(std::unique_ptr<programArgs> args);
 int spawnTracerTracee(void* args);
 ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 
@@ -104,7 +138,7 @@ static void update_map(char* mapping, char* map_file);
 static void proc_setgroups_write(pid_t pid, const char* str);
 
 // Default starting value used by our programArgs.
-static bool isDefault(string arg);
+static bool isDefault(string& arg);
 // =======================================================================================
 static execution *globalExeObject = nullptr;
 void sigalrmHandler(int _) {
@@ -116,68 +150,12 @@ void sigalrmHandler(int _) {
 // =======================================================================================
 
 struct CloneArgs {
-  struct programArgs args;
+  std::unique_ptr<programArgs> args;
   std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>> vdsoSyms;
+  CloneArgs(struct programArgs& args) {
+    this->args = std::make_unique<programArgs>(args);
+  }
 };
-
-const string usageMsg =
-  "  Dettrace\n"
-  "\n"
-  "  A container for dynamic determinism enforcement. Arbitrary programs run inside\n"
-  "  will run deterministically."
-  "\n"
-  "  ./detTrace [optionalArguments] ./cmd [cmdArgs]\n"
-  "  ./detTrace --help\n"
-  "\n"  
-  "  Optional Arguments:\n"
-  "  ===============================================  \n"
-  "\n"  
-  "  --working-dir\n"
-  "     Specify the working directory that dettrace should use as a workspace for the \n"
-  "     deterministic process tree, by default it is the current working directory.\n"
-  "  --chroot <pathToRoot>\n"
-  "    Specify root to use for chroot (such as one created by debootstrap).\n"
-  "  --no-container\n"
-  "    Do not use any sort of containerization (May not be deterministic!).\n"
-  "\n"
-  "  Debugging/logging: \n"
-  "  ===============================================  \n"
-  "\n"
-  "  --debug <debugLevel>\n"
-  "    Prints log information based on verbosity, useful to debug dettrace errors.\n"
-  "  --log\n"
-  "    Path to write log to. Defaults to stderr. If writing to a file, the filename\n"
-  "    has a unique suffix appended.\n"
-  "  --no-color\n"
-  "    Do not use colored output for log. Useful when piping log to a file.\n"
-  "  --print-statistics\n"
-  "    Print metadata about process that just ran including: number of system call events\n"
-  "    read/write retries, rdtsc, rdtscp, cpuid.\n"
-  "  --timeoutSeconds\n"
-  "    Tear down all tracee processes with SIGKILL after this many seconds.\n"
-  "\n"
-  "  Allow non-deterministic inputs\n"
-  "  ===============================================  \n"
-  "\n"  
-  "  --allow-network\n"
-  "    Allow netowrking related syscalls like socket/send/recv, which could be non-deterministic.\n"
-  "  --with-container\n"
-  "    setup mount points for mount namespace (not recomended).\n"
-  "  --epoch=<EPOCH>\n"
-  "    set system epoch (start) time \"now|yyyy-mm-dd,HH:MM:SS\" (utc).\n"
-  "\n"
-  "  Internal/Advanced flags you are unlikely to use: \n"
-  "  ===============================================  \n"
-  "\n"
-  "  --already-in-chroot\n"
-  "    The current environment is already the desired chroot. For some reason the\n"
-  "    current mount namespace is polluted with our bind mounts (even though we create\n"
-  "    our own namespace). Therefore make sure to unshare -m before running dettrace with\n"
-  "    this command, either when chrooting or when calling dettrace.\n"
-  "  --convert-uids Some programs attempt to use UIDs not mapped in our namespace. Catch\n"
-  "    this behavior for lchown, chown, fchown, fchowat, and dynamically change the UIDS to\n"
-  "    0 (root).\n"
-  ;
 
 /**
  * Given a program through the command line, spawn a child thread, call PTRACEME and exec
@@ -228,12 +206,11 @@ int main(int argc, char** argv){
   // get vDSO symbols before clone/fork
   // only offets are used so it doesn't really matter
   // we read it from tracer or tracee.
-  CloneArgs cloneArgs;
+  CloneArgs cloneArgs(args);
   auto syms = vdsoGetSymbols(getpid());
   if (4 > syms.size()) {
     runtimeError("VDSO symbol map has only "+to_string(syms.size())+", expect at least 4!");
   }
-  cloneArgs.args = args;
   cloneArgs.vdsoSyms = syms;
 
   // Requires SIGCHILD otherwise parent won't be notified of parent exit.
@@ -247,7 +224,6 @@ int main(int argc, char** argv){
     cerr << "clone failed:\n  " + reason << endl;
     return 1;
   }
-
   // This is modified code from user_namespaces(7)
   // see https://lwn.net/Articles/532593/
   /* Update the UID and GID maps for children in their namespace, notice we do not
@@ -323,20 +299,18 @@ static string getExePath(pid_t pid = 0) {
  * Child will become the process the user wishes through call to execvpe.
  * @arg tempdir: either empty string or tempdir to use, for cpio chroot.
  */
-int runTracee(programArgs args){
-  int optIndex = args.optIndex;
-  int argc = args.argc;
-  char** argv = args.argv;
-  int debugLevel = args.debugLevel;
-  string pathToChroot = args.pathToChroot;
-  bool useContainer = args.useContainer;
-  string workingDir = args.workingDir;
-  string pathToExe = args.pathToExe;
+int runTracee(std::unique_ptr<programArgs> args){
+  auto argv = args->args;
+  int debugLevel = args->debugLevel;
+  string pathToChroot = args->pathToChroot;
+  bool useContainer = args->useContainer;
+  string workingDir = args->workingDir;
+  string pathToExe = args->pathToExe;
 
   if(useContainer){
-    setUpContainer(pathToExe, pathToChroot, workingDir, args.userChroot, args.alreadyInChroot);
+    setUpContainer(pathToExe, pathToChroot, workingDir, args->userChroot, args->alreadyInChroot);
   } else {
-    if (!args.alreadyInChroot) {
+    if (!args->alreadyInChroot) {
       // Disable ASLR for our child
       doWithCheck(personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");
       mountDir(devrandFifoPath, "/dev/random");
@@ -360,10 +334,12 @@ int runTracee(programArgs args){
   ptracer::doPtrace(PTRACE_TRACEME, 0, NULL, NULL);
 
   // +1 for executable's name, +1 for NULL at the end.
-  int newArgc = argc - optIndex + 1 + 1;
+  int newArgc = args->args.size() + 1;
   char* traceeCommand[newArgc];
 
-  memcpy(traceeCommand, & argv[optIndex], newArgc * sizeof(char*));
+  for (int i = 0; i < newArgc - 1; i++) {
+    traceeCommand[i] = (strdup)(argv[i].c_str());
+  }
   traceeCommand[newArgc - 1] = NULL;
 
   // Create minimal environment.
@@ -376,7 +352,7 @@ int runTracee(programArgs args){
   // Set up seccomp + bpf filters using libseccomp.
   // Default action to take when no rule applies to system call. We send a PTRACE_SECCOMP
   // event message to the tracer with a unique data: INT16_MAX
-  seccomp myFilter { debugLevel, args.convertUids };
+  seccomp myFilter { debugLevel, args->convertUids };
 
   // Stop ourselves until the tracer is ready. This ensures the tracer has time to get set
   //up.
@@ -706,7 +682,7 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
  */
 int spawnTracerTracee(void* voidArgs){
   CloneArgs* cloneArgs = static_cast<CloneArgs*>(voidArgs);
-  programArgs args = cloneArgs->args;
+  auto args = std::move(cloneArgs->args);
   auto vdsoSyms = cloneArgs->vdsoSyms;
 
   // Properly set up propegation rules for mounts created by dettrace, that is
@@ -714,7 +690,7 @@ int spawnTracerTracee(void* voidArgs){
   // this mount are not propegated to the parent mount.
   // This makes sure we don't pollute the host OS' mount space with entries made by us
   // here.
-  if (! args.alreadyInChroot) {
+  if (! args->alreadyInChroot) {
     doWithCheck(mount("none", "/", NULL, MS_SLAVE | MS_REC, 0), "mount slave");
   }
 
@@ -740,7 +716,7 @@ int spawnTracerTracee(void* voidArgs){
   } else if(pid > 0) {
     // We must mount proc so that the tracer sees the same PID and /proc/ directory
     // as the tracee. The tracee will do the same so it sees /proc/ under it's chroot.
-    if (!args.alreadyInChroot) {
+    if (!args->alreadyInChroot) {
       doWithCheck(mount("/proc", "/proc/", "proc", MS_MGC_VAL, nullptr),
                   "tracer mounting proc failed");
     }
@@ -755,12 +731,12 @@ int spawnTracerTracee(void* voidArgs){
                  "pthread_create /dev/urandom pthread" );
 
     execution exe{
-        args.debugLevel, pid, args.useColor,
-        args.logFile, args.printStatistics,
+        args->debugLevel, pid, args->useColor,
+        args->logFile, args->printStatistics,
         devRandomPthread, devUrandomPthread,
         cloneArgs->vdsoSyms,
-        args.allow_network,
-        args.epoch};
+        args->allow_network,
+        args->epoch};
 
     globalExeObject = &exe;
     struct sigaction sa;
@@ -768,15 +744,35 @@ int spawnTracerTracee(void* voidArgs){
     doWithCheck(sigemptyset(&sa.sa_mask), "sigemptyset");
     sa.sa_flags = 0;
     doWithCheck(sigaction(SIGALRM, &sa, NULL), "sigaction(SIGALRM)");
-    alarm(args.timeoutSeconds);
+    alarm(args->timeoutSeconds);
 
     exe.runProgram();
   } else if (pid == 0) {
-    runTracee(args);
+    runTracee(std::move(args));
   }
 
   return 0;
 }
+
+// unwrap_or (default) OptionValue
+class OptionValue1: public cxxopts::OptionValue {
+public:
+  explicit OptionValue1(cxxopts::OptionValue value) {
+    m_value = std::move(value);
+  }
+  template <typename T>
+  const T&
+  unwrap_or(const T& default_value) const {
+    if (m_value.count()) {
+      return m_value.as<T>();
+    } else {
+      return default_value;
+    }
+  }
+private:
+  cxxopts::OptionValue m_value;
+};
+
 // =======================================================================================
 /**
  * index is the first index in the argv array containing a non option.
@@ -784,162 +780,181 @@ int spawnTracerTracee(void* voidArgs){
  * @return (optind, debugLevel, pathToChroot, useContainer, inSchroot, useColor)
  */
 programArgs parseProgramArguments(int argc, char* argv[]){
-  programArgs args;
-  args.optIndex = 0;
-  args.argc = argc;
-  args.argv = argv;
-  args.debugLevel = 0;
-  args.pathToChroot = "NONE";
-  args.useContainer = false;
-  args.workingDir = "NONE";
-  args.userChroot = false;
-  args.pathToExe = "NONE";
-  args.useColor = true;
-  args.logFile = "NONE";
-  args.printStatistics = false;
-  args.convertUids = false;
-  args.alreadyInChroot = false;
-  args.timeoutSeconds = 0;
-  args.epoch = execution::default_epoch;
+  programArgs args(argc, argv);
 
-  // Command line options for our program.
-  static struct option programOptions[] = {
-    {"debug" , required_argument,  0, 'd'},
-    {"help"  , no_argument,        0, 'h'},
-    {"chroot", required_argument,  0, 'c'},
-    {"no-color", no_argument, 0, 'r'},
-    {"log", required_argument, 0, 'l'},
-    {"print-statistics", no_argument, 0, 'p'},
-    {"working-dir", required_argument, 0, 'w'},
-    {"convert-uids", no_argument, 0, 'u'},
-    {"already-in-chroot", no_argument, 0, 'a'},
-    {"timeoutSeconds", required_argument, 0, 't'},
-    {"allow-network", no_argument, 0, 1},
-    {"with-container", no_argument, 0, 2},
-    {"epoch", required_argument, 0, 3},
-    {0,        0,                  0, 0}    // Last must be filled with 0's.
-  };
+  cxxopts::Options options("dettrace",  "A container for dynamic determinism enforcement. \n"
+			   "Arbitrary programs run inside will run deterministically.");
 
-  while(true){
-    int optionIdx = 0;
-    // "+" means only parse until we hit the first non option character.
-    // Otherwise something like "bin/detbox ls -ahl" would not work as getopt would
-    // try to parse "-ahl".
-    int returnVal = getopt_long(argc, argv, "+h", programOptions, &optionIdx);
-    // We're done!
-    if(returnVal == -1){ break; }
+  options
+    .positional_help("program [programArgs..]");
 
-    switch(returnVal){
-    case 'a':
-      args.alreadyInChroot = true;
-      break;
-    case 'c':
-      args.pathToChroot = string { optarg };
-      break;
-    case 'd':
-      args.debugLevel = parseNum(optarg);
-      if(args.debugLevel < 0 || args.debugLevel > 5){
-        fprintf(stderr, "Debug level must be between [0,5].");
-        exit(1);
-      }
-      break;
-      // Help message.
-    case 'h':
-      fprintf(stderr, "%s\n", usageMsg.c_str());
-      exit(0);
-    case 'r':
-      args.useColor = false;
-      break;
-    case 'l':
-      args.logFile = string { optarg };
-      break;
-    case 'p':
-      args.printStatistics = true;
-      break;
-    case 'u':
-      args.convertUids = true;
-      break;
-    case 'w':
-      args.workingDir = string { optarg };
-      break;
-    case 't':
-      args.timeoutSeconds = parseNum(optarg);
-      if (0 == args.timeoutSeconds) {
-        fprintf(stderr, "Timeout seconds must be > 0.");
-        exit(1);
-      }
-      break;
-    case 1:
-      args.allow_network = true;
-      break;
-    case 2:
-      args.useContainer = true;
-      break;
-    case 3:
-      {
-	string ts = string { optarg };
-	if (ts == "now") {
-	  args.epoch = time(NULL);
-	} else {
-	  struct tm tm = {0,};
-	  if (!strptime(ts.c_str(), "%Y-%m-%d,%H:%M:%S", &tm)) {
-	    string errmsg("invalid time for --epoch: ");
-	    errmsg += ts;
-	    runtimeError(errmsg);
-	  }
-	  tm.tm_isdst = -1; /* dst auto detect */
-	  args.epoch = timegm(&tm);
+  options.add_options()
+    ( "help",
+      "display this help diaglog")
+    ( "debug",
+      "set debugging level[0..5]. default is 0 (off).",
+      cxxopts::value<int>()->default_value("0"))
+    ( "log-file",
+      "Path to write log to. If writing to a file, the filename"
+      "has a unique suffix appended. default is stderr.",
+      cxxopts::value<std::string>())
+    ( "chroot",
+      "Specify root to use for chroot (such as one created by debootstrap)",
+      cxxopts::value<std::string>())
+    ( "working-dir",
+      "Specify the working directory that dettrace should use as a workspace for the "
+      "deterministic process tree, by default it is the current working directory.",
+      cxxopts::value<std::string>())
+    ( "with-host-envs",
+      "derive envvars from host,when disabled, the tracee starts with a miniaml env: "
+      "PATH=/bin:/usr/bin. default is true.\n",
+      cxxopts::value<bool>()->default_value("true"))
+    ( "env",
+      "KEY=VAL, set environment variables for tracee, only allowd when `--with-host-env=no`,"
+      "this flag can be added multiple times to add multiple envvars.",
+      cxxopts::value<string>())
+    ( "with-proc-overrides",
+      "override /proc/{stat,meminfo,filesystems} to predefiend values so that "
+      "tracee depends on them becomes more deterministic. default is true.",
+      cxxopts::value<bool>()->default_value("true"))
+    ( "with-devrand-overrides",
+      "override /dev/{random,urandom} to psudo deterministic seeds "
+      "so that app get deterministic random values. default is true.",
+      cxxopts::value<bool>()->default_value("true"))
+    ( "with-aslr",
+      "enable/disable Address Space Layout Randomization (ASLR). "
+      "Note ASLR can affect determinism when enabled. default is false.",
+      cxxopts::value<bool>())
+    ( "with-userns",
+      "allow dettrace use of Linux user namespace."
+      " disable userns may cause non-determinism because of uid/gid, however"
+      " it maybe reasonable to disable it under docker. default is true.",
+      cxxopts::value<bool>())
+    ( "with-pidns",
+      "allow dettrace use of Linux PID namespace."
+      " disable pidns may cause non-determinism because of PIDs, however"
+      " it maybe reasonable to disable it under docker. default is true.",
+      cxxopts::value<bool>())
+    ( "with-mountns",
+      "allow dettrace use of Linux mount namespace."
+      " disable pidns may cause non-determinism because of /proc, /sys, however"
+      " it maybe reasonable to disable it under docker.",
+      cxxopts::value<bool>())
+    ( "with-network",
+      "Allow netowrking related syscalls like socket/send/recv"
+      " which could be non-deterministic. default is false.",
+      cxxopts::value<bool>()->default_value("false"))
+    ( "epoch",
+      "set system epoch (start) time \"now|yyyy-mm-dd,HH:MM:SS\" (utc). default is 1993-08-08,22:00:00.",
+      cxxopts::value<std::string>()->default_value("1993-08-08,22:00:00"))
+    ( "with-color",
+      "Allow use of ANSI colors in log output. Useful when piping log to a file. default is true.",
+      cxxopts::value<bool>())
+    ( "print-statistics",
+      "Print metadata about process that just ran including: number of system call events"
+      " read/write retries, rdtsc, rdtscp, cpuid. default is false\n",
+      cxxopts::value<bool>()->default_value("false"))
+    ( "timeoutSeconds",
+      "Tear down all tracee processes with SIGKILL after this many seconds. default is 0 - indefinite.",
+      cxxopts::value<unsigned long>()->default_value("0"))
+    ( "already-in-chroot",
+      "The current environment is already the desired chroot. For some reason the"
+      " current mount namespace is polluted with our bind mounts (even though we create"
+      " our own namespace). Therefore make sure to unshare -m before running dettrace with"
+      " this command, either when chrooting or when calling dettrace. default is false",
+      cxxopts::value<bool>()->default_value("false"))
+    ( "convert-uids",
+      "Some programs attempt to use UIDs not mapped in our namespace. Catch"
+      " this behavior for lchown, chown, fchown, fchowat, and dynamically change the UIDS to"
+      " 0 (root). default is false.",
+      cxxopts::value<bool>()->default_value("false"))
+    ( "program",
+      "program to run",
+      cxxopts::value<std::string>())
+    ( "programArgs",
+      "program arguments",
+      cxxopts::value<std::vector<std::string>>());
+
+  try {
+    options.parse_positional("program", "programArgs");
+    auto result = options.parse(argc, argv);
+
+    const std::string emptyString("");
+
+    args.alreadyInChroot = (static_cast<OptionValue1>(result["already-in-chroot"])).unwrap_or(false);
+    args.pathToChroot = (static_cast<OptionValue1>(result["chroot"])).unwrap_or(emptyString);
+    args.debugLevel = (static_cast<OptionValue1>(result["debug"])).unwrap_or(0);
+    args.useColor = (static_cast<OptionValue1>(result["with-color"])).unwrap_or(false);
+    args.logFile = (static_cast<OptionValue1>(result["log-file"])).unwrap_or(emptyString);
+    args.printStatistics = (static_cast<OptionValue1>(result["print-statistics"])).unwrap_or(false);
+    args.convertUids = (static_cast<OptionValue1>(result["convert-uids"])).unwrap_or(false);
+    args.workingDir = (static_cast<OptionValue1>(result["working-dir"])).unwrap_or(emptyString);
+    args.timeoutSeconds = (static_cast<OptionValue1>(result["timeoutSeconds"])).unwrap_or(0);
+    args.allow_network = (static_cast<OptionValue1>(result["with-network"])).unwrap_or(false);
+    args.useContainer = false;
+    // epoch
+    {
+      string ts = result["epoch"].as<std::string>();
+      if (ts == "now") {
+	args.epoch = time(NULL);
+      } else {
+	struct tm tm = {0,};
+	if (!strptime(ts.c_str(), "%Y-%m-%d,%H:%M:%S", &tm)) {
+	  string errmsg("invalid time for --epoch: ");
+	  errmsg += ts;
+	  runtimeError(errmsg);
 	}
+	tm.tm_isdst = -1; /* dst auto detect */
+	args.epoch = timegm(&tm);
       }
-      break;
-    case '?':
-      fprintf(stderr, "Invalid option specified. (See `%s --help`)\n", argv[0]);
+    }
+
+    args.args.clear();
+    if (!result["program"].count()) {
+      std::cout << options.help() << std::endl;
       exit(1);
     }
-  }
+    args.args.push_back(result["program"].as<std::string>());
 
-  // User did not pass exe arguments:
-  if(argv[optind] == NULL){
-    fprintf(stderr, "Missing arguments to dettrace!\n");
-    fprintf(stderr, "Use --help\n");
-    exit(1);
-  }
+    const std::vector<std::string> emptyArgs;
+    auto traceeArgs = (static_cast<OptionValue1>(result["programArgs"])).unwrap_or(emptyArgs);
+    std::copy(traceeArgs.begin(), traceeArgs.end(), std::back_inserter(args.args));
 
-  args.optIndex = optind;
+    args.pathToExe = getExePath();
 
-  // Find absolute path to our build directory relative to the dettrace binary.
-  char argv0[strlen(argv[0])+1/*NULL*/];
-  strcpy(argv0, argv[0]); // Use a copy since dirname may mutate contents.
-  args.pathToExe = getExePath();
+    if (isDefault(args.pathToChroot)) {
+      args.userChroot = false;
+      const string defaultRoot = "/../root/";
+      args.pathToChroot = args.pathToExe + defaultRoot;
+    } else {
+      args.userChroot = true;
+    }
 
-  if (isDefault(args.pathToChroot)) {
-    args.userChroot = false;
-    const string defaultRoot = "/../root/";
-    args.pathToChroot = args.pathToExe + defaultRoot;
-  } else {
-    args.userChroot = true;
-  }
-
-  bool usingWorkingDir = args.workingDir != "NONE";
-  if (args.alreadyInChroot && (args.userChroot || usingWorkingDir)) {
-    fprintf(stderr, "Cannot use --already-in-chroot with --chroot or --working-dir.\n");
-    exit(1);
-  }
-
-  if (usingWorkingDir && !args.userChroot) {
-    fprintf(stderr, "Cannot use --working-dir without specifying a --chroot.\n");
-    exit(1);
-  }
-
-  // Detect if we're inside a chroot by attempting to make a user namespace.
-  if (args.alreadyInChroot) {
-    if (unshare(CLONE_NEWUSER) != -1) {
-      fprintf(stderr, "We detected you are not currently running inside a chroot env.\n");
+    bool usingWorkingDir = args.workingDir != "";
+    if (args.alreadyInChroot && (args.userChroot || usingWorkingDir)) {
+      fprintf(stderr, "Cannot use --already-in-chroot with --chroot or --working-dir.\n");
       exit(1);
     }
-    // Treat current enviornment as our chroot.
-    args.userChroot = true;
-    args.pathToChroot = "/";
+
+    if (usingWorkingDir && !args.userChroot) {
+      fprintf(stderr, "Cannot use --working-dir without specifying a --chroot.\n");
+      exit(1);
+    }
+
+    // Detect if we're inside a chroot by attempting to make a user namespace.
+    if (args.alreadyInChroot) {
+      if (unshare(CLONE_NEWUSER) != -1) {
+	fprintf(stderr, "We detected you are not currently running inside a chroot env.\n");
+	exit(1);
+      }
+      // Treat current enviornment as our chroot.
+      args.userChroot = true;
+      args.pathToChroot = "/";
+    }
+  } catch(cxxopts::option_not_exists_exception& e) {
+    std::cerr << "command line parsing exception: " << e.what() << std::endl;
+    std::cerr << options.help() << std::endl;
+    exit(1);
   }
   return args;
 }
@@ -1110,6 +1125,6 @@ static void deleteFile(string path) {
 }
 // =======================================================================================
 // Default starting value used by our programArgs.
-static bool isDefault(string arg) {
-  return arg == "NONE";
+static bool isDefault(string& arg) {
+  return arg.empty();
 }

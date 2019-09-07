@@ -52,7 +52,7 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
 		     bool allow_network, unsigned long epoch):
   kernelPre4_8 {kernelCheck(4,8,0)},
   log {logFile, debugLevel, useColor},
-  silentLogger {"NONE", 0},
+  silentLogger {"", 0},
   printStatistics{printStatistics},
   devRandomPthread{devRandomPthread},
   devUrandomPthread{devUrandomPthread},
