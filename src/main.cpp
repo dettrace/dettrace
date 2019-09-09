@@ -186,10 +186,7 @@ int main(int argc, char** argv){
   // Namespaces must must be done before fork. As changes don't apply until after
   // fork, to all child processes.
 
-  int cloneFlags =
-    CLONE_NEWUSER | // Our own user namespace.
-    CLONE_NEWPID | // Our own pid namespace.
-    CLONE_NEWNS;  // Our own mount namespace
+  int cloneFlags = args.clone_ns_flags;
 
   if (args.alreadyInChroot) {
     cloneFlags &= ~CLONE_NEWUSER;
@@ -232,7 +229,7 @@ int main(int argc, char** argv){
      to the namespace. This allows us, in the future, to extend the mappings to other
      uids when running as root (not currently implemented, but notice this cannot be
      done when using unshare.)*/
-  if (! args.alreadyInChroot) {
+  if ((args.clone_ns_flags & CLONE_NEWPID) == CLONE_NEWPID) {
     char map_path[PATH_MAX];
     const int MAP_BUF_SIZE = 100;
     char map_buf[MAP_BUF_SIZE];
@@ -295,11 +292,12 @@ static string getExePath(pid_t pid = 0) {
 #undef PROC_PID_EXE_LEN
 }
 
-static std::pair<char**, size_t> populate_env_vars(std::vector<std::pair<std::string, std::string>>& envvars) {
+// prepare envvars for tracee
+static std::pair<char**, size_t>populate_env_vars
+     (std::vector<std::pair<std::string, std::string>>& envvars) {
   // Create minimal environment.
   // Note: gcc needs to be somewhere along PATH or it gets very confused, see
   // https://github.com/upenn-acg/detTrace/issues/23
-
   unsigned long env_vars_bytes = 0;
   unsigned long env_vars_nr = 0;
   for (auto it = envvars.cbegin(); it != envvars.cend(); ++it) {
@@ -349,15 +347,21 @@ int runTracee(std::unique_ptr<programArgs> args){
   if(useContainer){
     setUpContainer(pathToExe, pathToChroot, workingDir, args->userChroot, args->alreadyInChroot);
   } else {
-    if (!args->alreadyInChroot) {
+    if (!args->with_aslr) {
       // Disable ASLR for our child
       doWithCheck(personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");
-      mountDir(devrandFifoPath, "/dev/random");
-      mountDir(devUrandFifoPath, "/dev/urandom");
-      // jld: determinize various parts of /proc which our benchmarks read from
-      mountDir(pathToExe+"/../root/proc/meminfo", "/proc/meminfo");
-      mountDir(pathToExe+"/../root/proc/stat", "/proc/stat");
-      mountDir(pathToExe+"/../root/proc/filesystems", "/proc/filesystems");
+    }
+    if (args->clone_ns_flags & CLONE_NEWNS) {
+      if (args->with_devrand_overrides) {
+	mountDir(devrandFifoPath, "/dev/random");
+	mountDir(devUrandFifoPath, "/dev/urandom");
+      }
+      if (args->with_proc_overrides) {
+	// jld: determinize various parts of /proc which our benchmarks read from
+	mountDir(pathToExe+"/../root/proc/meminfo", "/proc/meminfo");
+	mountDir(pathToExe+"/../root/proc/std::at", "/proc/stat");
+	mountDir(pathToExe+"/../root/proc/filesystems", "/proc/filesystems");
+      }
       char* home = secure_getenv("HOME");
       if (home) {
 	mountDir(home, "/root");
@@ -727,13 +731,21 @@ int spawnTracerTracee(void* voidArgs){
   // this mount are not propegated to the parent mount.
   // This makes sure we don't pollute the host OS' mount space with entries made by us
   // here.
-  if (! args->alreadyInChroot) {
+  if ((args->clone_ns_flags & CLONE_NEWNS) == CLONE_NEWNS) {
     doWithCheck(mount("none", "/", NULL, MS_SLAVE | MS_REC, 0), "mount slave");
   }
 
   // TODO assert is bad (does not print buffered log output).
   // Switch to throw runtime exception.
-  assert(getpid() == 1);
+  if ( (args->clone_ns_flags & CLONE_NEWPID) == CLONE_NEWPID) {
+    pid_t first_pid;
+    if ((first_pid = getpid()) != 1) {
+      string errmsg("PID of first process expected to be 1, got: ");
+      errmsg += to_string(first_pid);
+      errmsg += "\n";
+      runtimeError(errmsg);
+    }
+  }
 
   // DEVRAND STEP 1: create unique /dev/[u]random fifos before we fork, so
   // that their names are available to tracee
@@ -753,8 +765,9 @@ int spawnTracerTracee(void* voidArgs){
   } else if(pid > 0) {
     // We must mount proc so that the tracer sees the same PID and /proc/ directory
     // as the tracee. The tracee will do the same so it sees /proc/ under it's chroot.
-    if (!args->alreadyInChroot) {
-      doWithCheck(mount("/proc", "/proc/", "proc", MS_MGC_VAL, nullptr),
+    if ((args->clone_ns_flags & CLONE_NEWNS) == CLONE_NEWNS &&
+	(args->clone_ns_flags & CLONE_NEWPID) == CLONE_NEWPID) {
+      doWithCheck(mount("none", "/proc/", "proc", MS_MGC_VAL, nullptr),
                   "tracer mounting proc failed");
     }
 
@@ -932,6 +945,20 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     args.with_proc_overrides = (static_cast<OptionValue1>(result["with-proc-overrides"])).unwrap_or(false);
     args.with_devrand_overrides = (static_cast<OptionValue1>(result["with-devrand-overrides"])).unwrap_or(false);
     args.with_host_envs = result["with-host-envs"].as<bool>();
+
+    bool userns  = (static_cast<OptionValue1>(result["with-userns"])).unwrap_or(false);
+    bool pidns   = (static_cast<OptionValue1>(result["with-pidns"])).unwrap_or(false);
+    bool mountns = (static_cast<OptionValue1>(result["with-mountns"])).unwrap_or(false);
+    if (userns) {
+      args.clone_ns_flags |= CLONE_NEWUSER;
+    }
+    if (pidns) {
+      args.clone_ns_flags |= CLONE_NEWPID;
+    }
+    if (mountns) {
+      args.clone_ns_flags |= CLONE_NEWNS;
+    }
+
     args.useContainer = false;
     // epoch
     {
@@ -962,7 +989,6 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       }
     } else {
       extern char** environ;
-
       for (int i = 0; environ[i]; i++) {
 	string kv(environ[i]);
 	auto j = kv.find('=');
