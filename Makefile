@@ -14,7 +14,7 @@ dynamic: bin initramfs
 	cp src/dettrace bin/
 
 # This only builds a statically linked binary.
-static: bin
+static: bin initramfs
 	rm -rf bin/dettrace
 	cd src && ${MAKE} all-static
 	cp src/dettrace-static bin/dettrace
@@ -31,8 +31,8 @@ dynamic-and-static: bin initramfs
 templistfile := $(shell mktemp)
 initramfs: initramfs.cpio
 initramfs.cpio: root
-	@cd root && find . > $(templistfile) && cpio -o > ../initramfs.cpio < $(templistfile) 2>/dev/null
-	@$(RM) $(templistfile)
+	cd root && find . > $(templistfile) && cpio -o > ../initramfs.cpio < $(templistfile)
+	$(RM) $(templistfile)
 
 tests: run-tests
 test: tests
