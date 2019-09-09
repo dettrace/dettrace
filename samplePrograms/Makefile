@@ -30,7 +30,7 @@ CXX_ROOTS=random_device
 endif
 CXX_BINARIES= $(addsuffix .bin,$(CXX_ROOTS))
 
-DETTRACE=../../bin/dettrace --epoch=1993-08-08,22:00:00
+DETTRACE=../../bin/dettrace --epoch=1993-08-08,22:00:00 --
 DIFF_CMD=diff
 
 build: $(SIMPLE_BINARIES) $(PARAM_BINARIES) $(BROADWELL_BINARIES) $(RT_BINARIES) $(CXX_BINARIES)
@@ -122,7 +122,7 @@ getdents64.ok: getdents64.bin
 sshkeygen.ok:
 	@echo "   Testing ssh-keygen..."
 	@rm -f thisKey thisKey.pub
-	@python3 timeout.py 5s $(DETTRACE) 'ssh-keygen -f thisKey -N ""' > ActualOutputs/sshkeygen.output
+	@python3 timeout.py 5s $(DETTRACE) ssh-keygen -f thisKey -N \"\" > ActualOutputs/sshkeygen.output
 	@$(DIFF_CMD) ActualOutputs/sshkeygen.output ExpectedOutputs/sshkeygen.output
 
 grep.ok:
