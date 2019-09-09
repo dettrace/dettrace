@@ -19,7 +19,7 @@ LIBARCHIVE_STATIC=$(shell pkg-config --static --libs libarchive)
 LIBDETFLAGS= -g -O2 -Wall -Wextra -Wconversion -fPIC -shared -Wl,--no-as-needed -std=c99
 LIBDETLIBS=-ldl -lm
 
-INCLUDE = -I ../include/ -I ../lib/include
+INCLUDE = -I ../include/ -I ../lib/include -I ../cxxopts/include
 
 src = $(wildcard *.cpp)
 obj = $(src:.cpp=.o)
