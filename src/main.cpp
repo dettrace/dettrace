@@ -50,6 +50,7 @@
 
 #include <seccomp.h>
 
+#define CXXOPTS_NO_RTTI 1 // no rtti for cxxopts, this should be default.
 #include <cxxopts.hpp>
 
 /**
@@ -294,6 +295,44 @@ static string getExePath(pid_t pid = 0) {
 #undef PROC_PID_EXE_LEN
 }
 
+static std::pair<char**, size_t> populate_env_vars(std::vector<std::pair<std::string, std::string>>& envvars) {
+  // Create minimal environment.
+  // Note: gcc needs to be somewhere along PATH or it gets very confused, see
+  // https://github.com/upenn-acg/detTrace/issues/23
+
+  unsigned long env_vars_bytes = 0;
+  unsigned long env_vars_nr = 0;
+  for (auto it = envvars.cbegin(); it != envvars.cend(); ++it) {
+    env_vars_bytes += it->first.size() + it->second.size() + 3;
+    ++env_vars_nr;
+  }
+
+  char* env_var_store = (char*)calloc(1 + env_vars_bytes, 1);
+  if (!env_var_store) {
+    string errmsg = "unable to alloc env string for size: " + to_string(env_vars_bytes) + "\n";
+    runtimeError(errmsg);
+  }
+
+  char** envs = (char**)calloc(1 + env_vars_nr, sizeof(char*));
+  if (!envs) {
+    string errmsg = "unable to alloc envvar for size: " + to_string(sizeof(char*) * env_vars_nr) + "\n";
+    runtimeError(errmsg);
+  }
+
+  int i = 0;
+  int k = 0;
+  int n = (int)env_vars_bytes;
+  for (auto it = envvars.cbegin(); it != envvars.cend(); ++it) {
+    char* env = &env_var_store[k];
+    k += snprintf(&env_var_store[k], n - k, "%s=%s", it->first.c_str(), it->second.c_str());
+    env_var_store[k++] = '\0';
+    envs[i++] = env;
+  }
+  envs[i++] = NULL;
+
+  return std::make_pair(envs, (size_t)i);
+}
+
 // =======================================================================================
 /**
  * Child will become the process the user wishes through call to execvpe.
@@ -342,12 +381,10 @@ int runTracee(std::unique_ptr<programArgs> args){
   }
   traceeCommand[newArgc - 1] = NULL;
 
-  // Create minimal environment.
-  // Note: gcc needs to be somewhere along PATH or it gets very confused, see
-  // https://github.com/upenn-acg/detTrace/issues/23
+  char** envs = NULL;
+  size_t nenvs = 0;
 
-  char *const envs[] = {(char* const)"PATH=/usr/bin/:/bin",
-                        NULL};
+  std::tie(envs, nenvs) = populate_env_vars(args->envs);
 
   // Set up seccomp + bpf filters using libseccomp.
   // Default action to take when no rule applies to system call. We send a PTRACE_SECCOMP
@@ -812,7 +849,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     ( "env",
       "KEY=VAL, set environment variables for tracee, only allowd when `--with-host-env=no`,"
       "this flag can be added multiple times to add multiple envvars.",
-      cxxopts::value<string>())
+      cxxopts::value<std::vector<string>>())
     ( "with-proc-overrides",
       "override /proc/{stat,meminfo,filesystems} to predefiend values so that "
       "tracee depends on them becomes more deterministic. default is true.",
@@ -891,6 +928,10 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     args.workingDir = (static_cast<OptionValue1>(result["working-dir"])).unwrap_or(emptyString);
     args.timeoutSeconds = (static_cast<OptionValue1>(result["timeoutSeconds"])).unwrap_or(0);
     args.allow_network = (static_cast<OptionValue1>(result["with-network"])).unwrap_or(false);
+    args.with_aslr = (static_cast<OptionValue1>(result["with-aslr"])).unwrap_or(false);
+    args.with_proc_overrides = (static_cast<OptionValue1>(result["with-proc-overrides"])).unwrap_or(false);
+    args.with_devrand_overrides = (static_cast<OptionValue1>(result["with-devrand-overrides"])).unwrap_or(false);
+    args.with_host_envs = result["with-host-envs"].as<bool>();
     args.useContainer = false;
     // epoch
     {
@@ -906,6 +947,28 @@ programArgs parseProgramArguments(int argc, char* argv[]){
 	}
 	tm.tm_isdst = -1; /* dst auto detect */
 	args.epoch = timegm(&tm);
+      }
+    }
+
+    if (!args.with_host_envs) {
+      if (result["env"].count() > 0) {
+	auto kvs = result["env"].as<std::vector<std::string>>();
+	for (auto kv: kvs) {
+	  auto j = kv.find('=');
+	  auto k = kv.substr(0, j);
+	  auto v = kv.substr(1+j);
+	  args.envs.push_back({k, v});
+	}
+      }
+    } else {
+      extern char** environ;
+
+      for (int i = 0; environ[i]; i++) {
+	string kv(environ[i]);
+	auto j = kv.find('=');
+	auto k = kv.substr(0, j);
+	auto v = kv.substr(1+j);
+	args.envs.push_back({k, v});
       }
     }
 
