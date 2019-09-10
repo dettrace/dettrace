@@ -896,7 +896,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       cxxopts::value<bool>()->default_value("false"))
     ( "epoch",
       "set system epoch (start) time \"now|yyyy-mm-dd,HH:MM:SS\" (utc). default is 1993-08-08,22:00:00.",
-      cxxopts::value<std::string>()->default_value("1993-08-08,22:00:00"))
+      cxxopts::value<std::string>())
     ( "with-color",
       "Allow use of ANSI colors in log output. Useful when piping log to a file. default is true.",
       cxxopts::value<bool>())
@@ -942,13 +942,14 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     args.timeoutSeconds = (static_cast<OptionValue1>(result["timeoutSeconds"])).unwrap_or(0);
     args.allow_network = (static_cast<OptionValue1>(result["with-network"])).unwrap_or(false);
     args.with_aslr = (static_cast<OptionValue1>(result["with-aslr"])).unwrap_or(false);
-    args.with_proc_overrides = (static_cast<OptionValue1>(result["with-proc-overrides"])).unwrap_or(false);
-    args.with_devrand_overrides = (static_cast<OptionValue1>(result["with-devrand-overrides"])).unwrap_or(false);
+    args.with_proc_overrides = result["with-proc-overrides"].as<bool>();       // must have default!
+    args.with_devrand_overrides = result["with-devrand-overrides"].as<bool>(); // must have default!
     args.with_host_envs = result["with-host-envs"].as<bool>();
 
-    bool userns  = (static_cast<OptionValue1>(result["with-userns"])).unwrap_or(false);
-    bool pidns   = (static_cast<OptionValue1>(result["with-pidns"])).unwrap_or(false);
-    bool mountns = (static_cast<OptionValue1>(result["with-mountns"])).unwrap_or(false);
+    // userns|pidns|mountns default vaules are true
+    bool userns  = (static_cast<OptionValue1>(result["with-userns"])).unwrap_or(true);
+    bool pidns   = (static_cast<OptionValue1>(result["with-pidns"])).unwrap_or(true);
+    bool mountns = (static_cast<OptionValue1>(result["with-mountns"])).unwrap_or(true);
     if (userns) {
       args.clone_ns_flags |= CLONE_NEWUSER;
     }
@@ -962,18 +963,20 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     args.useContainer = false;
     // epoch
     {
-      string ts = result["epoch"].as<std::string>();
-      if (ts == "now") {
-	args.epoch = time(NULL);
-      } else {
-	struct tm tm = {0,};
-	if (!strptime(ts.c_str(), "%Y-%m-%d,%H:%M:%S", &tm)) {
-	  string errmsg("invalid time for --epoch: ");
-	  errmsg += ts;
-	  runtimeError(errmsg);
+      if (result["epoch"].count()) {
+	auto ts = result["epoch"].as<std::string>();
+	if (ts == "now") {
+	  args.epoch = time(NULL);
+	} else {
+	  struct tm tm;
+	  if (!strptime(ts.c_str(), "%Y-%m-%d,%H:%M:%S", &tm)) {
+	    string errmsg("invalid time for --epoch: ");
+	    errmsg += ts;
+	    runtimeError(errmsg);
+	  }
+	  tm.tm_isdst = -1; /* dst auto detect */
+	  args.epoch = timegm(&tm);
 	}
-	tm.tm_isdst = -1; /* dst auto detect */
-	args.epoch = timegm(&tm);
       }
     }
 
