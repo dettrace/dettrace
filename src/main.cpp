@@ -47,6 +47,7 @@
 #include "ptracer.hpp"
 #include "seccomp.hpp"
 #include "vdso.hpp"
+#include "tempfile.hpp"
 
 #include <seccomp.h>
 
@@ -716,6 +717,17 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
   // Disable ASLR for our child
   doWithCheck(personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");
 }
+
+static inline void closeAllFds(void) {
+  for (int fd = 3; fd < 256; fd++) {
+    close(fd);
+  }
+}
+
+static void doTracerCleanup(void) {
+  closeAllFds();
+}
+
 // =======================================================================================
 /**
  * Spawn two processes, a parent and child, the parent will become the tracer, and child
@@ -725,6 +737,8 @@ int spawnTracerTracee(void* voidArgs){
   CloneArgs* cloneArgs = static_cast<CloneArgs*>(voidArgs);
   auto args = std::move(cloneArgs->args);
   auto vdsoSyms = cloneArgs->vdsoSyms;
+
+  TempDir dtTmpDir("dettrace-", true);
 
   // Properly set up propegation rules for mounts created by dettrace, that is
   // make this a slave mount (and all mounts underneath this one) so that changes inside
@@ -749,12 +763,11 @@ int spawnTracerTracee(void* voidArgs){
 
   // DEVRAND STEP 1: create unique /dev/[u]random fifos before we fork, so
   // that their names are available to tracee
-  char tmpnamBuffer[L_tmpnam];
-  char* tmpnamResult = tmpnam(tmpnamBuffer);
-  assert(NULL != tmpnamResult);
-  devrandFifoPath = string{ tmpnamBuffer } + "-random.fifo";
-  //fprintf(stderr, "%s\n", devrandFifoPath.c_str());
-  devUrandFifoPath = string{ tmpnamBuffer } + "-urandom.fifo";
+  {
+    TempPath tmpnamBuffer(dtTmpDir);
+    devrandFifoPath = tmpnamBuffer.path() + "-random.fifo";
+    devUrandFifoPath = tmpnamBuffer.path() + "-urandom.fifo";
+  }
   doWithCheck(mkfifo(devrandFifoPath.c_str(), 0666), "mkfifo");
   doWithCheck(mkfifo(devUrandFifoPath.c_str(), 0666), "mkfifo");
 
@@ -780,6 +793,11 @@ int spawnTracerTracee(void* voidArgs){
     doWithCheck( pthread_create(&devUrandomPthread, NULL, devRandThread, (void*)strdup(devUrandFifoPath.c_str())),
                  "pthread_create /dev/urandom pthread" );
 
+    // remove temp files when out of scope
+    // NB: does work when the program is killed
+    TempPath scopedDevrand(devrandFifoPath);
+    TempPath scopedDevUrand(devUrandFifoPath);
+
     execution exe{
         args->debugLevel, pid, args->useColor,
         args->logFile, args->printStatistics,
@@ -797,6 +815,9 @@ int spawnTracerTracee(void* voidArgs){
     alarm(args->timeoutSeconds);
 
     exe.runProgram();
+
+    // do exra house keeping.
+    doTracerCleanup();
   } else if (pid == 0) {
     runTracee(std::move(args));
   }
