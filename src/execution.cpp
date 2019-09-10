@@ -20,6 +20,23 @@ pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process);
 bool kernelCheck(int a, int b, int c);
 void trapCPUID(globalState& gs, state& s, ptracer& t);
 
+struct Pedigree {
+  int pid;
+  int tid;
+};
+
+extern "C" long captured_syscall(struct Pedigree* p,
+				 int syscallno,
+				 unsigned long retval,
+				 unsigned long arg0,
+				 unsigned long arg1,
+				 unsigned long arg2,
+				 unsigned long arg3,
+				 unsigned long arg4,
+				 unsigned long arg5);
+
+extern "C" void fingerprinter_exit();
+
 bool kernelCheck(int a, int b, int c){
   struct utsname utsname = {};
   long x, y, z;
@@ -336,6 +353,8 @@ void execution::runProgram(){
       // there is at least 1 (the process)
       log.writeToLog(Importance::info, "thread group #%d\n",
                      myGlobalState.threadGroups.count(threadGroup));
+
+      fingerprinter_exit();
 
       if (isExitGroup && myGlobalState.threadGroups.count(threadGroup) != 1) {
         auto msg = "Caught exit group! Ending all thread in our process group %d.\n";
@@ -929,20 +948,7 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   }
 }
 
-struct Pedigree {
-  int pid;
-  int tid;
-};
 
-extern "C" long captured_syscall(struct Pedigree* p,
-				 int syscallno,
-				 unsigned long retval,
-				 unsigned long arg0,
-				 unsigned long arg1,
-				 unsigned long arg2,
-				 unsigned long arg3,
-				 unsigned long arg4,
-				 unsigned long arg5);
 // =======================================================================================
 void execution::callPostHook(int syscallNumber, globalState& gs,
                             state& s, ptracer& t, scheduler& sched){
