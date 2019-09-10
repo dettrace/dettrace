@@ -359,7 +359,7 @@ int runTracee(std::unique_ptr<programArgs> args){
       if (args->with_proc_overrides) {
 	// jld: determinize various parts of /proc which our benchmarks read from
 	mountDir(pathToExe+"/../root/proc/meminfo", "/proc/meminfo");
-	mountDir(pathToExe+"/../root/proc/std::at", "/proc/stat");
+	mountDir(pathToExe+"/../root/proc/stat", "/proc/stat");
 	mountDir(pathToExe+"/../root/proc/filesystems", "/proc/filesystems");
       }
       char* home = secure_getenv("HOME");
