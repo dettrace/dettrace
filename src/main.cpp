@@ -90,7 +90,6 @@ struct programArgs{
   bool with_proc_overrides;
   bool with_devrand_overrides;
 
-  bool with_host_envs;
   std::vector<std::pair<std::string, std::string>> envs;
 
   std::string tracee;
@@ -99,6 +98,9 @@ struct programArgs{
   unsigned timeoutSeconds;
   unsigned long epoch;
   unsigned long clone_ns_flags;
+
+  unsigned short prng_seed;
+  bool in_docker;
 
   programArgs(int argc, char* argv[]) {
     this->argc = argc;
@@ -118,10 +120,11 @@ struct programArgs{
     this->epoch = execution::default_epoch;
     this->allow_network = false;
     this->with_aslr = false;
-    this->with_host_envs = false;
     this->clone_ns_flags = 0;
     this->with_proc_overrides = true;
     this->with_devrand_overrides = true;
+    this->prng_seed = 0;
+    this->in_docker = false;
   }
 };
 // =======================================================================================
@@ -430,20 +433,26 @@ int runTracee(programArgs* args){
 static pthread_cond_t  devRandThreadReady = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t devRandThreadMutex = PTHREAD_MUTEX_INITIALIZER;
 
+struct DevRandThreadParam {
+  std::string fifoPath;
+  unsigned int prngSeed;
+};
+
 /**
  * DEVRAND STEP 3: thread that writes pseudorandom output to a /dev/[u]random fifo
  */
-static void* devRandThread(void* fifoPath_) {
-  char* fifoPath = (char*) fifoPath_;
+static void* devRandThread(void* param_) {
+  struct DevRandThreadParam* param = (struct DevRandThreadParam*)param_;
+  const char* fifoPath = param->fifoPath.c_str();
 
   pthread_mutex_lock(&devRandThreadMutex);
   // allow this thread to be unilaterally killed when tracer exits
   int oldCancelType;
   doWithCheck(pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldCancelType), "pthread_setcanceltype");
 
-  //fprintf(stderr, "[devRandThread] using fifo  %s\n", fifoPath);
+  // fprintf(stderr, "[devRandThread] using fifo  %s, seed: %x\n", fifoPath, param->prngSeed);
 
-  PRNG prng(0x1234);
+  PRNG prng(param->prngSeed);
 
   uint32_t totalBytesWritten = 0;
   uint16_t random = 0;
@@ -579,15 +588,20 @@ int spawnTracerTracee(void* voidArgs){
     // DEVRAND STEP 2: spawn a thread to write to each fifo
     pthread_t devRandomPthread, devUrandomPthread;
 
+    struct DevRandThreadParam params[2] =
+      {
+       { devrandFifoPath, args->prng_seed },
+       { devUrandFifoPath, args->prng_seed },
+      };
     // NB: we copy *FifoPath to the heap as our stack storage goes away: these allocations DO get leaked
     // If we wanted to not leak them, devRandThread could copy to its stack and free the heap copy
     pthread_mutex_lock(&devRandThreadMutex);
-    doWithCheck( pthread_create(&devRandomPthread, NULL, devRandThread, (void*)devrandFifoPath.c_str()),
+    doWithCheck( pthread_create(&devRandomPthread, NULL, devRandThread, (void*)&params[0]),
 		 "pthread_create /dev/random pthread" );
     pthread_cond_wait(&devRandThreadReady, &devRandThreadMutex);
     // we should unlock then lock the mutex again, but just leave the mutex locked
     // assuming: unlock -> lock = ID?
-    doWithCheck( pthread_create(&devUrandomPthread, NULL, devRandThread, (void*)devUrandFifoPath.c_str()),
+    doWithCheck( pthread_create(&devUrandomPthread, NULL, devRandThread, (void*)&params[1]),
 		 "pthread_create /dev/urandom pthread" );
     pthread_cond_wait(&devRandThreadReady, &devRandThreadMutex);
     pthread_mutex_unlock(&devRandThreadMutex);
@@ -661,7 +675,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
 			   "Arbitrary programs run inside will run deterministically.");
 
   options
-    .positional_help("-- program [programArgs..]");
+    .positional_help("[-- program [programArgs..]]");
 
   options.add_options()
     ( "help",
@@ -673,65 +687,102 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       "Path to write log to. If writing to a file, the filename"
       "has a unique suffix appended. default is stderr.",
       cxxopts::value<std::string>())
-    ( "chroot",
-      "Specify root to use for chroot (such as one created by debootstrap)",
+    ( "fs-chroot",
+      "In this mode, the user provides their own chroot environment, which"
+      "serves as the file system for the guest process.",
       cxxopts::value<std::string>())
     ( "working-dir",
       "Specify the working directory that dettrace should use as a workspace for the "
       "deterministic process tree, by default it is the current working directory.",
       cxxopts::value<std::string>())
-    ( "with-host-envs",
-      "derive envvars from host,when disabled, the tracee starts with a miniaml env: "
-      "PATH=/bin:/usr/bin. default is true.\n",
-      cxxopts::value<bool>()->default_value("false"))
-    ( "env",
-      "KEY=VAL, set environment variables for tracee, only allowd when `--with-host-env=no`,"
+    ( "base-env",
+      "empty|minimal|host (default is minimal)."
+      "The base environment that is set (before adding additions via --env)."
+      "In the `host` setting, we directly inherit the parent process\'s environment."
+      "Setting `host` is equivalent to passing `--env V` for each variable in the"
+      "current environment."
+      "\n"
+      "The `minimal` setting provides a minimal deterministic environment, setting"
+      "only PATH, HOSTNAME, and HOME to the following "
+      "\n"
+      "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      "HOSTNAME=nowhere"
+      "HOME=/root"
+      "\n"
+      "Setting `minimal` is equivalent to passing the above variables via --env.",
+      cxxopts::value<string>()->default_value("minimal"))
+    ( "e,env",
+      "Set an environment variable for the guest.  If the `=str` value "
+      "is elided, then the variable is read from the user's environment."
       "this flag can be added multiple times to add multiple envvars.",
       cxxopts::value<std::vector<string>>())
-    ( "with-proc-overrides",
-      "override /proc/{stat,meminfo,filesystems} to predefiend values so that "
-      "tracee depends on them becomes more deterministic. default is true.",
-      cxxopts::value<bool>()->default_value("true"))
-    ( "with-devrand-overrides",
-      "override /dev/{random,urandom} to psudo deterministic seeds "
-      "so that app get deterministic random values. default is true.",
-      cxxopts::value<bool>()->default_value("true"))
-    ( "with-aslr",
-      "enable/disable Address Space Layout Randomization (ASLR). "
-      "Note ASLR can affect determinism when enabled. default is false.",
+    ( "real-proc",
+      "default is no."
+      "When set, the program can access the full, nondeterministic /proc and /dev"
+      "interfaces.  In the default, disabled setting, deterministic information is"
+      "presented in these paths instead.  This overlay presents a canonical virtual"
+      "hardware platform to the application.",
+      cxxopts::value<bool>()->default_value("false"))
+    ( "aslr",
+      "Enable Address Space Layout Randomization. ASLR is disabled by default "
+      "as it is intrinsically a source of nondeterminism.",
       cxxopts::value<bool>())
-    ( "with-userns",
-      "allow dettrace use of Linux user namespace."
-      " disable userns may cause non-determinism because of uid/gid, however"
-      " it maybe reasonable to disable it under docker. default is true.",
+    ( "host-userns",
+      "Allow access to the host’s user namespace.  By default, dettrace creates"
+      "a fresh, deterministic user-namespace when launching the guest, that is,"
+      "CLONE_NEWUSER is set when cloning the guest process."
+      "It is safe to set --host-userns to `true` when the dettrace process is already"
+      "executing in a fresh container, e.g. the root process in a Docker container.",
       cxxopts::value<bool>())
-    ( "with-pidns",
-      "allow dettrace use of Linux PID namespace."
-      " disable pidns may cause non-determinism because of PIDs, however"
-      " it maybe reasonable to disable it under docker. default is true.",
+    ( "host-pidns",
+      "Allow access to the host’s PID namespace.  By default, dettrace creates"
+      "a fresh, deterministic PID namespace when launching the guest.  It is safe"
+      "to set this to `true` when the dettrace process is executing inside a fresh"
+      "container as the root process.",
       cxxopts::value<bool>())
-    ( "with-mountns",
-      "allow dettrace use of Linux mount namespace."
-      " disable pidns may cause non-determinism because of /proc, /sys, however"
-      " it maybe reasonable to disable it under docker.",
+    ( "host-mountns",
+      "Allow dettrace to inherit the mount namespace from the host.  By default,"
+      "when this is disabled, dettrace creates a fresh mount namespace.  "
+      "Setting to `true` is potentially dangerous.  dettrace may pollute the host"
+      "system’s mount namespace and not successfully clean up all of these mounts.",
       cxxopts::value<bool>())
-    ( "with-network",
-      "Allow netowrking related syscalls like socket/send/recv"
-      " which could be non-deterministic. default is false.",
+    ( "network",
+      "By default, networking is disallowed inside the guest, as it is generally"
+      "non-reproducible. This flag allows networking syscalls like"
+      "socket/send/recv, which become additional implicit inputs to the guest"
+      "computation.      ",
       cxxopts::value<bool>()->default_value("false"))
     ( "epoch",
-      "set system epoch (start) time \"now|yyyy-mm-dd,HH:MM:SS\" (utc). default is 1993-08-08,22:00:00.",
+      "Set system epoch (start) time.  Accepts now or yyyy-mm-dd,HH:MM:SS (utc)."
+      "The epoch time also becomes the initial atime/mtime on all files visible in"
+      "the container.  These timestamps change deterministically as execution proceeds."
+      "default is 1993-08-08,22:00:00.",
       cxxopts::value<std::string>())
+    ( "prng-seed",
+      "Use this string to seed to the PRNG that is used to supply all"
+      "randomness accessed by the guest.  This affects both /dev/[u]random and "
+      "system calls that create randomness.  The rdrand instruction is disabled for"
+      "the guest. default is 4660.",
+      cxxopts::value<unsigned int>())
+    ( "in-docker",
+      "A convenience feature for when launching dettrace in a fresh docker "
+      "container, e.g. `docker run dettrace --in-docker cmd`.  This is a shorthand for "
+      "  `--fs-host --host-userns --host-pidns --host-mountns --base-env=host`."
+      "Docker creates fresh namespaces and controls the base file system, making it "
+      "safe to disable these corresponding dettrace features.  However, it "
+      "is important to not “docker exec” additional processes into the container, as"
+      "it will pollute the deterministic namespaces.",
+      cxxopts::value<bool>()->default_value("false"))
     ( "with-color",
       "Allow use of ANSI colors in log output. Useful when piping log to a file. default is true.",
       cxxopts::value<bool>())
     ( "print-statistics",
       "Print metadata about process that just ran including: number of system call events"
       " read/write retries, rdtsc, rdtscp, cpuid. default is false\n",
-      cxxopts::value<bool>()->default_value("false"))
-    ( "timeoutSeconds",
-      "Tear down all tracee processes with SIGKILL after this many seconds. default is 0 - indefinite.",
-      cxxopts::value<unsigned long>()->default_value("0"))
+      cxxopts::value<bool>()->default_value("false"));
+
+  // internal options
+  options.add_options( "Internal/Advanced flags you are unlikely to use\n")
     ( "already-in-chroot",
       "The current environment is already the desired chroot. For some reason the"
       " current mount namespace is polluted with our bind mounts (even though we create"
@@ -743,6 +794,9 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       " this behavior for lchown, chown, fchown, fchowat, and dynamically change the UIDS to"
       " 0 (root). default is false.",
       cxxopts::value<bool>()->default_value("false"))
+    ( "timeoutSeconds",
+      "Tear down all tracee processes with SIGKILL after this many seconds. default is 0 - indefinite.",
+      cxxopts::value<unsigned long>()->default_value("0"))
     ( "program",
       "program to run",
       cxxopts::value<std::string>())
@@ -757,7 +811,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     const std::string emptyString("");
 
     args.alreadyInChroot = (static_cast<OptionValue1>(result["already-in-chroot"])).unwrap_or(false);
-    args.pathToChroot = (static_cast<OptionValue1>(result["chroot"])).unwrap_or(emptyString);
+    args.pathToChroot = (static_cast<OptionValue1>(result["fs-chroot"])).unwrap_or(emptyString);
     args.debugLevel = (static_cast<OptionValue1>(result["debug"])).unwrap_or(0);
     args.useColor = (static_cast<OptionValue1>(result["with-color"])).unwrap_or(false);
     args.logFile = (static_cast<OptionValue1>(result["log-file"])).unwrap_or(emptyString);
@@ -765,27 +819,29 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     args.convertUids = (static_cast<OptionValue1>(result["convert-uids"])).unwrap_or(false);
     args.workingDir = (static_cast<OptionValue1>(result["working-dir"])).unwrap_or(emptyString);
     args.timeoutSeconds = (static_cast<OptionValue1>(result["timeoutSeconds"])).unwrap_or(0);
-    args.allow_network = (static_cast<OptionValue1>(result["with-network"])).unwrap_or(false);
-    args.with_aslr = (static_cast<OptionValue1>(result["with-aslr"])).unwrap_or(false);
-    args.with_proc_overrides = result["with-proc-overrides"].as<bool>();       // must have default!
-    args.with_devrand_overrides = result["with-devrand-overrides"].as<bool>(); // must have default!
-    args.with_host_envs = result["with-host-envs"].as<bool>();
+    args.allow_network = (static_cast<OptionValue1>(result["network"])).unwrap_or(false);
+    args.with_aslr = (static_cast<OptionValue1>(result["aslr"])).unwrap_or(false);
+    auto use_real_proc = result["real-proc"].as<bool>();       // must have default!
+    auto base_env = result["base-env"].as<std::string>();
+    args.prng_seed = (static_cast<OptionValue1>(result["prng-seed"])).unwrap_or(0x1234);
 
     // userns|pidns|mountns default vaules are true
-    bool userns  = (static_cast<OptionValue1>(result["with-userns"])).unwrap_or(true);
-    bool pidns   = (static_cast<OptionValue1>(result["with-pidns"])).unwrap_or(true);
-    bool mountns = (static_cast<OptionValue1>(result["with-mountns"])).unwrap_or(true);
-    if (userns) {
+    bool host_userns  = (static_cast<OptionValue1>(result["host-userns"])).unwrap_or(false);
+    bool host_pidns   = (static_cast<OptionValue1>(result["host-pidns"])).unwrap_or(false);
+    bool host_mountns = (static_cast<OptionValue1>(result["host-mountns"])).unwrap_or(false);
+    if (!host_userns) {
       args.clone_ns_flags |= CLONE_NEWUSER;
     }
-    if (pidns) {
+    if (!host_pidns) {
       args.clone_ns_flags |= CLONE_NEWPID;
     }
-    if (mountns) {
+    if (!host_mountns) {
       args.clone_ns_flags |= CLONE_NEWNS;
     }
 
-    args.useContainer = false;
+    args.with_proc_overrides = !use_real_proc;
+    args.with_devrand_overrides = !use_real_proc;
+
     // epoch
     {
       if (result["epoch"].count()) {
@@ -805,20 +861,29 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       }
     }
 
-    if (!args.with_host_envs) {
-      if (result["env"].count() > 0) {
-	auto kvs = result["env"].as<std::vector<std::string>>();
-	for (auto kv: kvs) {
-	  auto j = kv.find('=');
-	  auto k = kv.substr(0, j);
-	  auto v = kv.substr(1+j);
-	  args.envs.push_back({k, v});
-	}
-      }
-    } else {
+    if (result["in-docker"].as<bool>()) {
+      args.in_docker = true;
+      args.clone_ns_flags = 0;
+    }
+
+    if (base_env == "host") {
       extern char** environ;
       for (int i = 0; environ[i]; i++) {
 	string kv(environ[i]);
+	auto j = kv.find('=');
+	auto k = kv.substr(0, j);
+	auto v = kv.substr(1+j);
+	args.envs.push_back({k, v});
+      }
+    } else if (base_env == "minimal") {
+      args.envs.push_back({"PATH",     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"});
+      args.envs.push_back({"HOSTNAME", "nowhare"});
+      args.envs.push_back({"HOME", "/root"});
+    }
+
+    if (result["env"].count() > 0) {
+      auto kvs = result["env"].as<std::vector<std::string>>();
+      for (auto kv: kvs) {
 	auto j = kv.find('=');
 	auto k = kv.substr(0, j);
 	auto v = kv.substr(1+j);
