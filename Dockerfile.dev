@@ -55,4 +55,4 @@ RUN useradd --shell /bin/bash --create-home --uid=${USER_ID} --gid ${GROUP_ID} d
 
 USER dev
 
-RUN echo 'export PS1="\[\033[1;36m\]$ \[\033[0m\]"' >> /home/dev/.bashrc
+RUN echo 'export PS1="dev-env \[\033[1;36m\]$ \[\033[0m\]"' >> /home/dev/.bashrc

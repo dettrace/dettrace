@@ -115,7 +115,7 @@ docker-dev: Dockerfile.dev
 		--build-arg "USER_ID=$(shell id -u)" \
 		--build-arg "GROUP_ID=$(shell id -g)" \
 		-t "${DOCKER_NAME}:dev" \
-		-f $< .
+		-f $< ci
 
 # Runs a docker image suitable for development. Note that the container is run
 # as the current user in order to avoid creating root-owned files in the volume

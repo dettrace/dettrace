@@ -16,3 +16,4 @@ src/dettrace-static
 benchmarking/*.time
 *.deb
 *.tbz
+/version
