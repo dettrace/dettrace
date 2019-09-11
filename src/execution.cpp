@@ -20,12 +20,14 @@ pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process);
 bool kernelCheck(int a, int b, int c);
 void trapCPUID(globalState& gs, state& s, ptracer& t);
 
-struct Pedigree {
+struct ProcessState {
   int pid;
   int tid;
+  bool noop;
+  int retval;
 };
 
-extern "C" long captured_syscall(struct Pedigree* p,
+extern "C" long fingerprinter_prehook(struct ProcessState* p,
 				 int syscallno,
 				 unsigned long retval,
 				 unsigned long arg0,
@@ -35,7 +37,16 @@ extern "C" long captured_syscall(struct Pedigree* p,
 				 unsigned long arg4,
 				 unsigned long arg5);
 
-extern "C" void fingerprinter_exit();
+extern "C" long fingerprinter_posthook(struct ProcessState* p,
+				 int syscallno,
+				 unsigned long retval,
+				 unsigned long arg0,
+				 unsigned long arg1,
+				 unsigned long arg2,
+				 unsigned long arg3,
+				 unsigned long arg4,
+				 unsigned long arg5);
+
 
 bool kernelCheck(int a, int b, int c){
   struct utsname utsname = {};
@@ -353,8 +364,6 @@ void execution::runProgram(){
       // there is at least 1 (the process)
       log.writeToLog(Importance::info, "thread group #%d\n",
                      myGlobalState.threadGroups.count(threadGroup));
-
-      fingerprinter_exit();
 
       if (isExitGroup && myGlobalState.threadGroups.count(threadGroup) != 1) {
         auto msg = "Caught exit group! Ending all thread in our process group %d.\n";
@@ -944,7 +953,22 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_arch_prctl:
     return arch_prctlSystemCall::handleDetPre(gs, s, t, sched);
   default:
-    return true;
+    {
+      struct ProcessState processState;
+      processState.tid = s.traceePid;
+      auto regs = t.getRegs();
+      fingerprinter_prehook(&processState, syscallNumber, (long)regs.rax,
+		       regs.rdi, regs.rsi,
+		       regs.rdx, regs.r10,
+		       regs.r8,  regs.r9);
+      // If fingerprinter indicates that the syscall shouldn't be run,
+      // cancel the syscall and set the return value
+      if(processState.noop) {
+        cancelSystemCall(gs, s, t);
+        t.writeRax((uint64_t)processState.retval);
+      }
+      return true;
+    }
   }
 }
 
@@ -957,10 +981,10 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
     return arch_prctlSystemCall::handleDetPost(gs, s, t, sched);
   default:
     {
-      struct Pedigree pedigree;
-      pedigree.tid = s.traceePid;
+      struct ProcessState processState;
+      processState.tid = s.traceePid;
       auto regs = t.getRegs();
-      captured_syscall(&pedigree, syscallNumber, (long)regs.rax,
+      fingerprinter_posthook(&processState, syscallNumber, (long)regs.rax,
 		       regs.rdi, regs.rsi,
 		       regs.rdx, regs.r10,
 		       regs.r8,  regs.r9);
