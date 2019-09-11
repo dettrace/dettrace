@@ -65,7 +65,9 @@ run-tests: build-tests build
 DOCKER_NAME=${NAME}
 DOCKER_TAG=${VERSION}
 
-docker: version
+docker:
+	$(RM) version
+	$(MAKE) version
 	docker build -t ${DOCKER_NAME}:${DOCKER_TAG} -t ${DOCKER_NAME}:latest .
 	docker run -i --rm --workdir /usr/share/cloudseal ${DOCKER_NAME}:${DOCKER_TAG} tar cf - . | bzip2 > cloudseal_alpha_pkg_${DOCKER_TAG}.tbz
 	docker run -i --rm --workdir /usr/share/cloudseal ${DOCKER_NAME}:${DOCKER_TAG} cat "/root/${PKGNAME}.deb" > "${PKGNAME}.deb"
@@ -90,6 +92,7 @@ endif
 
 .PHONY: build clean docker run-docker tests build-tests run-tests initramfs deb
 clean:
+	$(RM) version
 	$(RM) bin/dettrace
 	$(RM) bin/dettrace-static
 	$(RM) src/dettrace
