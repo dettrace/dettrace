@@ -135,19 +135,13 @@ ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 
 static string devrandFifoPath, devUrandFifoPath;
 
-static bool realDevNull(string path);
 static bool fileExists(string directory);
-static void deleteFile(string path);
 static void mountDir(string source, string target);
-static void mkdirIfNotExist(string dir);
-static void createFileIfNotExist(string path);
 
 // See user_namespaces(7)
 static void update_map(char* mapping, char* map_file);
 static void proc_setgroups_write(pid_t pid, const char* str);
 
-// Default starting value used by our programArgs.
-static bool isDefault(string& arg);
 // =======================================================================================
 static execution *globalExeObject = nullptr;
 void sigalrmHandler(int _) {
@@ -904,7 +898,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
 
     args.pathToExe = getExePath();
 
-    if (isDefault(args.pathToChroot)) {
+    if (args.pathToChroot == "") {
       args.userChroot = false;
       const string defaultRoot = "/../root/";
       args.pathToChroot = args.pathToExe + defaultRoot;
@@ -949,37 +943,6 @@ static bool fileExists(string file) {
   struct stat sb;
 
   return (stat(file.c_str(), &sb) == 0);
-}
-
-/**
- * @return true if the given path is a real /dev/null device, false otherwise
- */
-static bool realDevNull(string path) {
-  struct stat statDevNull;
-  doWithCheck(stat(path.c_str(), &statDevNull), "stat /dev/null");
-  /*
-  string fileType = "";
-  if (S_ISREG(statDevNull.st_mode)) { fileType = "S_ISREG"; }
-  if (S_ISDIR(statDevNull.st_mode)) { fileType = "S_ISDIR"; }
-  if (S_ISCHR(statDevNull.st_mode)) { fileType = "S_ISCHR"; }
-  if (S_ISBLK(statDevNull.st_mode)) { fileType = "S_ISBLK"; }
-  if (S_ISFIFO(statDevNull.st_mode)) { fileType = "S_ISFIFO"; }
-  if (S_ISLNK(statDevNull.st_mode)) { fileType = "S_ISLNK"; }
-  if (S_ISSOCK(statDevNull.st_mode)) { fileType = "S_ISSOCK"; }
-  cout << path
-       << " " << fileType
-       << " major:" << major(statDevNull.st_dev)
-       << " minor:" << minor(statDevNull.st_dev)
-       << endl;
-  */
-  // NB: on platforms where we run DT tests, /dev/null sometimes shows up as
-  // something besides a 1,3 CHR device. For example, it appears to show up
-  // with the version number 0,64 on Azure DevOps. Not sure what the
-  // significance of these numbers are, but they seem to act like proper
-  // /dev/null files as far as our readDevNull test is concerned.
-  return S_ISCHR(statDevNull.st_mode) &&
-    ((1 == major(statDevNull.st_dev) && 3 == minor(statDevNull.st_dev)) ||
-     (0 == major(statDevNull.st_dev)));
 }
 
 /**
@@ -1069,44 +1032,4 @@ static void proc_setgroups_write(pid_t pid, const char *str){
 	    strerror(errno));
 
   close(fd);
-}
-// =======================================================================================
-static void mkdirIfNotExist(string dir){
-  int result = mkdir(dir.c_str(), ACCESSPERMS);
-  if(result == -1){
-    // That's okay :)
-    if(errno == EEXIST){
-      return;
-    }else{
-      string reason { strerror(errno) };
-      runtimeError("Unable to make directory: " + dir + "\nReason: " + reason);
-    }
-  }
-  return;
-}
-// =======================================================================================
-// Create a blank file with sensible permissions.
-static void createFileIfNotExist(string path){
-  if(fileExists(path)){
-    return;
-  }
-
-  int fd;
-  doWithCheck((fd = open(path.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH)),
-              "Unable to create file: " + path);
-  if (fd >= 0) close(fd);
-
-  return;
-}
-/** Delete the file at the given path. If file does not exist, this does nothing. */
-static void deleteFile(string path) {
-  if (!fileExists(path)) {
-    return;
-  }
-  doWithCheck(unlink(path.c_str()), "unlink");
-}
-// =======================================================================================
-// Default starting value used by our programArgs.
-static bool isDefault(string& arg) {
-  return arg.empty();
 }
