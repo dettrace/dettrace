@@ -9,7 +9,14 @@ VERSION=$2
 
 PKGNAME=${NAME}_${VERSION}
 
-rm -rf -- "${PKGNAME}"
+cleanup() {
+    # Delete the package staging directory
+    rm -rf -- "${PKGNAME}"
+}
+
+cleanup
+
+trap cleanup EXIT
 
 mkdir -p -- "${PKGNAME}/usr/bin"
 mkdir -p -- "${PKGNAME}/usr/share/cloudseal/bin"
