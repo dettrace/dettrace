@@ -40,6 +40,8 @@ ADD ./src      /detTrace/src
 ADD ./include  /detTrace/include
 ADD ./Makefile /detTrace/Makefile
 ADD ./root     /detTrace/root
+ADD ./ci       /detTrace/ci
+ADD ./package  /detTrace/package
 
 WORKDIR /detTrace/
 RUN make -j dynamic-and-static
