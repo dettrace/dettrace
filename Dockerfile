@@ -36,10 +36,12 @@ RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-6.0 60 \
     --slave /usr/bin/lldb lldb /usr/bin/lldb-6.0
 
 # Lame attempt to improve caching, esp. re: examples:
-ADD ./src      /detTrace/src
-ADD ./include  /detTrace/include
 ADD ./Makefile /detTrace/Makefile
-ADD ./root     /detTrace/root
+ADD ./ci /detTrace/ci
+ADD ./include /detTrace/include
+ADD ./package/examples  /detTrace/package/examples
+ADD ./root /detTrace/root
+ADD ./src /detTrace/src
 
 WORKDIR /detTrace/
 RUN make -j dynamic-and-static
@@ -51,7 +53,7 @@ RUN make -j deb
 FROM ubuntu:18.04
 RUN apt-get update -y && apt-get install -y python3 bsdmainutils dnsutils curl
 
-# RUN apt-get install -y fractalnow 
+# RUN apt-get install -y fractalnow
 # COPY --from=0 /detTrace/package /alpha_pkg
 # RUN ln -s /alpha_pkg/bin/* /usr/bin/
 # WORKDIR /alpha_pkg/examples
