@@ -8,31 +8,25 @@ bin:
 	mkdir -p ./bin
 
 # This only builds a dynamically linked binary.
-dynamic: bin initramfs
+dynamic: bin
 	rm -rf bin/dettrace
 	cd src && ${MAKE}
 	cp src/dettrace bin/
 
 # This only builds a statically linked binary.
-static: bin initramfs
+static: bin
 	rm -rf bin/dettrace
 	cd src && ${MAKE} all-static
 	cp src/dettrace-static bin/dettrace
 
 # This builds both a dynamically linked binary (named bin/dettrace)
 # and a statically linked binary (named bin/dettrace-static)
-dynamic-and-static: bin initramfs
+dynamic-and-static: bin
 	rm -rf bin/dettrace
 	cd src && ${MAKE}
 	cp src/dettrace bin/
 	cd src && ${MAKE} all-static
 	cp src/dettrace-static bin/dettrace-static
-
-templistfile := $(shell mktemp)
-initramfs: initramfs.cpio
-initramfs.cpio: root
-	cd root && find . > $(templistfile) && cpio -o > ../initramfs.cpio < $(templistfile)
-	$(RM) $(templistfile)
 
 tests: run-tests
 test: tests
@@ -72,10 +66,9 @@ else
 	docker run ${DOCKER_RUN_ARGS} make -j tests
 endif
 
-.PHONY: build clean docker run-docker tests build-tests run-tests initramfs
+.PHONY: build clean docker run-docker tests build-tests run-tests
 clean:
 	$(RM) bin/dettrace
-	$(RM) initramfs.cpio
 	make -C ./src/ clean
 	# Use `|| true` in case one forgets to check out submodules
 	make -C ./test/samplePrograms clean || true

@@ -46,7 +46,14 @@ static std::pair<int, std::string> make_temp_file(const std::string& dir = "") {
   path += PATH_SEPEARTOR;
   path += "fileXXXXXX";
   int fd = mkostemp(strdupa(path.c_str()), O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC);
-  assert(fd >= 0);
+  if (fd < 0) {
+    string errmsg("mkostemp ");
+    errmsg += path;
+    errmsg += " failed, error: ";
+    errmsg += strerror(errno);
+    runtimeError(errmsg);
+  }
+  
   path = fd_file_path(fd);
   return std::make_pair(fd, path);
 }
@@ -66,6 +73,10 @@ TempDir::TempDir(const std::string& prefix, bool doMount) {
   path += prefix;
   path += "XXXXXX";
   name = mkdtemp(strdupa(path.c_str()));
+  if (name.empty()) {
+    runtimeError("TempDir mkdtemp failed.");
+  }
+
   if (doMount) {
     if (mount("none", name.c_str(), "tmpfs", 0, NULL) < 0) {
       std::string errmsg("TempDir: failed to mount ");
@@ -79,23 +90,12 @@ TempDir::TempDir(const std::string& prefix, bool doMount) {
 
 TempDir::~TempDir() {
   pid_t this_pid = gettid();
+
   if (this_pid == owner_pid) {
     if (this->mounted) {
-      if(umount(this->name.c_str()) < 0) {
-	std::string errmsg("TempDir: failed to umount ");
-	errmsg += name;
-	errmsg += ", error: ";
-	errmsg += strerror(errno);
-	runtimeError(errmsg);
-      }
+      umount(this->name.c_str());
     }
-    if (unlinkat(AT_FDCWD, this->name.c_str(), AT_REMOVEDIR) < 0) {
-      std::string errmsg("TempDir: unable to remove temp dir: ");
-      errmsg += name;
-      errmsg += ", error: ";
-      errmsg += strerror(errno);
-      runtimeError(errmsg);
-    }
+    unlinkat(AT_FDCWD, this->name.c_str(), AT_REMOVEDIR);
   }
 }
 
@@ -160,4 +160,8 @@ TempPath::TempPath(TempDir& dir) {
   close(fd);
 
   name = std::move(path);
+}
+
+TempPath::TempPath(const string& scoped) {
+  this->name = scoped;
 }

@@ -53,15 +53,25 @@ public:
   }
 
   template <typename T>
-  size_t read(T& to, size_t size, size_t nmemb) {
+  size_t read(T& to) {
+    return fread(to, sizeof(to), 1, file);
+  }
+
+  template <typename T>
+  size_t read(T* to, size_t size, size_t nmemb) {
     return fread(to, size, nmemb, file);
   }
 
+  template <typename T>
+  size_t write(T& to) {
+    return fwrite(to, sizeof(to), 1, file);
+  }
+
   template <typename T>  
-  size_t write(T& to, size_t size, size_t nmemb) {
+  size_t write(const T* to, size_t size, size_t nmemb) {
     return fwrite(to, size, nmemb, file);
   }
-  
+
   virtual ~NamedTempFile() {
     fclose(file);
     unlink(name.c_str());
@@ -82,15 +92,25 @@ public:
   }
 
   template <typename T>
-  size_t read(T& to, size_t size, size_t nmemb) {
+  size_t read(T& to) {
+    return fread(to, sizeof(to), 1, file);
+  }
+
+  template <typename T>
+  size_t read(T* to, size_t size, size_t nmemb) {
     return fread(to, size, nmemb, file);
   }
 
-  template <typename T>  
-  size_t write(T& to, size_t size, size_t nmemb) {
+  template <typename T>
+  size_t write(T& to) {
+    return fwrite(to, sizeof(to), 1, file);
+  }
+
+  template <typename T>
+  size_t write(const T* to, size_t size, size_t nmemb) {
     return fwrite(to, size, nmemb, file);
   }
-  
+
   virtual ~TempFile() {
     fclose(file);
   }
@@ -102,10 +122,7 @@ private:
 public:
   TempPath();
   TempPath(TempDir& dir);
-  TempPath(const std::string& scoped_path) {
-    name = scoped_path;
-  }
-
+  TempPath(const std::string& scoped_path);
   std::string path(void) const {
     return name;
   }
