@@ -820,7 +820,6 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
       auto coloredMsg = log.makeTextColored(Color::blue, msg);
       log.writeToLog(Importance::inter, coloredMsg, traceesPid, sigNum);
       return;
-
     } else if ((curr_insn32 << 16) ==0xA20F0000) {
       struct user_regs_struct regs = tracer.getRegs();
 
@@ -906,8 +905,6 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
       return;
     }
-
-
   }
 
   // Remember to deliver this signal to the tracee for next event! Happens in

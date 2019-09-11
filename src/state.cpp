@@ -1,9 +1,6 @@
 #include "state.hpp"
 
-state::state(pid_t traceePid, int debugLevel)
-  //  : clock(744847200), // avoid clock skew, see issue #24 for more details.
-  : clock(1561870800), // avoid clock skew, see issue #24 for more details.
-                      // same value as of libdet.c
+state::state(pid_t traceePid, int debugLevel) :
     fdStatus(new unordered_map<int, descriptorType>),
     traceePid(traceePid),
     signalToDeliver(0),
@@ -15,14 +12,6 @@ state::state(pid_t traceePid, int debugLevel)
 
   poll_retry_count = 0;
   poll_retry_maximum = LONG_MAX;
-}
-
-int state::getLogicalTime(){
-  return clock;
-}
-
-void state::incrementTime(){
-  clock++;
 }
 
 void state::setFdStatus(int fd, descriptorType dt){
