@@ -90,7 +90,7 @@ else
 	docker run ${DOCKER_RUN_ARGS} make -j tests
 endif
 
-.PHONY: build clean docker run-docker tests build-tests run-tests initramfs deb
+.PHONY: build clean docker run-docker tests build-tests run-tests initramfs deb docker-dev env
 clean:
 	$(RM) version
 	$(RM) bin/dettrace
@@ -99,7 +99,7 @@ clean:
 	$(RM) -rf -- "${PKGNAME}" *.deb
 
 	make -C ./src/ clean
-# Use `|| true` in case one forgets to check out submodules
+	# Use `|| true` in case one forgets to check out submodules
 	make -C ./test/samplePrograms clean || true
 	make -C ./test/standalone clean || true
 	make -C ./test/unitTests clean || true
@@ -108,3 +108,24 @@ ${PKGNAME}.deb: static
 	./ci/create_deb.sh "${NAME}" "${VERSION}-${BUILDID}"
 
 deb: ${PKGNAME}.deb
+
+# Builds a docker image suitable for development.
+docker-dev: Dockerfile.dev
+	docker build \
+		--build-arg "USER_ID=$(shell id -u)" \
+		--build-arg "GROUP_ID=$(shell id -g)" \
+		-t "${DOCKER_NAME}:dev" \
+		-f $< .
+
+# Runs a docker image suitable for development. Note that the container is run
+# as the current user in order to avoid creating root-owned files in the volume
+# mount.
+env: docker-dev
+	docker run \
+		--rm \
+		--privileged \
+		-it \
+		-v "$(shell pwd):/code" \
+		-u "$(shell id -u):$(shell id -g)" \
+		"${DOCKER_NAME}:dev" \
+		bash
