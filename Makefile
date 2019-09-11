@@ -1,9 +1,15 @@
-NAME=cloudseal-alpha
-# TODO: store version in one place in a file.
-VERSION=0.1.651
-BUILDID=1
 
-PKGNAME=${NAME}_${VERSION}-${BUILDID}
+NAME := cloudseal-alpha
+# Version is currently based on number of git commits:
+# TODO: store version in one place in a file.
+VERSION := $(shell if [ -e version ]; then cat version; else echo "0.1."`git log --pretty=oneline | wc -l`; fi)
+BUILDID := 1
+
+PKGNAME := ${NAME}_${VERSION}-${BUILDID}
+
+version: .git/index
+	@echo Writing VERSION=$(VERSION) to file.
+	echo $(VERSION) > $@
 
 # Top-level Makefile to capture different actions you can take.
 all: build
@@ -56,12 +62,10 @@ run-tests: build-tests build
 # essential to avoid errors with bind mounting a directory simultaneously
 	MAKEFLAGS= make --keep-going -C ./test/samplePrograms/ run
 
-DOCKER_NAME=cloudseal-alpha
-DOCKER_TAG=0.1.667
 DOCKER_NAME=${NAME}
 DOCKER_TAG=${VERSION}
 
-docker:
+docker: version
 	docker build -t ${DOCKER_NAME}:${DOCKER_TAG} -t ${DOCKER_NAME}:latest .
 	docker run -i --rm --workdir /usr/share/cloudseal ${DOCKER_NAME}:${DOCKER_TAG} tar cf - . | bzip2 > cloudseal_alpha_pkg_${DOCKER_TAG}.tbz
 	docker run -i --rm --workdir /usr/share/cloudseal ${DOCKER_NAME}:${DOCKER_TAG} cat "/root/${PKGNAME}.deb" > "${PKGNAME}.deb"
