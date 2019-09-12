@@ -2,6 +2,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <arpa/inet.h>
+#include <sys/timerfd.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -180,6 +181,12 @@ void closeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   if (s.fd_is_remote(fd)) {
     s.remote_sockfds->erase(fd);
   }
+  if (s.fd_is_timerfd(fd)) {
+    s.timerfds->erase(fd);
+  }
+  if (s.fd_is_signalfd(fd)) {
+    s.signalfds->erase(fd);
+  }
 }
 // =======================================================================================
 // TODO
@@ -278,6 +285,13 @@ void dup2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     s.setFdStatus(newfd, s.getFdStatus(fd));
     if (s.fd_is_remote(fd)) {
       s.remote_sockfds->insert(newfd);
+    }
+    if (s.fd_is_timerfd(fd)) {
+      auto it = (*s.timerfds)[fd];
+      s.timerfds->insert({newfd, it});
+    }
+    if (s.fd_is_signalfd(fd)) {
+      s.signalfds->insert(newfd);
     }
     gs.log.writeToLog(Importance::info, "%d = dup2(%d)\n", newfd, fd);
   }
@@ -556,6 +570,13 @@ void fcntlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
       (*s.fdStatus.get())[newfd] = s.getFdStatus(fd);
       if (s.fd_is_remote(fd)) {
 	s.remote_sockfds->insert(newfd);
+      }
+      if (s.fd_is_timerfd(fd)) {
+	auto it = (*s.timerfds)[fd];
+	s.timerfds->insert({newfd, it});
+      }
+      if (s.fd_is_signalfd(fd)) {
+	s.signalfds->insert(newfd);
       }
     }
   }
@@ -1102,8 +1123,10 @@ void mkdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
   if(t.getReturnValue() == 0 && (char*) t.arg1() != nullptr){
     string strPath = t.readTraceeCString(traceePtr<char>((char*) t.arg1()), s.traceePid);
     auto inode = inode_from_tracee(strPath, s.traceePid, gs.log, -1);
-    gs.mtimeMap.addRealValue(inode);
-    gs.inodeMap.addRealValue(inode);
+    if (inode != -1UL) {
+      gs.mtimeMap.addRealValue(inode);
+      gs.inodeMap.addRealValue(inode);
+    }
   }
 }
 // =======================================================================================
@@ -1121,8 +1144,10 @@ void mkdiratSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
   if(t.getReturnValue() == 0 && path != nullptr){
     string strPath = t.readTraceeCString(traceePtr<char>(path), s.traceePid);
     auto inode = inode_from_tracee(strPath, s.traceePid, gs.log, t.arg1());
-    gs.mtimeMap.addRealValue(inode);
-    gs.inodeMap.addRealValue(inode);
+    if (inode != -1UL ) {
+      gs.mtimeMap.addRealValue(inode);
+      gs.inodeMap.addRealValue(inode);
+    }
   }
 }
 // =======================================================================================
@@ -1414,8 +1439,10 @@ void prlimit64SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
 }
 // =======================================================================================
 bool readSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  int fd = t.arg1();
+
   gs.log.writeToLog(Importance::info, "File descriptor: %d\n", t.arg1());
-  gs.log.writeToLog(Importance::info, "non-blocking: %d\n", (int)fd_is_nonblocking(s, t.arg1()));
+  gs.log.writeToLog(Importance::info, "non-blocking: %d\n", (int)fd_is_nonblocking(s, fd));
   gs.log.writeToLog(Importance::info, "Bytes to read %d\n", t.arg3());
 
   return true;
@@ -1435,8 +1462,16 @@ void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
       s.totalBytes = 0;
     };
 
-  // Pipe exists in our map and it's set to non blocking.
-  if(s.countFdStatus(fd) != 0 && s.getFdStatus(fd) == descriptorType::nonBlocking){
+  if (s.fd_is_timerfd(fd)) {
+    t.writeToTracee(traceePtr<unsigned long>((unsigned long*)t.arg2()),
+		    1UL, s.traceePid);
+    s.totalBytes = sizeof(unsigned long);
+    resetState();
+    sched.preemptAndScheduleNext();    
+    return;
+  } else if(s.countFdStatus(fd) != 0 &&
+	    s.getFdStatus(fd) == descriptorType::nonBlocking) {
+    // Pipe exists in our map and it's set to non blocking.
     gs.log.writeToLog(Importance::info,
                       "read found with non blocking pipe!\n");
     int retval = t.getReturnValue();
@@ -2051,8 +2086,10 @@ void symlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
   if(t.getReturnValue() == 0 && (char*) t.arg2() != nullptr){
     string linkpath = t.readTraceeCString(traceePtr<char>((char*) t.arg2()), s.traceePid);
     auto inode = inode_from_tracee(linkpath, s.traceePid, gs.log, -1);
-    gs.mtimeMap.addRealValue(inode);
-    gs.inodeMap.addRealValue(inode);
+    if (inode != -1UL) {
+      gs.mtimeMap.addRealValue(inode);
+      gs.inodeMap.addRealValue(inode);
+    }
   }
 }
 // =======================================================================================
@@ -2069,8 +2106,10 @@ handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(t.getReturnValue() == 0 && (char*) t.arg3() != nullptr){
     string linkpath = t.readTraceeCString(traceePtr<char>((char*) t.arg3()), s.traceePid);
     auto inode = inode_from_tracee(linkpath, s.traceePid, gs.log, t.arg2());
-    gs.mtimeMap.addRealValue(inode);
-    gs.inodeMap.addRealValue(inode);
+    if (inode != -1UL) {
+      gs.mtimeMap.addRealValue(inode);
+      gs.inodeMap.addRealValue(inode);
+    }
   }
 }
 // =======================================================================================
@@ -2085,8 +2124,10 @@ handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(t.getReturnValue() == 0 && (char*) t.arg1() != nullptr){
     string path = t.readTraceeCString(traceePtr<char>((char*) t.arg1()), s.traceePid);
     auto inode = inode_from_tracee(path, s.traceePid, gs.log, -1);
-    gs.mtimeMap.addRealValue(inode);
-    gs.inodeMap.addRealValue(inode);
+    if (inode != -1UL) {
+      gs.mtimeMap.addRealValue(inode);
+      gs.inodeMap.addRealValue(inode);
+    }
   }
 }
 // =======================================================================================
@@ -2101,8 +2142,10 @@ handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   if(t.getReturnValue() == 0 && (char*) t.arg2() != nullptr){
     string path = t.readTraceeCString(traceePtr<char>((char*) t.arg2()), s.traceePid);
     auto inode = inode_from_tracee(path, s.traceePid, gs.log, t.arg1());
-    gs.mtimeMap.addRealValue(inode);
-    gs.inodeMap.addRealValue(inode);
+    if (inode != -1UL) {
+      gs.mtimeMap.addRealValue(inode);
+      gs.inodeMap.addRealValue(inode);
+    }
   }
 }
 // =======================================================================================
@@ -2356,6 +2399,103 @@ bool setitimerSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
 
 void setitimerSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) {
 }
+
+bool timerfd_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "timerfd_create syscall pre-hook\n");
+
+  int flags = t.arg2();
+  s.originalArg2 = (unsigned long)flags;
+
+  // make sure read does not block
+  t.writeArg2(flags | TFD_NONBLOCK);
+
+  return true;
+}
+
+void timerfd_createSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  int fd = t.getReturnValue();
+  int clockid = t.arg1();
+  int flags = t.arg2();
+
+  t.writeArg2(s.originalArg2);
+
+  if (fd >= 0) {
+    struct itimerspec it =
+      {
+       {0, 0},
+       {0, 0},
+      };
+    s.timerfds->insert({fd, it});
+    gs.log.writeToLog(Importance::info, "timerfd_create(%d, %d) = %d\n",
+		      clockid, flags, fd);
+  }
+}
+
+bool timerfd_settimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  int fd = t.arg1();
+  struct itimerspec *spec = (itimerspec*)s.mmapMemory.getAddr().ptr;
+  auto value = t.readFromTracee(traceePtr<struct itimerspec>((struct itimerspec*)t.arg3()), s.traceePid);
+  (*s.timerfds)[fd] = value;
+  struct itimerspec timer =
+    {
+     {0, 0},
+     {0, 0},
+  };
+  if (value.it_interval.tv_sec != 0 || value.it_interval.tv_nsec != 0) {
+    timer.it_interval.tv_sec = LONG_MAX;
+    timer.it_interval.tv_nsec = 0;
+  }
+  if (value.it_value.tv_sec != 0 || value.it_value.tv_nsec != 0) {
+    timer.it_value.tv_sec = LONG_MAX;
+    timer.it_value.tv_nsec = 0;
+  }
+
+  t.writeToTracee(traceePtr<itimerspec>(spec), timer, s.traceePid);
+  s.originalArg3 = t.arg3();
+  t.writeArg3((unsigned long)spec);
+
+  return true;
+}
+
+void timerfd_settimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  int fd = t.arg1();
+  int retval = t.getReturnValue();
+  gs.log.writeToLog(Importance::info, "timerfd_setttime returned %d\n", retval);
+  t.writeArg3(s.originalArg3);
+
+  // restore old_value.
+  if (retval == 0 && t.arg4() != 0) {
+    auto it = s.timerfds->find(fd);
+    if (it != s.timerfds->end()) {
+      t.writeToTracee(traceePtr<struct itimerspec>((struct itimerspec*)t.arg4()),
+		      it->second, s.traceePid);
+    }
+  }
+}
+
+bool timerfd_gettimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+
+void timerfd_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  int fd = t.arg1();
+  int retval = t.getReturnValue();
+  if (retval == 0 && t.arg2() != 0) {
+    auto rptr = traceePtr<struct itimerspec>((struct itimerspec*)t.arg2());
+    auto it = s.timerfds->find(fd);
+    if (it != s.timerfds->end()) {
+      auto timer = it->second;
+      if (timer.it_value.tv_sec != 0 || timer.it_value.tv_nsec != 0) {
+	// timer is active.
+	// cannot be 0 otherwise timer is disarmed.	
+	timer.it_value.tv_sec = 0;
+	timer.it_value.tv_nsec = 1;
+      }
+      t.writeToTracee(rptr, timer, s.traceePid);
+    }
+  }
+}
+
 // =======================================================================================
 bool timesSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   return true;

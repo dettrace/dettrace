@@ -183,6 +183,10 @@ void seccomp::loadRules(bool debug, bool convertUids){
   intercept(SYS_getitimer);
   intercept(SYS_pause);
 
+  intercept(SYS_timerfd_create);
+  intercept(SYS_timerfd_settime);
+  intercept(SYS_timerfd_gettime);
+
   // These system calls cause an even that is caught by ptrace and determinized:
   intercept(SYS_access, debug);
   // Not used, let's figure out who does one!

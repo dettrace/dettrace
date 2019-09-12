@@ -1192,6 +1192,15 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_timer_settime:
     return timer_settimeSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_timerfd_create:
+    return timerfd_createSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_timerfd_settime:
+    return timerfd_settimeSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_timerfd_gettime:
+    return timerfd_gettimeSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_times:
     return timesSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -1512,6 +1521,15 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 
   case SYS_timer_settime:
     return timer_settimeSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_timerfd_create:
+    return timerfd_createSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_timerfd_settime:
+    return timerfd_settimeSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_timerfd_gettime:
+    return timerfd_gettimeSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_times:
     return timesSystemCall::handleDetPost(gs, s, t, sched);

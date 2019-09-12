@@ -12,6 +12,8 @@ state::state(pid_t traceePid, int debugLevel, unsigned long epoch) :
   currentSignalHandlers = std::make_shared<unordered_map<int, enum sighandler_type>>();
   timerCreateTimers = std::make_shared<unordered_map<timerID_t, timerInfo>>();
   remote_sockfds = std::make_shared<unordered_set<int>>();
+  timerfds = std::make_shared<unordered_map<int, struct itimerspec>>();
+  signalfds = std::make_shared<unordered_set<int>>();
 
   poll_retry_count = 0;
   poll_retry_maximum = LONG_MAX;
@@ -73,6 +75,8 @@ state state::forked(pid_t childPid) const {
   childState.poll_retry_maximum = LONG_MAX;
 
   childState.remote_sockfds = make_shared<unordered_set<int>>(*(this->remote_sockfds));
+  childState.timerfds = make_shared<unordered_map<int, struct itimerspec>>(*(this->timerfds));
+  childState.signalfds = make_shared<unordered_set<int>>(*(this->signalfds));
   childState.clock = this->epoch * state::MICRO_SECS_PER_SEC;
   return childState;
 }
@@ -120,6 +124,8 @@ state state::cloned(pid_t childPid) const {
   childState.poll_retry_maximum = LONG_MAX;
 
   childState.remote_sockfds = this->remote_sockfds;
+  childState.timerfds = this->timerfds;
+  childState.signalfds = this->signalfds;
   childState.clock = this->epoch * state::MICRO_SECS_PER_SEC;
   return childState;
 }

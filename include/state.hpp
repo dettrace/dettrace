@@ -5,6 +5,7 @@
 #include <sys/reg.h>
 #include <sys/types.h>
 #include <sys/user.h>
+#include <sys/timerfd.h>
 #include <sys/vfs.h>
 #include <unordered_map>
 #include <unordered_set>
@@ -311,6 +312,30 @@ public:
    */
   bool fd_is_remote(int fd) const {
     return remote_sockfds->find(fd) != remote_sockfds->end();
+  }
+
+  /**
+   * timerfds
+   */
+  std::shared_ptr<std::unordered_map<int, struct itimerspec>> timerfds;
+
+  /**
+   * check whether a file descriptor is a timerfd
+   */
+  bool fd_is_timerfd(int fd) const {
+    return timerfds->find(fd) != timerfds->end();
+  }
+
+  /**
+   * signalfds
+   */
+  std::shared_ptr<std::unordered_set<int>> signalfds;
+
+  /**
+   * check whether a file descriptor is a signalfd
+   */
+  bool fd_is_signalfd(int fd) const {
+    return signalfds->find(fd) != signalfds->end();
   }
 };
 
