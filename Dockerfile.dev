@@ -51,7 +51,8 @@ RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-6.0 60 \
 
 WORKDIR /code
 
-RUN useradd --shell /bin/bash --create-home --uid=${USER_ID} --gid ${GROUP_ID} dev
+RUN groupadd --force --gid ${GROUP_ID} dev && \
+    useradd --shell /bin/bash --create-home --uid=${USER_ID} --gid ${GROUP_ID} dev
 
 USER dev
 
