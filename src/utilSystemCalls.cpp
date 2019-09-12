@@ -273,8 +273,9 @@ ino_t inode_from_tracee(const string& traceePath, pid_t traceePid, logger& log,
   string resolvedPath = resolve_tracee_path(traceePath, traceePid, log, traceeDirFd);
 
   if (resolvedPath.empty()) {
-    runtimeError(string { "inode_from_tracee, cannot resolve " } + traceePath +
-		 "for pid: " + to_string(traceePid));
+    log.writeToLog(Importance::info, string { "inode_from_tracee, cannot resolve " } + traceePath +
+		   "for pid: " + to_string(traceePid));
+    return -1;
   }
 
   struct stat statbuf = {0};
@@ -282,8 +283,9 @@ ino_t inode_from_tracee(const string& traceePath, pid_t traceePid, logger& log,
   // points to! So we lstat
   int res = lstat(resolvedPath.c_str(), &statbuf);
   if (res < 0) {
-    runtimeError("Unable to stat file in "
-                       "tracee from /proc/. errno: " + to_string(res));
+    log.writeToLog(Importance::info, "Unable to stat file " + traceePath + " => " + resolvedPath +
+		   " tracee, error: " + strerror(errno) + " (" + to_string(errno) + ")");
+    return -1;
   }
 
   if (S_ISLNK(statbuf.st_mode)) {
