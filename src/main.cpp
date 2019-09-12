@@ -89,6 +89,7 @@ struct programArgs{
 
   bool with_proc_overrides;
   bool with_devrand_overrides;
+  bool with_etc_overrides;
 
   std::vector<std::pair<std::string, std::string>> envs;
 
@@ -123,6 +124,7 @@ struct programArgs{
     this->clone_ns_flags = 0;
     this->with_proc_overrides = true;
     this->with_devrand_overrides = true;
+    this->with_etc_overrides = true;
     this->prng_seed = 0;
     this->in_docker = false;
   }
@@ -135,8 +137,9 @@ ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
 
 static string devrandFifoPath, devUrandFifoPath;
 
-static bool fileExists(string directory);
-static void mountDir(string source, string target);
+static bool fileExists(const string& directory);
+static void mountDir(const string& source, const string& target);
+static void createFileIfNotExist(const string& path);
 
 // See user_namespaces(7)
 static void update_map(char* mapping, char* map_file);
@@ -188,12 +191,10 @@ int main(int argc, char** argv){
   // our own user namespace. Other namepspace commands require CAP_SYS_ADMIN to work.
   // Namespaces must must be done before fork. As changes don't apply until after
   // fork, to all child processes.
-
-  int cloneFlags = args.clone_ns_flags;
-
   if (args.alreadyInChroot) {
-    cloneFlags &= ~CLONE_NEWUSER;
+    args.clone_ns_flags &=~ CLONE_NEWUSER;
   }
+  int cloneFlags = args.clone_ns_flags;
 
   // our own user namespace. Other namepspace commands require CAP_SYS_ADMIN to work.
   // Namespaces must must be done before fork. As changes don't apply until after
@@ -232,7 +233,7 @@ int main(int argc, char** argv){
      to the namespace. This allows us, in the future, to extend the mappings to other
      uids when running as root (not currently implemented, but notice this cannot be
      done when using unshare.)*/
-  if ((args.clone_ns_flags & CLONE_NEWPID) == CLONE_NEWPID) {
+  if ((args.clone_ns_flags & CLONE_NEWUSER) == CLONE_NEWUSER) {
     char map_path[PATH_MAX];
     const int MAP_BUF_SIZE = 100;
     char map_buf[MAP_BUF_SIZE];
@@ -351,16 +352,32 @@ int runTracee(programArgs* args){
       // Disable ASLR for our child
       doWithCheck(personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");
     }
+    if (!fileExists("/dev/null")) {
+      // we're running under reprotest as sudo, so we can use real mknod
+      // hat tip to: https://unix.stackexchange.com/questions/27279/how-to-create-dev-null
+      dev_t dev = makedev(1,3);
+      mode_t mode = S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+      doWithCheck(mknod("/dev/null", mode, dev), "mknod");
+    }
     if (args->clone_ns_flags & CLONE_NEWNS) {
       if (args->with_devrand_overrides) {
-	mountDir(devrandFifoPath, "/dev/random");
-	mountDir(devUrandFifoPath, "/dev/urandom");
+        createFileIfNotExist("/dev/random");
+        mountDir(devrandFifoPath, "/dev/random");
+        createFileIfNotExist("/dev/urandom");
+        mountDir(devUrandFifoPath, "/dev/urandom");
       }
-      doWithCheck(mount("none", "/tmp", "tmpfs", 0, NULL), "mount /tmp as tmpfs failed");
+      if (!args->alreadyInChroot) {
+        doWithCheck(mount("none", "/tmp", "tmpfs", 0, NULL), "mount /tmp as tmpfs failed");
+      }
       if (args->with_proc_overrides) {
 	mountDir(pathToExe+"/../root/proc/meminfo", "/proc/meminfo");
 	mountDir(pathToExe+"/../root/proc/stat", "/proc/stat");
 	mountDir(pathToExe+"/../root/proc/filesystems", "/proc/filesystems");
+      }
+      if (args->with_etc_overrides) {
+	mountDir(pathToExe+"/../root/etc/hosts", "/etc/hosts");
+	mountDir(pathToExe+"/../root/etc/passwd", "/etc/passwd");
+	mountDir(pathToExe+"/../root/etc/group", "/etc/group");
       }
       char* home = secure_getenv("HOME");
       if (home) {
@@ -528,7 +545,8 @@ int spawnTracerTracee(void* voidArgs){
   // this mount are not propegated to the parent mount.
   // This makes sure we don't pollute the host OS' mount space with entries made by us
   // here.
-  if ((args->clone_ns_flags & CLONE_NEWNS) == CLONE_NEWNS) {
+  if ( ((args->clone_ns_flags & CLONE_NEWNS) == CLONE_NEWNS)
+       && ((args->clone_ns_flags & CLONE_NEWUSER) == CLONE_NEWUSER)) {
     umountTmpfs = true;
     doWithCheck(mount("none", "/", NULL, MS_SLAVE | MS_REC, 0), "mount slave");
   }
@@ -835,6 +853,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
 
     args.with_proc_overrides = !use_real_proc;
     args.with_devrand_overrides = !use_real_proc;
+    args.with_etc_overrides = !use_real_proc;
 
     // epoch
     {
@@ -939,7 +958,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
  * Use stat to check if file/directory exists to mount.
  * @return boolean if file exists
  */
-static bool fileExists(string file) {
+static bool fileExists(const string& file) {
   struct stat sb;
 
   return (stat(file.c_str(), &sb) == 0);
@@ -948,7 +967,7 @@ static bool fileExists(string file) {
 /**
  * Wrapper around mount with strings.
  */
-static void mountDir(string source, string target){
+static void mountDir(const string& source, const string& target){
 
   /* Check if source path exists*/
   if (!fileExists(source)) {
@@ -1033,3 +1052,18 @@ static void proc_setgroups_write(pid_t pid, const char *str){
 
   close(fd);
 }
+
+// =======================================================================================
+// Create a blank file with sensible permissions.
+static void createFileIfNotExist(const string& path){
+  if(fileExists(path)){
+    return;
+  }
+
+  int fd;
+  doWithCheck((fd = open(path.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH)),
+              "Unable to create file: " + path);
+  if (fd >= 0) close(fd);
+
+  return;
+} 
