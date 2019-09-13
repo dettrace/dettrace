@@ -733,6 +733,7 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
 
       // Point system call to new address.
       t.writeArg4((uint64_t) newAddress);
+      s.userDefinedTimeout = false;
     }else{
       if (gs.log.getDebugLevel() > 0 ) {
         timespec timeout = t.readFromTracee(traceePtr<timespec>(timeoutPtr), t.getPid());
