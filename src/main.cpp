@@ -366,9 +366,6 @@ int runTracee(programArgs* args){
         createFileIfNotExist("/dev/urandom");
         mountDir(devUrandFifoPath, "/dev/urandom");
       }
-      if (!args->alreadyInChroot) {
-        doWithCheck(mount("none", "/tmp", "tmpfs", 0, NULL), "mount /tmp as tmpfs failed");
-      }
       if (args->with_proc_overrides) {
 	mountDir(pathToExe+"/../root/proc/meminfo", "/proc/meminfo");
 	mountDir(pathToExe+"/../root/proc/stat", "/proc/stat");
@@ -378,10 +375,13 @@ int runTracee(programArgs* args){
 	mountDir(pathToExe+"/../root/etc/hosts", "/etc/hosts");
 	mountDir(pathToExe+"/../root/etc/passwd", "/etc/passwd");
 	mountDir(pathToExe+"/../root/etc/group", "/etc/group");
+	mountDir(pathToExe+"/../root/etc/ld.so.cache", "/etc/ld.so.cache");
       }
-      char* home = secure_getenv("HOME");
-      if (home) {
-	mountDir(home, "/root");
+      if (!args->alreadyInChroot) {
+	char* home = secure_getenv("HOME");
+	if (home) {
+	  mountDir(home, "/root");
+	}
       }
     }
   }
@@ -545,8 +545,7 @@ int spawnTracerTracee(void* voidArgs){
   // this mount are not propegated to the parent mount.
   // This makes sure we don't pollute the host OS' mount space with entries made by us
   // here.
-  if ( ((args->clone_ns_flags & CLONE_NEWNS) == CLONE_NEWNS)
-       && ((args->clone_ns_flags & CLONE_NEWUSER) == CLONE_NEWUSER)) {
+  if ( ((args->clone_ns_flags & CLONE_NEWNS) == CLONE_NEWNS)) {
     umountTmpfs = true;
     doWithCheck(mount("none", "/", NULL, MS_SLAVE | MS_REC, 0), "mount slave");
   }
