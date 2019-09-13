@@ -366,6 +366,7 @@ int runTracee(programArgs* args){
         createFileIfNotExist("/dev/urandom");
         mountDir(devUrandFifoPath, "/dev/urandom");
       }
+      doWithCheck(mount("none", "/tmp", "tmpfs", 0, NULL), "mount /tmp as tmpfs failed");
       if (args->with_proc_overrides) {
 	mountDir(pathToExe+"/../root/proc/meminfo", "/proc/meminfo");
 	mountDir(pathToExe+"/../root/proc/stat", "/proc/stat");
