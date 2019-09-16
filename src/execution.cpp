@@ -7,6 +7,7 @@
 #include "execution.hpp"
 #include "scheduler.hpp"
 #include "vdso.hpp"
+#include "fingerprinter.hpp"
 
 #include <stack>
 #include <tuple>
@@ -19,34 +20,6 @@ void deleteMultimapEntry(unordered_multimap<pid_t, pid_t>& mymap, pid_t key, pid
 pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process);
 bool kernelCheck(int a, int b, int c);
 void trapCPUID(globalState& gs, state& s, ptracer& t);
-
-struct ProcessState {
-  int pid;
-  int tid;
-  bool noop;
-  int retval;
-};
-
-extern "C" long fingerprinter_prehook(struct ProcessState* p,
-				 int syscallno,
-				 unsigned long retval,
-				 unsigned long arg0,
-				 unsigned long arg1,
-				 unsigned long arg2,
-				 unsigned long arg3,
-				 unsigned long arg4,
-				 unsigned long arg5);
-
-extern "C" long fingerprinter_posthook(struct ProcessState* p,
-				 int syscallno,
-				 unsigned long retval,
-				 unsigned long arg0,
-				 unsigned long arg1,
-				 unsigned long arg2,
-				 unsigned long arg3,
-				 unsigned long arg4,
-				 unsigned long arg5);
-
 
 bool kernelCheck(int a, int b, int c){
   struct utsname utsname = {};
@@ -953,22 +926,7 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_arch_prctl:
     return arch_prctlSystemCall::handleDetPre(gs, s, t, sched);
   default:
-    {
-      struct ProcessState processState;
-      processState.tid = s.traceePid;
-      auto regs = t.getRegs();
-      fingerprinter_prehook(&processState, syscallNumber, (long)regs.rax,
-		       regs.rdi, regs.rsi,
-		       regs.rdx, regs.r10,
-		       regs.r8,  regs.r9);
-      // If fingerprinter indicates that the syscall shouldn't be run,
-      // cancel the syscall and set the return value
-      if(processState.noop) {
-        cancelSystemCall(gs, s, t);
-        t.writeRax((uint64_t)processState.retval);
-      }
-      return true;
-    }
+    return fingerprinter::handleDetPre(syscallNumber, gs, s, t, sched);
   }
 }
 
@@ -980,15 +938,7 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
   case SYS_arch_prctl:
     return arch_prctlSystemCall::handleDetPost(gs, s, t, sched);
   default:
-    {
-      struct ProcessState processState;
-      processState.tid = s.traceePid;
-      auto regs = t.getRegs();
-      fingerprinter_posthook(&processState, syscallNumber, (long)regs.rax,
-		       regs.rdi, regs.rsi,
-		       regs.rdx, regs.r10,
-		       regs.r8,  regs.r9);
-    }
+    return fingerprinter::handleDetPost(syscallNumber, gs, s, t, sched);
   }
 }
 // =======================================================================================
