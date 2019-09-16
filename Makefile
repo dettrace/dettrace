@@ -1,15 +1,29 @@
-
-NAME := cloudseal-alpha
-# Version is currently based on number of git commits:
-# TODO: store version in one place in a file.
-VERSION := $(shell if [ -e version ]; then cat version; else echo "0.1."`git log --pretty=oneline | wc -l`; fi)
-BUILDID := 1
+# Name and version of the package. This should be the *only* place where these
+# settings are modified.
+NAME := cloudseal
+VERSION := 0.1.0
+BUILDID := $(shell git rev-list --count HEAD 2> /dev/null || echo 0)
 
 PKGNAME := ${NAME}_${VERSION}-${BUILDID}
 
-version: .git/index
-	@echo Writing VERSION=$(VERSION) to file.
-	echo $(VERSION) > $@
+.PHONY: \
+	all \
+	build \
+	build-tests \
+	clean \
+	deb \
+	docker \
+	docker-dev \
+	dynamic \
+	env \
+	initramfs \
+	install \
+	run-docker \
+	run-docker-non-interactive \
+	run-tests \
+	static \
+	test-docker \
+	tests
 
 # Top-level Makefile to capture different actions you can take.
 all: build
@@ -21,25 +35,20 @@ bin:
 	mkdir -p ./bin
 
 # This only builds a dynamically linked binary.
-dynamic: bin initramfs
-	rm -rf bin/dettrace
+dynamic: bin/${NAME}
+bin/${NAME}: bin initramfs
 	cd src && ${MAKE}
-	cp src/dettrace bin/
+	cp src/${NAME} bin/
 
 # This only builds a statically linked binary.
-static: bin initramfs
-	rm -rf bin/dettrace
+static: bin/${NAME}-static
+bin/${NAME}-static: bin
 	cd src && ${MAKE} all-static
-	cp src/dettrace-static bin/dettrace-static
+	cp src/${NAME}-static bin/
 
-# This builds both a dynamically linked binary (named bin/dettrace)
-# and a statically linked binary (named bin/dettrace-static)
-dynamic-and-static: bin initramfs
-	rm -rf bin/dettrace
-	cd src && ${MAKE}
-	cp src/dettrace bin/
-	cd src && ${MAKE} all-static
-	cp src/dettrace-static bin/dettrace-static
+# This builds both a dynamically linked binary (named bin/${NAME}) and a
+# statically linked binary (named bin/${NAME}-static)
+dynamic-and-static: bin/${NAME} bin/${NAME}-static
 
 templistfile := $(shell mktemp)
 initramfs: initramfs.cpio
@@ -62,41 +71,26 @@ run-tests: build-tests build
 # essential to avoid errors with bind mounting a directory simultaneously
 	MAKEFLAGS= make --keep-going -C ./test/samplePrograms/ run
 
-DOCKER_NAME=${NAME}
-DOCKER_TAG=${VERSION}
-
 docker:
-	$(RM) version
-	$(MAKE) version
-	docker build -t ${DOCKER_NAME}:${DOCKER_TAG} -t ${DOCKER_NAME}:latest .
-	docker run -i --rm --workdir /usr/share/cloudseal ${DOCKER_NAME}:${DOCKER_TAG} tar cf - . | bzip2 > cloudseal_alpha_pkg_${DOCKER_TAG}.tbz
-	docker run -i --rm --workdir /usr/share/cloudseal ${DOCKER_NAME}:${DOCKER_TAG} cat "/root/${PKGNAME}.deb" > "${PKGNAME}.deb"
+	docker build -t ${NAME}:${VERSION} .
 
-DOCKER_RUN_ARGS=--rm --privileged --userns=host --cap-add=SYS_ADMIN ${OTHER_DOCKER_ARGS} ${DOCKER_NAME}:${DOCKER_TAG}
+DOCKER_RUN_ARGS=--rm --privileged --userns=host ${OTHER_DOCKER_ARGS} ${NAME}:${VERSION}
 
-# For convenience, we create an output portal to produce example output:
-run-docker:
-	mkdir -p /tmp/out
-	rm -rf /tmp/out/*
-	docker run -v "/tmp/out:/out" ${DOCKER_RUN_ARGS} ${DOCKER_RUN_COMMAND}
+run-docker: docker
+	docker run -it ${DOCKER_RUN_ARGS} ${DOCKER_RUN_COMMAND}
 
 run-docker-non-interactive: docker
 	docker run ${DOCKER_RUN_ARGS} ${DOCKER_RUN_COMMAND}
 
-test-docker: docker
+test-docker: clean docker
 ifdef DETTRACE_NO_CPUID_INTERCEPTION
-	docker run --env DETTRACE_NO_CPUID_INTERCEPTION=1 ${DOCKER_RUN_ARGS} true
+	docker run --env DETTRACE_NO_CPUID_INTERCEPTION=1 ${DOCKER_RUN_ARGS} make -j tests
 else
 	docker run ${DOCKER_RUN_ARGS} make -j tests
 endif
 
-.PHONY: build clean docker run-docker tests build-tests run-tests initramfs deb docker-dev env
 clean:
-	$(RM) version
-	$(RM) bin/dettrace
-	$(RM) bin/dettrace-static
-	$(RM) src/dettrace
-	$(RM) -rf -- "${PKGNAME}" *.deb
+	$(RM) -rf -- bin "src/${NAME}" "src/${NAME}-static" *.deb
 
 	make -C ./src/ clean
 	# Use `|| true` in case one forgets to check out submodules
@@ -104,17 +98,21 @@ clean:
 	make -C ./test/standalone clean || true
 	make -C ./test/unitTests clean || true
 
-${PKGNAME}.deb: static
+# Build a Debian package.
+deb: ${PKGNAME}.deb
+${PKGNAME}.deb: bin/${NAME}-static ci/create_deb.sh
 	./ci/create_deb.sh "${NAME}" "${VERSION}-${BUILDID}"
 
-deb: ${PKGNAME}.deb
+# Installs the Debian package.
+install: ${PKGNAME}.deb
+	sudo dpkg -i $^
 
 # Builds a docker image suitable for development.
 docker-dev: Dockerfile.dev
 	docker build \
 		--build-arg "USER_ID=$(shell id -u)" \
 		--build-arg "GROUP_ID=$(shell id -g)" \
-		-t "${DOCKER_NAME}:dev" \
+		-t "${NAME}:dev" \
 		-f $< ci
 
 # Runs a docker image suitable for development. Note that the container is run
@@ -125,7 +123,8 @@ env: docker-dev
 		--rm \
 		--privileged \
 		-it \
+		-e DETTRACE_NO_CPUID_INTERCEPTION=1 \
 		-v "$(shell pwd):/code" \
 		-u "$(shell id -u):$(shell id -g)" \
-		"${DOCKER_NAME}:dev" \
+		"${NAME}:dev" \
 		bash

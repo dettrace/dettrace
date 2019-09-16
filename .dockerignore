@@ -6,6 +6,8 @@ GRTAGS
 GTAGS
 .clang_complete
 *.so
+initramfs.cpio
+*.deb
 test/samplePrograms/2writers1reader
 test/samplePrograms/catTestFile
 test/samplePrograms/creat
@@ -39,3 +41,4 @@ Dockerfile
 .gitignore
 *.deb
 *.tbz
+bin/
