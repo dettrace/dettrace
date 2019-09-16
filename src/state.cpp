@@ -1,9 +1,6 @@
 #include "state.hpp"
 
-state::state(pid_t traceePid, int debugLevel)
-  //  : clock(744847200), // avoid clock skew, see issue #24 for more details.
-  : clock(0x5d683529), // avoid clock skew, see issue #24 for more details.
-                      // same value as of libdet.c
+state::state(pid_t traceePid, int debugLevel) :
     fdStatus(new unordered_map<int, descriptorType>),
     traceePid(traceePid),
     signalToDeliver(0),
@@ -12,18 +9,9 @@ state::state(pid_t traceePid, int debugLevel)
 {
   currentSignalHandlers = std::make_shared<unordered_map<int, enum sighandler_type>>();
   timerCreateTimers = std::make_shared<unordered_map<timerID_t, timerInfo>>();
-  remote_sockfds = std::make_shared<unordered_set<int>>();
 
   poll_retry_count = 0;
   poll_retry_maximum = LONG_MAX;
-}
-
-int state::getLogicalTime(){
-  return clock;
-}
-
-void state::incrementTime(){
-  clock++;
 }
 
 void state::setFdStatus(int fd, descriptorType dt){
@@ -80,7 +68,6 @@ state state::forked(pid_t childPid) const {
   childState.poll_retry_count = 0;
   childState.poll_retry_maximum = LONG_MAX;
 
-  childState.remote_sockfds = make_shared<unordered_set<int>>(*(this->remote_sockfds));
   return childState;
 }
 
@@ -127,6 +114,5 @@ state state::cloned(pid_t childPid) const {
   childState.poll_retry_count = 0;
   childState.poll_retry_maximum = LONG_MAX;
 
-  childState.remote_sockfds = this->remote_sockfds;
   return childState;
 }

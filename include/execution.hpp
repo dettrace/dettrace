@@ -119,12 +119,12 @@ private:
    * Atomic counter for rdtsc instruction.
    * Emulates IA32_TSC MSR.
   */
-  uint32_t tscCounter = 0;
+  uint64_t tscCounter = 0;
   /**
    * Atomic counter for rdtscp instruction.
    * Emulates IA32_TSC_AUX MSR.
   */
-  uint32_t tscpCounter = 0;
+  uint64_t tscpCounter = 0;
 
   // Statistic Counters start here!
 
@@ -168,8 +168,7 @@ public:
   execution(int debugLevel, pid_t startingPid, bool useColor, 
             string logFile, bool printStatistics, 
             pthread_t devRandomPthread, pthread_t devUrandomPthread,
-            map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs,
-	    bool allow_network = false);
+            map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs);
 
 
   /**

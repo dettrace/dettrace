@@ -1,3 +1,16 @@
+
+NAME := cloudseal-alpha
+# Version is currently based on number of git commits:
+# TODO: store version in one place in a file.
+VERSION := $(shell if [ -e version ]; then cat version; else echo "0.1."`git log --pretty=oneline | wc -l`; fi)
+BUILDID := 1
+
+PKGNAME := ${NAME}_${VERSION}-${BUILDID}
+
+version: .git/index
+	@echo Writing VERSION=$(VERSION) to file.
+	echo $(VERSION) > $@
+
 # Top-level Makefile to capture different actions you can take.
 all: build
 
@@ -14,10 +27,10 @@ dynamic: bin initramfs
 	cp src/dettrace bin/
 
 # This only builds a statically linked binary.
-static: bin
+static: bin initramfs
 	rm -rf bin/dettrace
 	cd src && ${MAKE} all-static
-	cp src/dettrace-static bin/dettrace
+	cp src/dettrace-static bin/dettrace-static
 
 # This builds both a dynamically linked binary (named bin/dettrace)
 # and a statically linked binary (named bin/dettrace-static)
@@ -49,33 +62,70 @@ run-tests: build-tests build
 # essential to avoid errors with bind mounting a directory simultaneously
 	MAKEFLAGS= make --keep-going -C ./test/samplePrograms/ run
 
-DOCKER_NAME=dettrace
-# TODO: store version in one place in a file.
-DOCKER_TAG=0.0.1
+DOCKER_NAME=${NAME}
+DOCKER_TAG=${VERSION}
 
 docker:
-	docker build -t ${DOCKER_NAME}:${DOCKER_TAG} .
+	$(RM) version
+	$(MAKE) version
+	docker build -t ${DOCKER_NAME}:${DOCKER_TAG} -t ${DOCKER_NAME}:latest .
+	docker run -i --rm --workdir /usr/share/cloudseal ${DOCKER_NAME}:${DOCKER_TAG} tar cf - . | bzip2 > cloudseal_alpha_pkg_${DOCKER_TAG}.tbz
+	docker run -i --rm --workdir /usr/share/cloudseal ${DOCKER_NAME}:${DOCKER_TAG} cat "/root/${PKGNAME}.deb" > "${PKGNAME}.deb"
 
 DOCKER_RUN_ARGS=--rm --privileged --userns=host --cap-add=SYS_ADMIN ${OTHER_DOCKER_ARGS} ${DOCKER_NAME}:${DOCKER_TAG}
 
-run-docker: docker
-	docker run -it ${DOCKER_RUN_ARGS} ${DOCKER_RUN_COMMAND}
+# For convenience, we create an output portal to produce example output:
+run-docker:
+	mkdir -p /tmp/out
+	rm -rf /tmp/out/*
+	docker run -v "/tmp/out:/out" ${DOCKER_RUN_ARGS} ${DOCKER_RUN_COMMAND}
 
 run-docker-non-interactive: docker
 	docker run ${DOCKER_RUN_ARGS} ${DOCKER_RUN_COMMAND}
 
-test-docker: clean docker
+test-docker: docker
 ifdef DETTRACE_NO_CPUID_INTERCEPTION
-	docker run --env DETTRACE_NO_CPUID_INTERCEPTION=1 ${DOCKER_RUN_ARGS} make -j tests
+	docker run --env DETTRACE_NO_CPUID_INTERCEPTION=1 ${DOCKER_RUN_ARGS} true
 else
 	docker run ${DOCKER_RUN_ARGS} make -j tests
 endif
 
-.PHONY: build clean docker run-docker tests build-tests run-tests initramfs
+.PHONY: build clean docker run-docker tests build-tests run-tests initramfs deb docker-dev env
 clean:
+	$(RM) version
 	$(RM) bin/dettrace
+	$(RM) bin/dettrace-static
+	$(RM) src/dettrace
+	$(RM) -rf -- "${PKGNAME}" *.deb
+
 	make -C ./src/ clean
 	# Use `|| true` in case one forgets to check out submodules
 	make -C ./test/samplePrograms clean || true
 	make -C ./test/standalone clean || true
 	make -C ./test/unitTests clean || true
+
+${PKGNAME}.deb: static
+	./ci/create_deb.sh "${NAME}" "${VERSION}-${BUILDID}"
+
+deb: ${PKGNAME}.deb
+
+# Builds a docker image suitable for development.
+docker-dev: Dockerfile.dev
+	docker build \
+		--build-arg "USER_ID=$(shell id -u)" \
+		--build-arg "GROUP_ID=$(shell id -g)" \
+		-t "${DOCKER_NAME}:dev" \
+		-f $< ci
+
+# Runs a docker image suitable for development. Note that the container is run
+# as the current user in order to avoid creating root-owned files in the volume
+# mount.
+env: docker-dev
+	docker run \
+		--rm \
+		--privileged \
+		-it \
+		-v "$(shell pwd):/code" \
+		-u "$(shell id -u):$(shell id -g)" \
+		"${DOCKER_NAME}:dev" \
+		bash

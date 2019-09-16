@@ -28,7 +28,7 @@ void scheduler::removeAndScheduleParent(pid_t child, pid_t parent){
   // Error if the parent of the proces has not finished.
   // Else, remove the process, and schedule its parent to run next.
   if(! isFinished(parent)){
-    runtimeError("dettrace runtime exception: scheduleThisProcess: Parent : " +
+    runtimeError("scheduleThisProcess: Parent : " +
                  to_string(parent) + " was not marked as finished!");
   }
 

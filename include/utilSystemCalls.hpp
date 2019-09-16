@@ -7,6 +7,10 @@
 #include "logger.hpp"
 #include "scheduler.hpp"
 #include <optional>
+
+/** Run a command and return its output as a string */
+string backtick(const char* cmd);
+
 /**
  * Compare returned value of system call (rax) vs the blocking value (errnoValue negated),
  * e.g. EAGAIN. If equal, system call would have blocked, log it, preempt current running

@@ -142,8 +142,8 @@ void clock_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& 
   if (tp != nullptr) {
     struct timespec myTp = {};
     // TODO: One day, unify time.
-    myTp.tv_sec = s.getLogicalTime();
-    myTp.tv_nsec = 0;
+    myTp.tv_sec = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
+    myTp.tv_nsec = 1000UL*(s.getLogicalTime() % state::MICRO_SECS_PER_SEC);
 
     t.writeToTracee(traceePtr<struct timespec>(tp), myTp, t.getPid());
     s.incrementTime();
@@ -175,10 +175,6 @@ void closeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   if(s.countFdStatus(fd) != 0){
     gs.log.writeToLog(Importance::info, "Removing pipe fd: %d!\n", fd);
     s.fdStatus.get()->erase(fd);
-  }
-
-  if (s.fd_is_remote(fd)) {
-    s.remote_sockfds->erase(fd);
   }
 }
 // =======================================================================================
@@ -251,9 +247,6 @@ void dupSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedul
   // dup succeeded.
   if(s.countFdStatus(fd) != 0){ // Only for pipes
     s.setFdStatus(newfd, s.getFdStatus(fd)); // copy over status.
-    if (s.fd_is_remote(fd)) {
-      s.remote_sockfds->insert(newfd);
-    }
     gs.log.writeToLog(Importance::info, "%d = dup(%d)\n", newfd, fd);
   }
 }
@@ -276,9 +269,6 @@ void dup2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     // Semantics of dup2 say old fd could be closed and overwritten, we do that
     // implicitly here!
     s.setFdStatus(newfd, s.getFdStatus(fd));
-    if (s.fd_is_remote(fd)) {
-      s.remote_sockfds->insert(newfd);
-    }
     gs.log.writeToLog(Importance::info, "%d = dup2(%d)\n", newfd, fd);
   }
 }
@@ -554,9 +544,6 @@ void fcntlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     if (it != end) {
       // Same status as what it was duped from.
       (*s.fdStatus.get())[newfd] = s.getFdStatus(fd);
-      if (s.fd_is_remote(fd)) {
-	s.remote_sockfds->insert(newfd);
-      }
     }
   }
 
@@ -864,11 +851,11 @@ void getrusageSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
     // are overwritten below
     struct rusage usage; // = t.readFromTracee(traceePtr<struct rusage>(usagePtr), t.getPid());
     /* user CPU time used */
-    usage.ru_utime = timeval { .tv_sec =  (long) s.getLogicalTime(),
-                               .tv_usec = (long )s.getLogicalTime() };
+    usage.ru_utime = timeval { .tv_sec =  (long) s.getLogicalTime() / state::MICRO_SECS_PER_SEC,
+                               .tv_usec = (long )s.getLogicalTime() % state::MICRO_SECS_PER_SEC};
     /* system CPU time used */
-    usage.ru_stime = timeval { .tv_sec =  (long) s.getLogicalTime(),
-                               .tv_usec = (long )s.getLogicalTime() };
+    usage.ru_stime = timeval { .tv_sec =  (long) s.getLogicalTime() / state::MICRO_SECS_PER_SEC,
+                               .tv_usec = (long )s.getLogicalTime() % state::MICRO_SECS_PER_SEC};
     usage.ru_maxrss = LONG_MAX;                    /* maximum resident set size */
     usage.ru_ixrss = LONG_MAX;                     /* integral shared memory size */
     usage.ru_idrss = LONG_MAX;    		   /* integral unshared data size */
@@ -898,13 +885,14 @@ bool gettimeofdaySystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
 
 void gettimeofdaySystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
                                            scheduler& sched){
-  gs.log.writeToLog(Importance::info, "Inside gettimeofday post-hook, sending tv_sec=%d\n", s.getLogicalTime());
+  gs.log.writeToLog(Importance::info, "Inside gettimeofday post-hook, sending tv_sec=%d\n",
+		    s.getLogicalTime() / state::MICRO_SECS_PER_SEC);
   gs.timeCalls++;
   struct timeval* tp = (struct timeval*) t.arg1();
   if (nullptr != tp) {
     struct timeval myTv = {};
-    myTv.tv_sec = s.getLogicalTime();
-    myTv.tv_usec = 0;
+    myTv.tv_sec = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
+    myTv.tv_usec = s.getLogicalTime() % state::MICRO_SECS_PER_SEC;
 
     t.writeToTracee(traceePtr<struct timeval>(tp), myTv, t.getPid());
     s.incrementTime();
@@ -984,7 +972,7 @@ void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     return;
   case RTC_RD_TIME:
     {
-      time_t logicalTime = s.getLogicalTime();
+      time_t logicalTime = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
       struct tm tm = {};
 
       s.incrementTime();
@@ -998,7 +986,7 @@ void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
     break;
   case RTC_EPOCH_READ:
     {
-      unsigned long logicalTime = s.getLogicalTime();
+      unsigned long logicalTime = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
       s.incrementTime();
 
       if (t.arg3()) {
@@ -2112,6 +2100,14 @@ bool tgkillSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   gs.log.writeToLog(Importance::info, "tgkill(tgid = %d, tid = %d, signal = %d)\n",
                     tgid, tid, signal);
 
+  if (signal == SIGABRT && tgid == s.traceePid &&
+      tgid == tid /* TODO: when we support threads, we should also compare against tracee's tid (from gettid) */) {
+    // ok
+  } else {
+    gs.log.writeToLog(Importance::info, "tgkillSystemCall::handleDetPre: tracee vtgid="+to_string(tgid)+" vtid=" +to_string(tid)+ " ptgid="+to_string(s.traceePid)+" trying to send unsupported signal="+to_string(signal));
+    //runtimeError("tgkillSystemCall::handleDetPre: tracee trying to send unsupported signal");
+  }
+
   return true;
 }
 
@@ -2141,10 +2137,11 @@ void timeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
     }
 
     time_t* timePtr = (time_t*) t.arg1();
-    gs.log.writeToLog(Importance::info, "time: tloc is null, returning %d\n", s.getLogicalTime());
-    t.writeRax(s.getLogicalTime());
+    time_t secs_since_epoch = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
+    gs.log.writeToLog(Importance::info, "time: tloc is null, returning %d\n", secs_since_epoch);
+    t.writeRax(secs_since_epoch);
     if(timePtr != nullptr){
-      t.writeToTracee(traceePtr<time_t>(timePtr), (time_t) s.getLogicalTime(), s.traceePid);
+      t.writeToTracee(traceePtr<time_t>(timePtr), secs_since_epoch, s.traceePid);
     }
     // Tick up time.
     s.incrementTime();
@@ -2716,184 +2713,16 @@ void writevSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
 
 // =======================================================================================
 bool socketSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  int domain = t.arg1();
-
-  if (domain == AF_INET || domain == AF_INET6) {
-    if (!gs.allow_network) {
-      gs.log.writeToLog(Importance::inter, "socket syscall disabled, add `--allow-network` to enable socket syscall\n");
-      cancelSystemCall(gs, s, t);
-      t.setReturnRegister(-ENOSYS);
-      return false;
-    }
-  }
-
   return true;
 }
 
 void socketSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int fd = (int)t.getReturnValue();
-  if (fd < 0) {
-    return;
-  }
 
-  int domain = t.arg1();
-  int type = t.arg2();
-
-  if (domain == AF_INET || domain == AF_INET6) {
-    s.remote_sockfds->insert(fd);
-  }
-
-  if (type & SOCK_NONBLOCK) {
-    (*s.fdStatus)[fd] = descriptorType::nonBlocking;
-  }
-
-  gs.log.writeToLog(Importance::info, "socket returned " + to_string(fd) + "\n");
-}
-// =======================================================================================
-
-// =======================================================================================
-bool listenSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  return true;
-}
-
-void listenSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  int retval = (int)t.getReturnValue();
-
-  gs.log.writeToLog(Importance::info, "listen returned " + to_string(retval) + "\n");
-
-  return;
-}
-// =======================================================================================
-
-// =======================================================================================
-bool acceptSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) {
-  cancelSystemCall(gs, s, t);
-  t.writeArg4(0);
-  replaySystemCall(gs, t, SYS_accept4);
-
-  gs.log.writeToLog(Importance::info, "change syscall accept => accept4\n");
-  return false;
-}
-
-void acceptSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  runtimeError("should never run into SYS_accept posthook");
-}
-// =======================================================================================
-
-static int get_proc_fd_flags(pid_t pid, int pid_fd) {
-  char path[64];
-  snprintf(path, 64, "/proc/%d/fdinfo/%d", pid, pid_fd);
-
-  int fd = open(path, O_RDONLY);
-  if (fd < 0) return 0;
-
-  char buff[4096] = {0,};
-
-  while (1) {
-    ssize_t n = read(fd, buff, 4096);
-    if (n < 0) {
-      if (errno == EINTR) {
-	continue;
-      } else {
-	close(fd);
-	return 0;
-      }
-    }
-    break;
-  }
-
-  close(fd);
-
-  char* p = (char*)buff, *q = (char*)buff;
-
-  const char prefix[] = "flags:";
-  int prefix_len = strlen(prefix);
-  while(1) {
-    p = strsep(&q, "\n");
-    if (!p) break;
-    if (strncmp(prefix, p, prefix_len) == 0) {
-      p += prefix_len;
-      while(p) {
-	if (*p == ' ' || *p == '\t') ++p;
-	break;
-      }
-      return (int)strtoul(p, NULL, 8);
-    }
-  }
-  return 0;
-}
-
-// =======================================================================================
-bool accept4SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  int fd = t.arg1();
-  int flags = t.arg4();
-
-  gs.log.writeToLog(Importance::info, "accept4(%d), flags = %d\n", fd, flags);
-
-  auto it = s.fdStatus.get()->find(fd);
-  if (it != s.fdStatus.get()->end()) {
-    if (it->second == descriptorType::nonBlocking) {
-      return true;
-    }
-  }
-
-  int fd_flags = get_proc_fd_flags(t.getPid(), fd);
-  /* blocking accept4, simulating nonblocking io */
-  s.userDefinedTimeout = true; // XXX: we have no timeout, borrow a variable
-  s.originalArg1 = fd_flags;
-  gs.log.writeToLog(Importance::info, "fd %d flags = 0x%x, nonblocking?: %d\n",
-		    fd, fd_flags, (fd_flags & O_NONBLOCK) == O_NONBLOCK);
-
-  return true;
-}
-
-void accept4SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  int fd = (int)t.arg1();
-  int flags = (int)t.arg4();
-  int retval = (int)t.getReturnValue();
-
-  if (retval >= 0) {
-    if ( (flags & SOCK_NONBLOCK) == SOCK_NONBLOCK) {
-      (*s.fdStatus.get())[retval] = descriptorType::nonBlocking;
-    } else {
-      (*s.fdStatus.get())[retval] = descriptorType::blocking;
-    }
-    gs.log.writeToLog(Importance::info, "accept4(%d) returned new fd %d\n", fd, retval);
-    return;
-  }
-
-  if (s.userDefinedTimeout) {
-    /* both EAGAIN/EWOULDBLOCK are valid return values for nonblocking mode */
-    if(retval == -EAGAIN || retval == -EWOULDBLOCK) {
-      gs.log.writeToLog(Importance::info, "accetp4 would have blocked! Replaying\n");
-      gs.replayDueToBlocking++;
-      sched.preemptAndScheduleNext();
-      replaySystemCall(gs, t, t.getSystemCallNumber());
-    }
-    s.userDefinedTimeout = false;
-    t.writeArg4(s.originalArg4);
-  }
-  return;
-}
-// =======================================================================================
-bool shutdownSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  gs.log.writeToLog(Importance::info, "shutdown(%d, %d)\n", t.arg1(), t.arg2());
-
-  return true;
-}
-
-void shutdownSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  int retval = (int)t.getReturnValue();
-
-  gs.log.writeToLog(Importance::info, "shutdown returned " + to_string(retval) + "\n");
-
-  if (retval == 0) {
-    int fd = t.arg1();
-    int how = t.arg2();
-    if (how == SHUT_RDWR) {
-      s.remote_sockfds->erase(fd);
-    }
+  if (fd >= 0) {
+    gs.log.writeToLog(Importance::info, "socket returned " + to_string(fd) + "\n");
   }
 
   return;
 }
+// =======================================================================================

@@ -123,7 +123,7 @@ private:
    */
   void sortOurEntries(){
     if(! entries.empty()){
-      throw runtime_error("dettrace runtime exception: sortOurEntries was called with non-empty entries.");
+      runtimeError("sortOurEntries was called with non-empty entries.");
     }
 
     /** Variable size data, we cannot "iterate" over the entries in the array. */

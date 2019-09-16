@@ -80,7 +80,7 @@ public:
                           "\n");
       return realValue;
     }
-    throw runtime_error("dettrace runtime exception: " + mappingName + ": getRealValue(" +
+    runtimeError(mappingName + ": getRealValue(" +
                         to_string(virtualValue) + ") does not exist\n");
   }
 
@@ -100,7 +100,7 @@ public:
 
       return virtValue;
     }
-    throw runtime_error("dettrace runtime exception: " + mappingName + ": getVirtualValue(" +
+    runtimeError(mappingName + ": getVirtualValue(" +
                         to_string(realValue) + ") does not exist\n");
   }
 
@@ -138,14 +138,14 @@ public:
     try{
       value = realToVirtualValue.at(key);
     }catch(...){
-      throw runtime_error("dettrace runtime exception: Key does not exist in real to virtual map.\n");
+      runtimeError("Key does not exist in real to virtual map.\n");
     }
 
     // We know it's there. We just checked.
     realToVirtualValue.erase(key);
     auto res = virtualToRealValue.erase(value);
     if(res == 0){
-      throw runtime_error("dettrace runtime exception: value does not exist in virtual to real map.\n");
+      runtimeError("value does not exist in virtual to real map.\n");
     }
   }
 };

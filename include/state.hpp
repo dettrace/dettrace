@@ -58,9 +58,10 @@ private:
    * information. The clock starts at this number to avoid seeing
    * files "in the future", if we were to start at zero.
    */
-  size_t clock = 1561870800;
+  unsigned long clock = 744847200UL * state::MICRO_SECS_PER_SEC;
 
 public:
+  static const long MICRO_SECS_PER_SEC = 1000000L;
  /**
    * Constructor.
    * Initialize traceePid and debugLevel to the provided values, and
@@ -251,12 +252,16 @@ public:
   /**
    * Function to increase value of internal logical clock.
    */
-  void incrementTime();
+  void incrementTime() {
+    ++clock;
+  }
 
   /**
    * Function to get value of internal logical clock.
    */
-  int getLogicalTime();
+  unsigned long getLogicalTime() const {
+    return clock;
+  }
 
   /**
    * We must keep track of file creation. For open and openat, we set this flag.
@@ -291,18 +296,6 @@ public:
    * poll retry maximum
    */
   long poll_retry_maximum;
-
-  /**
-   * remote socket file descriptors, unix domain sockets excluded.
-   */
-  std::shared_ptr<std::unordered_set<int>> remote_sockfds;
-
-  /**
-   * check whether a file descriptor is a remote socket fd
-   */
-  bool fd_is_remote(int fd) const {
-    return remote_sockfds->find(fd) != remote_sockfds->end();
-  }
 };
 
 #endif

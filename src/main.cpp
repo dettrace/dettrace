@@ -77,9 +77,8 @@ struct programArgs{
   // does not let us create a user namespace if the current process is chrooted. This
   // is a feature. So we handle this special case, by allowing dettrace to treat the
   // current enviornment as a chroot.
-  bool currentAsChroot;
+  bool alreadyInChroot;
   unsigned timeoutSeconds;
-  bool allow_network;
 };
 // =======================================================================================
 programArgs parseProgramArguments(int argc, char* argv[]);
@@ -93,7 +92,7 @@ static bool realDevNull(string path);
 static bool fileExists(string directory);
 static void deleteFile(string path);
 static void mountDir(string source, string target);
-static void setUpContainer(string pathToExe, string pathToChroot, string workingDir, bool userDefinedChroot, bool currentAsChroot);
+static void setUpContainer(string pathToExe, string pathToChroot, string workingDir, bool userDefinedChroot, bool alreadyInChroot);
 static void mkdirIfNotExist(string dir);
 static void createFileIfNotExist(string path);
 
@@ -109,7 +108,7 @@ void sigalrmHandler(int _) {
   assert(nullptr != globalExeObject);
   globalExeObject->killAllProcesses();
   // TODO: print out message about timeout expiring
-  runtimeError("dettrace timeout expired\n");
+  runtimeError("cloudseal timeout expired\n");
 }
 // =======================================================================================
 
@@ -119,45 +118,53 @@ struct CloneArgs {
 };
 
 const string usageMsg =
-  "  Dettrace\n"
+  "  Cloudseal\n"
   "\n"
-  "  A container for dynamic determinism enforcement. Arbitrary programs ran inside\n"
+  "  A container for dynamic determinism enforcement. Arbitrary programs run inside\n"
   "  will run deterministically."
   "\n"
-  "  ./detTrace [optionalArguments] ./exe [exeCmdArgs]\n"
-  "  ./detTrace --help\n"
-  "\n"
+  "  ./cloudseal [optionalArguments] ./cmd [cmdArgs]\n"
+  "  ./cloudseal --help\n"
+  "\n"  
   "  Optional Arguments:\n"
-  "  --debug <debugLevel>\n"
-  "    Prints log information based on verbosity, useful to debug dettrace errors.\n"
+  "  ===============================================  \n"
+  "\n"  
   "  --working-dir\n"
-  "     Specify the working directory that dettrace should use to build, by default\n"
-  "     it is the current working directory.\n"
+  "     Specify the working directory that cloudseal should use as a workspace for the \n"
+  "     deterministic process tree, by default it is the current working directory.\n"
   "  --chroot <pathToRoot>\n"
   "    Specify root to use for chroot (such as one created by debootstrap).\n"
   "  --no-container\n"
   "    Do not use any sort of containerization (May not be deterministic!).\n"
-  "  --no-color\n"
-  "    Do not use colored output for log. Useful when piping log to a file.\n"
+  "\n"
+  "  Debugging/logging: \n"
+  "  ===============================================  \n"
+  "\n"
+  "  --debug <debugLevel>\n"
+  "    Prints log information based on verbosity, useful to debug dettrace errors.\n"
   "  --log\n"
   "    Path to write log to. Defaults to stderr. If writing to a file, the filename\n"
   "    has a unique suffix appended.\n"
-  "  --convert-uids Some packages attempt to use UIDs not mapped in our namespace. Catch\n"
-  "    this behavior for lchown, chown, fchown, fchowat, and dynamically change the UIDS to\n"
-  "    0 (root).\n"
+  "  --no-color\n"
+  "    Do not use colored output for log. Useful when piping log to a file.\n"
   "  --print-statistics\n"
   "    Print metadata about process that just ran including: number of system call events\n"
   "    read/write retries, rdtsc, rdtscp, cpuid.\n"
-  "  --currentAsChroot\n"
-  "    Use the current enviornment as the chroot. This is useful for running dettrace\n"
-  "    inside a chroot, using that same chroot as the environnment. For some reason the\n"
-  "    current mount namespace is polluted with our bind mounts (even though we create)\n"
-  "    our own namespace. Therefore make sure to unshare -m before running dettrace with\n"
-  "    this command, either when chrooting or when calling dettrace.\n"
   "  --timeoutSeconds\n"
   "    Tear down all tracee processes with SIGKILL after this many seconds\n"
-  "  --allow-network\n"
-  "    Allow netowrking related syscalls like socket/send/recv, which could be non-deterministic\n";
+  "\n"
+  "  Internal/Advanced flags you are unlikely to use: \n"
+  "  ===============================================  \n"
+  "\n"
+  "  --already-in-chroot\n"
+  "    The current environment is already the desired chroot. For some reason the\n"
+  "    current mount namespace is polluted with our bind mounts (even though we create\n"
+  "    our own namespace). Therefore make sure to unshare -m before running dettrace with\n"
+  "    this command, either when chrooting or when calling dettrace.\n"
+  "  --convert-uids Some programs attempt to use UIDs not mapped in our namespace. Catch\n"
+  "    this behavior for lchown, chown, fchown, fchowat, and dynamically change the UIDS to\n"
+  "    0 (root).\n"
+  ;
 
 /**
  * Given a program through the command line, spawn a child thread, call PTRACEME and exec
@@ -192,7 +199,7 @@ int main(int argc, char** argv){
     CLONE_NEWPID | // Our own pid namespace.
     CLONE_NEWNS;  // Our own mount namespace
 
-  if (args.currentAsChroot) {
+  if (args.alreadyInChroot) {
     cloneFlags &= ~CLONE_NEWUSER;
   }
 
@@ -232,10 +239,10 @@ int main(int argc, char** argv){
   // see https://lwn.net/Articles/532593/
   /* Update the UID and GID maps for children in their namespace, notice we do not
      live in that namespace. We use clone instead of unshare to avoid moving us into
-     to the namespace. This allows us, in the future, to extend the mappins to other
+     to the namespace. This allows us, in the future, to extend the mappings to other
      uids when running as root (not currently implemented, but notice this cannot be
      done when using unshare.)*/
-  if (! args.currentAsChroot) {
+  if (! args.alreadyInChroot) {
     char map_path[PATH_MAX];
     const int MAP_BUF_SIZE = 100;
     char map_buf[MAP_BUF_SIZE];
@@ -314,9 +321,9 @@ int runTracee(programArgs args){
   string pathToExe = args.pathToExe;
 
   if(useContainer){
-    setUpContainer(pathToExe, pathToChroot, workingDir, args.userChroot, args.currentAsChroot);
+    setUpContainer(pathToExe, pathToChroot, workingDir, args.userChroot, args.alreadyInChroot);
   } else {
-    if (!args.currentAsChroot) {
+    if (!args.alreadyInChroot) {
       mountDir(devrandFifoPath, "/dev/random");
       mountDir(devUrandFifoPath, "/dev/urandom");
       // jld: determinize various parts of /proc which our benchmarks read from
@@ -330,6 +337,7 @@ int runTracee(programArgs args){
     }
   }
 
+  // trap on rdtsc/rdtscp insns
   doWithCheck(prctl(PR_SET_TSC, PR_TSC_SIGSEGV, 0, 0, 0), "Pre-clone prctl error");
   doWithCheck(prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0), "Pre-clone prctl error: setting no new privs");
 
@@ -579,7 +587,7 @@ static void* devRandThread(void* fifoPath_) {
  * Jail our container under chootPath.
  * This directory must exist and be located inside the chroot if the user defined their own chroot!
  */
-static void setUpContainer(string pathToExe, string pathToChroot, string workingDir, bool userDefinedChroot, bool currentAsChroot){
+static void setUpContainer(string pathToExe, string pathToChroot, string workingDir, bool userDefinedChroot, bool alreadyInChroot){
   if(userDefinedChroot && ! isDefault(workingDir)){
     checkPaths(pathToChroot, workingDir);
   }
@@ -626,7 +634,8 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
     mountDir("/usr/", pathToChroot + "/usr/");
     mountDir("/lib/", pathToChroot + "/lib/");
     mountDir("/lib64/", pathToChroot + "/lib64/");
-    mountDir("/etc/ld.so.cache", pathToChroot + "/etc/ld.so.cache");
+    //mountDir("/etc/ld.so.cache", pathToChroot + "/etc/ld.so.cache");
+    mountDir("/etc/", pathToChroot + "/etc/");
   }
 
   // make sure chroot has a real /dev/null
@@ -637,7 +646,7 @@ static void setUpContainer(string pathToExe, string pathToChroot, string working
     if (fileExists(chrootDevNullPath)) {
       deleteFile(chrootDevNullPath);
     }
-    if (currentAsChroot) {
+    if (alreadyInChroot) {
       // we're running under reprotest as sudo, so we can use real mknod
       // hat tip to: https://unix.stackexchange.com/questions/27279/how-to-create-dev-null
       dev_t dev = makedev(1,3);
@@ -691,7 +700,7 @@ int spawnTracerTracee(void* voidArgs){
   // this mount are not propegated to the parent mount.
   // This makes sure we don't pollute the host OS' mount space with entries made by us
   // here.
-  if (! args.currentAsChroot) {
+  if (! args.alreadyInChroot) {
     doWithCheck(mount("none", "/", NULL, MS_SLAVE | MS_REC, 0), "mount slave");
   }
 
@@ -717,7 +726,7 @@ int spawnTracerTracee(void* voidArgs){
   } else if(pid > 0) {
     // We must mount proc so that the tracer sees the same PID and /proc/ directory
     // as the tracee. The tracee will do the same so it sees /proc/ under it's chroot.
-    if (!args.currentAsChroot) {
+    if (!args.alreadyInChroot) {
       doWithCheck(mount("/proc", "/proc/", "proc", MS_MGC_VAL, nullptr),
                   "tracer mounting proc failed");
     }
@@ -735,8 +744,7 @@ int spawnTracerTracee(void* voidArgs){
         args.debugLevel, pid, args.useColor,
         args.logFile, args.printStatistics,
         devRandomPthread, devUrandomPthread,
-        cloneArgs->vdsoSyms,
-        args.allow_network};
+        cloneArgs->vdsoSyms};
 
     globalExeObject = &exe;
     struct sigaction sa;
@@ -764,17 +772,18 @@ programArgs parseProgramArguments(int argc, char* argv[]){
   args.optIndex = 0;
   args.argc = argc;
   args.argv = argv;
-  args.debugLevel = 0;
+  args.debugLevel = 1; // Verbosity 1: 
+  // args.debugLevel = 3; // print errors and intercepted system calls
   args.pathToChroot = "NONE";
   args.useContainer = true;
   args.workingDir = "NONE";
   args.userChroot = false;
   args.pathToExe = "NONE";
-  args.useColor = true;
-  args.logFile = "NONE";
+  args.useColor = false; // no ANSI color codes
+  args.logFile = "/tmp/cloudseal-alpha.log"; // log to a file by default
   args.printStatistics = false;
   args.convertUids = false;
-  args.currentAsChroot = false;
+  args.alreadyInChroot = false;
   args.timeoutSeconds = 0;
 
   // Command line options for our program.
@@ -788,9 +797,8 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     {"print-statistics", no_argument, 0, 'p'},
     {"working-dir", required_argument, 0, 'w'},
     {"convert-uids", no_argument, 0, 'u'},
-    {"currentAsChroot", no_argument, 0, 'a'},
+    {"already-in-chroot", no_argument, 0, 'a'},
     {"timeoutSeconds", required_argument, 0, 't'},
-    {"allow-network", no_argument, 0, 1},
     {0,        0,                  0, 0}    // Last must be filled with 0's.
   };
 
@@ -805,7 +813,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
 
     switch(returnVal){
     case 'a':
-      args.currentAsChroot = true;
+      args.alreadyInChroot = true;
       break;
     case 'c':
       args.pathToChroot = string { optarg };
@@ -813,7 +821,8 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     case 'd':
       args.debugLevel = parseNum(optarg);
       if(args.debugLevel < 0 || args.debugLevel > 5){
-        runtimeError("Debug level must be between [0,5].");
+        fprintf(stderr, "Debug level must be between [0,5].");
+        exit(1);
       }
       break;
       // Help message.
@@ -842,20 +851,19 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     case 't':
       args.timeoutSeconds = parseNum(optarg);
       if (0 == args.timeoutSeconds) {
-        runtimeError("timeout seconds must be > 0.");
+        fprintf(stderr, "Timeout seconds must be > 0.");
+        exit(1);
       }
       break;
-    case 1:
-      args.allow_network = true;
-      break;
     case '?':
-      runtimeError("Invalid option passed to detTrace!");
+      fprintf(stderr, "Invalid option specified. (See `%s --help`)\n", argv[0]);
+      exit(1);
     }
   }
 
   // User did not pass exe arguments:
   if(argv[optind] == NULL){
-    fprintf(stderr, "Missing arguments to dettrace!\n");
+    fprintf(stderr, "Missing arguments to cloudseal!\n");
     fprintf(stderr, "Use --help\n");
     exit(1);
   }
@@ -876,8 +884,8 @@ programArgs parseProgramArguments(int argc, char* argv[]){
   }
 
   bool usingWorkingDir = args.workingDir != "NONE";
-  if (args.currentAsChroot && (args.userChroot || usingWorkingDir)) {
-    fprintf(stderr, "Cannot use --currentAsChroot with --chroot or --working-dir.\n");
+  if (args.alreadyInChroot && (args.userChroot || usingWorkingDir)) {
+    fprintf(stderr, "Cannot use --already-in-chroot with --chroot or --working-dir.\n");
     exit(1);
   }
 
@@ -887,7 +895,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
   }
 
   // Detect if we're inside a chroot by attempting to make a user namespace.
-  if (args.currentAsChroot) {
+  if (args.alreadyInChroot) {
     if (unshare(CLONE_NEWUSER) != -1) {
       fprintf(stderr, "We detected you are not currently running inside a chroot env.\n");
       exit(1);
@@ -947,7 +955,8 @@ static void mountDir(string source, string target){
 
   /* Check if source path exists*/
   if (!fileExists(source)) {
-    runtimeError("Trying to mount source " + source + ". File does not exist.\n");
+    fprintf(stderr, "WARNING: Trying to mount source %s. File does not exist.\n", source.c_str());
+    return;
   }
 
   /* Check if target path exists*/

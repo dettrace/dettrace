@@ -35,3 +35,7 @@ test/samplePrograms/multipleThreads
 test/samplePrograms/simpleThreads
 .git
 ./benchmarking
+Dockerfile
+.gitignore
+*.deb
+*.tbz
