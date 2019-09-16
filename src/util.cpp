@@ -46,7 +46,7 @@ unordered_map<int, string> futexAdditionalFlags = {
 
 /*======================================================================================*/
 void runtimeError(string error) {
-  throw runtime_error("cloudseal runtime exception: " + error);
+  throw runtime_error("dettrace runtime exception: " + error);
 }
 
 /*======================================================================================*/
