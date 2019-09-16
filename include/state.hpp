@@ -5,6 +5,7 @@
 #include <sys/reg.h>
 #include <sys/types.h>
 #include <sys/user.h>
+#include <sys/timerfd.h>
 #include <sys/vfs.h>
 #include <unordered_map>
 #include <unordered_set>
@@ -58,8 +59,12 @@ private:
    * information. The clock starts at this number to avoid seeing
    * files "in the future", if we were to start at zero.
    */
-  unsigned long clock = 744847200UL * state::MICRO_SECS_PER_SEC;
+  unsigned long clock;
 
+  /**
+   * epoch in seconds passed from execution environment
+   */
+  unsigned long epoch;
 public:
   static const long MICRO_SECS_PER_SEC = 1000000L;
  /**
@@ -69,7 +74,7 @@ public:
    * @param traceePid pid of tracee
    * @param debugLevel debug level to be used
    */
-  state(pid_t traceePid, int debugLevel);
+  explicit state(pid_t traceePid, int debugLevel, unsigned long epoch);
 
   /**
    * fork a new state when fork/vfork is called
@@ -296,6 +301,42 @@ public:
    * poll retry maximum
    */
   long poll_retry_maximum;
+
+  /**
+   * remote socket file descriptors, unix domain sockets excluded.
+   */
+  std::shared_ptr<std::unordered_set<int>> remote_sockfds;
+
+  /**
+   * check whether a file descriptor is a remote socket fd
+   */
+  bool fd_is_remote(int fd) const {
+    return remote_sockfds->find(fd) != remote_sockfds->end();
+  }
+
+  /**
+   * timerfds
+   */
+  std::shared_ptr<std::unordered_map<int, struct itimerspec>> timerfds;
+
+  /**
+   * check whether a file descriptor is a timerfd
+   */
+  bool fd_is_timerfd(int fd) const {
+    return timerfds->find(fd) != timerfds->end();
+  }
+
+  /**
+   * signalfds
+   */
+  std::shared_ptr<std::unordered_set<int>> signalfds;
+
+  /**
+   * check whether a file descriptor is a signalfd
+   */
+  bool fd_is_signalfd(int fd) const {
+    return signalfds->find(fd) != signalfds->end();
+  }
 };
 
 #endif

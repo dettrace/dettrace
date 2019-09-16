@@ -25,7 +25,6 @@ cp -a bin/${NAME}-static "${PKGNAME}/usr/share/${NAME}/bin/${NAME}"
 ln -sf "../share/${NAME}/bin/${NAME}" "${PKGNAME}/usr/bin/${NAME}"
 cp -a root "${PKGNAME}/usr/share/${NAME}/root"
 find "${PKGNAME}/usr/share/${NAME}/root" -type f -name .gitignore -exec rm '{}' \+
-cp -a initramfs.cpio "${PKGNAME}/usr/share/${NAME}/"
 cp -a examples "${PKGNAME}/usr/share/${NAME}/"
 mkdir -- "${PKGNAME}/DEBIAN"
 

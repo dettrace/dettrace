@@ -1419,6 +1419,48 @@ public:
   const int syscallNumber = SYS_setitimer;
   const string syscallName = "setitimer";
 };
+
+// =======================================================================================
+/**
+ * int timerfd_create(clockid_t clockid, int flags);
+ */
+class timerfd_createSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_timerfd_create;
+  const string syscallName = "timerfd_create";
+};
+
+// =======================================================================================
+/**
+ * int timerfd_settime(clockid_t clockid, int flags,
+                       const struct itimerspec* new_value,
+                       struct itimerspec* old_value);
+ */
+class timerfd_settimeSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_timerfd_settime;
+  const string syscallName = "timerfd_settime";
+};
+
+// =======================================================================================
+/**
+ * int timerfd_gettime(clockid_t clockid, struct itimerspec* curr_value);
+ */
+class timerfd_gettimeSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_timerfd_gettime;
+  const string syscallName = "timerfd_gettime";
+};
+
 // =======================================================================================
 /**
  * clock_t times(struct tms *buf);
@@ -1702,6 +1744,62 @@ public:
 
   const int syscallNumber = SYS_socket;
   const string syscallName = "socket";
+};
+
+// =======================================================================================
+/**
+ * int listen(int sockfd, int backlog)
+ *
+ * listen()  marks the socket referred to by sockfd as a passive socket, that is, as a 
+ * socket that will be used to accept incoming connection requests using accept(2).
+ */
+class listenSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_listen;
+  const string syscallName = "listen";
+};
+
+// =======================================================================================
+/**
+ * int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
+ */
+class acceptSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_accept;
+  const string syscallName = "accept";
+};
+
+// =======================================================================================
+/**
+ * int accept4(int sockfd, struct sockaddr *addr,
+ *             socklen_t *addrlen, int flags);
+ */
+class accept4SystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_accept4;
+  const string syscallName = "accept4";
+};
+
+// =======================================================================================
+/**
+ * int shutdown(int sockfd, int how)
+ */
+class shutdownSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_shutdown;
+  const string syscallName = "shutdown";
 };
 
 // =======================================================================================

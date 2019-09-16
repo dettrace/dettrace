@@ -42,3 +42,4 @@ Dockerfile
 *.deb
 *.tbz
 bin/
+*.tbz

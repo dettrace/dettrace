@@ -48,10 +48,11 @@ bool kernelCheck(int a, int b, int c){
 execution::execution(int debugLevel, pid_t startingPid, bool useColor,
                      string logFile, bool printStatistics,
                      pthread_t devRandomPthread, pthread_t devUrandomPthread,
-                     map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs):
+                     map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs,
+		     bool allow_network, unsigned long epoch):
   kernelPre4_8 {kernelCheck(4,8,0)},
   log {logFile, debugLevel, useColor},
-  silentLogger {"NONE", 0},
+  silentLogger {"", 0},
   printStatistics{printStatistics},
   devRandomPthread{devRandomPthread},
   devUrandomPthread{devUrandomPthread},
@@ -62,13 +63,16 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
     log,
     ValueMapper<ino_t, ino_t> {log, "inode map", 1},
     ValueMapper<ino_t, time_t> {log, "mtime map", 1},
-    kernelCheck(4,12,0)
+    kernelCheck(4,12,0),
+    allow_network
   },
   myScheduler {startingPid, log},
   debugLevel {debugLevel},
-  vdsoFuncs(vdsoFuncs) {
+  vdsoFuncs(vdsoFuncs),
+  epoch(epoch)
+  {
     // Set state for first process.
-    states.emplace(startingPid, state{startingPid, debugLevel});
+    states.emplace(startingPid, state{startingPid, debugLevel, epoch});
     myGlobalState.threadGroups.insert({startingPid, startingPid});
     myGlobalState.threadGroupNumber.insert({startingPid, startingPid});
 
@@ -741,7 +745,7 @@ void execution::handleExecEvent(pid_t pid) {
 
   // TODO When does this ever happen?
   if (states.find(pid) == states.end()){
-      states.emplace(pid, state {pid, debugLevel} );
+    states.emplace(pid, state {pid, debugLevel, epoch} );
   }
   // Reset file descriptor state, it is wiped after execve.
   states.at(pid).fdStatus = make_shared<unordered_map<int, descriptorType>>();
@@ -818,6 +822,9 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
       states.at(traceesPid).signalToDeliver = 0;
 
       auto coloredMsg = log.makeTextColored(Color::blue, msg);
+
+      // force a preemption to avoid possible busy reading TSCs.
+      // myScheduler.preemptAndScheduleNext();
       log.writeToLog(Importance::inter, coloredMsg, traceesPid, sigNum);
       return;
     } else if ((curr_insn32 << 16) ==0xA20F0000) {
@@ -896,7 +903,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
         tracer.writeRax( 0x0 );
         tracer.writeRbx( 0x0 );
         tracer.writeRdx( 0x0 );
-	// size=2MB, 16-way set associative, line size = 64B
+        // size=2MB, 16-way set associative, line size = 64B
         tracer.writeRcx( 0x08008140 );
         break;
       default:
@@ -1190,6 +1197,15 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_timer_settime:
     return timer_settimeSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_timerfd_create:
+    return timerfd_createSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_timerfd_settime:
+    return timerfd_settimeSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_timerfd_gettime:
+    return timerfd_gettimeSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_times:
     return timesSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -1224,6 +1240,14 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
    return writevSystemCall::handleDetPre(gs, s, t, sched);
   case SYS_socket:
     return socketSystemCall::handleDetPre(gs, s, t, sched);
+  case SYS_listen:
+    return listenSystemCall::handleDetPre(gs, s, t, sched);
+  case SYS_accept:
+    return acceptSystemCall::handleDetPre(gs, s, t, sched);
+  case SYS_accept4:
+    return accept4SystemCall::handleDetPre(gs, s, t, sched);
+  case SYS_shutdown:
+    return shutdownSystemCall::handleDetPre(gs, s, t, sched);
   }
 
   // a system call we don't yet support
@@ -1503,6 +1527,15 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
   case SYS_timer_settime:
     return timer_settimeSystemCall::handleDetPost(gs, s, t, sched);
 
+  case SYS_timerfd_create:
+    return timerfd_createSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_timerfd_settime:
+    return timerfd_settimeSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_timerfd_gettime:
+    return timerfd_gettimeSystemCall::handleDetPost(gs, s, t, sched);
+
   case SYS_times:
     return timesSystemCall::handleDetPost(gs, s, t, sched);
 
@@ -1537,6 +1570,14 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
    return writevSystemCall::handleDetPost(gs, s, t, sched);
   case SYS_socket:
     return socketSystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_listen:
+    return listenSystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_accept:
+    return acceptSystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_accept4:
+    return accept4SystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_shutdown:
+    return shutdownSystemCall::handleDetPost(gs, s, t, sched);
   }
 
   // Generic system call. Throws error.  NB: even for unsupported system calls
