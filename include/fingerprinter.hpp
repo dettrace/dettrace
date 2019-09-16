@@ -12,30 +12,34 @@ struct ProcessState {
   int retval;
 };
 
-extern "C" long fingerprinter_prehook(struct ProcessState* p,
-				 int syscallno,
-				 unsigned long retval,
-				 unsigned long arg0,
-				 unsigned long arg1,
-				 unsigned long arg2,
-				 unsigned long arg3,
-				 unsigned long arg4,
-				 unsigned long arg5);
+extern "C" long fingerprinter_prehook(
+  struct ProcessState* p,
+  int syscallno,
+  unsigned long retval,
+  unsigned long arg0,
+  unsigned long arg1,
+  unsigned long arg2,
+  unsigned long arg3,
+  unsigned long arg4,
+  unsigned long arg5
+);
 
-extern "C" long fingerprinter_posthook(struct ProcessState* p,
-				 int syscallno,
-				 unsigned long retval,
-				 unsigned long arg0,
-				 unsigned long arg1,
-				 unsigned long arg2,
-				 unsigned long arg3,
-				 unsigned long arg4,
-				 unsigned long arg5);
+extern "C" long fingerprinter_posthook(
+  struct ProcessState* p,
+  int syscallno,
+  unsigned long retval,
+  unsigned long arg0,
+  unsigned long arg1,
+  unsigned long arg2,
+  unsigned long arg3,
+  unsigned long arg4,
+  unsigned long arg5
+);
 
 class fingerprinter {
 public:
-  static bool handleDetPre(int syscallNumber, globalState& gs, state& s, ptracer& t, scheduler& sched);
-  static void handleDetPost(int syscallNumber, globalState& gs, state& s, ptracer& t, scheduler& sched);
+  static bool callPreHook(int syscallNumber, globalState& gs, state& s, ptracer& t, scheduler& sched);
+  static void callPostHook(int syscallNumber, globalState& gs, state& s, ptracer& t, scheduler& sched);
 };
 
 #endif

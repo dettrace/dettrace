@@ -158,6 +158,9 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid){
   log.setPadding();
 
   bool callPostHook = callPreHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
+  if(syscallNum != SYS_arch_prctl) {
+    callPostHook |= fingerprinter::callPreHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
+  }
 
   if(kernelPre4_8){
     // Next event will be a sytem call pre-exit event as older kernels make us catch the
@@ -222,6 +225,9 @@ void execution::handlePostSystemCall(state& currState){
   }
 
   callPostHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
+  if(syscallNum != SYS_arch_prctl) {
+    fingerprinter::callPostHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
+  }
 
   log.writeToLog(Importance::info,"Value after handler: %d\n",
                  tracer.getReturnValue());
@@ -240,7 +246,7 @@ void execution::runProgram(){
 
   log.writeToLog(Importance::inter, backtick("uname -a"));
   log.writeToLog(Importance::inter, backtick("cat /proc/cpuinfo"));
-  
+
   // Once all process' have ended. We exit.
   bool exitLoop = false;
 
@@ -1229,7 +1235,7 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
 
   // a system call we don't yet support
   gs.log.writeToLog(Importance::inter, "unsupported system call # "+to_string(syscallNumber));
-  
+
   // don't call the post-hook for unsupported system calls
   return false;
 }
@@ -1540,12 +1546,14 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
     return socketSystemCall::handleDetPost(gs, s, t, sched);
   }
 
+  // Removing to support usage of fingerprinter
+
   // Generic system call. Throws error.  NB: even for unsupported system calls
   // we should never reach here, since we don't call the post-hook for
   // unsupported system calls.
-  runtimeError("This is a bug: "
-                      "Missing case for system call: " +
-                      to_string(syscallNumber));
+//   runtimeError("This is a bug: "
+//                       "Missing case for system call: " +
+//                       to_string(syscallNumber));
 
 }
 // =======================================================================================
