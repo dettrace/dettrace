@@ -1,3 +1,4 @@
+NAME=dettrace
 CXX = clang++
 CC= clang
 
@@ -20,13 +21,13 @@ src = $(wildcard *.cpp)
 obj = $(src:.cpp=.o)
 dep = $(obj:.o=.d)
 
-all: dettrace
-all-static: dettrace-static
+all: ${NAME}
+all-static: ${NAME}-static
 
-dettrace: $(obj) $(libs)
+${NAME}: $(obj) $(libs)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS) $(LIBCRYPTO)
 
-dettrace-static: $(obj) $(libs)
+${NAME}-static: $(obj) $(libs)
 	$(CXX) $(CXXFLAGS) -static $^ -o $@ $(LIBS) $(LIBCRYPTO_STATIC)
 
 -include $(dep)
@@ -37,10 +38,10 @@ dettrace-static: $(obj) $(libs)
 	@g++ $(CXXFLAGS) $< -MM -MT $(@:.d=.o) >$@
 
 
-.PHONY: clean
+.PHONY: all all-static clean
 clean:
 	$(RM) $(obj)
 	$(RM) $(dep)
-	$(RM) dettrace
+	$(RM) ${NAME}
 # Credits to the awesome makefile guide:
 # http://nuclear.mutantstargoat.com/articles/make/

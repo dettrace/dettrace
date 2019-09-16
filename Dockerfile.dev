@@ -1,4 +1,15 @@
+# vim: set ft=docker
+
+# This is meant to be used to create a Docker-based development environment such
+# that you can compile inside this container but edit files outside.
+#
+# Use `make env` to activate this environment.
 FROM ubuntu:18.04
+
+# We need these user IDs and group IDs in order to give the same permissions to
+# the user inside the container as outside.
+ARG USER_ID=1000
+ARG GROUP_ID=1000
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -38,8 +49,13 @@ RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-6.0 60 \
     --slave /usr/bin/clang-cpp clang-cpp /usr/bin/clang-cpp-6.0 \
     --slave /usr/bin/lldb lldb /usr/bin/lldb-6.0
 
+RUN groupadd --force --gid ${GROUP_ID} dev && \
+    useradd --shell /bin/bash --create-home --uid=${USER_ID} -G sudo --gid ${GROUP_ID} dev
+
+RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+USER dev
+
+RUN echo 'export PS1="dev-env \[\033[1;36m\]$ \[\033[0m\]"' >> /home/dev/.bashrc
+
 WORKDIR /code
-
-ADD ./ ./
-
-RUN make -j dynamic-and-static
