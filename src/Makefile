@@ -1,3 +1,4 @@
+NAME=cloudseal
 CXX = clang++
 CC= clang
 
@@ -27,16 +28,16 @@ dep = $(obj:.o=.d)
 
 obj += initramfs.o
 
-all: dettrace
-all-static: dettrace-static
+all: ${NAME}
+all-static: ${NAME}-static
 
 initramfs.o: initramfs.S $(INITRAMFS)
 	$(CC) $< $(CFLAGS) -c -o $@ -D__INITRAMFS__='"$(INITRAMFS)"'
 
-dettrace: $(obj) $(libs)
+${NAME}: $(obj) $(libs)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS) $(LIBARCHIVE) $(LIBCRYPTO)
 
-dettrace-static: $(obj) $(libs)
+${NAME}-static: $(obj) $(libs)
 	$(CXX) $(CXXFLAGS) -static $^ -o $@ $(LIBS) $(LIBARCHIVE_STATIC) $(LIBCRYPTO_STATIC)
 
 -include $(dep)
@@ -47,11 +48,11 @@ dettrace-static: $(obj) $(libs)
 	@g++ $(CXXFLAGS) $< -MM -MT $(@:.d=.o) >$@
 
 
-.PHONY: clean
+.PHONY: all all-static clean
 clean:
 	$(RM) $(obj)
 	$(RM) $(dep)
 	$(RM) initramfs.o
-	$(RM) dettrace
+	$(RM) ${NAME}
 # Credits to the awesome makefile guide:
 # http://nuclear.mutantstargoat.com/articles/make/

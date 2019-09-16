@@ -19,14 +19,14 @@ cleanup
 trap cleanup EXIT
 
 mkdir -p -- "${PKGNAME}/usr/bin"
-mkdir -p -- "${PKGNAME}/usr/share/cloudseal/bin"
+mkdir -p -- "${PKGNAME}/usr/share/${NAME}/bin"
 
-cp -a bin/dettrace-static "${PKGNAME}/usr/share/cloudseal/bin/cloudseal"
-ln -sf "../share/cloudseal/bin/cloudseal" "${PKGNAME}/usr/bin/cloudseal"
-cp -a root "${PKGNAME}/usr/share/cloudseal/root"
-find "${PKGNAME}/usr/share/cloudseal/root" -type f -name .gitignore -exec rm '{}' \+
-cp -a initramfs.cpio "${PKGNAME}/usr/share/cloudseal/"
-cp -a package/examples "${PKGNAME}/usr/share/cloudseal/"
+cp -a bin/${NAME}-static "${PKGNAME}/usr/share/${NAME}/bin/${NAME}"
+ln -sf "../share/${NAME}/bin/${NAME}" "${PKGNAME}/usr/bin/${NAME}"
+cp -a root "${PKGNAME}/usr/share/${NAME}/root"
+find "${PKGNAME}/usr/share/${NAME}/root" -type f -name .gitignore -exec rm '{}' \+
+cp -a initramfs.cpio "${PKGNAME}/usr/share/${NAME}/"
+cp -a examples "${PKGNAME}/usr/share/${NAME}/"
 mkdir -- "${PKGNAME}/DEBIAN"
 
 cat > "${PKGNAME}/DEBIAN/control" << EOF
@@ -36,8 +36,8 @@ Section: base
 Priority: optional
 Architecture: amd64
 Depends:
-Maintainer: Jason White <jw@cloudseal.io>
-Description: Cloudseal Alpha
+Maintainer: Jason White
+Description: ${NAME}
  Runs programs deterministically using ptrace.
 EOF
 
