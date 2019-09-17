@@ -237,6 +237,16 @@ fuse-%.ok: fuse-%.bin partialfs
 	@fusermount -q -u $(FUSE_FILE) # tear down FUSE filesystem
 	@$(DIFF_CMD) ActualOutputs/$(basename $<).output ExpectedOutputs/$(basename $<).output
 
+alarm-nohandler.ok: alarm-nohandler.bin
+	@echo "   Testing $(basename $<)..."
+	@($(DETTRACE) ./$< || if [ $$? -ne 142 ]; then echo "unexpected exit code"; fi ) > ActualOutputs/$(basename $<).output
+	@$(DIFF_CMD) ActualOutputs/$(basename $<).output ExpectedOutputs/$(basename $<).output
+
+alarm-resethand.ok: alarm-resethand.bin
+	@echo "   Testing $(basename $<)..."
+	@($(DETTRACE) ./$< || if [ $$? -ne 142 ]; then echo "unexpected exit code"; fi ) > ActualOutputs/$(basename $<).output
+	@$(DIFF_CMD) ActualOutputs/$(basename $<).output ExpectedOutputs/$(basename $<).output
+
 # Parameterized pipe tests. Each of these tests has a parent and a child process
 # connected via a pipe, and either/both may read/write from the pipe. Syntax:
 # pWcR means parent writes, child reads

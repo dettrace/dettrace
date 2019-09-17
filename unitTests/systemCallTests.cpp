@@ -114,7 +114,7 @@ TEST_CASE("getuid", "getuid"){
 void statFamilyTests(struct stat statbuf){
   CHECK(statbuf.st_uid == 0);
   CHECK(statbuf.st_dev == 1);
-  CHECK(statbuf.st_ino == 10);
+  CHECK(statbuf.st_ino == 8);
   CHECK(statbuf.st_blksize == 512);
   CHECK(statbuf.st_blocks == 1);
   CHECK(statbuf.st_gid == 0);
