@@ -69,7 +69,7 @@ struct programArgs{
   std::vector<std::string> args;
   int debugLevel;
   string pathToChroot;
-  string workingDir;
+  string mountHome;
   string pathToExe;
   string logFile;
 
@@ -91,7 +91,7 @@ struct programArgs{
   bool with_devrand_overrides;
   bool with_etc_overrides;
 
-  std::vector<std::pair<std::string, std::string>> envs;
+  std::unordered_map<std::string, std::string> envs;
 
   std::string tracee;
   std::vector<std::string> traceeArgs;
@@ -109,7 +109,7 @@ struct programArgs{
     this->debugLevel = 0;
     this->pathToChroot = "";
     this->useContainer = false;
-    this->workingDir = "";
+    this->mountHome = "";
     this->userChroot = false;
     this->pathToExe = "";
     this->useColor = true;
@@ -298,7 +298,7 @@ static string getExePath(pid_t pid = 0) {
 
 // prepare envvars for tracee
 static std::pair<char**, size_t>populate_env_vars
-     (std::vector<std::pair<std::string, std::string>>& envvars) {
+     (std::unordered_map<std::string, std::string>& envvars) {
   // Create minimal environment.
   // Note: gcc needs to be somewhere along PATH or it gets very confused, see
   // https://github.com/upenn-acg/detTrace/issues/23
@@ -343,8 +343,6 @@ static std::pair<char**, size_t>populate_env_vars
 int runTracee(programArgs* args){
   auto argv = args->args;
   int debugLevel = args->debugLevel;
-  string pathToChroot = args->pathToChroot;
-  string workingDir = args->workingDir;
   string pathToExe = args->pathToExe;
 
   {
@@ -359,6 +357,7 @@ int runTracee(programArgs* args){
       mode_t mode = S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
       doWithCheck(mknod("/dev/null", mode, dev), "mknod");
     }
+
     if (args->clone_ns_flags & CLONE_NEWNS) {
       if (args->with_devrand_overrides) {
         createFileIfNotExist("/dev/random");
@@ -366,6 +365,11 @@ int runTracee(programArgs* args){
         createFileIfNotExist("/dev/urandom");
         mountDir(devUrandFifoPath, "/dev/urandom");
       }
+
+      if (!args->mountHome.empty()) {
+	mountDir(args->mountHome, "/root");
+      }
+
       doWithCheck(mount("none", "/tmp", "tmpfs", 0, NULL), "mount /tmp as tmpfs failed");
       if (args->with_proc_overrides) {
 	mountDir(pathToExe+"/../root/proc/meminfo", "/proc/meminfo");
@@ -377,12 +381,6 @@ int runTracee(programArgs* args){
 	mountDir(pathToExe+"/../root/etc/passwd", "/etc/passwd");
 	mountDir(pathToExe+"/../root/etc/group", "/etc/group");
 	mountDir(pathToExe+"/../root/etc/ld.so.cache", "/etc/ld.so.cache");
-      }
-      if (!args->alreadyInChroot) {
-	char* home = secure_getenv("HOME");
-	if (home) {
-	  mountDir(home, "/root");
-	}
       }
     }
   }
@@ -536,7 +534,6 @@ int spawnTracerTracee(void* voidArgs){
   auto args = cloneArgs->args;
   auto vdsoSyms = cloneArgs->vdsoSyms;
 
-  bool umountTmpfs = false;
   int pipefds[2];
 
   doWithCheck(pipe2(pipefds, O_CLOEXEC), "spawnTracerTracee pipe2 failed");
@@ -546,8 +543,7 @@ int spawnTracerTracee(void* voidArgs){
   // this mount are not propegated to the parent mount.
   // This makes sure we don't pollute the host OS' mount space with entries made by us
   // here.
-  if ( ((args->clone_ns_flags & CLONE_NEWNS) == CLONE_NEWNS)) {
-    umountTmpfs = true;
+  if (!args->alreadyInChroot) {
     doWithCheck(mount("none", "/", NULL, MS_SLAVE | MS_REC, 0), "mount slave");
   }
 
@@ -644,7 +640,7 @@ int spawnTracerTracee(void* voidArgs){
     exe.runProgram();
 
     // do exra house keeping.
-    doTracerCleanup(umountTmpfs, std::move(cloneArgs->tmpdir));
+    doTracerCleanup(true, std::move(cloneArgs->tmpdir));
   } else if (pid == 0) {
     int ready = 0;
     doWithCheck(read(pipefds[0], &ready, sizeof(int)), "spawnTracerTracee, pipe read");
@@ -699,11 +695,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       "Path to write log to. If writing to a file, the filename"
       "has a unique suffix appended. default is stderr.",
       cxxopts::value<std::string>())
-    ( "fs-chroot",
-      "In this mode, the user provides their own chroot environment, which"
-      "serves as the file system for the guest process.",
-      cxxopts::value<std::string>())
-    ( "working-dir",
+    ( "mount-home",
       "Specify the working directory that dettrace should use as a workspace for the "
       "deterministic process tree, by default it is the current working directory.",
       cxxopts::value<std::string>())
@@ -822,14 +814,15 @@ programArgs parseProgramArguments(int argc, char* argv[]){
 
     const std::string emptyString("");
 
+    std::string defaultHome = secure_getenv("HOME");
+
     args.alreadyInChroot = (static_cast<OptionValue1>(result["already-in-chroot"])).unwrap_or(false);
-    args.pathToChroot = (static_cast<OptionValue1>(result["fs-chroot"])).unwrap_or(emptyString);
     args.debugLevel = (static_cast<OptionValue1>(result["debug"])).unwrap_or(0);
     args.useColor = (static_cast<OptionValue1>(result["with-color"])).unwrap_or(false);
     args.logFile = (static_cast<OptionValue1>(result["log-file"])).unwrap_or(emptyString);
     args.printStatistics = (static_cast<OptionValue1>(result["print-statistics"])).unwrap_or(false);
     args.convertUids = (static_cast<OptionValue1>(result["convert-uids"])).unwrap_or(false);
-    args.workingDir = (static_cast<OptionValue1>(result["working-dir"])).unwrap_or(emptyString);
+    args.mountHome = (static_cast<OptionValue1>(result["mount-home"])).unwrap_or(defaultHome);
     args.timeoutSeconds = (static_cast<OptionValue1>(result["timeoutSeconds"])).unwrap_or(0);
     args.allow_network = (static_cast<OptionValue1>(result["network"])).unwrap_or(false);
     args.with_aslr = (static_cast<OptionValue1>(result["aslr"])).unwrap_or(false);
@@ -886,12 +879,17 @@ programArgs parseProgramArguments(int argc, char* argv[]){
 	auto j = kv.find('=');
 	auto k = kv.substr(0, j);
 	auto v = kv.substr(1+j);
-	args.envs.push_back({k, v});
+	args.envs.insert({k, v});
       }
     } else if (base_env == "minimal") {
-      args.envs.push_back({"PATH",     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"});
-      args.envs.push_back({"HOSTNAME", "nowhare"});
-      args.envs.push_back({"HOME", "/root"});
+      args.envs.insert({"PATH",     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"});
+      args.envs.insert({"HOSTNAME", "nowhare"});
+      args.envs.insert({"HOME", "/root"});
+    }
+
+    if (args.clone_ns_flags & CLONE_NEWUSER || args.alreadyInChroot) {
+      args.envs["HOME"] = "/root";
+      args.envs["PWD"] = args.envs["HOME"];
     }
 
     if (result["env"].count() > 0) {
@@ -900,7 +898,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
 	auto j = kv.find('=');
 	auto k = kv.substr(0, j);
 	auto v = kv.substr(1+j);
-	args.envs.push_back({k, v});
+	args.envs.insert({k, v});
       }
     }
 
@@ -923,17 +921,6 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       args.pathToChroot = args.pathToExe + defaultRoot;
     } else {
       args.userChroot = true;
-    }
-
-    bool usingWorkingDir = args.workingDir != "";
-    if (args.alreadyInChroot && (args.userChroot || usingWorkingDir)) {
-      fprintf(stderr, "Cannot use --already-in-chroot with --chroot or --working-dir.\n");
-      exit(1);
-    }
-
-    if (usingWorkingDir && !args.userChroot) {
-      fprintf(stderr, "Cannot use --working-dir without specifying a --chroot.\n");
-      exit(1);
     }
 
     // Detect if we're inside a chroot by attempting to make a user namespace.
