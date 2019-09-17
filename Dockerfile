@@ -42,4 +42,6 @@ WORKDIR /code
 
 ADD ./ ./
 
-RUN make -j dynamic-and-static
+ARG BUILDID=0
+
+RUN make -j dynamic-and-static "BUILDID=${BUILDID}"
