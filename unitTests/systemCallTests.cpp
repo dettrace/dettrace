@@ -133,7 +133,7 @@ void statFamilyTests(struct stat statbuf){
 
 TEST_CASE("stat", "stat"){
   struct stat statbuf;
-  system("rm test_temp.txt");
+  std::remove("test_temp.txt");
   // Create new file to verify it has the newest filestamp possible.
   system("touch test_temp.txt");
 
@@ -148,7 +148,7 @@ TEST_CASE("fstat", "fstat"){
   int fd = open("test_temp.txt", O_RDONLY);
   int ret = fstat(fd, &statbuf);
   if(ret == -1){
-    system("rm test_temp.txt");
+    std::remove("test_temp.txt");
     REQUIRE(false);
   }
 
@@ -161,7 +161,7 @@ TEST_CASE("lstat", "lstat"){
 
   int ret = lstat("./test_temp.txt", &statbuf);
   statFamilyTests(statbuf);
-  system("rm test_temp.txt");
+  std::remove("test_temp.txt");
 }
 
 TEST_CASE("open", "/dev/urandom"){
@@ -228,7 +228,7 @@ TEST_CASE("uname", "uname"){
 
 TEST_CASE("utime", "utime"){
   char* test = (char*)"utimeTestFile.txt";
-  system("rm utimeTestFile.txt");
+  std::remove("utimeTestFile.txt");
   system("touch utimeTestFile.txt");
   if(-1 == utime(test, NULL)){
     REQUIRE(false);
@@ -237,11 +237,11 @@ TEST_CASE("utime", "utime"){
   // Verify timestamp is zero:
   struct stat myStat;
   if(-1 == stat(test, &myStat)){
-    system("rm utimeTestFile.txt");
+    std::remove("utimeTestFile.txt");
     REQUIRE(false);
   }
-  system("rm utimeTestFile.txt");
-
+  std::remove("utimeTestFile.txt");
+ 
   REQUIRE(myStat.st_atim.tv_sec == 0);
   REQUIRE(myStat.st_atim.tv_nsec == 0);
   REQUIRE(myStat.st_mtim.tv_sec == 2);
