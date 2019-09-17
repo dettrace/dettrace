@@ -157,6 +157,8 @@ private:
    * starting epoch
    */
   unsigned long epoch = execution::default_epoch;
+
+  int exit_code;
 public:
   /**
    * default epoch
@@ -218,7 +220,7 @@ public:
    * Launch initial process.
    * A program is defined as a tree of processes.
    */
-  void runProgram();
+  int runProgram();
 
   /**
    * Handle the fork event part of @handleFork. Pushes parent to our process hierarchy

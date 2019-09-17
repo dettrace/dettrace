@@ -261,9 +261,11 @@ int main(int argc, char** argv){
   int status;
 
   // Propegate Child's exit status to use as our own exit status.
-  doWithCheck(waitpid(-1, &status, 0), "cannot wait for child");
+  doWithCheck(waitpid(pid, &status, 0), "cannot wait for child");
   if (WIFEXITED(status)) {
     return WEXITSTATUS(status);
+  } else if (WIFSIGNALED(status)) {
+    return WTERMSIG(status);
   } else {
     return 1;
   }
@@ -585,6 +587,11 @@ int spawnTracerTracee(void* voidArgs){
                   "tracer mounting proc failed");
     }
 
+    if ((args->clone_ns_flags & CLONE_NEWNS) == CLONE_NEWNS) {
+      doWithCheck(mount("none", "/dev/pts", "devpts", 0, nullptr),
+                  "tracer mounting devpts failed");
+    }
+
     if (!fileExists(devrandFifoPath)) {
       runtimeError("cannot create psudo /dev/random fifo");
     }
@@ -637,18 +644,18 @@ int spawnTracerTracee(void* voidArgs){
     doWithCheck(sigaction(SIGALRM, &sa, NULL), "sigaction(SIGALRM)");
     alarm(args->timeoutSeconds);
 
-    exe.runProgram();
+    int exit_code = exe.runProgram();
 
     // do exra house keeping.
     doTracerCleanup(true, std::move(cloneArgs->tmpdir));
+    return exit_code;
   } else if (pid == 0) {
     int ready = 0;
     doWithCheck(read(pipefds[0], &ready, sizeof(int)), "spawnTracerTracee, pipe read");
     assert(ready == 1);
-    runTracee(args);
+    return runTracee(args);
   }
-
-  return 0;
+  return -1;
 }
 
 // unwrap_or (default) OptionValue

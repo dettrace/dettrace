@@ -234,7 +234,7 @@ void execution::handlePostSystemCall(state& currState){
 }
 
 // =======================================================================================
-void execution::runProgram(){
+int execution::runProgram(){
   // When using seccomp, we run with PTRACE_CONT, but seccomp only reports pre-hook
   // events. To get post hook events we must call ptrace with PTRACE_SYSCALL intead.
   // This happens in @getNextEvent.
@@ -312,8 +312,8 @@ void execution::runProgram(){
     */
     if(ret == ptraceEvent::eventExit){
       auto msg = log.makeTextColored(Color::blue, "Process [%d] has finished. "
-                                         "With ptraceEventExit.\n");
-      log.writeToLog(Importance::inter, msg, traceesPid);
+				     "With ptraceEventExit, exit_code: %d.");
+      log.writeToLog(Importance::inter, msg, traceesPid, exit_code);
       states.at(traceesPid).callPostHook = false;
 
       bool isExitGroup = states.at(traceesPid).isExitGroup;
@@ -526,6 +526,7 @@ void execution::runProgram(){
     exit(1);
   }
 
+  return exit_code;
   // Add a check for states.empty(). Not adding it now since I don't want a bunch of packages.
   // to fail over this :b
 }
@@ -1687,6 +1688,7 @@ ptraceEvent execution::getPtraceEvent(const int status){
   // Check if tracee has exited.
   if (WIFEXITED(status)){
     log.writeToLog(Importance::extra, "nonEventExit\n");
+    exit_code = WEXITSTATUS(status);
     return ptraceEvent::nonEventExit;
   }
 
@@ -1724,6 +1726,7 @@ ptraceEvent execution::getPtraceEvent(const int status){
 #endif
 
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_EXIT) ){
+    exit_code = WEXITSTATUS(status);
     return ptraceEvent::eventExit;
   }
 
@@ -1735,6 +1738,7 @@ ptraceEvent execution::getPtraceEvent(const int status){
   // Check if the child was terminated by a signal. This can happen after when we,
   //the tracer, intercept a signal of the tracee and deliver it.
   if(WIFSIGNALED(status)){
+    exit_code = WTERMSIG(status);
     return ptraceEvent::terminatedBySignal;
   }
 
