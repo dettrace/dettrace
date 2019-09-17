@@ -896,7 +896,6 @@ programArgs parseProgramArguments(int argc, char* argv[]){
 
     if (args.clone_ns_flags & CLONE_NEWUSER || args.alreadyInChroot) {
       args.envs["HOME"] = "/root";
-      args.envs["PWD"] = args.envs["HOME"];
     }
 
     if (result["env"].count() > 0) {
