@@ -958,13 +958,12 @@ static void mountDir(const string& source, const string& target){
 
   /* Check if source path exists*/
   if (!fileExists(source)) {
-    fprintf(stderr, "WARNING: Trying to mount source %s. File does not exist.\n", source.c_str());
-    return;
+    runtimeError("Trying to mount " + source + " => " + target + ". Source file does not exist.\n");
   }
 
   /* Check if target path exists*/
   if (!fileExists(target))  {
-    runtimeError("Trying to mount target " + target + ". File does not exist.\n");
+    runtimeError("Trying to mount " + source + " => " + target + ". Target file does not exist.\n");    
   }
 
   // TODO: Marking it as private here shouldn't be necessary since we already unshared the entire namespace as private?
