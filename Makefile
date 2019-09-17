@@ -65,11 +65,13 @@ run-tests: build-tests build
 # essential to avoid errors with bind mounting a directory simultaneously
 	MAKEFLAGS= make --keep-going -C ./test/samplePrograms/ run
 
+# Build the system inside Docker.  This produces an image shippable to Dockerhub.
 docker:
 	docker build -t ${NAME}:${VERSION} .
 
 DOCKER_RUN_ARGS=--rm --privileged --userns=host ${OTHER_DOCKER_ARGS} ${NAME}:${VERSION}
 
+# Run the same image we built.
 run-docker: docker
 	docker run -it ${DOCKER_RUN_ARGS} ${DOCKER_RUN_COMMAND}
 
@@ -111,11 +113,12 @@ docker-dev: Dockerfile.dev
 
 # Runs a docker image suitable for development. Note that the container is run
 # as the current user in order to avoid creating root-owned files in the volume
-# mount.
+# mount.  
 env: docker-dev
 	docker run \
 		--rm \
 		--privileged \
+		--userns=host \
 		-it \
 		-e DETTRACE_NO_CPUID_INTERCEPTION=1 \
 		-v "$(shell pwd):/code" \

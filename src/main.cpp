@@ -686,26 +686,42 @@ private:
 programArgs parseProgramArguments(int argc, char* argv[]){
   programArgs args(argc, argv);
 
-  cxxopts::Options options("dettrace",  "A container for dynamic determinism enforcement. \n"
-			   "Arbitrary programs run inside will run deterministically.");
+  cxxopts::Options options("dettrace",
+	 "Provides a container for dynamic determinism enforcement.\n"
+	 "Arbitrary programs run inside (guests) become deterministic \n"
+	 "functions of their inputs. Configuration flags control which inputs \n"
+	 "are allowed to affect the guest’s execution.\n");
 
   options
     .positional_help("[-- program [programArgs..]]");
 
   options.add_options()
     ( "help",
-      "display this help diaglog")
-    ( "debug",
-      "set debugging level[0..5]. default is 0 (off).",
-      cxxopts::value<int>()->default_value("0"))
-    ( "log-file",
-      "Path to write log to. If writing to a file, the filename"
-      "has a unique suffix appended. default is stderr.",
+      "display this help dialogue");
+
+  options.add_options(
+     "1. Container Initial Conditions\n"
+    " -------------------------------\n"
+    " The host file system is visible to the guest, by default excluding\n"
+    " /proc and /dev.  The guest computation is a function of host file\n"
+    " contents, but not timestamps (or inodes).  Typically, an existing\n"
+    " container or chroot system is used to control the visible files.\n"
+    " \n"
+    " Aside from files, the below flags control other aspects of the guest\n"
+    " starting state.\n\n")
+
+    ( "epoch",
+      "Set system epoch (start) time.  Accepts now or yyyy-mm-dd,HH:MM:SS (utc)."
+      "The epoch time also becomes the initial atime/mtime on all files visible in"
+      "the container.  These timestamps change deterministically as execution proceeds."
+      "default is 1993-08-08,22:00:00.",
       cxxopts::value<std::string>())
-    ( "mount-home",
-      "Specify the working directory that dettrace should use as a workspace for the "
-      "deterministic process tree, by default it is the current working directory.",
-      cxxopts::value<std::string>())
+    ( "prng-seed",
+      "Use this string to seed to the PRNG that is used to supply all"
+      "randomness accessed by the guest.  This affects both /dev/[u]random and "
+      "system calls that create randomness.  The rdrand instruction is disabled for"
+      "the guest. default is 4660.",
+      cxxopts::value<unsigned int>())
     ( "base-env",
       "empty|minimal|host (default is minimal)."
       "The base environment that is set (before adding additions via --env)."
@@ -727,6 +743,37 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       "is elided, then the variable is read from the user's environment."
       "this flag can be added multiple times to add multiple envvars.",
       cxxopts::value<std::vector<string>>())
+    ( "mount-home",
+      "Specify the working directory that dettrace should use as a workspace for the "
+      "deterministic process tree, by default it is the current working directory.",
+      cxxopts::value<std::string>())
+    ( "in-docker",
+      "A convenience feature for when launching dettrace in a fresh docker "
+      "container, e.g. `docker run dettrace --in-docker cmd`.  This is a shorthand for "
+      "  `--fs-host --host-userns --host-pidns --host-mountns --base-env=host`."
+      "Docker creates fresh namespaces and controls the base file system, making it "
+      "safe to disable these corresponding dettrace features.  However, it "
+      "is important to not “docker exec” additional processes into the container, as"
+      "it will pollute the deterministic namespaces.",
+      cxxopts::value<bool>()->default_value("false"));
+
+  options.add_options(
+     "2. Opt-in non-deterministic inputs\n"
+    " ----------------------------------\n"
+    " All sources of nondeterminism are disabled by default. This ensures\n"
+    " the application is maximally isolated from unintended deviation in\n"
+    " internal state or outputs caused from environmental deviation.  Activating\n"
+    " these flags opts in to individual nondeterministic inputs, allowing\n"
+    " implicit, non-reproducible inputs to the guest.  By doing so, you take it\n"
+    " upon yourself to guarantee that the guest application either does not use, or\n"
+    " is invariant to, these sources of input.\n\n")
+
+    ( "network",
+      "By default, networking is disallowed inside the guest, as it is generally"
+      "non-reproducible. This flag allows networking syscalls like"
+      "socket/send/recv, which become additional implicit inputs to the guest"
+      "computation.      ",
+      cxxopts::value<bool>()->default_value("false"))
     ( "real-proc",
       "default is no."
       "When set, the program can access the full, nondeterministic /proc and /dev"
@@ -756,34 +803,18 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       "when this is disabled, dettrace creates a fresh mount namespace.  "
       "Setting to `true` is potentially dangerous.  dettrace may pollute the host"
       "system’s mount namespace and not successfully clean up all of these mounts.",
-      cxxopts::value<bool>())
-    ( "network",
-      "By default, networking is disallowed inside the guest, as it is generally"
-      "non-reproducible. This flag allows networking syscalls like"
-      "socket/send/recv, which become additional implicit inputs to the guest"
-      "computation.      ",
-      cxxopts::value<bool>()->default_value("false"))
-    ( "epoch",
-      "Set system epoch (start) time.  Accepts now or yyyy-mm-dd,HH:MM:SS (utc)."
-      "The epoch time also becomes the initial atime/mtime on all files visible in"
-      "the container.  These timestamps change deterministically as execution proceeds."
-      "default is 1993-08-08,22:00:00.",
+      cxxopts::value<bool>());
+
+  options.add_options(
+     "3. Debugging and logging\n"
+    " ------------------------\n")
+    ( "debug",
+      "set debugging level[0..5]. default is 0 (off).",
+      cxxopts::value<int>()->default_value("0"))
+    ( "log-file",
+      "Path to write log to. If writing to a file, the filename"
+      "has a unique suffix appended. default is stderr.",
       cxxopts::value<std::string>())
-    ( "prng-seed",
-      "Use this string to seed to the PRNG that is used to supply all"
-      "randomness accessed by the guest.  This affects both /dev/[u]random and "
-      "system calls that create randomness.  The rdrand instruction is disabled for"
-      "the guest. default is 4660.",
-      cxxopts::value<unsigned int>())
-    ( "in-docker",
-      "A convenience feature for when launching dettrace in a fresh docker "
-      "container, e.g. `docker run dettrace --in-docker cmd`.  This is a shorthand for "
-      "  `--fs-host --host-userns --host-pidns --host-mountns --base-env=host`."
-      "Docker creates fresh namespaces and controls the base file system, making it "
-      "safe to disable these corresponding dettrace features.  However, it "
-      "is important to not “docker exec” additional processes into the container, as"
-      "it will pollute the deterministic namespaces.",
-      cxxopts::value<bool>()->default_value("false"))
     ( "with-color",
       "Allow use of ANSI colors in log output. Useful when piping log to a file. default is true.",
       cxxopts::value<bool>())
@@ -793,7 +824,9 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       cxxopts::value<bool>()->default_value("false"));
 
   // internal options
-  options.add_options( "Internal/Advanced flags you are unlikely to use\n")
+  options.add_options(
+     "4. Internal/Advanced flags you are unlikely to use\n"
+    " --------------------------------------------------\n")
     ( "already-in-chroot",
       "The current environment is already the desired chroot. For some reason the"
       " current mount namespace is polluted with our bind mounts (even though we create"
