@@ -10,10 +10,10 @@ PKGNAME := $(NAME)_$(VERSION)-$(BUILDID)
 CXX := clang++
 CC := clang
 DEFINES := -D_GNU_SOURCE=1 -D_POSIX_C_SOURCE=20181101 -D__USE_XOPEN=1 -DAPP_VERSION=$(VERSION)
-INCLUDE := -I include/ -I lib/include
+INCLUDE := -I include
 CXXFLAGS := -g -O3 -std=c++14 -Wall $(INCLUDE) $(DEFINES)
 CFLAGS := -g -O3 -Wall -Wshadow $(INCLUDE) $(DEFINES)
-LIBS := -pthread -lseccomp -L lib/lib64
+LIBS := -pthread -lseccomp
 
 # Source files and objects to build.
 src = $(wildcard src/*.cpp)
