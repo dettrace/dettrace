@@ -545,8 +545,9 @@ int spawnTracerTracee(void* voidArgs){
   // this mount are not propegated to the parent mount.
   // This makes sure we don't pollute the host OS' mount space with entries made by us
   // here.
-  if (!args->alreadyInChroot) {
-    doWithCheck(mount("none", "/", NULL, MS_SLAVE | MS_REC, 0), "mount slave");
+  if((args->clone_ns_flags & CLONE_NEWNS) &&
+       (args->clone_ns_flags & CLONE_NEWUSER)) {
+    doWithCheck(mount("none", "/", NULL, MS_SLAVE | MS_REC, 0), "failed to mount / as slave");
   }
 
   cloneArgs->tmpdir = std::make_unique<TempDir>("dt-");
