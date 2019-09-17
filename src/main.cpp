@@ -62,6 +62,15 @@
 
 using namespace std;
 
+struct MountPoint {
+  string source;
+  string target;
+  string type;
+  bool is_valid(void) const {
+    return !source.empty() && !target.empty();
+  }
+};
+
 struct programArgs{
   int argc;
   char** argv;
@@ -69,7 +78,7 @@ struct programArgs{
   std::vector<std::string> args;
   int debugLevel;
   string pathToChroot;
-  string mountHome;
+  std::vector<MountPoint> volume;
   string pathToExe;
   string logFile;
 
@@ -109,7 +118,6 @@ struct programArgs{
     this->debugLevel = 0;
     this->pathToChroot = "";
     this->useContainer = false;
-    this->mountHome = "";
     this->userChroot = false;
     this->pathToExe = "";
     this->useColor = true;
@@ -368,8 +376,8 @@ int runTracee(programArgs* args){
         mountDir(devUrandFifoPath, "/dev/urandom");
       }
 
-      if (!args->mountHome.empty()) {
-	mountDir(args->mountHome, "/root");
+      for (auto v: args->volume) {
+	mountDir(v.source, v.target);
       }
 
       doWithCheck(mount("none", "/tmp", "tmpfs", 0, NULL), "mount /tmp as tmpfs failed");
@@ -545,8 +553,9 @@ int spawnTracerTracee(void* voidArgs){
   // this mount are not propegated to the parent mount.
   // This makes sure we don't pollute the host OS' mount space with entries made by us
   // here.
-  if (!args->alreadyInChroot) {
-    doWithCheck(mount("none", "/", NULL, MS_SLAVE | MS_REC, 0), "mount slave");
+  if((args->clone_ns_flags & CLONE_NEWNS) &&
+       (args->clone_ns_flags & CLONE_NEWUSER)) {
+    doWithCheck(mount("none", "/", NULL, MS_SLAVE | MS_REC, 0), "failed to mount / as slave");
   }
 
   cloneArgs->tmpdir = std::make_unique<TempDir>("dt-");
@@ -702,10 +711,9 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       "Path to write log to. If writing to a file, the filename"
       "has a unique suffix appended. default is stderr.",
       cxxopts::value<std::string>())
-    ( "mount-home",
-      "Specify the working directory that dettrace should use as a workspace for the "
-      "deterministic process tree, by default it is the current working directory.",
-      cxxopts::value<std::string>())
+    ( "v,volume",
+      "directory|hostdir:targetdir, Specify volume to bind mount from host to target",
+      cxxopts::value<std::vector<std::string>>())
     ( "base-env",
       "empty|minimal|host (default is minimal)."
       "The base environment that is set (before adding additions via --env)."
@@ -821,15 +829,12 @@ programArgs parseProgramArguments(int argc, char* argv[]){
 
     const std::string emptyString("");
 
-    std::string defaultHome = secure_getenv("HOME");
-
     args.alreadyInChroot = (static_cast<OptionValue1>(result["already-in-chroot"])).unwrap_or(false);
     args.debugLevel = (static_cast<OptionValue1>(result["debug"])).unwrap_or(0);
     args.useColor = (static_cast<OptionValue1>(result["with-color"])).unwrap_or(false);
     args.logFile = (static_cast<OptionValue1>(result["log-file"])).unwrap_or(emptyString);
     args.printStatistics = (static_cast<OptionValue1>(result["print-statistics"])).unwrap_or(false);
     args.convertUids = (static_cast<OptionValue1>(result["convert-uids"])).unwrap_or(false);
-    args.mountHome = (static_cast<OptionValue1>(result["mount-home"])).unwrap_or(defaultHome);
     args.timeoutSeconds = (static_cast<OptionValue1>(result["timeoutSeconds"])).unwrap_or(0);
     args.allow_network = (static_cast<OptionValue1>(result["network"])).unwrap_or(false);
     args.with_aslr = (static_cast<OptionValue1>(result["aslr"])).unwrap_or(false);
@@ -877,6 +882,24 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     if (result["in-docker"].as<bool>()) {
       args.in_docker = true;
       args.clone_ns_flags = 0;
+    }
+
+    if (result["volume"].count()) {
+      auto mounts = result["volume"].as<std::vector<std::string>>();
+      for (auto v: mounts) {
+	MountPoint mountPoint;
+	int j = v.find(':');
+	if (j == string::npos) {
+	  mountPoint.source = v;
+	  mountPoint.target = v;
+	} else {
+	  auto key = v.substr(0, j);
+	  auto value = v.substr(1+j);
+	  mountPoint.source = key;
+	  mountPoint.target = value;
+	}
+	args.volume.push_back(mountPoint);
+      }
     }
 
     if (base_env == "host") {
