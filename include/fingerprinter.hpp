@@ -5,15 +5,16 @@
 #include "state.hpp"
 #include "scheduler.hpp"
 
-struct ProcessState {
-  int pid;
-  int tid;
+struct SyscallState {
   bool noop;
-  int retval;
 };
 
+struct ProcessState {};
+
 extern "C" long fingerprinter_prehook(
-  struct ProcessState* p,
+  struct SyscallState* s,
+  int pid,
+  int tid,
   int syscallno,
   unsigned long retval,
   unsigned long arg0,
@@ -25,7 +26,9 @@ extern "C" long fingerprinter_prehook(
 );
 
 extern "C" long fingerprinter_posthook(
-  struct ProcessState* p,
+  struct SyscallState* s,
+  int pid,
+  int tid,
   int syscallno,
   unsigned long retval,
   unsigned long arg0,
