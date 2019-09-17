@@ -695,126 +695,166 @@ private:
 programArgs parseProgramArguments(int argc, char* argv[]){
   programArgs args(argc, argv);
 
-  cxxopts::Options options("dettrace",  "A container for dynamic determinism enforcement. \n"
-			   "Arbitrary programs run inside will run deterministically.");
+  cxxopts::Options options("dettrace",
+	 "Provides a container for dynamic determinism enforcement.\n"
+	 "Arbitrary programs run inside (guests) become deterministic \n"
+	 "functions of their inputs. Configuration flags control which inputs \n"
+	 "are allowed to affect the guest’s execution.\n");
 
   options
     .positional_help("[-- program [programArgs..]]");
 
   options.add_options()
     ( "help",
-      "display this help diaglog")
-    ( "debug",
-      "set debugging level[0..5]. default is 0 (off).",
-      cxxopts::value<int>()->default_value("0"))
-    ( "log-file",
-      "Path to write log to. If writing to a file, the filename"
-      "has a unique suffix appended. default is stderr.",
+      "display this help diaglog");
+
+  options.add_options(
+     "1. Container Initial Conditions\n"
+    " -------------------------------\n"
+    " The host file system is visible to the guest by default, excluding\n"
+    " /proc and /dev.  The guest computation is a function of host file\n"
+    " contents, but not timestamps (or inodes).  Typically, an existing\n"
+    " container or chroot system is used to control the visible files.\n"
+    " \n"
+    " Aside from files, the below flags control other aspects of the guest\n"
+    " starting state.\n\n")
+
+    ( "epoch",
+      "Set system epoch (start) time.  Accepts `yyyy-mm-dd,HH:MM:SS` (utc). "
+      // RN: This is not true YET:
+      // "The epoch time also becomes the initial atime/mtime on all files visible in"
+      // "the container.  These timestamps change deterministically as execution proceeds."
+      "The default is `1993-08-08,22:00:00`. Also accepts a `now` value which "
+      "permits nondeterministically setting the initial system time to the host time. ",
       cxxopts::value<std::string>())
-    ( "v,volume",
-      "directory|hostdir:targetdir, Specify volume to bind mount from host to target",
-      cxxopts::value<std::vector<std::string>>())
+    ( "prng-seed",
+      "Use this string to seed to the PRNG that is used to supply all "
+      "randomness accessed by the guest.  This affects both /dev/[u]random and "
+      "system calls that create randomness.  (The rdrand instruction is disabled for "
+      "the guest.) The default PRNG seed is `4660`. ",
+      cxxopts::value<unsigned int>())
     ( "base-env",
-      "empty|minimal|host (default is minimal)."
-      "The base environment that is set (before adding additions via --env)."
-      "In the `host` setting, we directly inherit the parent process\'s environment."
-      "Setting `host` is equivalent to passing `--env V` for each variable in the"
-      "current environment."
+      "empty|minimal|host (default is minimal). "
+      "The base environment that is set before adding additions via --env. "
+      "In the `host` setting, we directly inherit the parent process\'s environment. "
+      "Setting `host` is equivalent to passing `--env V` for each variable in the "
+      "current environment. "
       "\n"
-      "The `minimal` setting provides a minimal deterministic environment, setting"
-      "only PATH, HOSTNAME, and HOME to the following "
-      "\n"
-      "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-      "HOSTNAME=nowhere"
-      "HOME=/root"
-      "\n"
-      "Setting `minimal` is equivalent to passing the above variables via --env.",
+      "The `minimal` setting provides a minimal deterministic environment, setting "
+      "only PATH, HOSTNAME, and HOME. ",
+      // cxxopts mangles the formatting here, so leaving this out for now -RN:
+      // "HOME to the following  \n"
+      // "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      // "HOSTNAME=nowhere"
+      // "HOME=/root"
+      // "\n"
+      // "Setting `minimal` is equivalent to passing the above variables via --env. ",
       cxxopts::value<string>()->default_value("minimal"))
     ( "e,env",
       "Set an environment variable for the guest.  If the `=str` value "
-      "is elided, then the variable is read from the user's environment."
-      "this flag can be added multiple times to add multiple envvars.",
+      "is elided, then the variable is read from the user's environment. "
+      "This flag can be added multiple times to add multiple envvars. ",
       cxxopts::value<std::vector<string>>())
-    ( "real-proc",
-      "default is no."
-      "When set, the program can access the full, nondeterministic /proc and /dev"
-      "interfaces.  In the default, disabled setting, deterministic information is"
-      "presented in these paths instead.  This overlay presents a canonical virtual"
-      "hardware platform to the application.",
-      cxxopts::value<bool>()->default_value("false"))
-    ( "aslr",
-      "Enable Address Space Layout Randomization. ASLR is disabled by default "
-      "as it is intrinsically a source of nondeterminism.",
-      cxxopts::value<bool>())
-    ( "host-userns",
-      "Allow access to the host’s user namespace.  By default, dettrace creates"
-      "a fresh, deterministic user-namespace when launching the guest, that is,"
-      "CLONE_NEWUSER is set when cloning the guest process."
-      "It is safe to set --host-userns to `true` when the dettrace process is already"
-      "executing in a fresh container, e.g. the root process in a Docker container.",
-      cxxopts::value<bool>())
-    ( "host-pidns",
-      "Allow access to the host’s PID namespace.  By default, dettrace creates"
-      "a fresh, deterministic PID namespace when launching the guest.  It is safe"
-      "to set this to `true` when the dettrace process is executing inside a fresh"
-      "container as the root process.",
-      cxxopts::value<bool>())
-    ( "host-mountns",
-      "Allow dettrace to inherit the mount namespace from the host.  By default,"
-      "when this is disabled, dettrace creates a fresh mount namespace.  "
-      "Setting to `true` is potentially dangerous.  dettrace may pollute the host"
-      "system’s mount namespace and not successfully clean up all of these mounts.",
-      cxxopts::value<bool>())
-    ( "network",
-      "By default, networking is disallowed inside the guest, as it is generally"
-      "non-reproducible. This flag allows networking syscalls like"
-      "socket/send/recv, which become additional implicit inputs to the guest"
-      "computation.      ",
-      cxxopts::value<bool>()->default_value("false"))
-    ( "epoch",
-      "Set system epoch (start) time.  Accepts now or yyyy-mm-dd,HH:MM:SS (utc)."
-      "The epoch time also becomes the initial atime/mtime on all files visible in"
-      "the container.  These timestamps change deterministically as execution proceeds."
-      "default is 1993-08-08,22:00:00.",
-      cxxopts::value<std::string>())
-    ( "prng-seed",
-      "Use this string to seed to the PRNG that is used to supply all"
-      "randomness accessed by the guest.  This affects both /dev/[u]random and "
-      "system calls that create randomness.  The rdrand instruction is disabled for"
-      "the guest. default is 4660.",
-      cxxopts::value<unsigned int>())
+    ( "v,volume",
+      "directory|hostdir:targetdir, Specify volume to bind mount from host to target",
+      cxxopts::value<std::vector<std::string>>())
     ( "in-docker",
       "A convenience feature for when launching dettrace in a fresh docker "
       "container, e.g. `docker run dettrace --in-docker cmd`.  This is a shorthand for "
-      "  `--fs-host --host-userns --host-pidns --host-mountns --base-env=host`."
+      // RN: --fs-host was part of this originally.  Might be again:
+      "  `--host-userns --host-pidns --host-mountns --base-env=host`. "
       "Docker creates fresh namespaces and controls the base file system, making it "
       "safe to disable these corresponding dettrace features.  However, it "
-      "is important to not “docker exec” additional processes into the container, as"
-      "it will pollute the deterministic namespaces.",
+      "is important to not “docker exec” additional processes into the container, as "
+      "it will pollute the deterministic namespaces. ",
+      cxxopts::value<bool>()->default_value("false"));
+
+  options.add_options(
+     "2. Opt-in non-deterministic inputs\n"
+    " ----------------------------------\n"
+    " All sources of nondeterminism are disabled by default. This ensures\n"
+    " the application is maximally isolated from unintended deviation in\n"
+    " internal state or outputs caused from environmental deviation.  Activating\n"
+    " these flags opts in to individual nondeterministic inputs, allowing\n"
+    " implicit, non-reproducible inputs to the guest.  By doing so, you take it\n"
+    " upon yourself to guarantee that the guest application either does not use, or\n"
+    " is invariant to, these sources of input.\n"
+    "\n"
+    " All boolean values can be set to `true` or `false`.\n"
+    " Setting `--flag` alone is equivalent to `--flag=true`.\n\n"
+     )
+
+    ( "network",
+      "By default, networking is disallowed inside the guest, as it is generally "
+      "non-reproducible. This flag allows networking syscalls like "
+      "socket/send/recv, which become additional implicit inputs to the guest "
+      "computation.      ",
       cxxopts::value<bool>()->default_value("false"))
+    ( "real-proc",
+      "When set, the program can access the full, nondeterministic /proc and /dev "
+      "interfaces.  In the default, disabled setting, deterministic information is "
+      "presented in these paths instead.  This overlay presents a canonical virtual "
+      "hardware platform to the application. ",
+      cxxopts::value<bool>()->default_value("false"))
+    ( "aslr",
+      "Enable Address Space Layout Randomization. ASLR is disabled by default "
+      "as it is intrinsically a source of nondeterminism. ",
+      cxxopts::value<bool>())
+    ( "host-userns",
+      "Allow access to the host’s user namespace.  By default, dettrace creates "
+      "a fresh, deterministic user-namespace when launching the guest, that is, "
+      "CLONE_NEWUSER is set when cloning the guest process. "
+      "It is safe to set --host-userns to `true` when the dettrace process is already "
+      "executing in a fresh container, e.g. the root process in a Docker container. ",
+      cxxopts::value<bool>())
+    ( "host-pidns",
+      "Allow access to the host’s PID namespace.  By default, dettrace creates "
+      "a fresh, deterministic PID namespace when launching the guest.  It is safe "
+      "to set this to `true` when the dettrace process is executing inside a fresh "
+      "container as the root process. ",
+      cxxopts::value<bool>())
+    ( "host-mountns",
+      "Allow dettrace to inherit the mount namespace from the host.  By default, "
+      "when this is disabled, dettrace creates a fresh mount namespace. "
+      "Setting to `true` is potentially dangerous.  dettrace may pollute the host "
+      "system’s mount namespace and not successfully clean up all of these mounts. ",
+      cxxopts::value<bool>());
+
+  options.add_options(
+     "3. Debugging and logging\n"
+    " ------------------------\n")
+    ( "debug",
+      "set debugging level[0..5]. The default is `0` (off).",
+      cxxopts::value<int>()->default_value("0"))
+    ( "log-file",
+      "Path to write log to. If writing to a file, the filename "
+      "has a unique suffix appended. The default is stderr. ",
+      cxxopts::value<std::string>())
     ( "with-color",
-      "Allow use of ANSI colors in log output. Useful when piping log to a file. default is true.",
+      "Allow use of ANSI colors in log output. Useful when piping log to a file. The default is `true`. ",
       cxxopts::value<bool>())
     ( "print-statistics",
-      "Print metadata about process that just ran including: number of system call events"
-      " read/write retries, rdtsc, rdtscp, cpuid. default is false\n",
+      "Print metadata about process that just ran including: number of system call events "
+      " read/write retries, rdtsc, rdtscp, cpuid. The default is `false`.\n",
       cxxopts::value<bool>()->default_value("false"));
 
   // internal options
-  options.add_options( "Internal/Advanced flags you are unlikely to use\n")
+  options.add_options(
+     "4. Internal/Advanced flags you are unlikely to use\n"
+    " --------------------------------------------------\n")
     ( "already-in-chroot",
-      "The current environment is already the desired chroot. For some reason the"
-      " current mount namespace is polluted with our bind mounts (even though we create"
-      " our own namespace). Therefore make sure to unshare -m before running dettrace with"
-      " this command, either when chrooting or when calling dettrace. default is false",
+      "The current environment is already the desired chroot. For some reason the "
+      " current mount namespace is polluted with our bind mounts (even though we create "
+      " our own namespace). Therefore make sure to unshare -m before running dettrace with "
+      " this command, either when chrooting or when calling dettrace. The default is `false`.\n",
       cxxopts::value<bool>()->default_value("false"))
     ( "convert-uids",
-      "Some programs attempt to use UIDs not mapped in our namespace. Catch"
-      " this behavior for lchown, chown, fchown, fchowat, and dynamically change the UIDS to"
-      " 0 (root). default is false.",
+      "Some programs attempt to use UIDs not mapped in our namespace. Catch "
+      " this behavior for lchown, chown, fchown, fchowat, and dynamically change the UIDS to "
+      " 0 (root). The default is `false`. ",
       cxxopts::value<bool>()->default_value("false"))
     ( "timeoutSeconds",
-      "Tear down all tracee processes with SIGKILL after this many seconds. default is 0 - indefinite.",
+      "Tear down all tracee processes with SIGKILL after this many seconds. The default is `0` - indefinite.",
       cxxopts::value<unsigned long>()->default_value("0"))
     ( "program",
       "program to run",
