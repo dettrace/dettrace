@@ -56,4 +56,4 @@ COPY --from=0 /code/*.deb /root/
 RUN dpkg --install /root/*.deb
 WORKDIR /usr/share/cloudseal/examples
 
-RUN echo 'export PS1="\[\033[1;36m\]$ \[\033[0m\]"' >> /root/.bashrc
+RUN echo 'export PS1="\w \[\033[1;36m\]$ \[\033[0m\]"' >> /root/.bashrc
