@@ -77,10 +77,11 @@ struct programArgs{
 
   std::vector<std::string> args;
   int debugLevel;
-  string pathToChroot;
+  std::string pathToChroot;
   std::vector<MountPoint> volume;
-  string pathToExe;
-  string logFile;
+  std::string pathToExe;
+  std::string logFile;
+  std::string workdir;
 
   bool useColor;
   bool printStatistics;
@@ -392,6 +393,9 @@ int runTracee(programArgs* args){
 	mountDir(pathToExe+"/../root/etc/group", "/etc/group");
 	mountDir(pathToExe+"/../root/etc/ld.so.cache", "/etc/ld.so.cache");
       }
+
+      // set working dir
+      doWithCheck(chdir(args->workdir.c_str()), "unable to chdir to " + args->workdir);
     }
   }
 
@@ -762,6 +766,10 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       "The syntax of the argument is `hostdir:targetdir`. "
       "The `targetdir` mount point must already exist.",
       cxxopts::value<std::vector<std::string>>())
+    ( "w,workdir",
+      "Specify working directory (CWD) dettrace should use. "
+      "default it is host's `$PWD`.",
+      cxxopts::value<std::string>())
     ( "in-docker",
       "A convenience feature for when launching dettrace in a fresh docker "
       "container, e.g. `docker run dettrace --in-docker cmd`.  This is a shorthand for "
@@ -892,6 +900,11 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     auto use_real_proc = result["real-proc"].as<bool>();       // must have default!
     auto base_env = result["base-env"].as<std::string>();
     args.prng_seed = (static_cast<OptionValue1>(result["prng-seed"])).unwrap_or(0x1234);
+
+    char* cwd = get_current_dir_name();
+    string host_cwd(cwd);
+    free(cwd);
+    args.workdir = (static_cast<OptionValue1>(result["workdir"])).unwrap_or(host_cwd);
 
     // userns|pidns|mountns default vaules are true
     bool host_userns  = (static_cast<OptionValue1>(result["host-userns"])).unwrap_or(false);
