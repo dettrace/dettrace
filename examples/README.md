@@ -60,19 +60,18 @@ To run these scripts, first go to the examples directory:
 cd /usr/share/cloudseal/examples
 ```
 
-Next, run one of the examples a few times. For example,
-running `./rand.py` should output a new series of random numbers on each execution:
+Next, run one of the examples a few times to see that it is, by default,
+nondeterministic. For example, running `./rand.py` should output a new
+series of random numbers on each execution:
 
 ```shell
 $ ./rand.py
 57 55 68 49 11 68 88 43 2 97
 $ ./rand.py
 17 12 63 1 92 76 75 68 13 81
-$ ./rand.py
-98 44 97 98 35 40 40 10 36 19
 ```
 
-Finally, run the same script a few more times, but this time, use `cloudseal` to
+Finally, run the same script again, but this time, use `cloudseal` to
 enforce determinism:
 
 ```shell
@@ -80,11 +79,21 @@ $ cloudseal ./rand.py
 55 8 80 78 8 35 14 60 71 78
 $ cloudseal ./rand.py
 55 8 80 78 8 35 14 60 71 78
-$ cloudseal ./rand.py
-55 8 80 78 8 35 14 60 71 78
 ```
 
-Notice the key difference here: every execution returns the same results!
+Notice the key difference here: every execution returns the same
+results!  It doesn't matter what language the program is written in or
+exactly *how* it gets its randomness (e.g., `getrandom` system call,
+or `/dev/random`).  Because all sources of randomness are determinized, the end result is determinstic.  However, if we want to seed our container with a different stream of random numbers, we can simply change its initial state by changing the seed:
+
+```
+$ cloudseal --prng-seed=100  ./examples/rand.py
+66 21 41 90 94 9 97 97 8 64
+$ cloudseal --prng-seed=200  ./examples/rand.py
+12 93 91 75 36 20 5 51 61 37
+```
+
+### More Examples
 
 In addition to `rand.py`, you can also try the following example scripts:
 
@@ -96,44 +105,11 @@ results in a consistent, reproducible output string.
 - `date.sh`: Retrieves the current date and time via the `date` command.
 Normally, the output of this command would change on subsequent calls as
 time elapses. However, running with `cloudseal` ensures that the same
-date output is received on every call.
+date output is received on every call.  The `--epoch` flag can control the date visible in the program.
 
 - `devrand.sh`: Generates random numbers similar to `rand.py`, but uses
-`/dev/random` as the source of its data. **Note:** Reading from `/dev/random`
-will block until sufficient entropy is available to generate the random output,
-so this example can take a while to run.
+`/dev/random` as the source of its data. 
 
-It is highly reccommended to take a look at the contents of these example
-scripts to see what is being tested.
+Take a look at the contents of these example scripts to see what is being tested.
 
-It is also worthwhile to experiment with running arbitrary commands in
-`cloudseal`. One such experiment could be reading directly from `/dev/urandom`:
-
-```shell
-$ head -c 16 /dev/urandom | hexdump
-0000000 9808 6ead 7593 4497 6435 a7d9 876d 8720
-0000010
-$ head -c 16 /dev/urandom | hexdump
-0000000 31b6 8790 f480 8c05 62c5 653f fdbd 27ba
-0000010
-$ head -c 16 /dev/urandom | hexdump
-0000000 e8aa f3e1 95be 0780 4cce 2a15 edf9 d6c9
-0000010
-```
-
-Again, we see random data being generated. Next, run the same command with
-`cloudseal`:
-```shell
-$ cloudseal head -c 16 /dev/urandom | hexdump
-0000000 3211 d873 5fc1 a37b d83b cf8d ea15 69c2
-0000010
-$ cloudseal head -c 16 /dev/urandom | hexdump
-0000000 3211 d873 5fc1 a37b d83b cf8d ea15 69c2
-0000010
-$ cloudseal head -c 16 /dev/urandom | hexdump
-0000000 3211 d873 5fc1 a37b d83b cf8d ea15 69c2
-0000010
-```
-
-As expected, the command is now running deterministically and generates
-the same output on each execution.
+As you start running arbitrary commands in `cloudseal`, it is recommended to start with your software builds or unit tests.
