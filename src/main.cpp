@@ -616,10 +616,12 @@ int spawnTracerTracee(void* voidArgs){
     // DEVRAND STEP 2: spawn a thread to write to each fifo
     pthread_t devRandomPthread, devUrandomPthread;
 
+    unsigned short seed1 = args->prng_seed + 1234567890;
+    unsigned short seed2 = args->prng_seed + 234567890;
     struct DevRandThreadParam params[2] =
       {
-       { devrandFifoPath, args->prng_seed },
-       { devUrandFifoPath, args->prng_seed },
+	{ devrandFifoPath, seed1 },
+       { devUrandFifoPath, seed2 },
       };
     // NB: we copy *FifoPath to the heap as our stack storage goes away: these allocations DO get leaked
     // If we wanted to not leak them, devRandThread could copy to its stack and free the heap copy
