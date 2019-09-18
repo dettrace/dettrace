@@ -8,9 +8,9 @@ Future Cloudseal releases will include additional features, particularly record-
 
 ## Installation
 
-The Cloudseal package installs to a single directory anywhere within your file system.  Cloudseal is a statically-linked executable that should work on any Linux distribution, with kernel version 4.8 or greater. Below are three different ways to get files onto your system.
+The Cloudseal package installs to a single directory anywhere within your file system.  Cloudseal is a statically-linked executable that should work on any Linux distribution with kernel version 4.8 or greater. Below are three different ways to get files onto your system.
 
-### With a script one-liner
+### Install with a script
 
 You can install globally to `/usr/cloudseal` with:
 
@@ -26,11 +26,11 @@ A non-root user can install to a custom directory:
 curl -sSLf https://cloudseal.io/getit | bash -s custom_dir
 ```
 
-### From a binary tarball
+### Install from a binary tarball
 
 You can grab the latest binary tarball at the [Cloudseal downloads page](https://cloudseal.io/download).  To install this manually, simply unpack it anywhere you like and make sure the contained `./bin/cloudseal` binary is on your path.
 
-### Via a `.deb` package
+### Install via a `.deb` package
 
 The [downloads page](https://cloudseal.io/download) also provides an installation package in the Debian `.deb` file format.  Then install with:
 
