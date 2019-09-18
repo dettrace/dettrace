@@ -1,42 +1,59 @@
-# Cloudseal - Dynamic determinism enforcement
+# Cloudseal Alpha - Dynamic determinism enforcement
 
 ## Overview
 
-Cloudseal uses a combination of lightweight containerization and system call interception to identify and compensate for potentially random behavior that may occur during the execution of a given program or command.
+Cloudseal uses a combination of lightweight containerization and system call interception to identify and compensate for potentially random behavior that may occur during the execution of a given program or command. In this way, Cloudseal can be used to launch arbitrary programs and run them in a way that is deterministic and reproducible.
 
-In this way, Cloudseal can be used to launch arbitrary programs and run them in a
-way that is deterministic and reproducible.
+Future Cloudseal releases will include additional features, particularly record-replay features.  This alpha package provides only the core deterministic container concept, and it is useful primarily for deterministic builds and software tests.
 
 ## Installation
 
-The Cloudseal tool is disributed as a Debian package file using the `.deb` file format. The easiest way to install the tool and all its dependencies is by using
-the `apt` package manager to perform the installation:
-```shell
-sudo apt install ./cloudseal-alpha_x.y.z.deb
-```
-**Note**: The exact filename of the `.deb` file will be slightly different than the one shown in the above command. Please modify the above command to match the name
-of your `.deb` file.
+The Cloudseal package installs to a single directory anywhere within your file system.  Cloudseal is a statically-linked executable that should work on any Linux distribution, with kernel version 4.8 or greater. Below are three different ways to get files onto your system.
 
-## Usage
+### With a script one-liner
+
+You can install globally to `/usr/cloudseal` with:
+
+```shell
+curl -sSLf https://cloudseal.io/getit | sudo bash
+```
+
+This uses a default installation root of `/usr`, with Cloudseal files unpacked in `/usr/cloudseal`. The script will also create a symbolic link: `/usr/bin/cloudseal`.
+
+A non-root user can install to a custom directory:
+
+```shell
+curl -sSLf https://cloudseal.io/getit | bash -s custom_dir
+```
+
+### From a binary tarball
+
+You can grab the latest binary tarball at the [Cloudseal downloads page](https://cloudseal.io/download).  To install this manually, simply unpack it anywhere you like and make sure the contained `./bin/cloudseal` binary is on your path.
+
+### Via a `.deb` package
+
+The [downloads page](https://cloudseal.io/download) also provides an installation package in the Debian `.deb` file format.  Then install with:
+
+```shell
+sudo apt install ./cloudseal-alpha_xyz.deb
+```
+
+## Basic Usage
 
 Typical usage of the Cloudseal tool consists of simply placing `cloudseal` at the beginning of the command that is to be executed. For example, running the script `my-example.sh` would be achieved by the following command:
 ```shell
 cloudseal ./my-example.sh
 ```
-Similarly, running the command `head -c 10 /dev/urandom` would consist of the following:
-```shell
-cloudseal head -c 10 /dev/urandom
-```
 
-While the above should suffice for most use cases, there are some advanced features that can be enabled and configured by additional command-line arguments.
-To see these arguments and how to use them, please refer to the cloudseal help command,
+Similarly, we could run `cloudseal ls -l`, revealing that the process run under Cloudseal can still by default access the full file system, including `/bin/ls`. More detailed control over the starting conditions of the deterministic computation is enabled with additional command line flags. To see these flags and how to use them, please refer to the command line help info:
+
 ```shell
 cloudseal --help
 ```
 
 ## Examples
-The Cloudseal installation will generate a directory of example scripts located at `/usr/share/cloudseal/examples`
-that highlight some of the ways that Cloudseal can be used to enforce determinism.
+The Cloudseal installation will generate a directory of example scripts located at `<installDir>/cloudseal/examples`
+which highlight some of the ways that Cloudseal can be used to enforce determinism.
 
 To run these scripts, first go to the examples directory:
 ```shell
