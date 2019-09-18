@@ -706,7 +706,9 @@ programArgs parseProgramArguments(int argc, char* argv[]){
 
   options.add_options()
     ( "help",
-      "display this help diaglog");
+      "Displays this help dialog.")
+    ( "version",
+      "Displays version information.");
 
   options.add_options(
      "1. Container Initial Conditions\n"
@@ -868,6 +870,13 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     auto result = options.parse(argc, argv);
 
     const std::string emptyString("");
+
+    // Display the version if --version is present. This should be in semver
+    // format such that it can be parsed by another program.
+    if (result.count("version")) {
+      std::cout << (APP_VERSION "+build." APP_BUILDID) << std::endl;
+      exit(0);
+    }
 
     args.alreadyInChroot = (static_cast<OptionValue1>(result["already-in-chroot"])).unwrap_or(false);
     args.debugLevel = (static_cast<OptionValue1>(result["debug"])).unwrap_or(0);
