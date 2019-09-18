@@ -28,11 +28,11 @@ curl -sSLf https://cloudseal.io/getit | bash -s custom_dir
 
 ### Install from a binary tarball
 
-You can grab the latest binary tarball at the [Cloudseal downloads page](https://cloudseal.io/download).  To install this manually, simply unpack it anywhere you like and make sure the contained `./bin/cloudseal` binary is on your path.
+You can grab the latest binary tarball at the [Cloudseal downloads page](https://cloudseal.io/download).  To install the software manually, simply unpack the tarball anywhere you like and make sure the contained `./bin/cloudseal` binary is on your path.
 
 ### Install via a `.deb` package
 
-The [downloads page](https://cloudseal.io/download) also provides an installation package in the Debian `.deb` file format.  Then install with:
+In addition to tarballs, the [downloads page](https://cloudseal.io/download) provides an installation package in the Debian `.deb` file format.  Download it and then install with:
 
 ```shell
 sudo apt install ./cloudseal-alpha_xyz.deb
@@ -45,7 +45,7 @@ Typical usage of the Cloudseal tool consists of simply placing `cloudseal` at th
 cloudseal ./my-example.sh
 ```
 
-Similarly, we could run `cloudseal ls -l`, revealing that the process run under Cloudseal can still by default access the full file system, including `/bin/ls`. More detailed control over the starting conditions of the deterministic computation is enabled with additional command line flags. To see these flags and how to use them, please refer to the command line help info:
+Similarly, we could run `cloudseal ls -l`, which runs the usual `/bin/ls`, revealing that the process run under Cloudseal can by default access the full host file system. More detailed control over the starting conditions of the deterministic computation is enabled with additional command line flags. To see these flags and how to use them, please refer to the command line help info:
 
 ```shell
 cloudseal --help
