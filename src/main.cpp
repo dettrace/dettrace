@@ -893,6 +893,11 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       exit(0);
     }
 
+    if (result["help"].count() > 0) {
+      std::cout << options.help() << std::endl;
+      exit(0);
+    }
+
     args.alreadyInChroot = (static_cast<OptionValue1>(result["already-in-chroot"])).unwrap_or(false);
     args.debugLevel = (static_cast<OptionValue1>(result["debug"])).unwrap_or(0);
     args.useColor = (static_cast<OptionValue1>(result["with-color"])).unwrap_or(false);
