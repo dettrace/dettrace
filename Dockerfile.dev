@@ -56,6 +56,6 @@ RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
 USER dev
 
-RUN echo 'export PS1="dev-env \[\033[1;36m\]$ \[\033[0m\]"' >> /home/dev/.bashrc
+RUN echo 'export PS1="dev-env:\w \[\033[1;36m\]$ \[\033[0m\]"' >> /home/dev/.bashrc
 
 WORKDIR /code

@@ -758,7 +758,9 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       "This flag can be added multiple times to add multiple envvars. ",
       cxxopts::value<std::vector<string>>())
     ( "v,volume",
-      "directory|hostdir:targetdir, Specify volume to bind mount from host to target",
+      "Specify a directory to bind mount . "
+      "The syntax of the argument is `hostdir:targetdir`. "
+      "The `targetdir` mount point must already exist.",
       cxxopts::value<std::vector<std::string>>())
     ( "in-docker",
       "A convenience feature for when launching dettrace in a fresh docker "
