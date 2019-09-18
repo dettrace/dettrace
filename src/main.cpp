@@ -62,6 +62,15 @@
 
 using namespace std;
 
+struct MountPoint {
+  string source;
+  string target;
+  string type;
+  bool is_valid(void) const {
+    return !source.empty() && !target.empty();
+  }
+};
+
 struct programArgs{
   int argc;
   char** argv;
@@ -69,7 +78,7 @@ struct programArgs{
   std::vector<std::string> args;
   int debugLevel;
   string pathToChroot;
-  string workingDir;
+  std::vector<MountPoint> volume;
   string pathToExe;
   string logFile;
 
@@ -91,7 +100,7 @@ struct programArgs{
   bool with_devrand_overrides;
   bool with_etc_overrides;
 
-  std::vector<std::pair<std::string, std::string>> envs;
+  std::unordered_map<std::string, std::string> envs;
 
   std::string tracee;
   std::vector<std::string> traceeArgs;
@@ -109,7 +118,6 @@ struct programArgs{
     this->debugLevel = 0;
     this->pathToChroot = "";
     this->useContainer = false;
-    this->workingDir = "";
     this->userChroot = false;
     this->pathToExe = "";
     this->useColor = true;
@@ -261,9 +269,11 @@ int main(int argc, char** argv){
   int status;
 
   // Propegate Child's exit status to use as our own exit status.
-  doWithCheck(waitpid(-1, &status, 0), "cannot wait for child");
+  doWithCheck(waitpid(pid, &status, 0), "cannot wait for child");
   if (WIFEXITED(status)) {
     return WEXITSTATUS(status);
+  } else if (WIFSIGNALED(status)) {
+    return WTERMSIG(status);
   } else {
     return 1;
   }
@@ -298,7 +308,7 @@ static string getExePath(pid_t pid = 0) {
 
 // prepare envvars for tracee
 static std::pair<char**, size_t>populate_env_vars
-     (std::vector<std::pair<std::string, std::string>>& envvars) {
+     (std::unordered_map<std::string, std::string>& envvars) {
   // Create minimal environment.
   // Note: gcc needs to be somewhere along PATH or it gets very confused, see
   // https://github.com/upenn-acg/detTrace/issues/23
@@ -343,8 +353,6 @@ static std::pair<char**, size_t>populate_env_vars
 int runTracee(programArgs* args){
   auto argv = args->args;
   int debugLevel = args->debugLevel;
-  string pathToChroot = args->pathToChroot;
-  string workingDir = args->workingDir;
   string pathToExe = args->pathToExe;
 
   {
@@ -359,6 +367,7 @@ int runTracee(programArgs* args){
       mode_t mode = S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
       doWithCheck(mknod("/dev/null", mode, dev), "mknod");
     }
+
     if (args->clone_ns_flags & CLONE_NEWNS) {
       if (args->with_devrand_overrides) {
         createFileIfNotExist("/dev/random");
@@ -366,6 +375,11 @@ int runTracee(programArgs* args){
         createFileIfNotExist("/dev/urandom");
         mountDir(devUrandFifoPath, "/dev/urandom");
       }
+
+      for (auto v: args->volume) {
+	mountDir(v.source, v.target);
+      }
+
       doWithCheck(mount("none", "/tmp", "tmpfs", 0, NULL), "mount /tmp as tmpfs failed");
       if (args->with_proc_overrides) {
 	mountDir(pathToExe+"/../root/proc/meminfo", "/proc/meminfo");
@@ -377,12 +391,6 @@ int runTracee(programArgs* args){
 	mountDir(pathToExe+"/../root/etc/passwd", "/etc/passwd");
 	mountDir(pathToExe+"/../root/etc/group", "/etc/group");
 	mountDir(pathToExe+"/../root/etc/ld.so.cache", "/etc/ld.so.cache");
-      }
-      if (!args->alreadyInChroot) {
-	char* home = secure_getenv("HOME");
-	if (home) {
-	  mountDir(home, "/root");
-	}
       }
     }
   }
@@ -536,7 +544,6 @@ int spawnTracerTracee(void* voidArgs){
   auto args = cloneArgs->args;
   auto vdsoSyms = cloneArgs->vdsoSyms;
 
-  bool umountTmpfs = false;
   int pipefds[2];
 
   doWithCheck(pipe2(pipefds, O_CLOEXEC), "spawnTracerTracee pipe2 failed");
@@ -546,9 +553,9 @@ int spawnTracerTracee(void* voidArgs){
   // this mount are not propegated to the parent mount.
   // This makes sure we don't pollute the host OS' mount space with entries made by us
   // here.
-  if ( ((args->clone_ns_flags & CLONE_NEWNS) == CLONE_NEWNS)) {
-    umountTmpfs = true;
-    doWithCheck(mount("none", "/", NULL, MS_SLAVE | MS_REC, 0), "mount slave");
+  if((args->clone_ns_flags & CLONE_NEWNS) &&
+       (args->clone_ns_flags & CLONE_NEWUSER)) {
+    doWithCheck(mount("none", "/", NULL, MS_SLAVE | MS_REC, 0), "failed to mount / as slave");
   }
 
   cloneArgs->tmpdir = std::make_unique<TempDir>("dt-");
@@ -587,6 +594,11 @@ int spawnTracerTracee(void* voidArgs){
 	(args->clone_ns_flags & CLONE_NEWPID) == CLONE_NEWPID) {
       doWithCheck(mount("none", "/proc/", "proc", MS_MGC_VAL, nullptr),
                   "tracer mounting proc failed");
+    }
+
+    if ((args->clone_ns_flags & CLONE_NEWNS) == CLONE_NEWNS) {
+      doWithCheck(mount("none", "/dev/pts", "devpts", 0, nullptr),
+                  "tracer mounting devpts failed");
     }
 
     if (!fileExists(devrandFifoPath)) {
@@ -641,18 +653,18 @@ int spawnTracerTracee(void* voidArgs){
     doWithCheck(sigaction(SIGALRM, &sa, NULL), "sigaction(SIGALRM)");
     alarm(args->timeoutSeconds);
 
-    exe.runProgram();
+    int exit_code = exe.runProgram();
 
     // do exra house keeping.
-    doTracerCleanup(umountTmpfs, std::move(cloneArgs->tmpdir));
+    doTracerCleanup(true, std::move(cloneArgs->tmpdir));
+    return exit_code;
   } else if (pid == 0) {
     int ready = 0;
     doWithCheck(read(pipefds[0], &ready, sizeof(int)), "spawnTracerTracee, pipe read");
     assert(ready == 1);
-    runTracee(args);
+    return runTracee(args);
   }
-
-  return 0;
+  return -1;
 }
 
 // unwrap_or (default) OptionValue
@@ -683,131 +695,170 @@ private:
 programArgs parseProgramArguments(int argc, char* argv[]){
   programArgs args(argc, argv);
 
-  cxxopts::Options options("dettrace",  "A container for dynamic determinism enforcement. \n"
-			   "Arbitrary programs run inside will run deterministically.");
+  cxxopts::Options options("dettrace",
+	 "Provides a container for dynamic determinism enforcement.\n"
+	 "Arbitrary programs run inside (guests) become deterministic \n"
+	 "functions of their inputs. Configuration flags control which inputs \n"
+	 "are allowed to affect the guest’s execution.\n");
 
   options
     .positional_help("[-- program [programArgs..]]");
 
   options.add_options()
     ( "help",
-      "display this help diaglog")
-    ( "debug",
-      "set debugging level[0..5]. default is 0 (off).",
-      cxxopts::value<int>()->default_value("0"))
-    ( "log-file",
-      "Path to write log to. If writing to a file, the filename"
-      "has a unique suffix appended. default is stderr.",
+      "Displays this help dialog.")
+    ( "version",
+      "Displays version information.");
+
+  options.add_options(
+     "1. Container Initial Conditions\n"
+    " -------------------------------\n"
+    " The host file system is visible to the guest by default, excluding\n"
+    " /proc and /dev.  The guest computation is a function of host file\n"
+    " contents, but not timestamps (or inodes).  Typically, an existing\n"
+    " container or chroot system is used to control the visible files.\n"
+    " \n"
+    " Aside from files, the below flags control other aspects of the guest\n"
+    " starting state.\n\n")
+
+    ( "epoch",
+      "Set system epoch (start) time.  Accepts `yyyy-mm-dd,HH:MM:SS` (utc). "
+      // RN: This is not true YET:
+      // "The epoch time also becomes the initial atime/mtime on all files visible in"
+      // "the container.  These timestamps change deterministically as execution proceeds."
+      "The default is `1993-08-08,22:00:00`. Also accepts a `now` value which "
+      "permits nondeterministically setting the initial system time to the host time. ",
       cxxopts::value<std::string>())
-    ( "fs-chroot",
-      "In this mode, the user provides their own chroot environment, which"
-      "serves as the file system for the guest process.",
-      cxxopts::value<std::string>())
-    ( "working-dir",
-      "Specify the working directory that dettrace should use as a workspace for the "
-      "deterministic process tree, by default it is the current working directory.",
-      cxxopts::value<std::string>())
+    ( "prng-seed",
+      "Use this string to seed to the PRNG that is used to supply all "
+      "randomness accessed by the guest.  This affects both /dev/[u]random and "
+      "system calls that create randomness.  (The rdrand instruction is disabled for "
+      "the guest.) The default PRNG seed is `4660`. ",
+      cxxopts::value<unsigned int>())
     ( "base-env",
-      "empty|minimal|host (default is minimal)."
-      "The base environment that is set (before adding additions via --env)."
-      "In the `host` setting, we directly inherit the parent process\'s environment."
-      "Setting `host` is equivalent to passing `--env V` for each variable in the"
-      "current environment."
+      "empty|minimal|host (default is minimal). "
+      "The base environment that is set before adding additions via --env. "
+      "In the `host` setting, we directly inherit the parent process\'s environment. "
+      "Setting `host` is equivalent to passing `--env V` for each variable in the "
+      "current environment. "
       "\n"
-      "The `minimal` setting provides a minimal deterministic environment, setting"
-      "only PATH, HOSTNAME, and HOME to the following "
-      "\n"
-      "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-      "HOSTNAME=nowhere"
-      "HOME=/root"
-      "\n"
-      "Setting `minimal` is equivalent to passing the above variables via --env.",
+      "The `minimal` setting provides a minimal deterministic environment, setting "
+      "only PATH, HOSTNAME, and HOME. ",
+      // cxxopts mangles the formatting here, so leaving this out for now -RN:
+      // "HOME to the following  \n"
+      // "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      // "HOSTNAME=nowhere"
+      // "HOME=/root"
+      // "\n"
+      // "Setting `minimal` is equivalent to passing the above variables via --env. ",
       cxxopts::value<string>()->default_value("minimal"))
     ( "e,env",
       "Set an environment variable for the guest.  If the `=str` value "
-      "is elided, then the variable is read from the user's environment."
-      "this flag can be added multiple times to add multiple envvars.",
+      "is elided, then the variable is read from the user's environment. "
+      "This flag can be added multiple times to add multiple envvars. ",
       cxxopts::value<std::vector<string>>())
-    ( "real-proc",
-      "default is no."
-      "When set, the program can access the full, nondeterministic /proc and /dev"
-      "interfaces.  In the default, disabled setting, deterministic information is"
-      "presented in these paths instead.  This overlay presents a canonical virtual"
-      "hardware platform to the application.",
-      cxxopts::value<bool>()->default_value("false"))
-    ( "aslr",
-      "Enable Address Space Layout Randomization. ASLR is disabled by default "
-      "as it is intrinsically a source of nondeterminism.",
-      cxxopts::value<bool>())
-    ( "host-userns",
-      "Allow access to the host’s user namespace.  By default, dettrace creates"
-      "a fresh, deterministic user-namespace when launching the guest, that is,"
-      "CLONE_NEWUSER is set when cloning the guest process."
-      "It is safe to set --host-userns to `true` when the dettrace process is already"
-      "executing in a fresh container, e.g. the root process in a Docker container.",
-      cxxopts::value<bool>())
-    ( "host-pidns",
-      "Allow access to the host’s PID namespace.  By default, dettrace creates"
-      "a fresh, deterministic PID namespace when launching the guest.  It is safe"
-      "to set this to `true` when the dettrace process is executing inside a fresh"
-      "container as the root process.",
-      cxxopts::value<bool>())
-    ( "host-mountns",
-      "Allow dettrace to inherit the mount namespace from the host.  By default,"
-      "when this is disabled, dettrace creates a fresh mount namespace.  "
-      "Setting to `true` is potentially dangerous.  dettrace may pollute the host"
-      "system’s mount namespace and not successfully clean up all of these mounts.",
-      cxxopts::value<bool>())
-    ( "network",
-      "By default, networking is disallowed inside the guest, as it is generally"
-      "non-reproducible. This flag allows networking syscalls like"
-      "socket/send/recv, which become additional implicit inputs to the guest"
-      "computation.      ",
-      cxxopts::value<bool>()->default_value("false"))
-    ( "epoch",
-      "Set system epoch (start) time.  Accepts now or yyyy-mm-dd,HH:MM:SS (utc)."
-      "The epoch time also becomes the initial atime/mtime on all files visible in"
-      "the container.  These timestamps change deterministically as execution proceeds."
-      "default is 1993-08-08,22:00:00.",
-      cxxopts::value<std::string>())
-    ( "prng-seed",
-      "Use this string to seed to the PRNG that is used to supply all"
-      "randomness accessed by the guest.  This affects both /dev/[u]random and "
-      "system calls that create randomness.  The rdrand instruction is disabled for"
-      "the guest. default is 4660.",
-      cxxopts::value<unsigned int>())
+    ( "v,volume",
+      "Specify a directory to bind mount . "
+      "The syntax of the argument is `hostdir:targetdir`. "
+      "The `targetdir` mount point must already exist.",
+      cxxopts::value<std::vector<std::string>>())
     ( "in-docker",
       "A convenience feature for when launching dettrace in a fresh docker "
       "container, e.g. `docker run dettrace --in-docker cmd`.  This is a shorthand for "
-      "  `--fs-host --host-userns --host-pidns --host-mountns --base-env=host`."
+      // RN: --fs-host was part of this originally.  Might be again:
+      "  `--host-userns --host-pidns --host-mountns --base-env=host`. "
       "Docker creates fresh namespaces and controls the base file system, making it "
       "safe to disable these corresponding dettrace features.  However, it "
-      "is important to not “docker exec” additional processes into the container, as"
-      "it will pollute the deterministic namespaces.",
+      "is important to not “docker exec” additional processes into the container, as "
+      "it will pollute the deterministic namespaces. ",
+      cxxopts::value<bool>()->default_value("false"));
+
+  options.add_options(
+     "2. Opt-in non-deterministic inputs\n"
+    " ----------------------------------\n"
+    " All sources of nondeterminism are disabled by default. This ensures\n"
+    " the application is maximally isolated from unintended deviation in\n"
+    " internal state or outputs caused from environmental deviation.  Activating\n"
+    " these flags opts in to individual nondeterministic inputs, allowing\n"
+    " implicit, non-reproducible inputs to the guest.  By doing so, you take it\n"
+    " upon yourself to guarantee that the guest application either does not use, or\n"
+    " is invariant to, these sources of input.\n"
+    "\n"
+    " All boolean values can be set to `true` or `false`.\n"
+    " Setting `--flag` alone is equivalent to `--flag=true`.\n\n"
+     )
+
+    ( "network",
+      "By default, networking is disallowed inside the guest, as it is generally "
+      "non-reproducible. This flag allows networking syscalls like "
+      "socket/send/recv, which become additional implicit inputs to the guest "
+      "computation.      ",
       cxxopts::value<bool>()->default_value("false"))
+    ( "real-proc",
+      "When set, the program can access the full, nondeterministic /proc and /dev "
+      "interfaces.  In the default, disabled setting, deterministic information is "
+      "presented in these paths instead.  This overlay presents a canonical virtual "
+      "hardware platform to the application. ",
+      cxxopts::value<bool>()->default_value("false"))
+    ( "aslr",
+      "Enable Address Space Layout Randomization. ASLR is disabled by default "
+      "as it is intrinsically a source of nondeterminism. ",
+      cxxopts::value<bool>())
+    ( "host-userns",
+      "Allow access to the host’s user namespace.  By default, dettrace creates "
+      "a fresh, deterministic user-namespace when launching the guest, that is, "
+      "CLONE_NEWUSER is set when cloning the guest process. "
+      "It is safe to set --host-userns to `true` when the dettrace process is already "
+      "executing in a fresh container, e.g. the root process in a Docker container. ",
+      cxxopts::value<bool>())
+    ( "host-pidns",
+      "Allow access to the host’s PID namespace.  By default, dettrace creates "
+      "a fresh, deterministic PID namespace when launching the guest.  It is safe "
+      "to set this to `true` when the dettrace process is executing inside a fresh "
+      "container as the root process. ",
+      cxxopts::value<bool>())
+    ( "host-mountns",
+      "Allow dettrace to inherit the mount namespace from the host.  By default, "
+      "when this is disabled, dettrace creates a fresh mount namespace. "
+      "Setting to `true` is potentially dangerous.  dettrace may pollute the host "
+      "system’s mount namespace and not successfully clean up all of these mounts. ",
+      cxxopts::value<bool>());
+
+  options.add_options(
+     "3. Debugging and logging\n"
+    " ------------------------\n")
+    ( "debug",
+      "set debugging level[0..5]. The default is `0` (off).",
+      cxxopts::value<int>()->default_value("0"))
+    ( "log-file",
+      "Path to write log to. If writing to a file, the filename "
+      "has a unique suffix appended. The default is stderr. ",
+      cxxopts::value<std::string>())
     ( "with-color",
-      "Allow use of ANSI colors in log output. Useful when piping log to a file. default is true.",
+      "Allow use of ANSI colors in log output. Useful when piping log to a file. The default is `true`. ",
       cxxopts::value<bool>())
     ( "print-statistics",
-      "Print metadata about process that just ran including: number of system call events"
-      " read/write retries, rdtsc, rdtscp, cpuid. default is false\n",
+      "Print metadata about process that just ran including: number of system call events "
+      " read/write retries, rdtsc, rdtscp, cpuid. The default is `false`.\n",
       cxxopts::value<bool>()->default_value("false"));
 
   // internal options
-  options.add_options( "Internal/Advanced flags you are unlikely to use\n")
+  options.add_options(
+     "4. Internal/Advanced flags you are unlikely to use\n"
+    " --------------------------------------------------\n")
     ( "already-in-chroot",
-      "The current environment is already the desired chroot. For some reason the"
-      " current mount namespace is polluted with our bind mounts (even though we create"
-      " our own namespace). Therefore make sure to unshare -m before running dettrace with"
-      " this command, either when chrooting or when calling dettrace. default is false",
+      "The current environment is already the desired chroot. For some reason the "
+      " current mount namespace is polluted with our bind mounts (even though we create "
+      " our own namespace). Therefore make sure to unshare -m before running dettrace with "
+      " this command, either when chrooting or when calling dettrace. The default is `false`.\n",
       cxxopts::value<bool>()->default_value("false"))
     ( "convert-uids",
-      "Some programs attempt to use UIDs not mapped in our namespace. Catch"
-      " this behavior for lchown, chown, fchown, fchowat, and dynamically change the UIDS to"
-      " 0 (root). default is false.",
+      "Some programs attempt to use UIDs not mapped in our namespace. Catch "
+      " this behavior for lchown, chown, fchown, fchowat, and dynamically change the UIDS to "
+      " 0 (root). The default is `false`. ",
       cxxopts::value<bool>()->default_value("false"))
     ( "timeoutSeconds",
-      "Tear down all tracee processes with SIGKILL after this many seconds. default is 0 - indefinite.",
+      "Tear down all tracee processes with SIGKILL after this many seconds. The default is `0` - indefinite.",
       cxxopts::value<unsigned long>()->default_value("0"))
     ( "program",
       "program to run",
@@ -822,14 +873,19 @@ programArgs parseProgramArguments(int argc, char* argv[]){
 
     const std::string emptyString("");
 
+    // Display the version if --version is present. This should be in semver
+    // format such that it can be parsed by another program.
+    if (result.count("version")) {
+      std::cout << (APP_VERSION "+build." APP_BUILDID) << std::endl;
+      exit(0);
+    }
+
     args.alreadyInChroot = (static_cast<OptionValue1>(result["already-in-chroot"])).unwrap_or(false);
-    args.pathToChroot = (static_cast<OptionValue1>(result["fs-chroot"])).unwrap_or(emptyString);
     args.debugLevel = (static_cast<OptionValue1>(result["debug"])).unwrap_or(0);
     args.useColor = (static_cast<OptionValue1>(result["with-color"])).unwrap_or(false);
     args.logFile = (static_cast<OptionValue1>(result["log-file"])).unwrap_or(emptyString);
     args.printStatistics = (static_cast<OptionValue1>(result["print-statistics"])).unwrap_or(false);
     args.convertUids = (static_cast<OptionValue1>(result["convert-uids"])).unwrap_or(false);
-    args.workingDir = (static_cast<OptionValue1>(result["working-dir"])).unwrap_or(emptyString);
     args.timeoutSeconds = (static_cast<OptionValue1>(result["timeoutSeconds"])).unwrap_or(0);
     args.allow_network = (static_cast<OptionValue1>(result["network"])).unwrap_or(false);
     args.with_aslr = (static_cast<OptionValue1>(result["aslr"])).unwrap_or(false);
@@ -879,6 +935,24 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       args.clone_ns_flags = 0;
     }
 
+    if (result["volume"].count()) {
+      auto mounts = result["volume"].as<std::vector<std::string>>();
+      for (auto v: mounts) {
+	MountPoint mountPoint;
+	int j = v.find(':');
+	if (j == string::npos) {
+	  mountPoint.source = v;
+	  mountPoint.target = v;
+	} else {
+	  auto key = v.substr(0, j);
+	  auto value = v.substr(1+j);
+	  mountPoint.source = key;
+	  mountPoint.target = value;
+	}
+	args.volume.push_back(mountPoint);
+      }
+    }
+
     if (base_env == "host") {
       extern char** environ;
       for (int i = 0; environ[i]; i++) {
@@ -886,12 +960,16 @@ programArgs parseProgramArguments(int argc, char* argv[]){
 	auto j = kv.find('=');
 	auto k = kv.substr(0, j);
 	auto v = kv.substr(1+j);
-	args.envs.push_back({k, v});
+	args.envs.insert({k, v});
       }
     } else if (base_env == "minimal") {
-      args.envs.push_back({"PATH",     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"});
-      args.envs.push_back({"HOSTNAME", "nowhare"});
-      args.envs.push_back({"HOME", "/root"});
+      args.envs.insert({"PATH",     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"});
+      args.envs.insert({"HOSTNAME", "nowhare"});
+      args.envs.insert({"HOME", "/root"});
+    }
+
+    if (args.clone_ns_flags & CLONE_NEWUSER || args.alreadyInChroot) {
+      args.envs["HOME"] = "/root";
     }
 
     if (result["env"].count() > 0) {
@@ -900,7 +978,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
 	auto j = kv.find('=');
 	auto k = kv.substr(0, j);
 	auto v = kv.substr(1+j);
-	args.envs.push_back({k, v});
+	args.envs.insert({k, v});
       }
     }
 
@@ -923,17 +1001,6 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       args.pathToChroot = args.pathToExe + defaultRoot;
     } else {
       args.userChroot = true;
-    }
-
-    bool usingWorkingDir = args.workingDir != "";
-    if (args.alreadyInChroot && (args.userChroot || usingWorkingDir)) {
-      fprintf(stderr, "Cannot use --already-in-chroot with --chroot or --working-dir.\n");
-      exit(1);
-    }
-
-    if (usingWorkingDir && !args.userChroot) {
-      fprintf(stderr, "Cannot use --working-dir without specifying a --chroot.\n");
-      exit(1);
     }
 
     // Detect if we're inside a chroot by attempting to make a user namespace.
@@ -971,13 +1038,12 @@ static void mountDir(const string& source, const string& target){
 
   /* Check if source path exists*/
   if (!fileExists(source)) {
-    fprintf(stderr, "WARNING: Trying to mount source %s. File does not exist.\n", source.c_str());
-    return;
+    runtimeError("Trying to mount " + source + " => " + target + ". Source file does not exist.\n");
   }
 
   /* Check if target path exists*/
   if (!fileExists(target))  {
-    runtimeError("Trying to mount target " + target + ". File does not exist.\n");
+    runtimeError("Trying to mount " + source + " => " + target + ". Target file does not exist.\n");    
   }
 
   // TODO: Marking it as private here shouldn't be necessary since we already unshared the entire namespace as private?

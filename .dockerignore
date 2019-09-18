@@ -36,6 +36,8 @@ test/samplePrograms/waitOnChild
 test/samplePrograms/multipleThreads
 test/samplePrograms/simpleThreads
 .git
+src/dettrace
+.git/
 ./benchmarking
 Dockerfile
 .gitignore

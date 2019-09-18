@@ -43,7 +43,9 @@ WORKDIR /code
 
 ADD ./ ./
 
-RUN make -j deb
+ARG BUILDID=0
+
+RUN make -j deb "BUILDID=${BUILDID}"
 
 # STAGE 2:
 # Copy only the deployment files into the final image:
