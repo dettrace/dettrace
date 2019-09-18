@@ -183,6 +183,10 @@ void seccomp::loadRules(bool debug, bool convertUids){
   intercept(SYS_getitimer);
   intercept(SYS_pause);
 
+  intercept(SYS_timerfd_create);
+  intercept(SYS_timerfd_settime);
+  intercept(SYS_timerfd_gettime);
+
   // These system calls cause an even that is caught by ptrace and determinized:
   intercept(SYS_access, debug);
   // Not used, let's figure out who does one!
@@ -284,7 +288,10 @@ void seccomp::loadRules(bool debug, bool convertUids){
   intercept(SYS_write);
 
   noIntercept(SYS_mbind);
-
+  // noIntercept(SYS_shmget);
+  // noIntercept(SYS_shmat);
+  // noIntercept(SYS_shmdt);
+  // noIntercept(SYS_shmctl);
 }
 
 void seccomp::noIntercept(uint16_t systemCall){

@@ -30,7 +30,6 @@ stdenv.mkDerivation {
     echo Copying dettrace binary;
     mkdir -p "$out/bin";
     cp bin/dettrace "$out/bin/";
-    cp initramfs.cpio "$out/";
     cp -a root "$out/root";
     cp -a test/samplePrograms "$out/samplePrograms";
   '';

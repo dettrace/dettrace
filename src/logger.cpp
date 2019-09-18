@@ -25,7 +25,7 @@ logger::logger(string logFile, int debugLevel, bool useColor):
     exit(1);
   }
 
-  if (logFile == "NONE") {
+  if (logFile.empty()) {
     fin = stderr;
   } else {
     // find a unique name for our log file

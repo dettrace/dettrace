@@ -18,13 +18,15 @@ public:
    * @param mtimeMap map of inode to modification times
    */
   globalState(logger& log, ValueMapper<ino_t, ino_t> inodeMap,
-              ValueMapper<ino_t, time_t> mtimeMap, bool kernelPre4_12);
+              ValueMapper<ino_t, time_t> mtimeMap, bool kernelPre4_12,
+	      unsigned prngSeed,
+	      bool allow_network = false);
 
-  /** 
+  /**
    * A pseudorandom number generator to implement getrandom()
    */
   PRNG prng;
-  
+
   /**
    * Isomorphism between inodes and virtual inodes.
    */

@@ -245,16 +245,14 @@ pair<int,int> getPipeFds(globalState& gs, state& s, ptracer& t){
 }
 
 // =======================================================================================
-bool tracee_file_exists(string traceePath, pid_t traceePid, logger& log,
+bool tracee_file_exists(const string& traceePath, pid_t traceePid, logger& log,
                    int traceeDirFd) {
   // Create full absolute path in the hostOS file system.
   string resolvedPath = resolve_tracee_path(traceePath, traceePid, log, traceeDirFd);
 
-  resolvedPath.append("/");
-  resolvedPath.append(traceePath);
-  log.writeToLog(Importance::info, "fullpath: %s\n", resolvedPath.c_str());
+  if (resolvedPath.empty()) return false;
 
-   struct stat statbuf = {0};
+  struct stat statbuf = {0};
   int res = stat(resolvedPath.c_str(), &statbuf);
   int err = errno;
   if (res == 0) {
@@ -269,21 +267,25 @@ bool tracee_file_exists(string traceePath, pid_t traceePid, logger& log,
   return false;
 }
 // =======================================================================================
-ino_t inode_from_tracee(string traceePath, pid_t traceePid, logger& log,
+ino_t inode_from_tracee(const string& traceePath, pid_t traceePid, logger& log,
                         int traceeDirFd) {
   // Create full absolute path in the hostOS file system.
   string resolvedPath = resolve_tracee_path(traceePath, traceePid, log, traceeDirFd);
-  resolvedPath.append("/");
-  resolvedPath.append(traceePath);
-  log.writeToLog(Importance::info, "fullpath: %s\n", resolvedPath.c_str());
+
+  if (resolvedPath.empty()) {
+    log.writeToLog(Importance::info, string { "inode_from_tracee, cannot resolve " } + traceePath +
+		   "for pid: " + to_string(traceePid));
+    return -1;
+  }
 
   struct stat statbuf = {0};
   // If this is a symbolic link, we want the actual symbolic links and not the file it
   // points to! So we lstat
   int res = lstat(resolvedPath.c_str(), &statbuf);
   if (res < 0) {
-    runtimeError("Unable to stat file in "
-                       "tracee from /proc/. errno: " + to_string(res));
+    log.writeToLog(Importance::info, "Unable to stat file " + traceePath + " => " + resolvedPath +
+		   " tracee, error: " + strerror(errno) + " (" + to_string(errno) + ")");
+    return -1;
   }
 
   if (S_ISLNK(statbuf.st_mode)) {
@@ -377,10 +379,8 @@ bool sendTraceeSignalNow(int signum, globalState& gs,
   return false;
 }
 // =======================================================================================
-string resolve_tracee_path(string traceePath, pid_t traceePid, logger& log,
+string resolve_tracee_path(const string& traceePath, pid_t traceePid, logger& log,
                         int traceeDirFd) {
-  log.writeToLog(Importance::info, "Resolving path for: %s\n", traceePath.c_str());
-
   // Some system calls take empty path and use traceeDirFd exclusively to refer to a file
   // see O_PATH option in `man 2 open`. We do not support this right now...
   if (traceePath == "") {
@@ -412,11 +412,14 @@ string resolve_tracee_path(string traceePath, pid_t traceePid, logger& log,
   char pathbuf[PATH_MAX + 1] = {0};
   int ret = readlink(prefixProcFd.c_str(), pathbuf, PATH_MAX);
   if (ret == -1) {
-    runtimeError("Unable to read cwd from tracee: " + to_string(traceePid) +
-                        " errno: " + to_string(errno));
+    log.writeToLog(Importance::info, "Unable to read cwd from tracee: " + to_string(traceePid) +
+		   " errno: " + to_string(errno));
+    return "";
   }
 
-  return string { pathbuf };
+  auto res = string { pathbuf } + "/" + traceePath;
+  log.writeToLog(Importance::info, "Resolving path %s => %s\n", traceePath.c_str(), res.c_str());
+  return res;
 }
 // =======================================================================================
 void handlePreOpens(globalState& gs, state& s, ptracer& t, int dirfd,

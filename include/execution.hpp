@@ -18,14 +18,6 @@
 #define ARCH_SET_CPUID		0x1012
 
 /**
- * rdtsc minimal incrementals
- * some program might do rdtsc in a loop mainly for profiling purposes, keep
- * our counter increment a more realistic value to avoid application busy
- * reading rdtsc.
- */
-#define RDTSC_STEPPING          0x8000
-
-/**
  * Execution class.
  * This class handles the event driven loop that is a process execution. Events from
  * a running program are intercepted, and a handler is called for that event.
@@ -43,6 +35,14 @@
 class execution{
 
 private:
+  /**
+   * rdtsc minimal incrementals
+   * some program might do rdtsc in a loop mainly for profiling purposes, keep
+   * our counter increment a more realistic value to avoid application busy
+   * reading rdtsc.
+   */
+  static const unsigned long RDTSC_STEPPING = 0x8000;
+
   /**
    * Using kernel version < 4.8 . Needed as semantics of ptrace + seccomp have changed.
    * See `man 2 ptrace`
@@ -71,7 +71,7 @@ private:
    * The pthread_t for the /dev/urandom thread, which we cancel when dettrace exits.
    */
   pthread_t devUrandomPthread;
-  
+
   /**
    * ptrace wrapper.
    * Class wrapping ptrace system call in a higher level API.
@@ -153,7 +153,19 @@ private:
 
   void disableVdso(pid_t traceesPid);
 
+  /**
+   * starting epoch
+   */
+  unsigned long epoch = execution::default_epoch;
+
+  int exit_code;
+
+  unsigned prngSeed;
 public:
+  /**
+   * default epoch
+   */
+  static const unsigned long default_epoch = 744847200UL;
 
   /**
    * Constructor.
@@ -162,13 +174,16 @@ public:
    * @param useColor Toggles color in logging process
    * @param Using kernel version < 4.8.
    * @param logFile file to write log messages to, if "" use stderr
-   * @param devRandomPthread 
+   * @param devRandomPthread
    */
 
-  execution(int debugLevel, pid_t startingPid, bool useColor, 
-            string logFile, bool printStatistics, 
+  execution(int debugLevel, pid_t startingPid, bool useColor,
+            string logFile, bool printStatistics,
             pthread_t devRandomPthread, pthread_t devUrandomPthread,
-            map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs);
+            map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs,
+	    unsigned prngSeed,
+	    bool allow_network = false,
+	    unsigned long epoch = execution::default_epoch);
 
 
   /**
@@ -208,7 +223,7 @@ public:
    * Launch initial process.
    * A program is defined as a tree of processes.
    */
-  void runProgram();
+  int runProgram();
 
   /**
    * Handle the fork event part of @handleFork. Pushes parent to our process hierarchy
