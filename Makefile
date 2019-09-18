@@ -35,6 +35,7 @@ dep = $(obj:.o=.d)
 	run-docker-non-interactive \
 	run-tests \
 	static \
+	tarball \
 	test-docker \
 	tests
 
@@ -89,6 +90,11 @@ run-tests: build-tests build
 # Build the system inside Docker.  This produces an image shippable to Dockerhub.
 docker:
 	docker build -t "$(NAME):$(VERSION)" -t "$(NAME):latest" --build-arg "BUILDID=$(BUILDID)" .
+
+
+tarball: ${NAME}_alpha_pkg_${VERSION}.tbz
+${NAME}_alpha_pkg_${VERSION}.tbz: docker
+	docker run -i --rm --workdir /usr/share/${NAME} "$(NAME):$(VERSION)" tar cf - . | bzip2 > ${NAME}_alpha_pkg_${VERSION}.tbz
 
 DOCKER_RUN_ARGS=--rm --privileged --userns=host $(OTHER_DOCKER_ARGS) $(NAME):$(VERSION)
 
