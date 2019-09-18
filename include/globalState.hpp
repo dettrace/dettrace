@@ -19,6 +19,7 @@ public:
    */
   globalState(logger& log, ValueMapper<ino_t, ino_t> inodeMap,
               ValueMapper<ino_t, time_t> mtimeMap, bool kernelPre4_12,
+	      unsigned prngSeed,
 	      bool allow_network = false);
 
   /** 

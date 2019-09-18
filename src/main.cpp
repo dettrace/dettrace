@@ -77,10 +77,11 @@ struct programArgs{
 
   std::vector<std::string> args;
   int debugLevel;
-  string pathToChroot;
+  std::string pathToChroot;
   std::vector<MountPoint> volume;
-  string pathToExe;
-  string logFile;
+  std::string pathToExe;
+  std::string logFile;
+  std::string workdir;
 
   bool useColor;
   bool printStatistics;
@@ -392,6 +393,9 @@ int runTracee(programArgs* args){
 	mountDir(pathToExe+"/../root/etc/group", "/etc/group");
 	mountDir(pathToExe+"/../root/etc/ld.so.cache", "/etc/ld.so.cache");
       }
+
+      // set working dir
+      doWithCheck(chdir(args->workdir.c_str()), "unable to chdir to " + args->workdir);
     }
   }
 
@@ -612,10 +616,12 @@ int spawnTracerTracee(void* voidArgs){
     // DEVRAND STEP 2: spawn a thread to write to each fifo
     pthread_t devRandomPthread, devUrandomPthread;
 
+    unsigned short seed1 = args->prng_seed + 1234567890;
+    unsigned short seed2 = args->prng_seed + 234567890;
     struct DevRandThreadParam params[2] =
       {
-       { devrandFifoPath, args->prng_seed },
-       { devUrandFifoPath, args->prng_seed },
+	{ devrandFifoPath, seed1 },
+       { devUrandFifoPath, seed2 },
       };
     // NB: we copy *FifoPath to the heap as our stack storage goes away: these allocations DO get leaked
     // If we wanted to not leak them, devRandThread could copy to its stack and free the heap copy
@@ -637,13 +643,16 @@ int spawnTracerTracee(void* voidArgs){
     int ready = 1;
     doWithCheck(write(pipefds[1], (const void*)&ready, sizeof(int)), "spawnTracerTracee, pipe write");
  
-    execution exe{
-        args->debugLevel, pid, args->useColor,
-        args->logFile, args->printStatistics,
-        devRandomPthread, devUrandomPthread,
-        cloneArgs->vdsoSyms,
-        args->allow_network,
-        args->epoch};
+    execution exe
+      {
+       args->debugLevel, pid, args->useColor,
+       args->logFile, args->printStatistics,
+       devRandomPthread, devUrandomPthread,
+       cloneArgs->vdsoSyms,
+       args->prng_seed,
+       args->allow_network,
+       args->epoch
+      };
 
     globalExeObject = &exe;
     struct sigaction sa;
@@ -762,6 +771,10 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       "The syntax of the argument is `hostdir:targetdir`. "
       "The `targetdir` mount point must already exist.",
       cxxopts::value<std::vector<std::string>>())
+    ( "w,workdir",
+      "Specify working directory (CWD) dettrace should use. "
+      "default it is host's `$PWD`.",
+      cxxopts::value<std::string>())
     ( "in-docker",
       "A convenience feature for when launching dettrace in a fresh docker "
       "container, e.g. `docker run dettrace --in-docker cmd`.  This is a shorthand for "
@@ -892,6 +905,11 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     auto use_real_proc = result["real-proc"].as<bool>();       // must have default!
     auto base_env = result["base-env"].as<std::string>();
     args.prng_seed = (static_cast<OptionValue1>(result["prng-seed"])).unwrap_or(0x1234);
+
+    char* cwd = get_current_dir_name();
+    string host_cwd(cwd);
+    free(cwd);
+    args.workdir = (static_cast<OptionValue1>(result["workdir"])).unwrap_or(host_cwd);
 
     // userns|pidns|mountns default vaules are true
     bool host_userns  = (static_cast<OptionValue1>(result["host-userns"])).unwrap_or(false);
