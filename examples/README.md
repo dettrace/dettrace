@@ -45,15 +45,15 @@ Typical usage of the Cloudseal tool consists of simply placing `cloudseal` at th
 cloudseal ./my-example.sh
 ```
 
-Similarly, we could run `cloudseal ls -l`, which runs the usual `/bin/ls`, revealing that the process run under Cloudseal can by default access the full host file system. More detailed control over the starting conditions of the deterministic computation is enabled with additional command line flags. To see these flags and how to use them, please refer to the command line help info:
+Similarly, we could run `cloudseal ls -l`, which invokes the usual `/bin/ls`, showing that the process run under Cloudseal can by default access the full host file system. More detailed control over the starting conditions of the deterministic computation is possible via additional command line flags. To see these flags and how to use them, please refer to the command line help info:
 
 ```shell
 cloudseal --help
 ```
 
 ## Examples
-The Cloudseal installation will generate a directory of example scripts located at `<installDir>/cloudseal/examples`
-which highlight some of the ways that Cloudseal can be used to enforce determinism.
+The Cloudseal installation will generate a directory of example scripts located at `<installDir>/cloudseal/examples`.
+These examples highlight some of the ways that Cloudseal can be used to enforce determinism.
 
 To run these scripts, first go to the examples directory:
 ```shell
@@ -83,8 +83,8 @@ $ cloudseal ./rand.py
 
 Notice the key difference here: every execution returns the same
 results!  It doesn't matter what language the program is written in or
-exactly *how* it gets its randomness (e.g., `getrandom` system call,
-or `/dev/random`).  Because all sources of randomness are determinized, the end result is determinstic.  However, if we want to seed our container with a different stream of random numbers, we can simply change its initial state by changing the seed:
+exactly *how* it gets its randomness, for example with a `getrandom` system call,
+or by reading `/dev/random`.  Because *all* sources of randomness to the process tree are determinized, the end result is determinstic.  However, if we want to seed our container with a different stream of random numbers, we can simply change its initial state by changing the seed:
 
 ```
 $ cloudseal --prng-seed=100  ./examples/rand.py
