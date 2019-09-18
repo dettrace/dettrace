@@ -159,6 +159,8 @@ private:
   unsigned long epoch = execution::default_epoch;
 
   int exit_code;
+
+  unsigned prngSeed;
 public:
   /**
    * default epoch
@@ -179,6 +181,7 @@ public:
             string logFile, bool printStatistics, 
             pthread_t devRandomPthread, pthread_t devUrandomPthread,
             map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs,
+	    unsigned prngSeed,
 	    bool allow_network = false,
 	    unsigned long epoch = execution::default_epoch);
 

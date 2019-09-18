@@ -641,13 +641,16 @@ int spawnTracerTracee(void* voidArgs){
     int ready = 1;
     doWithCheck(write(pipefds[1], (const void*)&ready, sizeof(int)), "spawnTracerTracee, pipe write");
  
-    execution exe{
-        args->debugLevel, pid, args->useColor,
-        args->logFile, args->printStatistics,
-        devRandomPthread, devUrandomPthread,
-        cloneArgs->vdsoSyms,
-        args->allow_network,
-        args->epoch};
+    execution exe
+      {
+       args->debugLevel, pid, args->useColor,
+       args->logFile, args->printStatistics,
+       devRandomPthread, devUrandomPthread,
+       cloneArgs->vdsoSyms,
+       args->prng_seed,
+       args->allow_network,
+       args->epoch
+      };
 
     globalExeObject = &exe;
     struct sigaction sa;
