@@ -28,7 +28,7 @@ curl -sSLf https://cloudseal.io/getit | bash -s custom_dir
 
 ### Install from a binary tarball
 
-You can grab the latest binary tarball at the [Cloudseal downloads page](https://cloudseal.io/download).  To install the software manually, simply unpack the tarball anywhere you like and make sure the contained `./bin/cloudseal` binary is on your path.
+You can grab the latest binary tarball at the [Cloudseal downloads page](https://cloudseal.io/download).  To install the software manually, simply unpack the tarball anywhere you like (except `/tmp`) and make sure the contained `./bin/cloudseal` binary is on your path.
 
 ### Install via a `.deb` package
 

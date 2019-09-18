@@ -93,7 +93,7 @@ docker:
 
 # Build and then extract distributable packages
 package: docker
-	docker run -i --rm --workdir /usr/share/${NAME} "$(NAME):$(VERSION)" tar cf - . | bzip2 > $(PKGNAME).tbz
+	docker run -i --rm --workdir /usr/share/ "$(NAME):$(VERSION)" tar cf - ${NAME} | bzip2 > $(PKGNAME).tbz
 	docker run -i --rm -v `pwd`:/out "$(NAME):$(VERSION)" cp /root/$(PKGNAME).deb /out
 
 DOCKER_RUN_ARGS=--rm --privileged --userns=host $(OTHER_DOCKER_ARGS) $(NAME):$(VERSION)
