@@ -989,10 +989,15 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       args.envs.insert({"PATH",     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"});
       args.envs.insert({"HOSTNAME", "nowhare"});
       args.envs.insert({"HOME", "/root"});
+    } else if (base_env == "empty") {
+    } else {
+      throw cxxopts::argument_incorrect_type("base-env=" + base_env);
     }
 
     if (args.clone_ns_flags & CLONE_NEWUSER || args.alreadyInChroot) {
-      args.envs["HOME"] = "/root";
+      if (args.envs.find("HOME") != args.envs.end()) {
+	args.envs["HOME"] = "/root";
+      }
     }
 
     if (result["env"].count() > 0) {
