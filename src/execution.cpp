@@ -785,6 +785,30 @@ bool execution::handleSeccomp(const pid_t traceesPid){
   auto callPostHook = handlePreSystemCall( states.at(traceesPid), traceesPid );
   return callPostHook;
 }
+
+static const struct CPUIDRegs {
+  unsigned eax;
+  unsigned ebx;
+  unsigned ecx;
+  unsigned edx;
+} cpuids[] =
+  {
+   { 0x0000000D, 0x756E6547, 0x6C65746E, 0x49656E69, },
+   { 0x000306C3, 0x02100800, 0x3FFAFBFF, 0xBFEBFBFF, }, /* RDRAND disabled */
+   { 0x76036301, 0x00F0B6FF, 0x00000000, 0x00C10000, },
+   { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
+   { 0x00000000, 0x00000000, 0x00000000, 0x00000000, }, /* cache */
+   { 0x00000040, 0x00000040, 0x00000003, 0x00042120, },
+   { 0x00000077, 0x00000002, 0x00000009, 0x00000000, },
+   { 0x00000000, 0x000027AB, 0x00000000, 0x9C000400, },
+   { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
+   { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
+   { 0x07300803, 0x00000000, 0x00000000, 0x00000603, },
+   { 0x00000001, 0x00000001, 0x00000100, 0x00000002, },
+   { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
+   { 0x00000007, 0x00000340, 0x00000340, 0x00000000, },
+  };
+
 // =======================================================================================
 void execution::handleSignal(int sigNum, const pid_t traceesPid){
   if(sigNum == SIGSEGV) {
@@ -829,7 +853,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
     } else if ((curr_insn32 << 16) ==0xA20F0000) {
       struct user_regs_struct regs = tracer.getRegs();
 
-      auto msg = "[%d] Tracer: intercepted cpuid instruction at %p. %rax == 0x%p, %rcx == 0x%p\n";
+      auto msg = "[%d] Tracer: intercepted cpuid instruction at %p. %rax == %p, %rcx == %p\n";
       auto coloredMsg = log.makeTextColored(Color::blue, msg);
       log.writeToLog(Importance::inter, coloredMsg, traceesPid, regs.rip, regs.rax, regs.rcx);
 
@@ -841,51 +865,20 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
       // fill in canonical cpuid return values
 
+      const unsigned nleafs = sizeof(cpuids) / sizeof(cpuids[0]);
+      assert(nleafs == 1 +  cpuids[0].eax);
+
       switch (regs.rax) {
-      case 0x0:
-        tracer.writeRax( 0x00000002 ); // max supported %eax argument. Set to 4 to narrow support (IE Pentium 4).  For reference, Sandy Bridge has 0xD and Kaby Lake 0x16
-        tracer.writeRbx( 0x756e6547 ); // "GenuineIntel" string
-        tracer.writeRdx( 0x49656e69 );
-        tracer.writeRcx( 0x6c65746e );
-        //tracer.writeRcx( 0x6c6c6c6c ); // for debugging, returns "GenuineIllll" instead
-        break;
-      case 0x01: // basic features
-        tracer.writeRax( 0x306c3 );
-        tracer.writeRbx( 0x4100800 );
-        tracer.writeRdx( 0xbfebfbff );
-        tracer.writeRcx( 0x7ffafbff );
-        break;
-      case 0x02: // TLB/Cache/Prefetch Information
-        // say that we have no caches, TLBs or prefetchers
-        tracer.writeRax( 0x80000001 );
-        tracer.writeRbx( 0x80000000 );
-        tracer.writeRcx( 0x80000000 );
-        tracer.writeRdx( 0x80000000 );
-        break;
-      case 0x03:
-        tracer.writeRax( 0x0 );
-        tracer.writeRbx( 0x0 );
-        tracer.writeRdx( 0x0 );
-        tracer.writeRcx( 0x0 );
-        break;
-      case 0x04:
-        tracer.writeRax( 0x0 );
-        tracer.writeRbx( 0x0 );
-        tracer.writeRdx( 0x0 );
-        tracer.writeRcx( 0x0 );
-        break;
-      case 0x07:
-        tracer.writeRax( 0x0 );
-        tracer.writeRbx( 0x0 );
-        tracer.writeRdx( (1ul << 10) | /* MD_CLEAR */
-                         (1ul << 26) | /* IBRS/IBPB */
-                         (1ul << 27) | /* STIBP */
-                         (1ul << 28) | /* L1D_FLUSH */
-                         (1ul << 29) | /* IA32_ARCH_CAPABILITIES */
-                         (1ul << 31) | /* SSBD */
-                         0 );
-        tracer.writeRcx( 0x0 );
-        break;
+      case 0x0 ... nleafs:
+	{
+	  int leaf = regs.rax;
+	  const struct CPUIDRegs& cpuid = cpuids[leaf];
+	  tracer.writeRax(cpuid.eax);
+	  tracer.writeRbx(cpuid.ebx);
+	  tracer.writeRcx(cpuid.ecx);
+	  tracer.writeRdx(cpuid.edx);
+	}
+	break;
       case 0x80000000:
         tracer.writeRax( 0x80000000 );
         tracer.writeRbx( 0x0 );
@@ -906,7 +899,7 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
         tracer.writeRcx( 0x08008140 );
         break;
       default:
-        runtimeError("CPUID unsupported %eax argument");
+        runtimeError("CPUID unsupported %eax = " + to_string(regs.rax));
       }
 
       return;
