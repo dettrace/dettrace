@@ -1849,7 +1849,6 @@ ptraceEvent execution::handleExitedThread(pid_t currentPid) {
 pair<bool, ptraceEvent> execution::loopOnWaitpid(pid_t currentPid) {
   // Threads may not respond to ptrace calls since it has exited. Check waitpid to see
   // if an exit status was delivered to us.
-  bool done = false;
   int status;
 
   // Attempt blocking wait. Will error if thread no longer responds.
