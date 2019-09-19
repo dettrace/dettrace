@@ -16,7 +16,6 @@ extern "C" long fingerprinter_prehook(
   int pid,
   int tid,
   int syscallno,
-  unsigned long retval,
   unsigned long arg0,
   unsigned long arg1,
   unsigned long arg2,
