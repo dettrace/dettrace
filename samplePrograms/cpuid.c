@@ -38,7 +38,7 @@ int main(void)
            "mov     eax,1;"
            "cpuid;"
            "mov     [version],eax;"
-           "mov     [features],edx;"
+           "mov     [features],ecx;"
                 
            "pop     rax;"
            "pop     rcx;"
@@ -247,7 +247,6 @@ int main(void)
            level,eax,ebx,ecx,edx);
   }
   
-  //  printf("RDRAND? %d\n", __may_i_use_cpu_feature(_FEATURE_RDRND));
   printf("Exiting successfully.\n");
   return 0;
 }
