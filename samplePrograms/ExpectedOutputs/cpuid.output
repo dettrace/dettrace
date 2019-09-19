@@ -1,13 +1,34 @@
 Probing with eax=0 for vendor info...
 vendor_id is GenuineIntelProbing with eax=1 for version and features...
-version is 0x0000
-features are 0x0000
+version is 0x306C3
+features are 0x3FFAFB00
 
 C compiler thinks RDRAND is OFF...
 Using cpuid.h:
-Highest supported __get_cpuid input (aka eax value, cpuid leaf): 2
-Result of __get_cpuid(1) eax|ebx|ecx|edx: 00000000 00000000 00000000 00000000
-  supported features:  (extended/ecx:) 
-  unsupported features: CMPXCHG8B CMOV MMX FXSAVE SSE SSE2 SSE3 PCLMUL SSSE3 FMA CMPXCHG16B SSE4_1 SSE4_2 MOVBE POPCNT AES XSAVE OSXSAVE AVX F16C RDRND LAHF_LM ABM SSE4a PRFCHW XOP LWP FMA4 TBM MWAITX 
-Extended Features (eax==7) not supported.
+Highest supported __get_cpuid input (aka eax value, cpuid leaf): 13
+Result of __get_cpuid(1) eax|ebx|ecx|edx: 000306C3 02100800 3FFAFBFF BFEBFBFF
+  supported features: fpu CMPXCHG8B CMOV MMX FXSAVE SSE SSE2 SSE3 PCLMUL SSSE3 FMA CMPXCHG16B SSE4_1 SSE4_2 MOVBE POPCNT AES XSAVE OSXSAVE AVX F16C  (extended/ecx:) LAHF_LM ABM SSE4a PRFCHW XOP LWP TBM MWAITX 
+  unsupported features: RDRND FMA4 
+
+   Extended Features (eax == 7)
+   ----------------------------
+Result of __get_cpuid(7) eax|ebx|ecx|edx: 00000000 000027AB 00000000 9C000400
+  supported features:  FSGSBASE BMI AVX2 BMI2
+  UNsupported features:  HLE RTM MPX AVX512F AVX512DQ RDSEED ADX AVX512IFMA CLFLUSHOPT CLWB AVX512PF AVX512CD SHA AVX512BW AVX512VL AVX512VBMI
+
+Now dumping ALL CPUID results in raw form:
+__get_cpuid(0) eax|ebx|ecx|edx: 0000000D 756E6547 6C65746E 49656E69
+__get_cpuid(1) eax|ebx|ecx|edx: 000306C3 02100800 3FFAFBFF BFEBFBFF
+__get_cpuid(2) eax|ebx|ecx|edx: 76036301 00F0B6FF 00000000 00C10000
+__get_cpuid(3) eax|ebx|ecx|edx: 00000000 00000000 00000000 00000000
+__get_cpuid(4) eax|ebx|ecx|edx: 00000000 00000000 00000000 00000000
+__get_cpuid(5) eax|ebx|ecx|edx: 00000040 00000040 00000003 00042120
+__get_cpuid(6) eax|ebx|ecx|edx: 00000077 00000002 00000009 00000000
+__get_cpuid(7) eax|ebx|ecx|edx: 00000000 000027AB 00000000 9C000400
+__get_cpuid(8) eax|ebx|ecx|edx: 00000000 00000000 00000000 00000000
+__get_cpuid(9) eax|ebx|ecx|edx: 00000000 00000000 00000000 00000000
+__get_cpuid(10) eax|ebx|ecx|edx: 07300803 00000000 00000000 00000603
+__get_cpuid(11) eax|ebx|ecx|edx: 00000001 00000001 00000100 00000002
+__get_cpuid(12) eax|ebx|ecx|edx: 00000000 00000000 00000000 00000000
+__get_cpuid(13) eax|ebx|ecx|edx: 00000007 00000340 00000340 00000000
 Exiting successfully.
