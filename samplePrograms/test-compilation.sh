@@ -8,6 +8,8 @@ CLANG=clang-6.0
 CLANGXX=clang++-6.0
 MAKE=make
 
+export TZ=UTC
+
 TMPDIR=/tmp/test-compilation
 
 function cleanup {
