@@ -2598,8 +2598,8 @@ bool utimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   // Create our own struct with our time.
   // TODO: In the future we might want to unify this with our mtimeMapper.
   utimbuf clockTime = {
-    .actime = 0,
-    .modtime = 0,
+    .actime = FILE_INITIAL_TIMESTAMP_SECS,
+    .modtime = FILE_INITIAL_TIMESTAMP_SECS,
   };
 
   // Write our struct to the tracee's memory.
@@ -2636,7 +2636,7 @@ bool utimesSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   // Create our own struct with our time.
   // TODO: In the future we might want to unify this with our mtimeMapper.
   timeval clockTime = {
-    .tv_sec = 0,
+    .tv_sec = FILE_INITIAL_TIMESTAMP_SECS,
     .tv_usec = 0,
   };
 
@@ -2683,7 +2683,7 @@ bool utimensatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
   // Create our own struct with our time.
   // TODO: In the future we might want to unify this with our mtimeMapper.
   struct timespec clockTime = {
-    .tv_sec = 0,// (time_t) s.getLogicalTime(),
+    .tv_sec = FILE_INITIAL_TIMESTAMP_SECS,  // (time_t) s.getLogicalTime(),
     .tv_nsec = 0, //(time_t) s.getLogicalTime()
   };
 
