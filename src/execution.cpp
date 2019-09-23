@@ -50,7 +50,7 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
                      pthread_t devRandomPthread, pthread_t devUrandomPthread,
                      map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs,
 		     unsigned prngSeed,
-		     bool allow_network, unsigned long epoch):
+		     bool allow_network, unsigned long epoch, unsigned long timestamps):
   kernelPre4_8 {kernelCheck(4,8,0)},
   log {logFile, debugLevel, useColor},
   silentLogger {"", 0},
@@ -66,12 +66,14 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
     ValueMapper<ino_t, time_t> {log, "mtime map", 1},
     kernelCheck(4,12,0),
     prngSeed,
+    timestamps,
     allow_network
   },
   myScheduler {startingPid, log},
   debugLevel {debugLevel},
   vdsoFuncs(vdsoFuncs),
   epoch(epoch),
+  timestamps(timestamps),
   prngSeed(prngSeed)
   {
     // Set state for first process.

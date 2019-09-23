@@ -8,10 +8,6 @@
 #include "scheduler.hpp"
 #include <optional>
 
-// File creation/mod/access time at container start:
-#define FILE_INITIAL_TIMESTAMP_SECS 946080000
-
-
 /**
  * Compare returned value of system call (rax) vs the blocking value (errnoValue negated),
  * e.g. EAGAIN. If equal, system call would have blocked, log it, preempt current running
