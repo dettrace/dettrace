@@ -1,8 +1,6 @@
-# Cloudseal Alpha - Dynamic determinism enforcement
+## Getting Started with the Cloudseal Alpha Prototype
 
-## Overview
-
-Cloudseal uses a combination of lightweight containerization and system call interception to identify and compensate for potentially random behavior that may occur during the execution of a given program or command. In this way, Cloudseal can be used to launch arbitrary programs and run them in a way that is deterministic and reproducible.
+The Cloudseal alpha prototype provides dynamic determinism enforcement. It uses a combination of lightweight containerization and system call interception to identify and compensate for potentially random behavior that may occur during the execution of a given program or command. In this way, Cloudseal can be used to launch arbitrary programs and run them in a way that is deterministic and reproducible.
 
 Future Cloudseal releases will include additional features, particularly record-replay features.  This alpha package provides only the core deterministic container concept, and it is useful primarily for deterministic builds and software tests.
 
