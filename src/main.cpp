@@ -1028,10 +1028,19 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     if (result["env"].count() > 0) {
       auto kvs = result["env"].as<std::vector<std::string>>();
       for (auto kv: kvs) {
-	auto j = kv.find('=');
-	auto k = kv.substr(0, j);
-	auto v = kv.substr(1+j);
-	args.envs.insert({k, v});
+        auto j = kv.find('=');
+        auto k = kv.substr(0, j);
+
+        if (j == std::string::npos) {
+          // If no '=' was specified, get the variable from the host
+          // environment. If the host environment variable doesn't exist, don't
+          // set it at all.
+          if (auto host_env = getenv(k.c_str())) {
+            args.envs[k] = std::string(host_env);
+          }
+        } else {
+          args.envs[k] = kv.substr(1+j);
+        }
       }
     }
 
