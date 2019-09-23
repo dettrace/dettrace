@@ -105,16 +105,16 @@ void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName)
     // Use inode to check if we created this file during our run.
     time_t virtualMtime = gs.mtimeMap.realValueExists(inode) ?
       gs.mtimeMap.getVirtualValue(inode) :
-      0; // This was an old file that has not been opened for modification.
+      FILE_INITIAL_TIMESTAMP_SECS; // This was an old file that has not been opened for modification.
 
     /* Time of last access */
-    myStat.st_atim = timespec { .tv_sec =  0,
+    myStat.st_atim = timespec { .tv_sec =  FILE_INITIAL_TIMESTAMP_SECS,
                                 .tv_nsec = 0 };
     /* Time of last modification */
     myStat.st_mtim = timespec { .tv_sec =  virtualMtime,
                                 .tv_nsec = 0 };
     /* Time of last status change */
-    myStat.st_ctim = timespec { .tv_sec = 0,
+    myStat.st_ctim = timespec { .tv_sec = FILE_INITIAL_TIMESTAMP_SECS,
                                 .tv_nsec = 0 };
 
     // TODO: I'm surprised this doesn't break things. I guess so far, we have only used
