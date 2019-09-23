@@ -1225,6 +1225,9 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_wait4:
     return wait4SystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_waitid:
+    return waitidSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_write:
     return writeSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -1554,6 +1557,9 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
 
   case SYS_wait4:
     return wait4SystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_waitid:
+    return waitidSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_write:
     return writeSystemCall::handleDetPost(gs, s, t, sched);

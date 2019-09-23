@@ -2847,6 +2847,30 @@ void wait4SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   return;
 }
 // =======================================================================================
+bool waitidSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  s.wait4Blocking = (t.arg4() & WNOHANG) == 0;
+  gs.log.writeToLog(Importance::info, "waitid(%d)\n", (int) t.arg1());
+  gs.log.writeToLog(Importance::info, "Making this a non-blocking waitid\n");
+
+  // Make this a non blocking hang!
+  s.originalArg4 = t.arg4();
+  t.writeArg4(s.originalArg4 | WNOHANG);
+  return true;
+}
+void waitidSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  if(s.wait4Blocking){
+    gs.log.writeToLog(Importance::info, "Blocking waitid found\n");
+    replaySyscallIfBlocked(gs, s, t, sched, 0);
+  }else{
+    gs.log.writeToLog(Importance::info, "Non-blocking waitid found\n");
+    preemptIfBlocked(gs, s, t, sched, EAGAIN);
+  }
+  // Reset.
+  t.writeArg4(s.originalArg4);
+
+  return;
+}
+// =======================================================================================
 bool writevSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
   return true;
 }

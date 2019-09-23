@@ -290,6 +290,8 @@ void seccomp::loadRules(bool debug, bool convertUids){
   intercept(SYS_uname);
 
   intercept(SYS_wait4);
+  intercept(SYS_waitid);
+
   intercept(SYS_write);
 
   noIntercept(SYS_mbind);

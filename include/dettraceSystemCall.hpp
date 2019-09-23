@@ -1689,6 +1689,15 @@ public:
   const string syscallName = "wait4";
 };
 // =======================================================================================
+class waitidSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_waitid;
+  const string syscallName = "waitid";
+};
+// =======================================================================================
 /**
  * ssize_t writev(int fd, const struct iovec *iov, int iovcnt)
  *
