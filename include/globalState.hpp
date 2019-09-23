@@ -22,11 +22,11 @@ public:
 	      unsigned prngSeed,
 	      bool allow_network = false);
 
-  /**
+  /** 
    * A pseudorandom number generator to implement getrandom()
    */
   PRNG prng;
-
+  
   /**
    * Isomorphism between inodes and virtual inodes.
    */
@@ -120,6 +120,11 @@ public:
    * to the map anyways to avoid special cases for the process owner vs threads.
    */
   unordered_map<pid_t, pid_t> threadGroupNumber;
+
+  /**
+   * Allow non-deterministic socket/networking
+   */
+  bool allow_network;
 };
 
 #endif

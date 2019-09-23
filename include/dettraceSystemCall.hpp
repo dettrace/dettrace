@@ -1747,6 +1747,62 @@ public:
 };
 
 // =======================================================================================
+/**
+ * int listen(int sockfd, int backlog)
+ *
+ * listen()  marks the socket referred to by sockfd as a passive socket, that is, as a 
+ * socket that will be used to accept incoming connection requests using accept(2).
+ */
+class listenSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_listen;
+  const string syscallName = "listen";
+};
+
+// =======================================================================================
+/**
+ * int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
+ */
+class acceptSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_accept;
+  const string syscallName = "accept";
+};
+
+// =======================================================================================
+/**
+ * int accept4(int sockfd, struct sockaddr *addr,
+ *             socklen_t *addrlen, int flags);
+ */
+class accept4SystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_accept4;
+  const string syscallName = "accept4";
+};
+
+// =======================================================================================
+/**
+ * int shutdown(int sockfd, int how)
+ */
+class shutdownSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_shutdown;
+  const string syscallName = "shutdown";
+};
+
+// =======================================================================================
 // Iterate through our vector of entries, which represent the binary memory for linux_dirents
 // or linux_dirent64. We virtualize the inodes and add entries to our inodeMap.
 template<typename DirEntry>

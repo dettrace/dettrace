@@ -495,7 +495,7 @@ static void* devRandThread(void* param_) {
   doWithCheck(fd, string("open: ") + fifoPath);
   pthread_cond_signal(&devRandThreadReady);
   pthread_mutex_unlock(&devRandThreadMutex);
-
+  
   while (true) {
     if (getNewRandom) {
       random = prng.get();
@@ -583,7 +583,7 @@ int spawnTracerTracee(void* voidArgs){
     devrandFifoPath = tmpnamBuffer.path() + "-random.fifo";
     devUrandFifoPath = tmpnamBuffer.path() + "-urandom.fifo";
   }
-
+  
   doWithCheck(mkfifo(devrandFifoPath.c_str(), 0666), "mkfifo");
   doWithCheck(mkfifo(devUrandFifoPath.c_str(), 0666), "mkfifo");
 
@@ -642,7 +642,7 @@ int spawnTracerTracee(void* voidArgs){
     // the FifoPath might have be deleted by the tracee already.
     int ready = 1;
     doWithCheck(write(pipefds[1], (const void*)&ready, sizeof(int)), "spawnTracerTracee, pipe write");
-
+ 
     execution exe
       {
        args->debugLevel, pid, args->useColor,
@@ -1061,7 +1061,7 @@ static void mountDir(const string& source, const string& target){
 
   /* Check if target path exists*/
   if (!fileExists(target))  {
-    runtimeError("Trying to mount " + source + " => " + target + ". Target file does not exist.\n");
+    runtimeError("Trying to mount " + source + " => " + target + ". Target file does not exist.\n");    
   }
 
   // TODO: Marking it as private here shouldn't be necessary since we already unshared the entire namespace as private?
@@ -1150,4 +1150,4 @@ static void createFileIfNotExist(const string& path){
   if (fd >= 0) close(fd);
 
   return;
-}
+} 

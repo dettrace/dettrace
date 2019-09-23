@@ -87,7 +87,7 @@ void arch_prctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, 
   if (0 != t.getReturnValue()) {
     runtimeError("cpuid interception via arch_prctl failed");
   }
-
+  
   if (s.CPUIDTrapSet) {
     // This should be impossible.
     runtimeError("Got to arch_prctl post-hook without it needing to have CPUID trap set.");
@@ -258,6 +258,9 @@ void dupSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedul
   // dup succeeded.
   if(s.countFdStatus(fd) != 0){ // Only for pipes
     s.setFdStatus(newfd, s.getFdStatus(fd)); // copy over status.
+    if (s.fd_is_remote(fd)) {
+      s.remote_sockfds->insert(newfd);
+    }
     gs.log.writeToLog(Importance::info, "%d = dup(%d)\n", newfd, fd);
   }
 }
@@ -337,7 +340,7 @@ bool epoll_ctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
 }
 
 void epoll_ctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  return;
+  return; 
 }
 
 static void epoll_log_event(globalState& gs, ptracer& t) {
@@ -376,7 +379,7 @@ void epoll_waitSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, 
   if ((int)t.getReturnValue() > 0) {
     epoll_log_event(gs, t);
   }
-
+  
   if((int) s.originalArg4 < 0){
     gs.log.writeToLog(Importance::info, "Blocking epoll_wait found\n");
     bool replay = replaySyscallIfBlocked(gs, s, t, sched, 0);
@@ -1465,7 +1468,7 @@ void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
 		    1UL, s.traceePid);
     s.totalBytes = sizeof(unsigned long);
     resetState();
-    sched.preemptAndScheduleNext();
+    sched.preemptAndScheduleNext();    
     return;
   } else if(s.countFdStatus(fd) != 0 &&
 	    s.getFdStatus(fd) == descriptorType::nonBlocking) {
@@ -1602,7 +1605,7 @@ bool recvmsgSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
   int flags = (int)t.arg3();
   int fd = (int)t.arg1();
   bool nonblock = (flags & MSG_DONTWAIT) == MSG_DONTWAIT ||
-    fd_is_nonblocking(s, fd);
+    fd_is_nonblocking(s, fd); 
   gs.log.writeToLog(Importance::info, "recvmsg from fd " + to_string(t.arg1()) + ", nonblock: " + to_string(nonblock) + "\n");
   return true;
 }
@@ -1801,7 +1804,7 @@ bool rt_sigtimedwaitSystemCall::handleDetPre(globalState& gs, state& s, ptracer&
 
   struct timespec* timeoutPtr = (struct timespec*)t.arg3();
   s.originalArg3 = (uint64_t)timeoutPtr;
-
+    
   if(timeoutPtr == nullptr){
     // Has to be created in memory.
     struct timespec* newAddr = (struct timespec*) s.mmapMemory.getAddr().ptr;
@@ -2493,7 +2496,7 @@ void timerfd_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer
       auto timer = it->second;
       if (timer.it_value.tv_sec != 0 || timer.it_value.tv_nsec != 0) {
 	// timer is active.
-	// cannot be 0 otherwise timer is disarmed.
+	// cannot be 0 otherwise timer is disarmed.	
 	timer.it_value.tv_sec = 0;
 	timer.it_value.tv_nsec = 1;
       }
@@ -2864,16 +2867,184 @@ void writevSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
 
 // =======================================================================================
 bool socketSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  int domain = t.arg1();
+
+  if (domain == AF_INET || domain == AF_INET6) {
+    if (!gs.allow_network) {
+      gs.log.writeToLog(Importance::inter, "socket syscall disabled, add `--allow-network` to enable socket syscall\n");
+      cancelSystemCall(gs, s, t);
+      t.setReturnRegister(-ENOSYS);
+      return false;
+    }
+  }
+
   return true;
 }
 
 void socketSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   int fd = (int)t.getReturnValue();
-
-  if (fd >= 0) {
-    gs.log.writeToLog(Importance::info, "socket returned " + to_string(fd) + "\n");
+  if (fd < 0) {
+    return;
   }
+
+  int domain = t.arg1();
+  int type = t.arg2();
+
+  if (domain == AF_INET || domain == AF_INET6) {
+    s.remote_sockfds->insert(fd);
+  }
+
+  if (type & SOCK_NONBLOCK) {
+    (*s.fdStatus)[fd] = descriptorType::nonBlocking;
+  }
+
+  gs.log.writeToLog(Importance::info, "socket returned " + to_string(fd) + "\n");
+}
+// =======================================================================================
+
+// =======================================================================================
+bool listenSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  return true;
+}
+
+void listenSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  int retval = (int)t.getReturnValue();
+
+  gs.log.writeToLog(Importance::info, "listen returned " + to_string(retval) + "\n");
 
   return;
 }
 // =======================================================================================
+
+// =======================================================================================
+bool acceptSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  cancelSystemCall(gs, s, t);
+  t.writeArg4(0);
+  replaySystemCall(gs, t, SYS_accept4);
+
+  gs.log.writeToLog(Importance::info, "change syscall accept => accept4\n");
+  return false;
+}
+
+void acceptSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  runtimeError("should never run into SYS_accept posthook");
+}
+// =======================================================================================
+
+static int get_proc_fd_flags(pid_t pid, int pid_fd) {
+  char path[64];
+  snprintf(path, 64, "/proc/%d/fdinfo/%d", pid, pid_fd);
+
+  int fd = open(path, O_RDONLY);
+  if (fd < 0) return 0;
+
+  char buff[4096] = {0,};
+
+  while (1) {
+    ssize_t n = read(fd, buff, 4096);
+    if (n < 0) {
+      if (errno == EINTR) {
+	continue;
+      } else {
+	close(fd);
+	return 0;
+      }
+    }
+    break;
+  }
+
+  close(fd);
+
+  char* p = (char*)buff, *q = (char*)buff;
+
+  const char prefix[] = "flags:";
+  int prefix_len = strlen(prefix);
+  while(1) {
+    p = strsep(&q, "\n");
+    if (!p) break;
+    if (strncmp(prefix, p, prefix_len) == 0) {
+      p += prefix_len;
+      while(p) {
+	if (*p == ' ' || *p == '\t') ++p;
+	break;
+      }
+      return (int)strtoul(p, NULL, 8);
+    }
+  }
+  return 0;
+}
+
+// =======================================================================================
+bool accept4SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  int fd = t.arg1();
+  int flags = t.arg4();
+
+  gs.log.writeToLog(Importance::info, "accept4(%d), flags = %d\n", fd, flags);
+
+  auto it = s.fdStatus.get()->find(fd);
+  if (it != s.fdStatus.get()->end()) {
+    if (it->second == descriptorType::nonBlocking) {
+      return true;
+    }
+  }
+
+  int fd_flags = get_proc_fd_flags(t.getPid(), fd);
+  /* blocking accept4, simulating nonblocking io */
+  s.userDefinedTimeout = true; // XXX: we have no timeout, borrow a variable
+  s.originalArg1 = fd_flags;
+  gs.log.writeToLog(Importance::info, "fd %d flags = 0x%x, nonblocking?: %d\n",
+		    fd, fd_flags, (fd_flags & O_NONBLOCK) == O_NONBLOCK);
+
+  return true;
+}
+
+void accept4SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  int fd = (int)t.arg1();
+  int flags = (int)t.arg4();
+  int retval = (int)t.getReturnValue();
+
+  if (retval >= 0) {
+    if ( (flags & SOCK_NONBLOCK) == SOCK_NONBLOCK) {
+      (*s.fdStatus.get())[retval] = descriptorType::nonBlocking;
+    } else {
+      (*s.fdStatus.get())[retval] = descriptorType::blocking;
+    }
+    gs.log.writeToLog(Importance::info, "accept4(%d) returned new fd %d\n", fd, retval);
+    return;
+  }
+
+  if (s.userDefinedTimeout) {
+    /* both EAGAIN/EWOULDBLOCK are valid return values for nonblocking mode */
+    if(retval == -EAGAIN || retval == -EWOULDBLOCK) {
+      gs.log.writeToLog(Importance::info, "accetp4 would have blocked! Replaying\n");
+      gs.replayDueToBlocking++;
+      sched.preemptAndScheduleNext();
+      replaySystemCall(gs, t, t.getSystemCallNumber());
+    }
+    s.userDefinedTimeout = false;
+    t.writeArg4(s.originalArg4);
+  }
+  return;
+}
+// =======================================================================================
+bool shutdownSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  gs.log.writeToLog(Importance::info, "shutdown(%d, %d)\n", t.arg1(), t.arg2());
+
+  return true;
+}
+
+void shutdownSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+  int retval = (int)t.getReturnValue();
+
+  gs.log.writeToLog(Importance::info, "shutdown returned " + to_string(retval) + "\n");
+
+  if (retval == 0) {
+    int fd = t.arg1();
+    int how = t.arg2();
+    if (how == SHUT_RDWR) {
+      s.remote_sockfds->erase(fd);
+    }
+  }
+
+  return;
+}

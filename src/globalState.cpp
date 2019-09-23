@@ -7,4 +7,5 @@ globalState::globalState(logger& log, ValueMapper<ino_t, ino_t> inodeMap,
   inodeMap{ inodeMap },
   mtimeMap{ mtimeMap },
   kernelPre4_12{ kernelPre4_12 },
-  log(log){}
+  log(log),
+  allow_network(allow_network) {}

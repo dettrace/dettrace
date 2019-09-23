@@ -253,7 +253,7 @@ int execution::runProgram(){
 
   log.writeToLog(Importance::inter, backtick("uname -a"));
   log.writeToLog(Importance::inter, backtick("cat /proc/cpuinfo"));
-
+  
   // Once all process' have ended. We exit.
   bool exitLoop = false;
 
@@ -1249,11 +1249,19 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
    return writevSystemCall::handleDetPre(gs, s, t, sched);
   case SYS_socket:
     return socketSystemCall::handleDetPre(gs, s, t, sched);
+  case SYS_listen:
+    return listenSystemCall::handleDetPre(gs, s, t, sched);
+  case SYS_accept:
+    return acceptSystemCall::handleDetPre(gs, s, t, sched);
+  case SYS_accept4:
+    return accept4SystemCall::handleDetPre(gs, s, t, sched);
+  case SYS_shutdown:
+    return shutdownSystemCall::handleDetPre(gs, s, t, sched);
   }
 
   // a system call we don't yet support
   gs.log.writeToLog(Importance::inter, "unsupported system call # "+to_string(syscallNumber));
-
+  
   // don't call the post-hook for unsupported system calls
   return false;
 }
@@ -1571,6 +1579,14 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
    return writevSystemCall::handleDetPost(gs, s, t, sched);
   case SYS_socket:
     return socketSystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_listen:
+    return listenSystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_accept:
+    return acceptSystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_accept4:
+    return accept4SystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_shutdown:
+    return shutdownSystemCall::handleDetPost(gs, s, t, sched);
   }
 
   // Removing to support usage of fingerprinter
