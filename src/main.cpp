@@ -108,6 +108,7 @@ struct programArgs{
 
   unsigned timeoutSeconds;
   unsigned long epoch;
+  unsigned long timestamps;
   unsigned long clone_ns_flags;
 
   unsigned short prng_seed;
@@ -127,7 +128,8 @@ struct programArgs{
     this->convertUids = false;
     this->alreadyInChroot = false;
     this->timeoutSeconds = 0;
-    this->epoch = execution::default_epoch;
+    this->epoch      = execution::default_epoch;
+    this->timestamps = execution::default_epoch;
     this->allow_network = false;
     this->with_aslr = false;
     this->clone_ns_flags = 0;
@@ -651,7 +653,8 @@ int spawnTracerTracee(void* voidArgs){
        cloneArgs->vdsoSyms,
        args->prng_seed,
        args->allow_network,
-       args->epoch
+       args->epoch,
+       args->timestamps
       };
 
     globalExeObject = &exe;
@@ -738,6 +741,13 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       "The default is `1993-08-08,22:00:00`. Also accepts a `now` value which "
       "permits nondeterministically setting the initial system time to the host time. ",
       cxxopts::value<std::string>())
+    ( "timestamps",
+      // TODO: provide an option to let real timestamps through.
+      // Right now the initial stamps are always constant.
+      "Set initial file timestamps (atime,ctime,mtime).  Accepts `yyyy-mm-dd,HH:MM:SS` (utc). "
+      "If unset, this defaults to value used for --epoch.",
+      cxxopts::value<std::string>())
+    
     ( "prng-seed",
       "Use this string to seed to the PRNG that is used to supply all "
       "randomness accessed by the guest.  This affects both /dev/[u]random and "
@@ -950,6 +960,22 @@ programArgs parseProgramArguments(int argc, char* argv[]){
 	  tm.tm_isdst = -1; /* dst auto detect */
 	  args.epoch = timegm(&tm);
 	}
+      }
+    }
+    // timestamps
+    {
+      if (result["timestamps"].count()) {
+	auto ts = result["timestamps"].as<std::string>();
+	struct tm tm;
+	if (!strptime(ts.c_str(), "%Y-%m-%d,%H:%M:%S", &tm)) {
+	  string errmsg("invalid time for --timestamps: ");
+	  errmsg += ts;
+	  runtimeError(errmsg);
+	}
+	tm.tm_isdst = -1; /* dst auto detect */
+	args.timestamps = timegm(&tm);
+      } else {
+	args.timestamps = args.epoch;
       }
     }
 

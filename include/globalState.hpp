@@ -20,6 +20,7 @@ public:
   globalState(logger& log, ValueMapper<ino_t, ino_t> inodeMap,
               ValueMapper<ino_t, time_t> mtimeMap, bool kernelPre4_12,
 	      unsigned prngSeed,
+	      unsigned long timestamps,
 	      bool allow_network = false);
 
   /** 
@@ -125,6 +126,12 @@ public:
    * Allow non-deterministic socket/networking
    */
   bool allow_network;
+
+  /**
+   * Initial timestamps on files
+   */
+  unsigned long timestamps;
+
 };
 
 #endif

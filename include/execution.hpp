@@ -158,6 +158,12 @@ private:
    */
   unsigned long epoch = execution::default_epoch;
 
+  /**
+   * starting timestamps
+   */
+  unsigned long timestamps = execution::default_epoch;
+
+  
   int exit_code;
 
   unsigned prngSeed;
@@ -183,7 +189,9 @@ public:
             map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs,
 	    unsigned prngSeed,
 	    bool allow_network = false,
-	    unsigned long epoch = execution::default_epoch);
+	    unsigned long epoch = execution::default_epoch,
+	    unsigned long timestamps = execution::default_epoch
+	    );
 
 
   /**
