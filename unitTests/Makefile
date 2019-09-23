@@ -8,13 +8,16 @@ src = $(wildcard *.cpp)
 obj = $(src:.cpp=.o)
 dep = $(obj:.o=.d)
 
+# TODO: factor out to 
+DETTRACE=../../bin/dettrace --epoch="1970-01-01,00:00:00" --
+
 build: systemCallTests
 
 systemCallTests: $(obj)
 	$(CXX) $^ -o $@
 
 run: systemCallTests
-	../../bin/dettrace ./systemCallTests | tee .unit-test-output
+	$(DETTRACE) ./systemCallTests | tee .unit-test-output
 	@grep --quiet "All tests passed" .unit-test-output
 	make -C ./otherClassesTests/ run
 
