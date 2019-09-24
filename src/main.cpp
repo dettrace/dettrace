@@ -981,6 +981,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     if (result["in-docker"].as<bool>()) {
       args.in_docker = true;
       args.clone_ns_flags = 0;
+      base_env = "host";
     }
 
     if (result["volume"].count()) {
@@ -1035,7 +1036,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
           // If no '=' was specified, get the variable from the host
           // environment. If the host environment variable doesn't exist, don't
           // set it at all.
-          if (auto host_env = getenv(k.c_str())) {
+          if (auto host_env = secure_getenv(k.c_str())) {
             args.envs[k] = std::string(host_env);
           }
         } else {
