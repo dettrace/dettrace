@@ -977,7 +977,7 @@ void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   int fd = t.arg1();
   const uint64_t request = t.arg2();
   gs.log.writeToLog(Importance::info, "File descriptor: %d\n", fd);
-  gs.log.writeToLog(Importance::info, "Request %" PRId64 "\n", request);
+  gs.log.writeToLog(Importance::info, "Request 0x%" PRIx64 "\n", request);
 
   switch (request) {
   // Even though we don't particularly like TCGETS, we will let it through as we need
@@ -994,9 +994,20 @@ void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   case SIOCGIFHWADDR:
   case SIOCGIFADDR:
     return;
-  // Do not suport querying for these.
+  // simulate vt100.
   case TIOCGWINSZ:
-    t.setReturnRegister((uint64_t) -ENOTTY);
+    {
+      if (t.arg3() && t.getReturnValue() == 0) {
+	struct winsize winsz {
+			      .ws_row = 24,
+			      .ws_col = 80,
+			      .ws_xpixel = 480,
+			      .ws_ypixel = 640,
+	};
+	auto rptr = traceePtr<struct winsize>((struct winsize*)t.arg3());
+	t.writeToTracee(rptr, winsz, s.traceePid);
+      }
+    }
     return;
   case TIOCGPGRP:
   case SIOCSIFMAP:
