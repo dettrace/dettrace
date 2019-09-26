@@ -163,7 +163,8 @@ private:
    */
   unsigned long timestamps = execution::default_epoch;
 
-  
+  unsigned long clock_step = execution::default_clock_step;
+
   int exit_code;
 
   unsigned prngSeed;
@@ -172,6 +173,11 @@ public:
    * default epoch
    */
   static const unsigned long default_epoch = 744847200UL;
+
+  /**
+   * Default number of microseconds to increment the clock by.
+   */
+  static const unsigned long default_clock_step = 1;
 
   /**
    * Constructor.
@@ -190,7 +196,8 @@ public:
 	    unsigned prngSeed,
 	    bool allow_network = false,
 	    unsigned long epoch = execution::default_epoch,
-	    unsigned long timestamps = execution::default_epoch
+	    unsigned long timestamps = execution::default_epoch,
+        unsigned long clock_step = execution::default_clock_step
 	    );
 
 

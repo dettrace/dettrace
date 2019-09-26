@@ -65,6 +65,11 @@ private:
    * epoch in seconds passed from execution environment
    */
   unsigned long epoch;
+
+  /**
+   * The number of microseconds to increment the clock by.
+   */
+  unsigned long clock_step;
 public:
   static const long MICRO_SECS_PER_SEC = 1000000L;
  /**
@@ -74,7 +79,8 @@ public:
    * @param traceePid pid of tracee
    * @param debugLevel debug level to be used
    */
-  explicit state(pid_t traceePid, int debugLevel, unsigned long epoch);
+  explicit state(pid_t traceePid, int debugLevel, unsigned long epoch,
+                 unsigned long clock_step);
 
   /**
    * fork a new state when fork/vfork is called
@@ -258,7 +264,7 @@ public:
    * Function to increase value of internal logical clock.
    */
   void incrementTime() {
-    ++clock;
+    clock += clock_step;
   }
 
   /**

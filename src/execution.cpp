@@ -50,7 +50,8 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
                      pthread_t devRandomPthread, pthread_t devUrandomPthread,
                      map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs,
 		     unsigned prngSeed,
-		     bool allow_network, unsigned long epoch, unsigned long timestamps):
+		     bool allow_network, unsigned long epoch, unsigned long timestamps,
+                     unsigned long clock_step):
   kernelPre4_8 {kernelCheck(4,8,0)},
   log {logFile, debugLevel, useColor},
   silentLogger {"", 0},
@@ -74,10 +75,11 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
   vdsoFuncs(vdsoFuncs),
   epoch(epoch),
   timestamps(timestamps),
+  clock_step(clock_step),
   prngSeed(prngSeed)
   {
     // Set state for first process.
-    states.emplace(startingPid, state{startingPid, debugLevel, epoch});
+    states.emplace(startingPid, state{startingPid, debugLevel, epoch, clock_step});
     myGlobalState.threadGroups.insert({startingPid, startingPid});
     myGlobalState.threadGroupNumber.insert({startingPid, startingPid});
 
@@ -748,7 +750,7 @@ void execution::handleExecEvent(pid_t pid) {
 
   // TODO When does this ever happen?
   if (states.find(pid) == states.end()){
-    states.emplace(pid, state {pid, debugLevel, epoch} );
+    states.emplace(pid, state {pid, debugLevel, epoch, clock_step} );
   }
   // Reset file descriptor state, it is wiped after execve.
   states.at(pid).fdStatus = make_shared<unordered_map<int, descriptorType>>();

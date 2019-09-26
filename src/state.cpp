@@ -1,8 +1,9 @@
 #include "state.hpp"
 
-state::state(pid_t traceePid, int debugLevel, unsigned long epoch) :
+state::state(pid_t traceePid, int debugLevel, unsigned long epoch, unsigned long clock_step):
     clock(epoch * state::MICRO_SECS_PER_SEC),
-    epoch(epoch),    
+    epoch(epoch),
+    clock_step(clock_step),
     fdStatus(new unordered_map<int, descriptorType>),
     traceePid(traceePid),
     signalToDeliver(0),
@@ -34,7 +35,7 @@ int state::countFdStatus(int fd){
 }
 
 state state::forked(pid_t childPid) const {
-  state childState(childPid, this->debugLevel, this->epoch);
+  state childState(childPid, this->debugLevel, this->epoch, this->clock_step);
   childState.CPUIDTrapSet = this->CPUIDTrapSet;
   childState.currentSignalHandlers = make_shared<unordered_map<int, enum sighandler_type>>(*(this->currentSignalHandlers));
   childState.dirEntries = this->dirEntries;
@@ -82,7 +83,7 @@ state state::forked(pid_t childPid) const {
 }
 
 state state::cloned(pid_t childPid) const {
-  state childState(childPid, this->debugLevel, this->epoch);
+  state childState(childPid, this->debugLevel, this->epoch, this->clock_step);
   childState.CPUIDTrapSet = this->CPUIDTrapSet;
   childState.currentSignalHandlers = this->currentSignalHandlers;
   childState.dirEntries = this->dirEntries;

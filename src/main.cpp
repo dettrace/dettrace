@@ -109,6 +109,7 @@ struct programArgs{
   unsigned timeoutSeconds;
   unsigned long epoch;
   unsigned long timestamps;
+  unsigned long clock_step;
   unsigned long clone_ns_flags;
 
   unsigned short prng_seed;
@@ -130,6 +131,7 @@ struct programArgs{
     this->timeoutSeconds = 0;
     this->epoch      = execution::default_epoch;
     this->timestamps = execution::default_epoch;
+    this->clock_step = execution::default_clock_step;
     this->allow_network = false;
     this->with_aslr = false;
     this->clone_ns_flags = 0;
@@ -644,7 +646,7 @@ int spawnTracerTracee(void* voidArgs){
     // the FifoPath might have be deleted by the tracee already.
     int ready = 1;
     doWithCheck(write(pipefds[1], (const void*)&ready, sizeof(int)), "spawnTracerTracee, pipe write");
- 
+
     execution exe
       {
        args->debugLevel, pid, args->useColor,
@@ -654,7 +656,8 @@ int spawnTracerTracee(void* voidArgs){
        args->prng_seed,
        args->allow_network,
        args->epoch,
-       args->timestamps
+       args->timestamps,
+       args->clock_step,
       };
 
     globalExeObject = &exe;
@@ -747,6 +750,9 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       "Set initial file timestamps (atime,ctime,mtime). Accepts `yyyy-mm-dd,HH:MM:SS` (utc). "
       "If unset, this defaults to value used for --epoch.",
       cxxopts::value<std::string>())
+    ( "clock-step",
+      "The number of microseconds to increment the clock each time it is queried.",
+      cxxopts::value<unsigned long>())
 
     ( "prng-seed",
       "Use this string to seed to the PRNG that is used to supply all "
@@ -976,6 +982,10 @@ programArgs parseProgramArguments(int argc, char* argv[]){
       } else {
 	args.timestamps = args.epoch;
       }
+    }
+
+    if (result["clock-step"].count()) {
+      args.clock_step = result["clock-step"].as<unsigned long>();
     }
 
     if (result["in-docker"].as<bool>()) {
