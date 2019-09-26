@@ -260,7 +260,7 @@ bool tracee_file_exists(const string& traceePath, pid_t traceePid, logger& log,
   } else if (err == ENOENT /*|| err == ENOTDIR might be needed later */) {
     return false;
   } else {
-    runtimeError("Unable to check for existance of file: " + to_string(errno));
+    runtimeError("Unable to check for existance of file: " + resolvedPath + ", error: " + to_string(errno));
   }
 
   // Can never happen, here to avoid spurious warning.
