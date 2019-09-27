@@ -29,7 +29,6 @@
 #include <libgen.h>
 #include <sys/mount.h>
 #include <sys/prctl.h>
-#include <archive.h>
 #include <time.h>
 
 #include <iostream>
