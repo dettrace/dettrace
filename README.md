@@ -1,19 +1,27 @@
 
-# Determinism enforcement based on ptrace.
+# DetTrace: Dynamic Determinism Enforcement Based on Ptrace.
 
 [![Build Status](https://dev.azure.com/upenn-acg/detTrace/_apis/build/status/upenn-acg.detTrace?branchName=master)](https://dev.azure.com/upenn-acg/detTrace/_build/latest?definitionId=1&branchName=master)
 
 ## Overview
-Using `ptrace` we are able to run programs deterministically. All system calls are caught
-and determinized by our tracer.
+Using `ptrace` we are able to run programs deterministically. All nondeterministic system
+calls are caught and determinized by DetTrace.
 
 ## Building
+
+### Project Dependencies
+Currently, this project requires the following dependencies:
+
+```
+clang # Building C++ code base
+libssl-dev # Hashing of bytes from read system call.
+libseccomp-dev # Helper library for finer-grained system call filtering.
+libarchive-dev # TBD
+```
+
 This project relies on the [libseccomp library](https://github.com/seccomp/libseccomp). Please install. For hassle free, we recommend installing from your system's standard repository of packages.
 
 Working on any recent Linux system you should be able to `make` from this directory.
-
-We use C++17 features not yet implemented in older compilers. It should work with GCC
-6.0 or higher. See [GCC feature list](https://gcc.gnu.org/projects/cxx-status.html).
 
 ## Usage
 Use the `dettrace` executable to run a program deterministically:
