@@ -372,34 +372,36 @@ int runTracee(programArgs* args){
       doWithCheck(mknod("/dev/null", mode, dev), "mknod");
     }
 
-    if (args->clone_ns_flags & CLONE_NEWNS) {
-      if (args->with_devrand_overrides) {
-        createFileIfNotExist("/dev/random");
-        mountDir(devrandFifoPath, "/dev/random");
-        createFileIfNotExist("/dev/urandom");
-        mountDir(devUrandFifoPath, "/dev/urandom");
-      }
+    if (args->with_devrand_overrides) {
+      createFileIfNotExist("/dev/random");
+      mountDir(devrandFifoPath, "/dev/random");
+      createFileIfNotExist("/dev/urandom");
+      mountDir(devUrandFifoPath, "/dev/urandom");
+    }
 
+    if (args->with_proc_overrides) {
+      mountDir(pathToExe+"/../root/proc/meminfo", "/proc/meminfo");
+      mountDir(pathToExe+"/../root/proc/stat", "/proc/stat");
+      mountDir(pathToExe+"/../root/proc/filesystems", "/proc/filesystems");
+    }
+    if (args->with_etc_overrides) {
+      mountDir(pathToExe+"/../root/etc/hosts", "/etc/hosts");
+      mountDir(pathToExe+"/../root/etc/passwd", "/etc/passwd");
+      mountDir(pathToExe+"/../root/etc/group", "/etc/group");
+      mountDir(pathToExe+"/../root/etc/ld.so.cache", "/etc/ld.so.cache");
+    }
+
+    if (args->clone_ns_flags & CLONE_NEWNS) {
       for (auto v: args->volume) {
 	mountDir(v.source, v.target);
       }
-
+      // this have to be done before mount /dev/{u}random because
+      // the source file is under previous /tmp
       doWithCheck(mount("none", "/tmp", "tmpfs", 0, NULL), "mount /tmp as tmpfs failed");
-      if (args->with_proc_overrides) {
-	mountDir(pathToExe+"/../root/proc/meminfo", "/proc/meminfo");
-	mountDir(pathToExe+"/../root/proc/stat", "/proc/stat");
-	mountDir(pathToExe+"/../root/proc/filesystems", "/proc/filesystems");
-      }
-      if (args->with_etc_overrides) {
-	mountDir(pathToExe+"/../root/etc/hosts", "/etc/hosts");
-	mountDir(pathToExe+"/../root/etc/passwd", "/etc/passwd");
-	mountDir(pathToExe+"/../root/etc/group", "/etc/group");
-	mountDir(pathToExe+"/../root/etc/ld.so.cache", "/etc/ld.so.cache");
-      }
-
-      // set working dir
-      doWithCheck(chdir(args->workdir.c_str()), "unable to chdir to " + args->workdir);
     }
+
+    // set working dir
+    doWithCheck(chdir(args->workdir.c_str()), "unable to chdir to " + args->workdir);
   }
 
   // trap on rdtsc/rdtscp insns
