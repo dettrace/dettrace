@@ -51,6 +51,7 @@
 #include <seccomp.h>
 
 #define CXXOPTS_NO_RTTI 1 // no rtti for cxxopts, this should be default.
+#define CXXOPTS_VECTOR_DELIMITER '\0'
 #include <cxxopts.hpp>
 
 /**
