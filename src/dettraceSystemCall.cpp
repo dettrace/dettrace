@@ -85,17 +85,17 @@ void arch_prctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, 
                     t.getReturnValue());
 
   if (0 != t.getReturnValue()) {
-    runtimeError("cpuid interception via arch_prctl failed");
+    fprintf(stderr, "DETTRACE WARNING: cpuid interception via arch_prctl failed, not virtualizing CPUID.");
+    s.CPUIDTrapSet = false;
+  } else {
+    if (s.CPUIDTrapSet) {
+      // This should be impossible.
+      runtimeError("Got to arch_prctl post-hook without it needing to have CPUID trap set.");
+    }
+    s.CPUIDTrapSet = true;
   }
-  
-  if (s.CPUIDTrapSet) {
-    // This should be impossible.
-    runtimeError("Got to arch_prctl post-hook without it needing to have CPUID trap set.");
-  }
-
   s.syscallInjected = false;
-  s.CPUIDTrapSet = true;
-
+  
   // I don't believe arch_prctl(ARCH_SET_CPUID) writes to tracee memory at all.
   t.setRegs(s.regSaver.popRegisterState());
 
