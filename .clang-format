@@ -1,0 +1,16 @@
+# vim: ft=conf
+---
+BasedOnStyle: Google
+---
+Language: Cpp
+
+IndentCaseLabels: false
+SpacesBeforeTrailingComments: 1
+AccessModifierOffset: -2
+
+# Enabling these option prevents changing a single line without perturbing the
+# surrounding lines. Keeping the formatting of each line more independent makes
+# merging easier.
+AlignTrailingComments: false
+AlignAfterOpenBracket: AlwaysBreak
+BinPackParameters: false

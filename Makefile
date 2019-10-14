@@ -30,6 +30,8 @@ dep = $(obj:.o=.d)
 	docker-dev \
 	dynamic \
 	env \
+	fmt \
+	format \
 	install \
 	run-docker \
 	run-docker-non-interactive \
@@ -152,3 +154,9 @@ env: docker-dev
 		-u "$(shell id -u):$(shell id -g)" \
 		"$(NAME):dev" \
 		bash
+
+# Formats the codebase using clang-format.
+fmt: format
+format:
+	find src -type f -name '*.cpp' -exec clang-format -i '{}' \+
+	find include -type f -name '*.hpp' -exec clang-format -i '{}' \+
