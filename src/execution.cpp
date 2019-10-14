@@ -799,6 +799,7 @@ struct CPUIDRegs {
   unsigned edx;
 };
 
+// clang-format off
 static const struct CPUIDRegs cpuids[] =
   {
    { 0x0000000D, 0x756E6547, 0x6C65746E, 0x49656E69, },
@@ -831,6 +832,7 @@ static const struct CPUIDRegs extended_cpuids[] =
    { 0x00000000, 0x00000000,0x00000000,0x00000000, },
    { 0x00000000, 0x00000000,0x00000000,0x00000000, },
 };
+// clang-format on
 
 // =======================================================================================
 void execution::handleSignal(int sigNum, const pid_t traceesPid){

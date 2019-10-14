@@ -40,11 +40,10 @@
 #include "util.hpp"
 
 /*
- * byte code for the new psudo vdso functions
- * which do the actual syscalls.
- * NB: the byte code must be 8 bytes
- * aligned
+ * byte code for the new psudo vdso functions which do the actual syscalls.
+ * NB: the byte code must be 8 bytes aligned
  */
+// clang-format off
 static const unsigned char __vdso_time[] = {
     0xb8, 0xc9, 0x0, 0x0, 0x0                     // mov %SYS_time, %eax
   , 0x0f, 0x05                                    // syscall
@@ -77,6 +76,7 @@ static const unsigned char __vdso_gettimeofday[] = {
   , 0xc3                                         // retq
   , 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00     // nopl 0x0(%rax, %rax, 1)
   , 0x00 };
+// clang-format on
 
 std::map<std::string, std::basic_string<unsigned char>> vdsoGetCandidateData(void) {
   std::map<std::string, std::basic_string<unsigned char>> res;

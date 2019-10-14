@@ -712,6 +712,7 @@ private:
 programArgs parseProgramArguments(int argc, char* argv[]){
   programArgs args(argc, argv);
 
+  // clang-format off
   cxxopts::Options options("dettrace",
 	 "Provides a container for dynamic determinism enforcement.\n"
 	 "Arbitrary programs run inside (guests) become deterministic \n"
@@ -896,6 +897,7 @@ programArgs parseProgramArguments(int argc, char* argv[]){
     ( "programArgs",
       "program arguments",
       cxxopts::value<std::vector<std::string>>());
+  // clang-format on
 
   try {
     options.parse_positional("program", "programArgs");
