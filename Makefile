@@ -24,6 +24,7 @@ dep = $(obj:.o=.d)
 	all \
 	build \
 	build-tests \
+	check-formatting \
 	clean \
 	deb \
 	docker \
@@ -76,7 +77,7 @@ dynamic-and-static: bin/$(NAME) bin/$(NAME)-static
 tests: run-tests
 test: tests
 
-build-tests:
+build-tests: check-formatting
 	$(MAKE) -C ./test/unitTests/ build
 	$(MAKE) -C ./test/samplePrograms/ build
 
@@ -158,5 +159,11 @@ env: docker-dev
 # Formats the codebase using clang-format.
 fmt: format
 format:
-	find src -type f -name '*.cpp' -exec clang-format -i '{}' \+
-	find include -type f -name '*.hpp' -exec clang-format -i '{}' \+
+	@find src -type f -name '*.cpp' -exec clang-format -i '{}' \+
+	@find include -type f -name '*.hpp' -exec clang-format -i '{}' \+
+
+# Checks the formatting on all files without actually modifying them. If
+# formatting is incorrect, a diff is printed out.
+check-formatting:
+	@find src -type f -name '*.cpp' -print0 | xargs -0 -n1 ./ci/check-formatting.sh
+	@find include -type f -name '*.hpp' -print0 | xargs -0 -n1 ./ci/check-formatting.sh
