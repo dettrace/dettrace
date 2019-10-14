@@ -2,11 +2,10 @@ FROM ubuntu:18.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get -qq update
-
-RUN apt-get install -y \
-    clang++-6.0 \
-    clang-6.0 \
+RUN apt-get -qq update && apt-get install -y \
+    clang++-8 \
+    clang-8 \
+    clang-format-8 \
     cpio \
     fuse \
     git \
@@ -21,8 +20,8 @@ RUN apt-get install -y \
     libseccomp-dev \
     libssl-dev \
     libxml2-dev \
-    lld-6.0 \
-    lldb-6.0 \
+    lld-8 \
+    lldb-8 \
     make \
     nettle-dev \
     openssh-server \
@@ -33,10 +32,11 @@ RUN apt-get install -y \
     sudo \
     valgrind
 
-RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-6.0 60 \
-    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-6.0 \
-    --slave /usr/bin/clang-cpp clang-cpp /usr/bin/clang-cpp-6.0 \
-    --slave /usr/bin/lldb lldb /usr/bin/lldb-6.0
+RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-8 60 \
+    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-8 \
+    --slave /usr/bin/clang-cpp clang-cpp /usr/bin/clang-cpp-8 \
+    --slave /usr/bin/lldb lldb /usr/bin/lldb-8 \
+    --slave /usr/bin/clang-format clang-format /usr/bin/clang-format-8
 
 WORKDIR /code
 
