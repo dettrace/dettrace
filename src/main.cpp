@@ -32,7 +32,9 @@
 #include <cstdlib>
 
 #include <cassert>
+#include <cstring>
 #include <iostream>
+#include <memory>
 #include <tuple>
 #include <vector>
 
@@ -312,48 +314,50 @@ static string getExePath(pid_t pid = 0) {
 #undef PROC_PID_EXE_LEN
 }
 
-// prepare envvars for tracee
-static std::pair<char**, size_t> populate_env_vars(
+/**
+ * Creates vector of environment variables whose binary representation is
+ * compatible with execvpe. Using a vector of unique pointers ensures that it is
+ * deallocated in case execvpe fails.
+ */
+static std::vector<std::unique_ptr<char[]>> make_envp(
     std::unordered_map<std::string, std::string>& envvars) {
-  // Create minimal environment.
-  // Note: gcc needs to be somewhere along PATH or it gets very confused, see
-  // https://github.com/upenn-acg/detTrace/issues/23
-  unsigned long env_vars_bytes = 0;
-  unsigned long env_vars_nr = 0;
-  for (auto it = envvars.cbegin(); it != envvars.cend(); ++it) {
-    env_vars_bytes += it->first.size() + it->second.size() + 3;
-    ++env_vars_nr;
+  // Use a unique ptr to ensure that everything gets deallocated properly.
+  std::vector<std::unique_ptr<char[]>> envs;
+  envs.reserve(envvars.size() + 1);
+
+  for (const auto& v : envvars) {
+    // Add +2 for the '=' and '\0'.
+    const auto size = v.first.size() + v.second.size() + 2;
+    auto p = new char[size];
+    snprintf(p, size, "%s=%s", v.first.c_str(), v.second.c_str());
+    envs.push_back(std::unique_ptr<char[]>(p));
   }
 
-  char* env_var_store = (char*)calloc(1 + env_vars_bytes, 1);
-  if (!env_var_store) {
-    string errmsg =
-        "unable to alloc env string for size: " + to_string(env_vars_bytes) +
-        "\n";
-    runtimeError(errmsg);
+  envs.push_back(nullptr);
+
+  return envs;
+}
+
+/**
+ * Creates vector of arguments whose binary representation is compatible with
+ * execvpe. Using a vector of unique pointers ensures that it is deallocated in
+ * case execvpe fails.
+ */
+static std::vector<std::unique_ptr<char[]>> make_argv(
+    std::vector<std::string>& args) {
+  std::vector<std::unique_ptr<char[]>> argv;
+  argv.reserve(argv.size() + 1);
+
+  for (const auto& arg : args) {
+    const auto size = arg.size() + 1;
+    auto p = new char[size];
+    std::memcpy(p, arg.c_str(), size);
+    argv.push_back(std::unique_ptr<char[]>(p));
   }
 
-  char** envs = (char**)calloc(1 + env_vars_nr, sizeof(char*));
-  if (!envs) {
-    string errmsg = "unable to alloc envvar for size: " +
-                    to_string(sizeof(char*) * env_vars_nr) + "\n";
-    runtimeError(errmsg);
-  }
+  argv.push_back(nullptr);
 
-  int i = 0;
-  int k = 0;
-  int n = (int)env_vars_bytes;
-  for (auto it = envvars.cbegin(); it != envvars.cend(); ++it) {
-    char* env = &env_var_store[k];
-    k += snprintf(
-        &env_var_store[k], n - k, "%s=%s", it->first.c_str(),
-        it->second.c_str());
-    env_var_store[k++] = '\0';
-    envs[i++] = env;
-  }
-  envs[i++] = NULL;
-
-  return std::make_pair(envs, (size_t)i);
+  return argv;
 }
 
 // =======================================================================================
@@ -362,8 +366,6 @@ static std::pair<char**, size_t> populate_env_vars(
  * @arg tempdir: either empty string or tempdir to use, for cpio chroot.
  */
 int runTracee(programArgs* args) {
-  auto argv = args->args;
-  int debugLevel = args->debugLevel;
   string pathToExe = args->pathToExe;
 
   {
@@ -427,28 +429,22 @@ int runTracee(programArgs* args) {
   // Perform execve based on user command.
   ptracer::doPtrace(PTRACE_TRACEME, 0, NULL, NULL);
 
-  // +1 for executable's name, +1 for NULL at the end.
-  int newArgc = args->args.size() + 1;
-  char* traceeCommand[newArgc];
+  // Create program arguments.
+  auto argv = make_argv(args->args);
+  assert(argv.size() > 0);
 
-  for (int i = 0; i < newArgc - 1; i++) {
-    traceeCommand[i] = (strdup)(argv[i].c_str());
-  }
-  traceeCommand[newArgc - 1] = NULL;
-
-  char** envs = NULL;
-  size_t nenvs = 0;
-
-  std::tie(envs, nenvs) = populate_env_vars(args->envs);
+  // Create environment.
+  // NOTE: gcc needs to be somewhere along PATH or it gets very confused, see
+  // https://github.com/upenn-acg/detTrace/issues/23
+  auto envs = make_envp(args->envs);
 
   // Set up seccomp + bpf filters using libseccomp.
   // Default action to take when no rule applies to system call. We send a
   // PTRACE_SECCOMP event message to the tracer with a unique data: INT16_MAX
-  seccomp myFilter{debugLevel, args->convertUids};
+  seccomp myFilter{args->debugLevel, args->convertUids};
 
   // Stop ourselves until the tracer is ready. This ensures the tracer has time
-  // to get set
-  // up.
+  // to get set up.
   raise(SIGSTOP);
 
   myFilter.loadFilterToKernel();
@@ -456,10 +452,11 @@ int runTracee(programArgs* args) {
   // execvpe() duplicates the actions of the shell in searching  for  an
   // executable file if the specified filename does not contain a slash (/)
   // character.
-  int val = execvpe(traceeCommand[0], traceeCommand, envs);
+  int val =
+      execvpe(argv[0].get(), (char* const*)argv.data(), (char**)envs.data());
   if (val == -1) {
     if (errno == ENOENT) {
-      cerr << "Unable to exec your program (" << traceeCommand[0]
+      cerr << "Unable to exec your program (" << argv[0].get()
            << "). No such executable found\n"
            << endl;
       cerr << "This program may not exist inside the chroot." << endl;

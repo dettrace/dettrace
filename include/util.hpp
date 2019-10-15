@@ -29,15 +29,6 @@ extern unordered_map<int, string> futexCommands;
 extern unordered_map<int, string> futexAdditionalFlags;
 
 /**
- * Get env variable copy to free space and return as a heap-allocated pointer.
- * @param var: env variable to fetch from system (e.g. "HOME").
- * @param dieIfNotSet: if True, system will crash in case var was not found.
- * @return value of env variable as string if found. NULL if variable is
- *                    not found and dieifNotSet == false.
- */
-char* getEnvVar(char* var, bool dieIfNotSet);
-
-/**
  * Parses a string of numbers while safely handing all errors by reporting
  * error to stderr and exit(1). Warning: does not check for underflows!
  * @param numToParse: a pointer to the string to be parsed.
