@@ -790,28 +790,45 @@ bool execution::handleSeccomp(const pid_t traceesPid){
   return callPostHook;
 }
 
-static const struct CPUIDRegs {
+struct CPUIDRegs {
   unsigned eax;
   unsigned ebx;
   unsigned ecx;
   unsigned edx;
-} cpuids[] =
+};
+
+static const struct CPUIDRegs cpuids[] =
   {
    { 0x0000000D, 0x756E6547, 0x6C65746E, 0x49656E69, },
    { 0x00000663, 0x00000800, 0x80202001, 0x078BFBFD, },
    { 0x00000001, 0x00000000, 0x0000004D, 0x002C307D, },
    { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
-   { 0x00000121, 0x01C0003F, 0x0000003F, 0x00000001, },
+   { 0x00000120, 0x01C0003F, 0x0000003F, 0x00000001, },
    { 0x00000000, 0x00000000, 0x00000003, 0x00000000, },
    { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
    { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
    { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
    { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
    { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
-   { 0x00000001, 0x00000001, 0x00000100, 0x00000000, },
+   { 0x00000000, 0x00000001, 0x00000100, 0x00000001, },
    { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
    { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
   };
+
+static const struct CPUIDRegs extended_cpuids[] =
+  {
+   { 0x8000000A, 0x756E6547,0x6C65746E,0x49656E69, },
+   { 0x00000663, 0x00000000,0x00000001,0x20100800, },
+   { 0x554D4551, 0x72695620,0x6C617574,0x55504320, },
+   { 0x72657620, 0x6E6F6973,0x352E3220,0x0000002B, },
+   { 0x00000000, 0x00000000,0x00000000,0x00000000, },
+   { 0x01FF01FF, 0x01FF01FF,0x40020140,0x40020140, },
+   { 0x00000000, 0x42004200,0x02008140,0x00808140, },
+   { 0x00000000, 0x00000000,0x00000000,0x00000000, },
+   { 0x00003028, 0x00000000,0x00000000,0x00000000, },
+   { 0x00000000, 0x00000000,0x00000000,0x00000000, },
+   { 0x00000000, 0x00000000,0x00000000,0x00000000, },
+};
 
 // =======================================================================================
 void execution::handleSignal(int sigNum, const pid_t traceesPid){
@@ -869,13 +886,16 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
       // fill in canonical cpuid return values
 
-      const unsigned nleafs = sizeof(cpuids) / sizeof(cpuids[0]);
+      const unsigned long nleafs = sizeof(cpuids) / sizeof(cpuids[0]);
       assert(nleafs == 1 +  cpuids[0].eax);
+
+      const unsigned long nleafs_ext = 0x80000000ul + sizeof(extended_cpuids) / sizeof(extended_cpuids[0]);
+      assert(nleafs_ext == 1 + extended_cpuids[0].eax);
 
       switch (regs.rax) {
       case 0x0 ... nleafs:
 	{
-	  int leaf = regs.rax;
+	  long leaf = regs.rax;
 	  const struct CPUIDRegs& cpuid = cpuids[leaf];
 	  tracer.writeRax(cpuid.eax);
 	  tracer.writeRbx(cpuid.ebx);
@@ -883,25 +903,16 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 	  tracer.writeRdx(cpuid.edx);
 	}
 	break;
-      case 0x80000000:
-        tracer.writeRax( 0x80000000 );
-        tracer.writeRbx( 0x0 );
-        tracer.writeRdx( 0x0 );
-        tracer.writeRcx( 0x0 );
-        break;
-      case 0x80000001:
-        tracer.writeRax( 0x0 );
-        tracer.writeRbx( 0x0 );
-        tracer.writeRcx( 0x21 );
-        tracer.writeRdx( 0x2c100800 );
-        break;
-      case 0x80000006: // L2 cache
-        tracer.writeRax( 0x0 );
-        tracer.writeRbx( 0x0 );
-        tracer.writeRdx( 0x0 );
-        // size=2MB, 16-way set associative, line size = 64B
-        tracer.writeRcx( 0x08008140 );
-        break;
+      case 0x80000000ul ... nleafs_ext:
+	{
+	  long leaf = regs.rax - 0x80000000ul;
+	  const struct CPUIDRegs& cpuid_ext = extended_cpuids[leaf];
+	  tracer.writeRax(cpuid_ext.eax);
+	  tracer.writeRbx(cpuid_ext.ebx);
+	  tracer.writeRcx(cpuid_ext.ecx);
+	  tracer.writeRdx(cpuid_ext.edx);
+	}
+	break;
       default:
         runtimeError("CPUID unsupported %eax = " + to_string(regs.rax));
       }
