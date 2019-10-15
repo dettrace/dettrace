@@ -16,3 +16,4 @@ src/dettrace-static
 /bin/
 benchmarking/*.time
 *.deb
+*.tmp

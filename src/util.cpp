@@ -49,24 +49,6 @@ void runtimeError(string error) {
 }
 
 /*======================================================================================*/
-char* getEnvVar(char* var, bool dieIfNotSet) {
-  char* tempResult = getenv(var);
-
-  if (tempResult == NULL && dieIfNotSet) {
-    /* Do not make this a call to libDetLog, we need to fetch the env for DEBUG
-       before we make a call to it. */
-    fprintf(
-        stderr, "  [Detbox] Util library: Unable to read env variable %s\n",
-        var);
-  }
-  if (tempResult == NULL) {
-    return NULL;
-  }
-  char* returnVar = (char*)malloc(sizeof(char) * strlen(tempResult) + 1);
-  strcpy(returnVar, tempResult);
-  return returnVar;
-}
-/*======================================================================================*/
 int parseNum(const char* const numToParse) {
   // Required to check error condition of strtol.
   char* endptr;

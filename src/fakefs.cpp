@@ -212,6 +212,8 @@ std::string stat(void) {
       total_softirqs - 1);
   res += line;
 
+  delete[] stats;
+
   return res;
 }
 } // namespace proc

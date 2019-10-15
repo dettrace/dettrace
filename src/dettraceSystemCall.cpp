@@ -411,7 +411,7 @@ static void epoll_log_event(globalState& gs, ptracer& t) {
     p += snprintf(
         p + n, size - n, " (%s, %lu)", epoll_op(ev.events), ev.data.u64);
   }
-  p += snprintf(p + n, size - n, "]\n");
+  snprintf(p + n, size - n, "]\n");
   gs.log.writeToLogNoFormat(Importance::extra, buffer);
 }
 
@@ -3286,12 +3286,12 @@ static int get_proc_fd_flags(pid_t pid, int pid_fd) {
 
   close(fd);
 
-  char *p = (char*)buff, *q = (char*)buff;
+  char* q = (char*)buff;
 
   const char prefix[] = "flags:";
   int prefix_len = strlen(prefix);
   while (1) {
-    p = strsep(&q, "\n");
+    const char* p = strsep(&q, "\n");
     if (!p) break;
     if (strncmp(prefix, p, prefix_len) == 0) {
       p += prefix_len;
