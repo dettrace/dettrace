@@ -246,7 +246,18 @@ int main(void)
     printf("__get_cpuid(%d) eax|ebx|ecx|edx: %08X %08X %08X %08X\n",
            level,eax,ebx,ecx,edx);
   }
-  
+
+  {
+    long ext=0x80000000;
+    unsigned long max_level = (long)(unsigned)__get_cpuid_max(ext,&sig);
+    printf("Highest supported __get_cpuid (extended) input (aka eax value, cpuid leaf): %ld\n",max_level);
+    for(long level=ext; level <= max_level; level++) {
+      assert(1 == __get_cpuid(level, &eax,&ebx,&ecx,&edx));
+      printf("__get_cpuid(%lx) eax|ebx|ecx|edx: { %08X, %08X, %08X, %08X, },\n",
+            level,eax,ebx,ecx,edx);
+    }
+  }
+
   printf("Exiting successfully.\n");
   return 0;
 }
