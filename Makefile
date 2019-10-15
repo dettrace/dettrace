@@ -167,3 +167,8 @@ format:
 check-formatting:
 	@find src -type f -name '*.cpp' -print0 | xargs -0 -n1 ./ci/check-formatting.sh
 	@find include -type f -name '*.hpp' -print0 | xargs -0 -n1 ./ci/check-formatting.sh
+
+# Installs Git hooks.
+hooks:
+	rm -rf -- .git/hooks
+	ln -sf ../.githooks .git/hooks

@@ -1,0 +1,17 @@
+#!/bin/sh
+
+if command -v clang-format > /dev/null; then
+    # Check formatting
+    if ! git diff --name-only --cached HEAD '*.hpp' '*.cpp' | xargs -n1 ./ci/check-formatting.sh; then
+        echo '============================================================='
+        echo 'ERROR: One or more files were not formatted correctly. You can'
+        echo '       run `make format` to correct the above errors. If you know'
+        echo '       what you are doing, you can ignore this error with'
+        echo '       `git commit --no-verify`.'
+        exit 1
+    fi
+else
+    echo "WARNING: clang-format is not installed. Skipping format check."
+    echo "         You might be committing unformatted code!"
+fi
+
