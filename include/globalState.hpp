@@ -132,6 +132,12 @@ public:
    */
   unsigned long timestamps;
 
+  /**
+   * allow trap CPUID. this can be set to false
+   * when arch_prctl(SET_CPUID) returned error
+   * which can happen in old CPUs or in certain VM.
+   */
+  bool allow_trapCPUID;
 };
 
 #endif

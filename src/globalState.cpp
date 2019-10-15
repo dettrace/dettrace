@@ -8,5 +8,7 @@ globalState::globalState(logger& log, ValueMapper<ino_t, ino_t> inodeMap,
   mtimeMap{ mtimeMap },
   kernelPre4_12{ kernelPre4_12 },
   log(log),
-  timestamps(timestamps),
-  allow_network(allow_network) {}
+  allow_network(allow_network),
+  timestamps(timestamps) {
+    allow_trapCPUID = true;
+  }

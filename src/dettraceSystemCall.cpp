@@ -84,18 +84,23 @@ void arch_prctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, 
   gs.log.writeToLog(Importance::info, "post-hook for arch_prctl, returning %d\n",
                     t.getReturnValue());
 
-  if (0 != t.getReturnValue()) {
-    runtimeError("cpuid interception via arch_prctl failed");
-  }
-  
   if (s.CPUIDTrapSet) {
     // This should be impossible.
     runtimeError("Got to arch_prctl post-hook without it needing to have CPUID trap set.");
   }
 
-  s.syscallInjected = false;
-  s.CPUIDTrapSet = true;
+  // arch_prctl could return ENODEV when `cpuid_fault` flag is absent (cpuinfo).
+  if (0 != t.getReturnValue()) {
+    string errmsg("cpuid interception (cpuid_fault) via arch_prctl failed: ");
+    errmsg += strerror(-t.getReturnValue());
+    errmsg += "\nPlease check `cpuid_fault` flag from `cat /proc/cpuinfo`";
+    gs.log.writeToLog(Importance::inter, errmsg);
+    gs.allow_trapCPUID = false;
+  } else {
+    s.CPUIDTrapSet = true;
+  }
 
+  s.syscallInjected = false;
   // I don't believe arch_prctl(ARCH_SET_CPUID) writes to tracee memory at all.
   t.setRegs(s.regSaver.popRegisterState());
 
