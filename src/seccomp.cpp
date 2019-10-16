@@ -1,31 +1,30 @@
 #include "seccomp.hpp"
 #include "util.hpp"
 
-#include <string>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 
 #include <sys/personality.h>
 #include <sys/ptrace.h>
-#include <sys/reg.h>     /* For constants ORIG_EAX, etc */
-#include <sys/syscall.h>    /* For SYS_write, etc */
+#include <sys/reg.h> /* For constants ORIG_EAX, etc */
+#include <sys/syscall.h> /* For SYS_write, etc */
 
 using namespace std;
 
-seccomp::seccomp(int debugLevel, bool convertUids){
+seccomp::seccomp(int debugLevel, bool convertUids) {
   ctx = seccomp_init(SCMP_ACT_TRACE(INT16_MAX));
 
-  if(ctx == nullptr){
+  if (ctx == nullptr) {
     runtimeError("Unable to init seccomp filter.\n");
   }
 
   loadRules(debugLevel >= 4, convertUids);
 }
 
-void seccomp::loadRules(bool debug, bool convertUids){
-
+void seccomp::loadRules(bool debug, bool convertUids) {
   // Add other UID functions we might need to intercept here!
-  if(convertUids){
+  if (convertUids) {
     intercept(SYS_fchownat);
     intercept(SYS_chown);
     intercept(SYS_lchown);
@@ -42,10 +41,10 @@ void seccomp::loadRules(bool debug, bool convertUids){
   // Change location of the program break.
   noIntercept(SYS_brk);
 
-  // Bind seems safe enough to let though, specially since user is stuck in chroot.
-  // There might be some slight issues with permission denied if we set up our
-  // bind mounts wrong and might need to allow for recursive mounting. But it will
-  // be obvious.
+  // Bind seems safe enough to let though, specially since user is stuck in
+  // chroot. There might be some slight issues with permission denied if we set
+  // up our bind mounts wrong and might need to allow for recursive mounting.
+  // But it will be obvious.
   noIntercept(SYS_bind);
   noIntercept(SYS_splice);
   noIntercept(SYS_dup3);
@@ -66,14 +65,15 @@ void seccomp::loadRules(bool debug, bool convertUids){
   // Epoll system calls.
   noIntercept(SYS_epoll_create1);
   noIntercept(SYS_epoll_create);
-  //noIntercept(SYS_epoll_ctl);
+  // noIntercept(SYS_epoll_ctl);
   intercept(SYS_epoll_ctl);
   intercept(SYS_epoll_wait);
   intercept(SYS_epoll_pwait);
   // Advise on access patter by program of file.
   noIntercept(SYS_fadvise64);
   noIntercept(SYS_fallocate);
-  // Variants of regular function that use file descriptor instead of char* path.
+  // Variants of regular function that use file descriptor instead of char*
+  // path.
   noIntercept(SYS_fchdir);
   noIntercept(SYS_fchmod);
   noIntercept(SYS_fchmodat);
@@ -110,8 +110,8 @@ void seccomp::loadRules(bool debug, bool convertUids){
   noIntercept(SYS_pread64);
   intercept(SYS_rt_sigprocmask);
 
-  //intercept(SYS_sigaction); // is mapped to SYS_rt_sigaction on cat16
-  //intercept(SYS_signal); // is mapped to SYS_rt_sigaction on cat16
+  // intercept(SYS_sigaction); // is mapped to SYS_rt_sigaction on cat16
+  // intercept(SYS_signal); // is mapped to SYS_rt_sigaction on cat16
   noIntercept(SYS_rt_sigreturn);
   intercept(SYS_rt_sigtimedwait);
   intercept(SYS_rt_sigsuspend);
@@ -131,7 +131,8 @@ void seccomp::loadRules(bool debug, bool convertUids){
   noIntercept(SYS_setreuid);
   noIntercept(SYS_setuid);
   // This seems to be, surprisingly, deterministic. The affinity is set/get by
-  // us so it should always be the same mask. User cannot actually observe differences.
+  // us so it should always be the same mask. User cannot actually observe
+  // differences.
   noIntercept(SYS_sched_getaffinity);
   noIntercept(SYS_sched_setaffinity);
   intercept(SYS_socket);
@@ -152,11 +153,10 @@ void seccomp::loadRules(bool debug, bool convertUids){
   // TODO
   noIntercept(SYS_writev);
 
-  // These system calls must be intercepted as to know when a fork even has happened:
-  // We handle forks when see the system call pre exit.
-  // Since this is the easiest time to tell a fork even happened. It's not trivial
-  // to check the event as we might get a signal first from the child process.
-  // See:
+  // These system calls must be intercepted as to know when a fork even has
+  // happened: We handle forks when see the system call pre exit. Since this is
+  // the easiest time to tell a fork even happened. It's not trivial to check
+  // the event as we might get a signal first from the child process. See:
   // https://stackoverflow.com/questions/29997244/
   // occasionally-missing-ptrace-event-vfork-when-running-ptrace
   noIntercept(SYS_fork);
@@ -222,8 +222,8 @@ void seccomp::loadRules(bool debug, bool convertUids){
   intercept(SYS_getrlimit);
   intercept(SYS_getrusage);
   intercept(SYS_gettimeofday);
-  // TODO we might be able to use seccomp to only intercept on the ioctl system calls
-  // arguments that we care about
+  // TODO we might be able to use seccomp to only intercept on the ioctl system
+  // calls arguments that we care about
   intercept(SYS_ioctl);
   // TODO
   intercept(SYS_llistxattr);
@@ -301,46 +301,45 @@ void seccomp::loadRules(bool debug, bool convertUids){
   // noIntercept(SYS_shmctl);
 }
 
-void seccomp::noIntercept(uint16_t systemCall){
+void seccomp::noIntercept(uint16_t systemCall) {
   // Send system call number as data to tracer to avoid a ptrace(GET_REGS).
   int ret = seccomp_rule_add(ctx, SCMP_ACT_ALLOW, systemCall, 0);
-  if(ret < 0){
-    runtimeError("Failed to add system call no interception rule! Reason: \n" +
-			to_string(systemCall));
+  if (ret < 0) {
+    runtimeError(
+        "Failed to add system call no interception rule! Reason: \n" +
+        to_string(systemCall));
   }
 
   return;
 }
 
-void seccomp::intercept(uint16_t systemCall){
+void seccomp::intercept(uint16_t systemCall) {
   // Send system call number as data to tracer to avoid a ptrace(GET_REGS).
   int ret = seccomp_rule_add(ctx, SCMP_ACT_TRACE(systemCall), systemCall, 0);
-  if(ret < 0){
-    runtimeError("Failed to add system call no interception rule! Reason: \n" +
-			to_string(systemCall));
+  if (ret < 0) {
+    runtimeError(
+        "Failed to add system call no interception rule! Reason: \n" +
+        to_string(systemCall));
   }
 
   return;
 }
 
-void seccomp::intercept(uint16_t systemCall, bool cond){
-  if(cond){
+void seccomp::intercept(uint16_t systemCall, bool cond) {
+  if (cond) {
     intercept(systemCall);
-  }else{
+  } else {
     noIntercept(systemCall);
   }
 
   return;
 }
 
-void seccomp::loadFilterToKernel(){
+void seccomp::loadFilterToKernel() {
   int ret = seccomp_load(ctx);
-  if(ret < 0){
-    runtimeError("Unable to seccomp_load.\n Reason: " + string { strerror(- ret)});
+  if (ret < 0) {
+    runtimeError("Unable to seccomp_load.\n Reason: " + string{strerror(-ret)});
   }
-
 }
 
-seccomp::~seccomp(){
-  seccomp_release(ctx);
-}
+seccomp::~seccomp() { seccomp_release(ctx); }

@@ -7,11 +7,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <iostream>
 #include <limits.h>
 #include <sys/uio.h>
+#include <iostream>
 
-#include<unordered_map>
+#include <unordered_map>
 
 #include <linux/futex.h>
 
@@ -63,20 +63,22 @@ int doWithCheck(int returnValue, string errorMessage);
 
 // =======================================================================================
 /**
- * Read bytes from tracee memory using process_vm_readv while moving errors up the call
- * chain. The type T does not affect the behavior of the
- * function, however it provides clarity as to what the caller
- * is wishing to read/write.
+ * Read bytes from tracee memory using process_vm_readv while moving errors up
+ * the call chain. The type T does not affect the behavior of the function,
+ * however it provides clarity as to what the caller is wishing to read/write.
  * @param traceeMemory starting address in tracee memory (remote)
  * @param localMemory starting address in local memory (local)
  * @param numberOfBytes number of bytes to be read
  * @param traceePid tracee process' pid, whose address space is being read
  */
 template <typename T>
-ssize_t readVmTraceeRaw(traceePtr<T> traceeMemory, T* localMemory, size_t numberOfBytes,
-                  pid_t traceePid) {
+ssize_t readVmTraceeRaw(
+    traceePtr<T> traceeMemory,
+    T* localMemory,
+    size_t numberOfBytes,
+    pid_t traceePid) {
   iovec remoteIoVec = {traceeMemory.ptr, numberOfBytes};
-  iovec localIoVec = {localMemory, numberOfBytes };
+  iovec localIoVec = {localMemory, numberOfBytes};
   const unsigned long flags = 0;
 
   return process_vm_readv(traceePid, &localIoVec, 1, &remoteIoVec, 1, flags);
@@ -93,14 +95,18 @@ ssize_t readVmTraceeRaw(traceePtr<T> traceeMemory, T* localMemory, size_t number
  * @param traceepid tracee process' pid, whose address space is being written to
  */
 template <typename T>
-void writeVmTraceeRaw(T* localMemory, traceePtr<T> traceeMemory, size_t numberOfBytes,
-                   pid_t traceePid) {
+void writeVmTraceeRaw(
+    T* localMemory,
+    traceePtr<T> traceeMemory,
+    size_t numberOfBytes,
+    pid_t traceePid) {
   iovec remoteIoVec = {traceeMemory.ptr, numberOfBytes};
-  iovec localIoVec = {localMemory, numberOfBytes };
+  iovec localIoVec = {localMemory, numberOfBytes};
   const unsigned long flags = 0;
 
-  doWithCheck(process_vm_writev(traceePid, &localIoVec, 1, &remoteIoVec, 1, flags),
-              "writeVmTraceeRaw: Error calling process_vm_writev");
+  doWithCheck(
+      process_vm_writev(traceePid, &localIoVec, 1, &remoteIoVec, 1, flags),
+      "writeVmTraceeRaw: Error calling process_vm_writev");
 
   return;
 }

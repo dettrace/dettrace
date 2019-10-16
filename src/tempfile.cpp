@@ -1,31 +1,35 @@
-#include <sys/types.h>
+#include <assert.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
-#include <sys/mount.h>
-#include <fcntl.h>
+#include <sys/types.h>
 #include <unistd.h>
-#include <stdio.h>
-#include <assert.h>
-#include <string.h>
-#include <limits.h>
 
-#include <memory>
-#include <tuple>
 #include <fstream>
+#include <memory>
 #include <string>
+#include <tuple>
 
-#include "util.hpp"
 #include "tempfile.hpp"
+#include "util.hpp"
 
 #if defined _WIN32
-  #define PATH_SEPERATOR  '\\';
+#define PATH_SEPERATOR '\\';
 #else
-  #define PATH_SEPEARTOR  '/';
+#define PATH_SEPEARTOR '/';
 #endif
 
 static std::string fd_file_path(int fd) {
-  char procfd[32] = {0,};
-  char pathname[1 + PATH_MAX] = {0,};
+  char procfd[32] = {
+      0,
+  };
+  char pathname[1 + PATH_MAX] = {
+      0,
+  };
 
   snprintf(procfd, 32, "/proc/self/fd/%u", fd);
   if (readlink(procfd, pathname, PATH_MAX) < 0) {
@@ -36,16 +40,17 @@ static std::string fd_file_path(int fd) {
 
 static std::pair<int, std::string> make_temp_file(const std::string& dir = "") {
   std::string path;
-  
+
   if (dir.empty()) {
     path = P_tmpdir;
   } else {
     path = dir;
   }
-    
+
   path += PATH_SEPEARTOR;
   path += "fileXXXXXX";
-  int fd = mkostemp(strdupa(path.c_str()), O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC);
+  int fd =
+      mkostemp(strdupa(path.c_str()), O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC);
   if (fd < 0) {
     string errmsg("mkostemp ");
     errmsg += path;
@@ -53,18 +58,14 @@ static std::pair<int, std::string> make_temp_file(const std::string& dir = "") {
     errmsg += strerror(errno);
     runtimeError(errmsg);
   }
-  
+
   path = fd_file_path(fd);
   return std::make_pair(fd, path);
 }
 
-static pid_t gettid(void) {
-  return syscall(SYS_gettid);
-}
+static pid_t gettid(void) { return syscall(SYS_gettid); }
 
-TempDir::TempDir() {
-  TempDir("", false);
-}
+TempDir::TempDir() { TempDir("", false); }
 
 TempDir::TempDir(const std::string& prefix, bool doMount) {
   owner_pid = gettid();
@@ -162,6 +163,4 @@ TempPath::TempPath(TempDir& dir) {
   name = std::move(path);
 }
 
-TempPath::TempPath(const string& scoped) {
-  this->name = scoped;
-}
+TempPath::TempPath(const string& scoped) { this->name = scoped; }

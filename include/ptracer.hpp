@@ -2,71 +2,67 @@
 #define PTRACER_H
 
 #include <stdint.h>
-#include <unistd.h>
-#include <sys/types.h>
+#include <string.h>
+#include <sys/ptrace.h>
+#include <sys/reg.h> /* For constants ORIG_EAX, etc */
 #include <sys/stat.h>
+#include <sys/syscall.h> /* For SYS_write, etc */
+#include <sys/types.h>
+#include <sys/uio.h>
 #include <sys/user.h>
 #include <sys/vfs.h>
-#include <sys/ptrace.h>
-#include <sys/reg.h>     /* For constants ORIG_EAX, etc */
-#include <string.h>
 #include <sys/wait.h>
-#include <sys/syscall.h>    /* For SYS_write, etc */
-#include <sys/uio.h>
+#include <unistd.h>
 
 #include <algorithm>
-#include <iostream>
-#include <tuple>
-#include <iostream>
-#include <set>
-#include <map>
-#include <experimental/optional>
-#include <memory>
 #include <cstddef>
+#include <experimental/optional>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <set>
+#include <tuple>
 
-#include "util.hpp"
 #include "traceePtr.hpp"
+#include "util.hpp"
 
 using namespace std;
 
 const size_t wordSize = 8; /**< Size of word, 8 bytes for x86_64. */
-
 
 /**
  * ptrace event enum.
  * Types of events we expect returned from getNextEvent(), I wish we had ADTs.
  */
 enum class ptraceEvent {
-  syscall,     /**< Post system call execution event. */
-  nonEventExit,        /** Process/thread has exited. */
-  eventExit,        /**< Process/thread has exited. */
-  signal,      /**< Received signal. */
-  exec,        /**< Execve event. */
-  clone,       /**< Clone event. */
-  fork,        /**< fork event. */
-  vfork,        /** fork event. */
+  syscall, /**< Post system call execution event. */
+  nonEventExit, /** Process/thread has exited. */
+  eventExit, /**< Process/thread has exited. */
+  signal, /**< Received signal. */
+  exec, /**< Execve event. */
+  clone, /**< Clone event. */
+  fork, /**< fork event. */
+  vfork, /** fork event. */
   terminatedBySignal, /**< Tracee terminated by signal. */
   seccomp,
 };
 
 /**
  * State of SysCall enum.
- * Ptrace does not keep track for us if this is a pre or a post event. Instead we must
- * track this ourselves.
+ * Ptrace does not keep track for us if this is a pre or a post event. Instead
+ * we must track this ourselves.
  */
 enum class syscallState {
-  pre,  /**< pre-hook state*/
+  pre, /**< pre-hook state*/
   post /**< post-hook state*/
 };
-
 
 /**
  * ptracer.
  * Class wrapping the functionality of the system call ptrace.
  */
-class ptracer{
+class ptracer {
 public:
-
   /**
    * counter to keep track read vm events;
    */
@@ -85,14 +81,13 @@ public:
   /**
    * Map of real inodes to virtual inodes.
    */
-  map<ino_t,ino_t> real2VirtualMap;
+  map<ino_t, ino_t> real2VirtualMap;
 
   /**
    * Constructor.
-   * Create a ptracer. The child must have called PTRACE_TRACEME and then stopped itself like
-   * so:
-   *     raise(SIGSTOP);
-   *	 execvp(traceeCommand[0], traceeCommand);
+   * Create a ptracer. The child must have called PTRACE_TRACEME and then
+   *stopped itself like so: raise(SIGSTOP); execvp(traceeCommand[0],
+   *traceeCommand);
    *
    * Else this will block forever. Set up options for our tracer.
    * @param pid process pid
@@ -119,10 +114,11 @@ public:
 
   /**
    * Retrieves value for arg4: r10 register.
-   * RCX, along with R11, is used by the syscall instruction, being immediately destroyed by it.
-   * Thus these registers are not only not saved after syscall, but they can't even be used for parameter passing.
-   * Thus R10 was chosen to replace unusable RCX to pass fourth parameter.
-   * per: https://stackoverflow.com/questions/21322100/linux-x64-why-does-r10-come-before-r8-and-r9-in-syscalls
+   * RCX, along with R11, is used by the syscall instruction, being immediately
+   * destroyed by it. Thus these registers are not only not saved after syscall,
+   * but they can't even be used for parameter passing. Thus R10 was chosen to
+   * replace unusable RCX to pass fourth parameter. per:
+   * https://stackoverflow.com/questions/21322100/linux-x64-why-does-r10-come-before-r8-and-r9-in-syscalls
    *
    * @return r10 register value
    */
@@ -223,7 +219,7 @@ public:
    * @param val new rax register value
    */
   void writeRax(uint64_t val);
-  
+
   /**
    * Write value to rbx register.
    * @param val new rbx register value
@@ -274,7 +270,7 @@ public:
    * @param event
    * @return
    */
-  inline static bool isPtraceEvent(int status, enum __ptrace_eventcodes event){
+  inline static bool isPtraceEvent(int status, enum __ptrace_eventcodes event) {
     return (status >> 8) == (SIGTRAP | (event << 8));
   }
 
@@ -291,8 +287,9 @@ public:
   pid_t getPid();
 
   /**
-   * Set the correct tracing options for a child we plan to trace. This should be called
-   * per child and only once! This must be called when child is stopped waiting on ptrace.
+   * Set the correct tracing options for a child we plan to trace. This should
+   * be called per child and only once! This must be called when child is
+   * stopped waiting on ptrace.
    * @param pid process id
    */
   static void setOptions(pid_t pid);
@@ -303,13 +300,14 @@ public:
    * @param pid
    * @param addr
    * @param data
-   * @return On success, PTRACE_PEEK* requests return the requested data, while other
-   * requests return zero. On error, all requests return -1, and errno is set
-   * appropriately. Since the value returned by a successful PTRACE_PEEK* request may
-   * be -1, the caller must clear errno before the call, and then check it afterward
-   * to determine whether or not an error occurred.
+   * @return On success, PTRACE_PEEK* requests return the requested data, while
+   * other requests return zero. On error, all requests return -1, and errno is
+   * set appropriately. Since the value returned by a successful PTRACE_PEEK*
+   * request may be -1, the caller must clear errno before the call, and then
+   * check it afterward to determine whether or not an error occurred.
    */
-  static long doPtrace(enum __ptrace_request request, pid_t pid, void *addr, void *data);
+  static long doPtrace(
+      enum __ptrace_request request, pid_t pid, void *addr, void *data);
 
   /**
    * Read a type T from the tracee at source address. Be careful when reading
@@ -319,26 +317,26 @@ public:
    * @param traceePid Pid of the tracee
    * @return the data of type T at the memory address in tracee address space
    */
-  template<typename T>
-  T readFromTracee(traceePtr<T> sourceAddress, pid_t traceePid){
+  template <typename T>
+  T readFromTracee(traceePtr<T> sourceAddress, pid_t traceePid) {
     readVmCalls++;
     T myData;
-    doWithCheck(readVmTraceeRaw(sourceAddress, &myData, sizeof(T), traceePid),
-                "readFromTracee: Unable to read bytes at address.");
+    doWithCheck(
+        readVmTraceeRaw(sourceAddress, &myData, sizeof(T), traceePid),
+        "readFromTracee: Unable to read bytes at address.");
     return myData;
   }
-
 
   /**
    * Read the C-string from the tracee's memory.
    * Notice we keep reading until we hit a null.
    * Undefined behavior will happen if the location is not actually a C-string.
-   * @param readAddress address of CString to be read from (in tracee address space)
+   * @param readAddress address of CString to be read from (in tracee address
+   * space)
    * @param traceePid the pid of the tracee
    * @return cpp string version of readAddress.
    */
   string readTraceeCString(traceePtr<char> readAddress, pid_t traceePid);
-
 
   /**
    * Write a value to tracee.
@@ -346,19 +344,20 @@ public:
    * @param valueToCopy value of type T to be written in tracee memory
    * @param traceePid the pid of the tracee
    */
-  template<typename T>
-  void writeToTracee(traceePtr<T> writeAddress, T valueToCopy, pid_t traceePid){
+  template <typename T>
+  void writeToTracee(
+      traceePtr<T> writeAddress, T valueToCopy, pid_t traceePid) {
     writeVmCalls++;
-    writeVmTraceeRaw(&valueToCopy, traceePtr<T>(writeAddress), sizeof(T), traceePid);
+    writeVmTraceeRaw(
+        &valueToCopy, traceePtr<T>(writeAddress), sizeof(T), traceePid);
 
     return;
   }
 
-
 private:
-  pid_t traceePid;   /**< The pid of the tracee.  */
+  pid_t traceePid; /**< The pid of the tracee.  */
 
-  struct user_regs_struct regs;   /**< Registers struct defined in sys.   */
+  struct user_regs_struct regs; /**< Registers struct defined in sys.   */
 };
 
 #endif

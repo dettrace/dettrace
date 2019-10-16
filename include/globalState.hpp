@@ -1,15 +1,15 @@
 #ifndef GLOBAL_STATE_H
 #define GLOBAL_STATE_H
 
-#include "ValueMapper.hpp"
+#include <unordered_set>
 #include "PRNG.hpp"
-#include<unordered_set>
+#include "ValueMapper.hpp"
 
 /**
- * Class to hold global state shared among all processes, this includes the logger, inode
- * mappings, modified time mappings.
+ * Class to hold global state shared among all processes, this includes the
+ * logger, inode mappings, modified time mappings.
  */
-class globalState{
+class globalState {
 public:
   /**
    * Constructor.
@@ -17,17 +17,20 @@ public:
    * @param inodeMap map of inodes and virtual nodes
    * @param mtimeMap map of inode to modification times
    */
-  globalState(logger& log, ValueMapper<ino_t, ino_t> inodeMap,
-              ValueMapper<ino_t, time_t> mtimeMap, bool kernelPre4_12,
-	      unsigned prngSeed,
-	      unsigned long timestamps,
-	      bool allow_network = false);
+  globalState(
+      logger& log,
+      ValueMapper<ino_t, ino_t> inodeMap,
+      ValueMapper<ino_t, time_t> mtimeMap,
+      bool kernelPre4_12,
+      unsigned prngSeed,
+      unsigned long timestamps,
+      bool allow_network = false);
 
-  /** 
+  /**
    * A pseudorandom number generator to implement getrandom()
    */
   PRNG prng;
-  
+
   /**
    * Isomorphism between inodes and virtual inodes.
    */
@@ -48,7 +51,6 @@ public:
    */
   logger& log;
 
-
   // Kept here as they're ticked up in the function hooks.
   /**
    * Counter for keeping track of total number of read retries.
@@ -67,8 +69,8 @@ public:
 
   /**
    * Counter for keeping track of number of open/openat to /dev/urandom
-   * Not as interest as "reads" from open urandom, but this is the best we can do.
-   * As we don't keep track of which fds map to which files.
+   * Not as interest as "reads" from open urandom, but this is the best we can
+   * do. As we don't keep track of which fds map to which files.
    */
   uint32_t devUrandomOpens = 0;
 
@@ -85,7 +87,8 @@ public:
   uint32_t replayDueToBlocking = 0;
 
   /**
-   * Counter for keeping track of number of replays including replays due to blocking.
+   * Counter for keeping track of number of replays including replays due to
+   * blocking.
    */
   uint32_t totalReplays = 0;
 
@@ -100,25 +103,26 @@ public:
   unordered_set<pid_t> liveThreads;
 
   /**
-   * Keeps track of thread groups, each thread groups is composed of the threads and
-   * the single parent process that belongs to that thread group. The process will always
-   * be the last live member of a thread group as it cannot exit until all it's threads
-   * and true process children have exited.
-   * When no members are left, the threadGroup is deleted.
-   * The pid of the process is used as the key into the multimap.
-   * Hence {(2, 2), (2, 3), (2, 4)} means for thread group 2, process 2, thread 3, and
-   * thread 4 are members of this thread group. (k, k) is always the process, and two
-   * different processes cannot belong to the same thread group.
-   * Child processes of a process are NOT included in the thread group, only threads are.
-   * A child process will get it's own thread group.
+   * Keeps track of thread groups, each thread groups is composed of the threads
+   * and the single parent process that belongs to that thread group. The
+   * process will always be the last live member of a thread group as it cannot
+   * exit until all it's threads and true process children have exited. When no
+   * members are left, the threadGroup is deleted. The pid of the process is
+   * used as the key into the multimap. Hence {(2, 2), (2, 3), (2, 4)} means for
+   * thread group 2, process 2, thread 3, and thread 4 are members of this
+   * thread group. (k, k) is always the process, and two different processes
+   * cannot belong to the same thread group. Child processes of a process are
+   * NOT included in the thread group, only threads are. A child process will
+   * get it's own thread group.
    */
   unordered_multimap<pid_t, pid_t> threadGroups;
 
   /**
    * Map threadsGroups members back to their thread group.
-   * Makes it easy to look up threads in threadGroups while only knowing their tid/traceePid.
-   * Notice for processes their threadGroupNumber equals their traceePid, we add them
-   * to the map anyways to avoid special cases for the process owner vs threads.
+   * Makes it easy to look up threads in threadGroups while only knowing their
+   * tid/traceePid. Notice for processes their threadGroupNumber equals their
+   * traceePid, we add them to the map anyways to avoid special cases for the
+   * process owner vs threads.
    */
   unordered_map<pid_t, pid_t> threadGroupNumber;
 

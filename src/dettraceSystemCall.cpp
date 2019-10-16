@@ -1,49 +1,49 @@
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <arpa/inet.h>
-#include <sys/timerfd.h>
-#include <unistd.h>
+#include <asm/prctl.h>
+#include <errno.h>
+#include <fcntl.h> /* Obtain O_* constant definitions */
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/utsname.h>
+#include <sys/epoll.h>
 #include <sys/ioctl.h>
-#include <fcntl.h>              /* Obtain O_* constant definitions */
-#include <inttypes.h>
-#include <sys/times.h>
+#include <sys/mman.h>
+#include <sys/prctl.h>
 #include <sys/select.h>
 #include <sys/socket.h>
-#include <sys/mman.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
-#include <asm/prctl.h>
-#include <sys/prctl.h>
-#include <sys/epoll.h>
+#include <sys/timerfd.h>
+#include <sys/times.h>
+#include <sys/types.h>
+#include <sys/utsname.h>
+#include <unistd.h>
 
-#include <limits>
 #include <cstring>
+#include <limits>
 #include <optional>
 
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <sys/sysinfo.h>
-#include <sys/uio.h>
-#include <linux/futex.h>
 #include <linux/fiemap.h>
 #include <linux/fs.h>
+#include <linux/futex.h>
 #include <linux/rtc.h>
+#include <sys/resource.h>
+#include <sys/sysinfo.h>
+#include <sys/time.h>
 #include <sys/types.h>
+#include <sys/uio.h>
 #include <utime.h>
 #include <unordered_map>
 
-#include<optional>
+#include <optional>
 
 #include "dettraceSystemCall.hpp"
-#include "utilSystemCalls.hpp"
 #include "ptracer.hpp"
+#include "utilSystemCalls.hpp"
 
-#include <sstream>
-#include <iomanip>
 #include <openssl/sha.h>
+#include <iomanip>
+#include <sstream>
 
 // Enable tracee reads that are not strictly necessary for functionality, but
 // are enabled for instrumentation or sanity checking. For example, verify,
@@ -55,38 +55,47 @@ using namespace std;
 static bool fd_is_nonblocking(state& s, int fd);
 
 // =======================================================================================
-bool accessSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool accessSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
   return true;
 }
-void accessSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void accessSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return;
 }
 // =======================================================================================
-bool arch_prctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  gs.log.writeToLog(Importance::info,
-                    "pre-hook for arch_prctl(%d, 0) == ARCH_SET_CPUID? %d\n",
-                    t.arg1(), t.arg1() == ARCH_SET_CPUID);
+bool arch_prctlSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  gs.log.writeToLog(
+      Importance::info,
+      "pre-hook for arch_prctl(%d, 0) == ARCH_SET_CPUID? %d\n", t.arg1(),
+      t.arg1() == ARCH_SET_CPUID);
 
-  // System call injected due to us needing CPUID interception added to this process!
+  // System call injected due to us needing CPUID interception added to this
+  // process!
   if (s.syscallInjected) {
     return true;
   }
 
   return false;
 }
-void arch_prctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void arch_prctlSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   if (!s.syscallInjected) {
     // This should be impossible.
     runtimeError("Got to arch_prctl post-hook without it being injected.");
   }
 
-  gs.log.writeToLog(Importance::info, "post-hook for arch_prctl, returning %d\n",
-                    t.getReturnValue());
+  gs.log.writeToLog(
+      Importance::info, "post-hook for arch_prctl, returning %d\n",
+      t.getReturnValue());
 
   if (s.CPUIDTrapSet) {
     // This should be impossible.
-    runtimeError("Got to arch_prctl post-hook without it needing to have CPUID trap set.");
+    runtimeError(
+        "Got to arch_prctl post-hook without it needing to have CPUID trap "
+        "set.");
   }
 
   // arch_prctl could return ENODEV when `cpuid_fault` flag is absent (cpuinfo).
@@ -104,52 +113,63 @@ void arch_prctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, 
   // I don't believe arch_prctl(ARCH_SET_CPUID) writes to tracee memory at all.
   t.setRegs(s.regSaver.popRegisterState());
 
-  gs.log.writeToLog(Importance::info, "restored register state from arch_prctl post-hook\n");
+  gs.log.writeToLog(
+      Importance::info, "restored register state from arch_prctl post-hook\n");
   replaySystemCall(gs, t, t.getSystemCallNumber());
 }
 // =======================================================================================
-bool alarmSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  gs.log.writeToLog(Importance::info, "alarm pre-hook, requesting alarm in %u second(s)\n", t.arg1());
+bool alarmSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  gs.log.writeToLog(
+      Importance::info, "alarm pre-hook, requesting alarm in %u second(s)\n",
+      t.arg1());
   // run post-hook if necessary
   return sendTraceeSignalNow(SIGALRM, gs, s, t, sched);
 }
 
-void alarmSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void alarmSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return;
 }
 // =======================================================================================
-bool chdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool chdirSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
 
   return false;
 }
 
-void chdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void chdirSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return;
 }
 // =======================================================================================
-bool chmodSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool chmodSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
   return false;
 }
 
-void chmodSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void chmodSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return;
 }
 // =======================================================================================
-bool clock_gettimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool clock_gettimeSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void clock_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) {
+void clock_gettimeSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.timeCalls++;
-  struct timespec* tp = (struct timespec*) t.arg2();
+  struct timespec* tp = (struct timespec*)t.arg2();
 
   if (tp != nullptr) {
     struct timespec myTp = {};
     // TODO: One day, unify time.
     myTp.tv_sec = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
-    myTp.tv_nsec = 1000UL*(s.getLogicalTime() % state::MICRO_SECS_PER_SEC);
+    myTp.tv_nsec = 1000UL * (s.getLogicalTime() % state::MICRO_SECS_PER_SEC);
 
     t.writeToTracee(traceePtr<struct timespec>(tp), myTp, t.getPid());
     s.incrementTime();
@@ -162,23 +182,26 @@ void clock_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& 
   return;
 }
 // =======================================================================================
-bool closeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool closeSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void closeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  int fd = (int) t.arg1();
+void closeSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  int fd = (int)t.arg1();
   gs.log.writeToLog(Importance::info, "close(%d)\n", fd);
   // Remove entry from our dirEntries.
   auto result = s.dirEntries.find(fd);
   // Exists.
-  if(result != s.dirEntries.end()){
-    gs.log.writeToLog(Importance::info, "Removing directory entries for fd: %d!\n", fd);
+  if (result != s.dirEntries.end()) {
+    gs.log.writeToLog(
+        Importance::info, "Removing directory entries for fd: %d!\n", fd);
     s.dirEntries.erase(result);
   }
 
   // Remove entry from our fd set for pipes.
-  if(s.countFdStatus(fd) != 0){
+  if (s.countFdStatus(fd) != 0) {
     gs.log.writeToLog(Importance::info, "Removing pipe fd: %d!\n", fd);
     s.fdStatus.get()->erase(fd);
   }
@@ -195,26 +218,31 @@ void closeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 }
 // =======================================================================================
 // TODO
-bool connectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool connectSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int sockfd = t.arg1();
   socklen_t len = t.arg3();
   char* buff;
-  char dst[128] = {0,};
+  char dst[128] = {
+      0,
+  };
 
   if (len == INET6_ADDRSTRLEN) {
-    auto sockaddr = t.readFromTracee(traceePtr<struct sockaddr_in6>
-				     ((struct sockaddr_in6*)t.arg2()),
-				     t.getPid());
-    asprintf(&buff, "connect to sock fd %u %s#%u\n",
-	     sockfd, inet_ntop(AF_INET6, &sockaddr.sin6_addr, dst, 128),
-	     ntohs(sockaddr.sin6_port));
+    auto sockaddr = t.readFromTracee(
+        traceePtr<struct sockaddr_in6>((struct sockaddr_in6*)t.arg2()),
+        t.getPid());
+    asprintf(
+        &buff, "connect to sock fd %u %s#%u\n", sockfd,
+        inet_ntop(AF_INET6, &sockaddr.sin6_addr, dst, 128),
+        ntohs(sockaddr.sin6_port));
   } else {
-    auto sockaddr = t.readFromTracee(traceePtr<struct sockaddr_in>
-				     ((struct sockaddr_in*)t.arg2()),
-				     t.getPid());
-    asprintf(&buff, "connect to sock fd %u %s#%u\n",
-	     sockfd, inet_ntop(AF_INET, &sockaddr.sin_addr, dst, 128),
-	     ntohs(sockaddr.sin_port));
+    auto sockaddr = t.readFromTracee(
+        traceePtr<struct sockaddr_in>((struct sockaddr_in*)t.arg2()),
+        t.getPid());
+    asprintf(
+        &buff, "connect to sock fd %u %s#%u\n", sockfd,
+        inet_ntop(AF_INET, &sockaddr.sin_addr, dst, 128),
+        ntohs(sockaddr.sin_port));
   }
   gs.log.writeToLog(Importance::info, buff);
   free(buff);
@@ -222,26 +250,30 @@ bool connectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sche
   return true;
 }
 
-void connectSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void connectSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return;
 }
 // =======================================================================================
-bool creatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool creatSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
   return true;
 }
 
-void creatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if(t.getReturnValue() < 0){
+void creatSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  if (t.getReturnValue() < 0) {
     return;
   }
 
   // Add an entry for this new file to our inode with a newer modified date.
   // If the file already exists, creat truncates it since:
   // create == open(O_CREATE | O_WRONLY | O_TRUNC)
-  // The inode is reused though, this is based on emperical observation, and I do not
-  // thin the POSIX semantics say this must happen, so we read the inode here to be
-  // safe. (Not sure how we could use this information to optimze anyways.)
+  // The inode is reused though, this is based on emperical observation, and I
+  // do not thin the POSIX semantics say this must happen, so we read the inode
+  // here to be safe. (Not sure how we could use this information to optimze
+  // anyways.)
   auto inode = readInodeFor(gs.log, s.traceePid, t.getReturnValue());
   gs.mtimeMap.addRealValue(inode);
   gs.inodeMap.addRealValue(inode);
@@ -249,19 +281,21 @@ void creatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   return;
 }
 // =======================================================================================
-bool dupSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool dupSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void dupSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void dupSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int newfd = t.getReturnValue();
   int fd = t.arg1();
-  if(newfd < 0){
+  if (newfd < 0) {
     return;
   }
 
   // dup succeeded.
-  if(s.countFdStatus(fd) != 0){ // Only for pipes
+  if (s.countFdStatus(fd) != 0) { // Only for pipes
     s.setFdStatus(newfd, s.getFdStatus(fd)); // copy over status.
     if (s.fd_is_remote(fd)) {
       s.remote_sockfds->insert(newfd);
@@ -270,20 +304,22 @@ void dupSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedul
   }
 }
 // =======================================================================================
-bool dup2SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool dup2SystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void dup2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void dup2SystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int newfd = t.getReturnValue();
   int fd = t.arg1();
   gs.log.writeToLog(Importance::info, "dup2(%d) returned %d\n", fd, newfd);
-  if(newfd < 0){
+  if (newfd < 0) {
     return;
   }
 
   // dup2 succeeded.
-  if(s.countFdStatus(fd) != 0){ // Only for pipes
+  if (s.countFdStatus(fd) != 0) { // Only for pipes
 
     // Semantics of dup2 say old fd could be closed and overwritten, we do that
     // implicitly here!
@@ -316,36 +352,47 @@ static const char* epoll_op(int op) {
 }
 
 // =======================================================================================
-bool epoll_ctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  struct epoll_event *traceeEvent = (struct epoll_event*) t.arg4();
-  struct epoll_event epev = {0,};
+bool epoll_ctlSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  struct epoll_event* traceeEvent = (struct epoll_event*)t.arg4();
+  struct epoll_event epev = {
+      0,
+  };
 
   string op = epoll_op((int)t.arg2());
 
-  gs.log.writeToLog(Importance::info, "epoll_ctl(" + to_string(t.arg1()) + "..)\n");
+  gs.log.writeToLog(
+      Importance::info, "epoll_ctl(" + to_string(t.arg1()) + "..)\n");
 
-  readVmTraceeRaw(traceePtr<struct epoll_event>(traceeEvent), &epev, sizeof(epev), s.traceePid);
-  if((epev.events & EPOLLONESHOT) == EPOLLONESHOT){
+  readVmTraceeRaw(
+      traceePtr<struct epoll_event>(traceeEvent), &epev, sizeof(epev),
+      s.traceePid);
+  if ((epev.events & EPOLLONESHOT) == EPOLLONESHOT) {
     runtimeError("epoll_ctl call used EPOLLONESHOT flag!");
   }
-  if((epev.events & EPOLLIN) == EPOLLIN){
-    gs.log.writeToLog(Importance::info, op + " EPOLLIN " + to_string(epev.data.u64) + "\n");
+  if ((epev.events & EPOLLIN) == EPOLLIN) {
+    gs.log.writeToLog(
+        Importance::info, op + " EPOLLIN " + to_string(epev.data.u64) + "\n");
   }
-  if((epev.events & EPOLLOUT) == EPOLLOUT){
-    gs.log.writeToLog(Importance::info, op + " EPOLLOUT " + to_string(epev.data.u64) + "\n");
+  if ((epev.events & EPOLLOUT) == EPOLLOUT) {
+    gs.log.writeToLog(
+        Importance::info, op + " EPOLLOUT " + to_string(epev.data.u64) + "\n");
   }
-  if((epev.events & EPOLLPRI) == EPOLLERR){
-    gs.log.writeToLog(Importance::info, op + " EPOLLERR " + to_string(epev.data.u64) + "\n");
+  if ((epev.events & EPOLLPRI) == EPOLLERR) {
+    gs.log.writeToLog(
+        Importance::info, op + " EPOLLERR " + to_string(epev.data.u64) + "\n");
   }
-  if((epev.events & EPOLLPRI) == EPOLLPRI){
-    gs.log.writeToLog(Importance::info, op + " EPOLLPRI " + to_string(epev.data.u64) + "\n");
+  if ((epev.events & EPOLLPRI) == EPOLLPRI) {
+    gs.log.writeToLog(
+        Importance::info, op + " EPOLLPRI " + to_string(epev.data.u64) + "\n");
   }
 
   return false;
 }
 
-void epoll_ctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  return; 
+void epoll_ctlSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  return;
 }
 
 static void epoll_log_event(globalState& gs, ptracer& t) {
@@ -358,70 +405,76 @@ static void epoll_log_event(globalState& gs, ptracer& t) {
 
   p += snprintf(p + n, size - n, "epoll_wait(%u, [", epoll_fd);
   for (int i = 0; i < maxevents; i++) {
-    auto rptr = traceePtr<struct epoll_event>((struct epoll_event*)t.arg2()+i);
+    auto rptr =
+        traceePtr<struct epoll_event>((struct epoll_event*)t.arg2() + i);
     struct epoll_event ev = t.readFromTracee(rptr, t.getPid());
-    p += snprintf(p + n, size - n, " (%s, %lu)",
-		  epoll_op(ev.events),
-		  ev.data.u64);
+    p += snprintf(
+        p + n, size - n, " (%s, %lu)", epoll_op(ev.events), ev.data.u64);
   }
   p += snprintf(p + n, size - n, "]\n");
   gs.log.writeToLogNoFormat(Importance::extra, buffer);
 }
 
 // =======================================================================================
-bool epoll_waitSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool epoll_waitSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // Set the timeout to zero.
   s.originalArg4 = t.arg4();
-  if((int) s.originalArg4 != 0){
+  if ((int)s.originalArg4 != 0) {
     t.writeArg4(0);
   }
 
-  gs.log.writeToLog(Importance::info, "epoll_wait on fd: " + to_string(t.arg1()) + "\n");
+  gs.log.writeToLog(
+      Importance::info, "epoll_wait on fd: " + to_string(t.arg1()) + "\n");
   return true;
 }
 
-void epoll_waitSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void epoll_waitSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   if ((int)t.getReturnValue() > 0) {
     epoll_log_event(gs, t);
   }
-  
-  if((int) s.originalArg4 < 0){
+
+  if ((int)s.originalArg4 < 0) {
     gs.log.writeToLog(Importance::info, "Blocking epoll_wait found\n");
     bool replay = replaySyscallIfBlocked(gs, s, t, sched, 0);
-    if(replay){
+    if (replay) {
       t.writeArg4(s.originalArg4);
     }
-  }else{
+  } else {
     gs.log.writeToLog(Importance::info, "Non-blocking epoll found\n");
     sched.preemptAndScheduleNext();
   }
   return;
 }
 // =======================================================================================
-bool epoll_pwaitSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool epoll_pwaitSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // Set the timeout to zero.
   s.originalArg4 = t.arg4();
-  if((int) s.originalArg4 != 0){
+  if ((int)s.originalArg4 != 0) {
     t.writeArg4(0);
   }
   return true;
 }
 
-void epoll_pwaitSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if((int) s.originalArg4 < 0){
+void epoll_pwaitSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  if ((int)s.originalArg4 < 0) {
     gs.log.writeToLog(Importance::info, "Blocking epoll_wait found\n");
     bool replay = replaySyscallIfBlocked(gs, s, t, sched, 0);
-    if(replay){
+    if (replay) {
       t.writeArg4(s.originalArg4);
     }
-  }else{
+  } else {
     gs.log.writeToLog(Importance::info, "Non-blocking epoll found\n");
     sched.preemptAndScheduleNext();
   }
   return;
 }
 // =======================================================================================
-bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool execveSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
 
   auto tgNumber = gs.threadGroupNumber.at(s.traceePid);
@@ -429,124 +482,141 @@ bool execveSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
     runtimeError("We do not support exec from threaded process groups!");
   }
 
-  char** argv = (char**) t.arg2();
-  char** envp = (char**) t.arg3();
-  string execveArgs {};
-  string execveEnvp {};
+  char** argv = (char**)t.arg2();
+  char** envp = (char**)t.arg3();
+  string execveArgs{};
+  string execveEnvp{};
 
   // Print all arguments to execve!
-  if(gs.log.getDebugLevel() > 0){
+  if (gs.log.getDebugLevel() > 0) {
     // Remeber these are addresses in the tracee. We must explicitly read them
     // ourselves!
     if (argv != nullptr) {
-      for(int i = 0; true; i++){
+      for (int i = 0; true; i++) {
         // Make sure it's non null before reading to string.
-        char* address = t.readFromTracee(traceePtr<char*>(&(argv[i])), t.getPid());
-        if(address == nullptr){
+        char* address =
+            t.readFromTracee(traceePtr<char*>(&(argv[i])), t.getPid());
+        if (address == nullptr) {
           break;
         }
-        execveArgs += " \"" + t.readTraceeCString(traceePtr<char>(address), t.getPid()) + "\" ";
+        execveArgs +=
+            " \"" + t.readTraceeCString(traceePtr<char>(address), t.getPid()) +
+            "\" ";
       }
     }
 
     if (envp != nullptr) {
-      for(int i = 0; true; i++){
+      for (int i = 0; true; i++) {
         // Make sure it's non null before reading to string.
-        char* address = t.readFromTracee(traceePtr<char*>(&(envp[i])), t.getPid());
-        if(address == nullptr){
+        char* address =
+            t.readFromTracee(traceePtr<char*>(&(envp[i])), t.getPid());
+        if (address == nullptr) {
           break;
         }
-        execveEnvp += " \"" + t.readTraceeCString(traceePtr<char>(address), t.getPid()) + "\" ";
+        execveEnvp +=
+            " \"" + t.readTraceeCString(traceePtr<char>(address), t.getPid()) +
+            "\" ";
       }
     }
 
-    auto msg = "Args: " + gs.log.makeTextColored(Color::green, execveArgs) + "\n";
+    auto msg =
+        "Args: " + gs.log.makeTextColored(Color::green, execveArgs) + "\n";
     gs.log.writeToLogNoFormat(Importance::info, msg);
-    auto msg2 = "Envp: " + gs.log.makeTextColored(Color::green, execveEnvp) + "\n";
+    auto msg2 =
+        "Envp: " + gs.log.makeTextColored(Color::green, execveEnvp) + "\n";
     gs.log.writeToLogNoFormat(Importance::info, msg2);
   }
 
-  // WARNING: Never change this, there is no execve post-hook event. You will end up
-  // and the next system call. In the past, we have seen a brk.
+  // WARNING: Never change this, there is no execve post-hook event. You will
+  // end up and the next system call. In the past, we have seen a brk.
   return false;
 }
 
 // =======================================================================================
-bool exit_groupSystemCall::
-handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool exit_groupSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.log.writeToLog(Importance::info, "Saw exit group!!\n");
   s.isExitGroup = true;
   return false;
 }
 
-void exit_groupSystemCall::
-handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void exit_groupSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.log.writeToLog(Importance::info, "Saw exit group post hook!!\n");
 }
 // =======================================================================================
-bool fchownatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool fchownatSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg2(), gs.log, s.traceePid, t);
-  if(t.arg3() != 0){
+  if (t.arg3() != 0) {
     t.writeArg3(0);
   }
-  if(t.arg4() != 0){
+  if (t.arg4() != 0) {
     t.writeArg4(0);
   }
 
   return false;
 }
 
-void fchownatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void fchownatSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   runtimeError("fchownat post hook shold never be called.");
   return;
 }
 // =======================================================================================
-bool fchownSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if(t.arg2() != 0){
+bool fchownSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  if (t.arg2() != 0) {
     t.writeArg2(0);
   }
-  if(t.arg3() != 0){
+  if (t.arg3() != 0) {
     t.writeArg3(0);
   }
   return false;
 }
 
-void fchownSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void fchownSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   runtimeError("fchownat post hook shold never be called.");
   return;
 }
 // =======================================================================================
-bool chownSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if(t.arg2() != 0){
+bool chownSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  if (t.arg2() != 0) {
     t.writeArg2(0);
   }
-  if(t.arg3() != 0){
+  if (t.arg3() != 0) {
     t.writeArg3(0);
   }
   return false;
 }
 
-void chownSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void chownSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   runtimeError("fchownat post hook shold never be called.");
   return;
 }
 // =======================================================================================
-bool lchownSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if(t.arg2() != 0){
+bool lchownSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  if (t.arg2() != 0) {
     t.writeArg2(0);
   }
-  if(t.arg3() != 0){
+  if (t.arg3() != 0) {
     t.writeArg3(0);
   }
   return false;
 }
 
-void lchownSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void lchownSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   runtimeError("fchownat post hook shold never be called.");
   return;
 }
 // =======================================================================================
-bool fcntlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool fcntlSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int cmd = t.arg2();
 
   if (cmd == F_GETFD) {
@@ -555,16 +625,18 @@ bool fcntlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   return true;
 }
 
-void fcntlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void fcntlSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int retval = t.getReturnValue();
   int fd = t.arg1();
   int cmd = t.arg2();
   int arg = t.arg3();
 
-  gs.log.writeToLog(Importance::extra, "fcntl(" + to_string(fd) + ", "
-		    + to_string(cmd) + "..) = " + to_string(retval) + "\n");
+  gs.log.writeToLog(
+      Importance::extra, "fcntl(" + to_string(fd) + ", " + to_string(cmd) +
+                             "..) = " + to_string(retval) + "\n");
 
-  if(cmd == F_DUPFD || cmd == F_DUPFD_CLOEXEC){
+  if (cmd == F_DUPFD || cmd == F_DUPFD_CLOEXEC) {
     auto str = "found fcntl(%d, FDUPFD || F_DUPFD_CLOCEXEC) = %d\n";
     int newfd = retval;
     gs.log.writeToLog(Importance::info, str, fd, newfd);
@@ -574,89 +646,96 @@ void fcntlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
       // Same status as what it was duped from.
       (*s.fdStatus.get())[newfd] = s.getFdStatus(fd);
       if (s.fd_is_remote(fd)) {
-	s.remote_sockfds->insert(newfd);
+        s.remote_sockfds->insert(newfd);
       }
       if (s.fd_is_timerfd(fd)) {
-	auto it = (*s.timerfds)[fd];
-	s.timerfds->insert({newfd, it});
+        auto it = (*s.timerfds)[fd];
+        s.timerfds->insert({newfd, it});
       }
       if (s.fd_is_signalfd(fd)) {
-	s.signalfds->insert(newfd);
+        s.signalfds->insert(newfd);
       }
     }
   }
 
   // User attempting to change blocked status.
-  if(cmd == F_SETFL && ((arg & O_NONBLOCK) != 0)){
-    gs.log.writeToLog(Importance::info, "found fcntl setting %d to non blocking!\n", fd);
+  if (cmd == F_SETFL && ((arg & O_NONBLOCK) != 0)) {
+    gs.log.writeToLog(
+        Importance::info, "found fcntl setting %d to non blocking!\n", fd);
     (*s.fdStatus.get())[fd] = descriptorType::nonBlocking;
   }
 }
-  // =======================================================================================
-bool faccessatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
-                                       scheduler& sched){
+// =======================================================================================
+bool faccessatSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg2(), gs.log, s.traceePid, t);
 
   return false;
 }
 
-void faccessatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void faccessatSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   runtimeError("faccessat post hook shold never be called.");
   return;
 }
 // =======================================================================================
-bool fgetxattrSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
-                                        scheduler& sched){
+bool fgetxattrSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void fgetxattrSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
-                                        scheduler& sched){
+void fgetxattrSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg2(), gs.log, s.traceePid, t);
 
   return;
 }
 // =======================================================================================
-bool flistxattrSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
-                                        scheduler& sched){
+bool flistxattrSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void flistxattrSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
-                                         scheduler& sched){
+void flistxattrSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg2(), gs.log, s.traceePid, t);
 
   return;
 }
 // =======================================================================================
-bool fstatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool fstatSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.log.writeToLog(Importance::info, "fstat(fd=%d)\n", t.arg1());
   return true;
 }
 
-void fstatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-    handleStatFamily(gs, s, t, "fstat");
+void fstatSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  handleStatFamily(gs, s, t, "fstat");
   return;
 }
 // =======================================================================================
-bool fstatfsSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool fstatfsSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void fstatfsSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  struct statfs* statfsPtr = (struct statfs*) t.arg2();
+void fstatfsSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  struct statfs* statfsPtr = (struct statfs*)t.arg2();
 
-  if(statfsPtr == nullptr){
+  if (statfsPtr == nullptr) {
     gs.log.writeToLog(Importance::info, "fstatfs: statfsbuf null.\n");
     return;
   }
 
-  if(t.getReturnValue() == 0){
+  if (t.getReturnValue() == 0) {
     // Read values written to by system call.
 
     // jld: filling in myStatfs from tracee memory does not seem to be used at
     // all, as zeroOutStatfs() overwrites all its fields.
-    struct statfs myStatfs; //= t.readFromTracee(traceePtr<struct statfs>(statfsPtr), s.traceePid);
+    struct statfs myStatfs; //= t.readFromTracee(traceePtr<struct
+                            // statfs>(statfsPtr), s.traceePid);
 
     // Assume we're using this file sytem?
     zeroOutStatfs(myStatfs);
@@ -669,16 +748,19 @@ void fstatfsSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
 }
 
 // =======================================================================================
-bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // If operation is a FUTEX_WAIT, set timeout to zero for polling instead of blocking.
+bool futexSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  // If operation is a FUTEX_WAIT, set timeout to zero for polling instead of
+  // blocking.
   int futexOp = t.arg2();
   int futexValue = t.arg3();
-  timespec* timeoutPtr = (timespec*) t.arg4();
+  timespec* timeoutPtr = (timespec*)t.arg4();
 
   // See definitions of variables here.
   // https://github.com/spotify/linux/blob/master/include/linux/futex.h
   int futexCmd = futexOp & FUTEX_CMD_MASK;
-  gs.log.writeToLog(Importance::info, "Operation: " + futexCommands.at(futexCmd) + "\n");
+  gs.log.writeToLog(
+      Importance::info, "Operation: " + futexCommands.at(futexCmd) + "\n");
 
   if ((futexOp & FUTEX_PRIVATE_FLAG) != 0) {
     gs.log.writeToLog(Importance::info, "with: FUTEX_PRIVATE_FLAG\n");
@@ -691,21 +773,26 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   }
 
   // Handle wake operations by notifying scheduler of progress.
-  if(futexCmd == FUTEX_WAKE || futexCmd == FUTEX_REQUEUE || futexCmd == FUTEX_CMP_REQUEUE ||
-     futexCmd == FUTEX_WAKE_BITSET || futexCmd == FUTEX_WAKE_OP){
-    traceePtr<int> rptr( (int*)t.arg1());
+  if (futexCmd == FUTEX_WAKE || futexCmd == FUTEX_REQUEUE ||
+      futexCmd == FUTEX_CMP_REQUEUE || futexCmd == FUTEX_WAKE_BITSET ||
+      futexCmd == FUTEX_WAKE_OP) {
+    traceePtr<int> rptr((int*)t.arg1());
     int val = t.readFromTracee(rptr, t.getPid());
-    gs.log.writeToLog(Importance::info, "Waking on address: %p = %x, my pid: %u, traceesPid: %u\n", t.arg1(), val, t.getPid(), s.traceePid);
-    gs.log.writeToLog(Importance::info, "Trying to wake up to %d threads.\n", futexValue);
+    gs.log.writeToLog(
+        Importance::info,
+        "Waking on address: %p = %x, my pid: %u, traceesPid: %u\n", t.arg1(),
+        val, t.getPid(), s.traceePid);
+    gs.log.writeToLog(
+        Importance::info, "Trying to wake up to %d threads.\n", futexValue);
 
     /*
     auto waiters = futex_remove_waiters(s, t.arg1(), futexValue);
     for (auto pidToWakeup: waiters) {
       if (pidToWakeup != t.getPid()) {
-	gs.log.writeToLog(Importance::info, "Scheduling task %d.\n", pidToWakeup);
-	sched.addAndScheduleNext(pidToWakeup);
-      } else {
-	gs.log.writeToLog(Importance::info, "Scheduling task %d ignored (already running)\n", pidToWakeup);
+        gs.log.writeToLog(Importance::info, "Scheduling task %d.\n",
+    pidToWakeup); sched.addAndScheduleNext(pidToWakeup); } else {
+        gs.log.writeToLog(Importance::info, "Scheduling task %d ignored (already
+    running)\n", pidToWakeup);
       }
     }
     */
@@ -713,38 +800,44 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
     return false;
   }
 
-  // Handle wait operations, by setting our timeout to zero, and seeing if time runs out.
-  if(futexCmd == FUTEX_WAIT ||
-     futexCmd == FUTEX_WAIT_BITSET ||
-     futexCmd == FUTEX_WAIT_REQUEUE_PI
-     ){
-    gs.log.writeToLog(Importance::info, "Waiting on value at address: %p.\n", t.arg1());
-    gs.log.writeToLog(Importance::info, "Against value: " + to_string(futexValue) + "\n");
+  // Handle wait operations, by setting our timeout to zero, and seeing if time
+  // runs out.
+  if (futexCmd == FUTEX_WAIT || futexCmd == FUTEX_WAIT_BITSET ||
+      futexCmd == FUTEX_WAIT_REQUEUE_PI) {
+    gs.log.writeToLog(
+        Importance::info, "Waiting on value at address: %p.\n", t.arg1());
+    gs.log.writeToLog(
+        Importance::info, "Against value: " + to_string(futexValue) + "\n");
     if (gs.log.getDebugLevel() > 0) {
-      int actualValue = (int) t.readFromTracee(traceePtr<int>((int*) t.arg1()), t.getPid());
-      gs.log.writeToLog(Importance::info, "Actual value: " + to_string(actualValue) + "\n");
+      int actualValue =
+          (int)t.readFromTracee(traceePtr<int>((int*)t.arg1()), t.getPid());
+      gs.log.writeToLog(
+          Importance::info, "Actual value: " + to_string(actualValue) + "\n");
     }
 
     // Overwrite the current value with our value. Restore value in post hook.
-    s.originalArg4 = (uint64_t) timeoutPtr;
+    s.originalArg4 = (uint64_t)timeoutPtr;
     // Our timespec value to copy over.
 
     timespec ourTimeout = {0};
-    if(timeoutPtr == nullptr){
-       gs.log.writeToLog(Importance::extra,
-                        "timeout null, writing our data to mmaped page...\n");
-      timespec* newAddress = (timespec*) s.mmapMemory.getAddr().ptr;
+    if (timeoutPtr == nullptr) {
+      gs.log.writeToLog(
+          Importance::extra,
+          "timeout null, writing our data to mmaped page...\n");
+      timespec* newAddress = (timespec*)s.mmapMemory.getAddr().ptr;
       t.writeToTracee(traceePtr<timespec>(newAddress), ourTimeout, s.traceePid);
 
       // Point system call to new address.
-      t.writeArg4((uint64_t) newAddress);
+      t.writeArg4((uint64_t)newAddress);
       s.userDefinedTimeout = false;
-    }else{
-      if (gs.log.getDebugLevel() > 0 ) {
-        timespec timeout = t.readFromTracee(traceePtr<timespec>(timeoutPtr), t.getPid());
-        gs.log.writeToLog(Importance::info,
-                          "Using original timeout value: (s = %d, ns = %d)\n",
-                          timeout.tv_sec, timeout.tv_nsec);
+    } else {
+      if (gs.log.getDebugLevel() > 0) {
+        timespec timeout =
+            t.readFromTracee(traceePtr<timespec>(timeoutPtr), t.getPid());
+        gs.log.writeToLog(
+            Importance::info,
+            "Using original timeout value: (s = %d, ns = %d)\n", timeout.tv_sec,
+            timeout.tv_nsec);
       }
       t.writeToTracee(traceePtr<timespec>(timeoutPtr), ourTimeout, s.traceePid);
       s.userDefinedTimeout = true;
@@ -754,23 +847,24 @@ bool futexSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   return true;
 }
 
-void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void futexSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int futexOp = t.arg2();
   int futexCmd = futexOp & FUTEX_CMD_MASK;
-  if(futexCmd == FUTEX_WAIT ||
-     futexCmd == FUTEX_WAIT_BITSET ||
-     futexCmd == FUTEX_WAIT_REQUEUE_PI
-     ){
-    gs.log.writeToLog(Importance::info, "Futex post-hook, handling wait operation.\n");
+  if (futexCmd == FUTEX_WAIT || futexCmd == FUTEX_WAIT_BITSET ||
+      futexCmd == FUTEX_WAIT_REQUEUE_PI) {
+    gs.log.writeToLog(
+        Importance::info, "Futex post-hook, handling wait operation.\n");
 
     // *uaddr != val
     if (t.getReturnValue() == -EAGAIN) {
       return;
     }
 
-    if(s.userDefinedTimeout){
-      // Only preempt if we would have timeout out. Othewise let if continue running!
-      if(t.getReturnValue() == -ETIMEDOUT){
+    if (s.userDefinedTimeout) {
+      // Only preempt if we would have timeout out. Othewise let if continue
+      // running!
+      if (t.getReturnValue() == -ETIMEDOUT) {
         sched.preemptAndScheduleNext();
       }
       s.userDefinedTimeout = false;
@@ -780,43 +874,48 @@ void futexSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
       t.writeArg4(s.originalArg4);
       replaySyscallIfBlocked(gs, s, t, sched, ETIMEDOUT);
     }
-
   }
 
   return;
 }
 // =======================================================================================
-bool getcwdSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
-                                     scheduler& sched){
+bool getcwdSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
-void getcwdSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
-                                     scheduler& sched){
+void getcwdSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
 
   return;
 }
 // =======================================================================================
-bool getdentsSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool getdentsSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
-void getdentsSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void getdentsSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   handleDents<linux_dirent>(gs, s, t, sched);
   return;
 }
 // =======================================================================================
-bool getdents64SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool getdents64SystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
-void getdents64SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void getdents64SystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   handleDents<linux_dirent64>(gs, s, t, sched);
   return;
 }
 // =======================================================================================
-bool getpeernameSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool getpeernameSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
-void getpeernameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void getpeernameSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // int ret = t.getReturnValue();
   /*
   if(ret == 0){
@@ -826,23 +925,25 @@ void getpeernameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
   return;
 }
 // =======================================================================================
-bool getrandomSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
-                                        scheduler& sched){
+bool getrandomSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void getrandomSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void getrandomSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.getRandomCalls++;
 
-  char* buf = (char*) t.arg1();
-  size_t bufLength = (size_t) t.arg2();
+  char* buf = (char*)t.arg1();
+  size_t bufLength = (size_t)t.arg2();
 
   char prngValues[128];
 
   // write batches of pseudorandom bytes to the tracee
-  for (size_t traceeByteIdx = 0; traceeByteIdx < bufLength; traceeByteIdx += sizeof(prngValues)) {
+  for (size_t traceeByteIdx = 0; traceeByteIdx < bufLength;
+       traceeByteIdx += sizeof(prngValues)) {
     // Fill buffer with deterministic pseudorandom values
-    for (size_t i = 0; i < sizeof(prngValues)/sizeof(uint16_t); i++) {
+    for (size_t i = 0; i < sizeof(prngValues) / sizeof(uint16_t); i++) {
       uint16_t* prngValues16b = (uint16_t*)prngValues;
       prngValues16b[i] = gs.prng.get();
     }
@@ -858,13 +959,14 @@ void getrandomSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
   return;
 }
 // =======================================================================================
-bool getrlimitSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
-                                        scheduler& sched){
+bool getrlimitSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void getrlimitSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  struct rlimit* rp = (struct rlimit*) t.arg2();
+void getrlimitSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  struct rlimit* rp = (struct rlimit*)t.arg2();
   if (rp != nullptr) {
     // struct rlimit noLimits = {};
     // TODO See prlimit64SystemCall
@@ -877,39 +979,44 @@ void getrlimitSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
   return;
 }
 // =======================================================================================
-bool getrusageSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool getrusageSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
-void getrusageSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void getrusageSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.timeCalls++;
-  struct rusage* usagePtr = (struct rusage*) t.arg2();
+  struct rusage* usagePtr = (struct rusage*)t.arg2();
 
-  if(usagePtr == nullptr){
+  if (usagePtr == nullptr) {
     gs.log.writeToLog(Importance::info, "getrusage pointer null.");
-  }else{
+  } else {
     // jld; initializing usage from tracee memory seems redundant, as all fields
     // are overwritten below
-    struct rusage usage; // = t.readFromTracee(traceePtr<struct rusage>(usagePtr), t.getPid());
+    struct rusage usage; // = t.readFromTracee(traceePtr<struct
+                         // rusage>(usagePtr), t.getPid());
     /* user CPU time used */
-    usage.ru_utime = timeval { .tv_sec =  (long) s.getLogicalTime() / state::MICRO_SECS_PER_SEC,
-                               .tv_usec = (long )s.getLogicalTime() % state::MICRO_SECS_PER_SEC};
+    usage.ru_utime = timeval{
+        .tv_sec = (long)s.getLogicalTime() / state::MICRO_SECS_PER_SEC,
+        .tv_usec = (long)s.getLogicalTime() % state::MICRO_SECS_PER_SEC};
     /* system CPU time used */
-    usage.ru_stime = timeval { .tv_sec =  (long) s.getLogicalTime() / state::MICRO_SECS_PER_SEC,
-                               .tv_usec = (long )s.getLogicalTime() % state::MICRO_SECS_PER_SEC};
-    usage.ru_maxrss = LONG_MAX;                    /* maximum resident set size */
-    usage.ru_ixrss = LONG_MAX;                     /* integral shared memory size */
-    usage.ru_idrss = LONG_MAX;    		   /* integral unshared data size */
-    usage.ru_isrss = LONG_MAX;    		   /* integral unshared stack size */
-    usage.ru_minflt = LONG_MAX;   		   /* page reclaims (soft page faults) */
-    usage.ru_majflt = LONG_MAX;   		   /* page faults (hard page faults) */
-    usage.ru_nswap = LONG_MAX;    		   /* swaps */
-    usage.ru_inblock = LONG_MAX;  		   /* block input operations */
-    usage.ru_oublock = LONG_MAX;  		   /* block output operations */
-    usage.ru_msgsnd = LONG_MAX;   		   /* IPC messages sent */
-    usage.ru_msgrcv = LONG_MAX;   		   /* IPC messages received */
-    usage.ru_nsignals = LONG_MAX; 		   /* signals received */
-    usage.ru_nvcsw = LONG_MAX;    		   /* voluntary context switches */
-    usage.ru_nivcsw = LONG_MAX;   		   /* involuntary context switches */
+    usage.ru_stime = timeval{
+        .tv_sec = (long)s.getLogicalTime() / state::MICRO_SECS_PER_SEC,
+        .tv_usec = (long)s.getLogicalTime() % state::MICRO_SECS_PER_SEC};
+    usage.ru_maxrss = LONG_MAX; /* maximum resident set size */
+    usage.ru_ixrss = LONG_MAX; /* integral shared memory size */
+    usage.ru_idrss = LONG_MAX; /* integral unshared data size */
+    usage.ru_isrss = LONG_MAX; /* integral unshared stack size */
+    usage.ru_minflt = LONG_MAX; /* page reclaims (soft page faults) */
+    usage.ru_majflt = LONG_MAX; /* page faults (hard page faults) */
+    usage.ru_nswap = LONG_MAX; /* swaps */
+    usage.ru_inblock = LONG_MAX; /* block input operations */
+    usage.ru_oublock = LONG_MAX; /* block output operations */
+    usage.ru_msgsnd = LONG_MAX; /* IPC messages sent */
+    usage.ru_msgrcv = LONG_MAX; /* IPC messages received */
+    usage.ru_nsignals = LONG_MAX; /* signals received */
+    usage.ru_nvcsw = LONG_MAX; /* voluntary context switches */
+    usage.ru_nivcsw = LONG_MAX; /* involuntary context switches */
 
     t.writeToTracee(traceePtr<struct rusage>(usagePtr), usage, t.getPid());
   }
@@ -918,17 +1025,18 @@ void getrusageSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
   return;
 }
 // =======================================================================================
-bool gettimeofdaySystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
-                                           scheduler& sched){
+bool gettimeofdaySystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void gettimeofdaySystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
-                                           scheduler& sched){
-  gs.log.writeToLog(Importance::info, "Inside gettimeofday post-hook, sending tv_sec=%d\n",
-		    s.getLogicalTime() / state::MICRO_SECS_PER_SEC);
+void gettimeofdaySystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  gs.log.writeToLog(
+      Importance::info, "Inside gettimeofday post-hook, sending tv_sec=%d\n",
+      s.getLogicalTime() / state::MICRO_SECS_PER_SEC);
   gs.timeCalls++;
-  struct timeval* tp = (struct timeval*) t.arg1();
+  struct timeval* tp = (struct timeval*)t.arg1();
   if (nullptr != tp) {
     struct timeval myTv = {};
     myTv.tv_sec = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
@@ -945,9 +1053,10 @@ void gettimeofdaySystemCall::handleDetPost(globalState& gs, state& s, ptracer& t
   return;
 }
 // =======================================================================================
-bool ioctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool ioctlSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   long request = t.arg2();
-  switch(request) {
+  switch (request) {
   // non-supported rtc ops
   case RTC_AIE_ON:
   case RTC_AIE_OFF:
@@ -958,35 +1067,33 @@ bool ioctlSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   case RTC_WKALM_RD:
   case RTC_WKALM_SET:
   case RTC_IRQP_READ:
-  case RTC_IRQP_SET:
-    {
-      int err = ENOTTY;
-      failSystemCall(gs, s, t, err);
-      return false;
-    }
-    break;
+  case RTC_IRQP_SET: {
+    int err = ENOTTY;
+    failSystemCall(gs, s, t, err);
+    return false;
+  } break;
   case RTC_SET_TIME:
-  case RTC_EPOCH_SET:
-    {
-      int err = EPERM;
-      failSystemCall(gs, s, t, err);
-      return false;
-    }
+  case RTC_EPOCH_SET: {
+    int err = EPERM;
+    failSystemCall(gs, s, t, err);
+    return false;
+  }
   case RTC_RD_TIME:
   case RTC_EPOCH_READ:
     return true;
   }
   return true;
 }
-void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void ioctlSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int fd = t.arg1();
   const uint64_t request = t.arg2();
   gs.log.writeToLog(Importance::info, "File descriptor: %d\n", fd);
   gs.log.writeToLog(Importance::info, "Request 0x%" PRIx64 "\n", request);
 
   switch (request) {
-  // Even though we don't particularly like TCGETS, we will let it through as we need
-  // it for some programs to work, like `more`.
+  // Even though we don't particularly like TCGETS, we will let it through as we
+  // need it for some programs to work, like `more`.
   case TCGETS:
   case TCSETS:
   case TCSETSW:
@@ -1000,19 +1107,15 @@ void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   case SIOCGIFADDR:
     return;
   // simulate vt100.
-  case TIOCGWINSZ:
-    {
-      if (t.arg3() && t.getReturnValue() == 0) {
-	struct winsize winsz {
-			      .ws_row = 24,
-			      .ws_col = 80,
-			      .ws_xpixel = 480,
-			      .ws_ypixel = 640,
-	};
-	auto rptr = traceePtr<struct winsize>((struct winsize*)t.arg3());
-	t.writeToTracee(rptr, winsz, s.traceePid);
-      }
+  case TIOCGWINSZ: {
+    if (t.arg3() && t.getReturnValue() == 0) {
+      struct winsize winsz {
+        .ws_row = 24, .ws_col = 80, .ws_xpixel = 480, .ws_ypixel = 640,
+      };
+      auto rptr = traceePtr<struct winsize>((struct winsize*)t.arg3());
+      t.writeToTracee(rptr, winsz, s.traceePid);
     }
+  }
     return;
   case TIOCGPGRP:
   case SIOCSIFMAP:
@@ -1021,124 +1124,128 @@ void ioctlSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   case FICLONE:
 #endif
     return;
-  case RTC_RD_TIME:
-    {
-      time_t logicalTime = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
-      struct tm tm = {};
+  case RTC_RD_TIME: {
+    time_t logicalTime = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
+    struct tm tm = {};
 
-      s.incrementTime();
-      gmtime_r(&logicalTime, &tm);
+    s.incrementTime();
+    gmtime_r(&logicalTime, &tm);
 
-      if (t.arg3()) {
-	traceePtr<struct tm> rptr((struct tm*)t.arg3());
-	t.writeToTracee(rptr, tm, t.getPid());
-      }
+    if (t.arg3()) {
+      traceePtr<struct tm> rptr((struct tm*)t.arg3());
+      t.writeToTracee(rptr, tm, t.getPid());
     }
-    break;
-  case RTC_EPOCH_READ:
-    {
-      unsigned long logicalTime = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
-      s.incrementTime();
+  } break;
+  case RTC_EPOCH_READ: {
+    unsigned long logicalTime = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
+    s.incrementTime();
 
-      if (t.arg3()) {
-	traceePtr<unsigned long> rptr((unsigned long*)t.arg3());
-	t.writeToTracee(rptr, logicalTime, t.getPid());
-      }
+    if (t.arg3()) {
+      traceePtr<unsigned long> rptr((unsigned long*)t.arg3());
+      t.writeToTracee(rptr, logicalTime, t.getPid());
     }
-    break;
-  case FIONBIO:
-    {
-      int flag = t.readFromTracee(traceePtr<int>((int*)t.arg3()), t.getPid());
-      auto blocking_flag = flag? descriptorType::nonBlocking: descriptorType::blocking;
-      auto blocking_msg = flag? "non blocking": "blocking";
-      gs.log.writeToLog(Importance::info, "found ioctl(%d, FIONBIO, &%d), setting %d to %s!\n", fd, flag, fd, blocking_msg);
-      (*s.fdStatus.get())[fd] = blocking_flag;
-    }
-    break;
+  } break;
+  case FIONBIO: {
+    int flag = t.readFromTracee(traceePtr<int>((int*)t.arg3()), t.getPid());
+    auto blocking_flag =
+        flag ? descriptorType::nonBlocking : descriptorType::blocking;
+    auto blocking_msg = flag ? "non blocking" : "blocking";
+    gs.log.writeToLog(
+        Importance::info, "found ioctl(%d, FIONBIO, &%d), setting %d to %s!\n",
+        fd, flag, fd, blocking_msg);
+    (*s.fdStatus.get())[fd] = blocking_flag;
+  } break;
   default:
-    runtimeError("Unsupported ioctl call: fd=" + to_string(t.arg1()) +
-                        " request=" + to_string(request));
+    runtimeError(
+        "Unsupported ioctl call: fd=" + to_string(t.arg1()) +
+        " request=" + to_string(request));
     break;
   }
   return;
 }
 // =======================================================================================
 // TODO
-bool llistxattrSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool llistxattrSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
-void llistxattrSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-
-}
+void llistxattrSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {}
 // =======================================================================================
 // TODO
-bool lgetxattrSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool lgetxattrSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void lgetxattrSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-
-}
+void lgetxattrSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {}
 // =======================================================================================
-bool mmapSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool mmapSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void mmapSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // This isn't a natural call mmap from the tracee we injected this call ourselves!
-  if(s.syscallInjected){
-    gs.log.writeToLog(Importance::info, "This mmap was inject for use in pre and post hook purposes.\n");
+void mmapSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  // This isn't a natural call mmap from the tracee we injected this call
+  // ourselves!
+  if (s.syscallInjected) {
+    gs.log.writeToLog(
+        Importance::info,
+        "This mmap was inject for use in pre and post hook purposes.\n");
 
-    if(t.getRax().ptr == MAP_FAILED){
-      runtimeError("Unable to properly inject mmap call to tracee!\n"
-                          "mmap call returned: " +
-                          to_string(t.getReturnValue()) + "\n");
+    if (t.getRax().ptr == MAP_FAILED) {
+      runtimeError(
+          "Unable to properly inject mmap call to tracee!\n"
+          "mmap call returned: " +
+          to_string(t.getReturnValue()) + "\n");
     }
     s.syscallInjected = false;
-
 
     // save memory address to be used later
     s.mmapMemory.setAddr(t.getRax());
 
     // Inject original system call:
-    // Previous state that should have been set by system call that created this fstat
-    // injection.
+    // Previous state that should have been set by system call that created this
+    // fstat injection.
     t.setRegs(s.regSaver.popRegisterState());
     replaySystemCall(gs, t, t.getSystemCallNumber());
   }
 }
 // =======================================================================================
-bool
-nanosleepSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool nanosleepSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // Write 0 seconds to time. Required to skip waiting at all.
-  struct timespec *req = (struct timespec *) t.arg1();
-  if(req != nullptr){
-    struct timespec* myReq = (timespec*) s.mmapMemory.getAddr().ptr;
+  struct timespec* req = (struct timespec*)t.arg1();
+  if (req != nullptr) {
+    struct timespec* myReq = (timespec*)s.mmapMemory.getAddr().ptr;
     struct timespec localReq = {0};
 
     t.writeToTracee(traceePtr<struct timespec>(myReq), localReq, s.traceePid);
-    t.writeArg1((uint64_t) myReq);
+    t.writeArg1((uint64_t)myReq);
   }
   return false;
 }
 
-void
-nanosleepSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void nanosleepSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   runtimeError("nanosleep post-hook should never be called.");
 }
 // =======================================================================================
-bool mkdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
-                                   scheduler& sched){
+bool mkdirSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
 
   return true;
 }
 
-void mkdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
-                                     scheduler& sched){
+void mkdirSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // Add/overwrite entry in our map.
-  if(t.getReturnValue() == 0 && (char*) t.arg1() != nullptr){
-    string strPath = t.readTraceeCString(traceePtr<char>((char*) t.arg1()), s.traceePid);
+  if (t.getReturnValue() == 0 && (char*)t.arg1() != nullptr) {
+    string strPath =
+        t.readTraceeCString(traceePtr<char>((char*)t.arg1()), s.traceePid);
     auto inode = inode_from_tracee(strPath, s.traceePid, gs.log, -1);
     if (inode != -1UL) {
       gs.mtimeMap.addRealValue(inode);
@@ -1147,50 +1254,54 @@ void mkdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
   }
 }
 // =======================================================================================
-bool mkdiratSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
-                                     scheduler& sched){
+bool mkdiratSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg2(), gs.log, s.traceePid, t);
   gs.log.writeToLog(Importance::info, "dirfd: %d\n", t.arg1());
   return true;
 }
 
-void mkdiratSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
-                                      scheduler& sched){
-  char* path = (char*) t.arg2();
+void mkdiratSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  char* path = (char*)t.arg2();
   // Add/overwrite entry in our map.
-  if(t.getReturnValue() == 0 && path != nullptr){
+  if (t.getReturnValue() == 0 && path != nullptr) {
     string strPath = t.readTraceeCString(traceePtr<char>(path), s.traceePid);
     auto inode = inode_from_tracee(strPath, s.traceePid, gs.log, t.arg1());
-    if (inode != -1UL ) {
+    if (inode != -1UL) {
       gs.mtimeMap.addRealValue(inode);
       gs.inodeMap.addRealValue(inode);
     }
   }
 }
 // =======================================================================================
-bool newfstatatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
-                                         scheduler& sched){
+bool newfstatatSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void newfstatatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
-                                         scheduler& sched){
+void newfstatatSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg2(), gs.log, s.traceePid, t);
 
-  // This newfstatat was injected to get the inode belonging to a file that was deleted
-  // through: unlink, unlinkat, or rmdir.
-  if(s.syscallInjected){
+  // This newfstatat was injected to get the inode belonging to a file that was
+  // deleted through: unlink, unlinkat, or rmdir.
+  if (s.syscallInjected) {
     gs.log.writeToLog(Importance::info, "This newfstatat was injected.\n");
     s.syscallInjected = false;
 
-    if(t.getReturnValue() >= 0){
-      struct stat* statbufPtr = (struct stat*) t.arg3();
-      struct stat statbuf = t.readFromTracee(traceePtr<struct stat>(statbufPtr), s.traceePid);
+    if (t.getReturnValue() >= 0) {
+      struct stat* statbufPtr = (struct stat*)t.arg3();
+      struct stat statbuf =
+          t.readFromTracee(traceePtr<struct stat>(statbufPtr), s.traceePid);
 
-      gs.log.writeToLog(Importance::extra, "marking (device,inode) = (%lu,%lu) for deletion\n", statbuf.st_dev, statbuf.st_ino);
+      gs.log.writeToLog(
+          Importance::extra,
+          "marking (device,inode) = (%lu,%lu) for deletion\n", statbuf.st_dev,
+          statbuf.st_ino);
 
       s.inodeToDelete = statbuf.st_ino;
-    }else{
+    } else {
       gs.log.writeToLog(Importance::info, "No such file, that's okay.\n");
       s.inodeToDelete = -1;
     }
@@ -1201,82 +1312,91 @@ void newfstatatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
     t.setRegs(s.regSaver.popRegisterState());
     replaySystemCall(gs, t, t.getSystemCallNumber());
     s.firstTrySystemcall = false;
-  }else{
+  } else {
     handleStatFamily(gs, s, t, "newfstatat");
   }
 
   return;
 }
 // =======================================================================================
-bool lstatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool lstatSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
 
   return true;
 }
 
-void lstatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void lstatSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   handleStatFamily(gs, s, t, "lstat");
   return;
 }
 // =======================================================================================
-bool linkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-
+bool linkSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg2(), gs.log, s.traceePid, t, " hardlinking path: ");
   printInfoString(t.arg1(), gs.log, s.traceePid, t, " to path: ");
 
   return false;
 }
 
-void linkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
-                                     scheduler& sched){
+void linkSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   runtimeError("link post-hook should never be called.");
 }
 // =======================================================================================
-bool linkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-
+bool linkatSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg4(), gs.log, s.traceePid, t, " hardlinking path: ");
   printInfoString(t.arg2(), gs.log, s.traceePid, t, " to path: ");
 
   return false;
 }
 
-void linkatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
-                                     scheduler& sched){
+void linkatSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   runtimeError("linkat post-hook should never be called.");
 }
 // =======================================================================================
-bool openSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if((char*) t.arg1() != nullptr){
-    handlePreOpens(gs, s, t, -1, traceePtr<char>{(char*) t.arg1()}, t.arg2());
+bool openSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  if ((char*)t.arg1() != nullptr) {
+    handlePreOpens(gs, s, t, -1, traceePtr<char>{(char*)t.arg1()}, t.arg2());
     return true;
   }
   return false;
 }
 
-void openSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void openSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // Beware of unsigned numbers, can lead to wrong value if not casted!
-  handlePostOpens(gs, s, t, (int) t.arg2());
+  handlePostOpens(gs, s, t, (int)t.arg2());
 }
 // =======================================================================================
-bool openatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if((char*) t.arg2() != nullptr){
-    handlePreOpens(gs, s, t, t.arg1(), traceePtr<char>{(char*) t.arg2()}, t.arg3());
+bool openatSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  if ((char*)t.arg2() != nullptr) {
+    handlePreOpens(
+        gs, s, t, t.arg1(), traceePtr<char>{(char*)t.arg2()}, t.arg3());
     return true;
   }
   return false;
 }
 
-void openatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void openatSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // Beware of sign, can lead to wrong value if not casted!
-  handlePostOpens(gs, s, t, (int) t.arg3());
+  handlePostOpens(gs, s, t, (int)t.arg3());
 }
 // =======================================================================================
-bool pauseSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool pauseSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.log.writeToLog(Importance::info, "pause pre-hook\n");
   return true;
 }
 
-void pauseSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void pauseSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.log.writeToLog(Importance::info, "pause post-hook\n");
   if (s.signalInjected) {
     uint64_t retval = t.getReturnValue();
@@ -1291,8 +1411,10 @@ void pauseSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
 }
 
 // =======================================================================================
-bool pipeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  gs.log.writeToLog(Importance::info, "Making this pipe non-blocking via pipe2\n");
+bool pipeSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  gs.log.writeToLog(
+      Importance::info, "Making this pipe non-blocking via pipe2\n");
 
   s.syscallInjected = true;
   t.changeSystemCall(SYS_pipe2);
@@ -1304,8 +1426,10 @@ bool pipeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedul
   return true;
 }
 
-void pipeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // We should never get here. We always change the call to pipe to a call to pipe2.
+void pipeSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  // We should never get here. We always change the call to pipe to a call to
+  // pipe2.
   runtimeError("did not expect to arrive a pipe post hook.");
   // Restore original register state.
   // t.writeArg2(s.originalArg2);
@@ -1314,9 +1438,11 @@ void pipeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
   // s.fdStatus[p.second] = descriptorType::blocking;
 }
 // =======================================================================================
-bool pipe2SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // We only see this pre-hook if the call was originally a pipe2 and not a pipe that was
-  // converted into a pipe2. That's why it's okay to set s.originalArg2 here.
+bool pipe2SystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  // We only see this pre-hook if the call was originally a pipe2 and not a pipe
+  // that was converted into a pipe2. That's why it's okay to set s.originalArg2
+  // here.
   gs.log.writeToLog(Importance::info, "Making this pipe2 non-blocking\n");
   // Convert pipe call to pipe2 to set O_NONBLOCK.
   s.originalArg2 = t.arg2();
@@ -1325,69 +1451,76 @@ bool pipe2SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   return true;
 }
 
-void pipe2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void pipe2SystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // Restore original registers.
   t.writeArg2(s.originalArg2);
   auto p = getPipeFds(gs, s, t);
 
   // Track this file descriptor:
-  if(s.countFdStatus(p.first) != 0){
+  if (s.countFdStatus(p.first) != 0) {
     runtimeError("Value already in map (fdStatus): " + to_string(p.first));
   }
-  if(s.countFdStatus(p.second) != 0){
+  if (s.countFdStatus(p.second) != 0) {
     runtimeError("Value already in map (fdStatus): " + to_string(p.second));
   }
 
   // This was a pipe that got converted to a pipe2.
-  if(s.syscallInjected){
+  if (s.syscallInjected) {
     s.syscallInjected = false;
     gs.log.writeToLog(Importance::info, "This used to a pipe()!\n");
     gs.log.writeToLog(Importance::info, "Set pipe %d as blocking.\n", p.first);
     gs.log.writeToLog(Importance::info, "Set pipe %d as blocking.\n", p.second);
     s.setFdStatus(p.first, descriptorType::blocking);
     s.setFdStatus(p.second, descriptorType::blocking);
-  }else{
+  } else {
     // Must be checked after resetting state.
-    int flags = (int) t.arg2();
+    int flags = (int)t.arg2();
 
     // Check if set as non=blocking.
-    if((flags & O_NONBLOCK) == 0){
-      gs.log.writeToLog(Importance::info, "Set pipe %d as blocking.\n", p.first);
-      gs.log.writeToLog(Importance::info, "Set pipe %d as blocking.\n", p.second);
+    if ((flags & O_NONBLOCK) == 0) {
+      gs.log.writeToLog(
+          Importance::info, "Set pipe %d as blocking.\n", p.first);
+      gs.log.writeToLog(
+          Importance::info, "Set pipe %d as blocking.\n", p.second);
       s.setFdStatus(p.first, descriptorType::blocking);
       s.setFdStatus(p.second, descriptorType::blocking);
-    }else{
-      gs.log.writeToLog(Importance::info, "Set pipe %d as non-blocking.\n", p.first);
-      gs.log.writeToLog(Importance::info, "Set pipe %d as non-blocking.\n", p.second);
+    } else {
+      gs.log.writeToLog(
+          Importance::info, "Set pipe %d as non-blocking.\n", p.first);
+      gs.log.writeToLog(
+          Importance::info, "Set pipe %d as non-blocking.\n", p.second);
       s.setFdStatus(p.first, descriptorType::nonBlocking);
       s.setFdStatus(p.second, descriptorType::nonBlocking);
     }
   }
 }
 // =======================================================================================
-bool pselect6SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool pselect6SystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void pselect6SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void pselect6SystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return;
 }
 // =======================================================================================
-bool pollSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if (!s.originalArg3 && t.arg3() != 0)
-    s.originalArg3 = t.arg3();
+bool pollSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  if (!s.originalArg3 && t.arg3() != 0) s.originalArg3 = t.arg3();
 
-  if ((int) s.originalArg3 != 0){
+  if ((int)s.originalArg3 != 0) {
     t.writeArg3(0);
     s.userDefinedTimeout = true;
 
-    if (s.originalArg3 > 0)
-      s.poll_retry_maximum = s.originalArg3;
+    if (s.originalArg3 > 0) s.poll_retry_maximum = s.originalArg3;
   }
   return true;
 }
 
-void pollSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void pollSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int timeout = (int)s.originalArg3;
   int retval = t.getReturnValue();
   auto rptr = traceePtr<struct pollfd>((struct pollfd*)t.arg1());
@@ -1410,23 +1543,28 @@ void pollSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
 }
 // =======================================================================================
 // for reference, here's the prlimit() prototype
-// int prlimit(pid_t pid, int resource, const struct rlimit *new_limit, struct rlimit *old_limit);
-bool prlimit64SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+// int prlimit(pid_t pid, int resource, const struct rlimit *new_limit, struct
+// rlimit *old_limit);
+bool prlimit64SystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   s.originalArg3 = t.arg3();
-  t.writeArg3(0/*NULL*/); // suppress attempts to set new limits
+  t.writeArg3(0 /*NULL*/); // suppress attempts to set new limits
 
   // Check if first argument (pid) is non-zero. If so fail.
   // TODO: could also always overwrite first argument with zero
-  int pid = (pid_t) t.arg1();
-  if(pid != 0){
-    runtimeError("prlimit64: We do not support prlimit64 on other processes.\n "
-                        "(pid: " + to_string(pid));
+  int pid = (pid_t)t.arg1();
+  if (pid != 0) {
+    runtimeError(
+        "prlimit64: We do not support prlimit64 on other processes.\n "
+        "(pid: " +
+        to_string(pid));
   }
 
   return true;
 }
 
-void prlimit64SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void prlimit64SystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   /* To bypass the complexity of this system call (lots of different resources,
    * dynamic limits, ...) we just always say everything is unlimited, and ignore
    * requests from the application to try to increase the soft limit.
@@ -1437,95 +1575,99 @@ void prlimit64SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, s
    * starting limits are deterministic.
    */
   t.writeArg3(s.originalArg3);
-  struct rlimit* rp = (struct rlimit*) t.arg4();
+  struct rlimit* rp = (struct rlimit*)t.arg4();
   if (rp != nullptr) {
-    // TODO: For memory: return correct memory used, which should be deterministic.
-    // TODO: Allow actual max memory through, I believe this is outside our deterministic
-    // gurantee.
+    // TODO: For memory: return correct memory used, which should be
+    // deterministic.
+    // TODO: Allow actual max memory through, I believe this is outside our
+    // deterministic gurantee.
 
     // struct rlimit noLimits = {};
 
     // noLimits.rlim_cur =
     // noLimits.rlim_max = RLIM_INFINITY;
 
-    //gs.log.writeToLog(Importance::info, "rp=" + to_string(t.arg4()), t.getPid());
+    // gs.log.writeToLog(Importance::info, "rp=" + to_string(t.arg4()),
+    // t.getPid());
     // t.writeToTracee(rp, noLimits, t.getPid());
   }
 
   return;
 }
 // =======================================================================================
-bool readSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool readSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int fd = t.arg1();
 
   gs.log.writeToLog(Importance::info, "File descriptor: %d\n", t.arg1());
-  gs.log.writeToLog(Importance::info, "non-blocking: %d\n", (int)fd_is_nonblocking(s, fd));
+  gs.log.writeToLog(
+      Importance::info, "non-blocking: %d\n", (int)fd_is_nonblocking(s, fd));
   gs.log.writeToLog(Importance::info, "Bytes to read %d\n", t.arg3());
 
   return true;
 }
 
-void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void readSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int fd = t.arg1();
-  auto resetState =
-    [&](){
-      // Restore user regs so that it appears as if only one syscall occurred
-      t.setReturnRegister(s.totalBytes);
-      t.writeArg2(s.beforeRetry.rsi);
-      t.writeArg3(s.beforeRetry.rdx);
+  auto resetState = [&]() {
+    // Restore user regs so that it appears as if only one syscall occurred
+    t.setReturnRegister(s.totalBytes);
+    t.writeArg2(s.beforeRetry.rsi);
+    t.writeArg3(s.beforeRetry.rdx);
 
-      // reset for next syscall that we may have to retry
-      s.firstTrySystemcall = true;
-      s.totalBytes = 0;
-    };
+    // reset for next syscall that we may have to retry
+    s.firstTrySystemcall = true;
+    s.totalBytes = 0;
+  };
 
   if (s.fd_is_timerfd(fd)) {
-    t.writeToTracee(traceePtr<unsigned long>((unsigned long*)t.arg2()),
-		    1UL, s.traceePid);
+    t.writeToTracee(
+        traceePtr<unsigned long>((unsigned long*)t.arg2()), 1UL, s.traceePid);
     s.totalBytes = sizeof(unsigned long);
     resetState();
-    sched.preemptAndScheduleNext();    
+    sched.preemptAndScheduleNext();
     return;
-  } else if(s.countFdStatus(fd) != 0 &&
-	    s.getFdStatus(fd) == descriptorType::nonBlocking) {
+  } else if (
+      s.countFdStatus(fd) != 0 &&
+      s.getFdStatus(fd) == descriptorType::nonBlocking) {
     // Pipe exists in our map and it's set to non blocking.
-    gs.log.writeToLog(Importance::info,
-                      "read found with non blocking pipe!\n");
+    gs.log.writeToLog(Importance::info, "read found with non blocking pipe!\n");
     int retval = t.getReturnValue();
 
     // for non-blocking io, if it returns -EAGAIN on the 1st try, let it through
-    // if it returns -EAGAIN after the retry logic, return bytes already read/wrote
-    if(retval == -EAGAIN){
+    // if it returns -EAGAIN after the retry logic, return bytes already
+    // read/wrote
+    if (retval == -EAGAIN) {
       if (s.firstTrySystemcall) {
-	resetState();
-	t.setReturnRegister((uint64_t)-EAGAIN);
+        resetState();
+        t.setReturnRegister((uint64_t)-EAGAIN);
       } else {
-	auto totalBytes = s.totalBytes;
-	resetState();
-	t.setReturnRegister(totalBytes);
+        auto totalBytes = s.totalBytes;
+        resetState();
+        t.setReturnRegister(totalBytes);
       }
       return;
     }
-  }else{
+  } else {
     bool preemptAndTryLater = replaySyscallIfBlocked(gs, s, t, sched, EAGAIN);
-    if(preemptAndTryLater){
+    if (preemptAndTryLater) {
       gs.readRetryEvents++;
       return;
     }
   }
 
   ssize_t bytes_read = t.getReturnValue();
-  if(bytes_read < 0){
-    gs.log.writeToLog(Importance::info, "Returned negative: %d.",
-                      bytes_read);
+  if (bytes_read < 0) {
+    gs.log.writeToLog(Importance::info, "Returned negative: %d.", bytes_read);
     return;
   }
 
-  if(bytes_read > 0){
+  if (bytes_read > 0) {
     // This operation is very expensive!
     // char buffer[bytes_read];
-    // readVmTracee(traceePtr<void>((void*) t.arg2()), buffer, bytes_read, s.traceePid);
-    // gs.log.writeToLog(Importance::extra, "Read output: \"\n");
+    // readVmTracee(traceePtr<void>((void*) t.arg2()), buffer, bytes_read,
+    // s.traceePid); gs.log.writeToLog(Importance::extra, "Read output: \"\n");
     // for(int i = 0; i < bytes_read; i++){
     // gs.log.writeToLog(Importance::extra, "%d", (int) buffer[i]);
     // }
@@ -1535,31 +1677,34 @@ void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
   // Replay system call if not enought bytes were read.
   s.totalBytes += bytes_read;
 
-  if(s.firstTrySystemcall){
+  if (s.firstTrySystemcall) {
     gs.log.writeToLog(Importance::info, "First time seeing this read!\n");
     s.firstTrySystemcall = false;
     s.beforeRetry = t.getRegs();
   }
 
   // EOF, or read returned everything we asked for.
-  if(bytes_read == 0  || // EOF
-     s.totalBytes == s.beforeRetry.rdx){  // original bytes requested
+  if (bytes_read == 0 || // EOF
+      s.totalBytes == s.beforeRetry.rdx) { // original bytes requested
     gs.log.writeToLog(Importance::info, "EOF or read all bytes.\n");
 
     if (gs.log.getDebugLevel() > 0 && s.totalBytes > 0) {
       // NB: this operation is very expensive!
-      unsigned char* buffer = (unsigned char*) malloc(s.totalBytes);
-      readVmTraceeRaw(traceePtr<unsigned char>((unsigned char*) s.beforeRetry.rsi), buffer, s.totalBytes, s.traceePid);
+      unsigned char* buffer = (unsigned char*)malloc(s.totalBytes);
+      readVmTraceeRaw(
+          traceePtr<unsigned char>((unsigned char*)s.beforeRetry.rsi), buffer,
+          s.totalBytes, s.traceePid);
       unsigned char sha1[SHA_DIGEST_LENGTH] = {0};
       SHA1(buffer, s.totalBytes, sha1);
       free(buffer);
       stringstream ss;
       ss << std::hex << std::setw(2) << std::setfill('0');
       for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
-        ss << (unsigned short) sha1[i];
+        ss << (unsigned short)sha1[i];
       }
-      gs.log.writeToLog(Importance::info, "sha1 checksum of %d bytes read: %s\n",
-                        s.totalBytes, ss.str().c_str());
+      gs.log.writeToLog(
+          Importance::info, "sha1 checksum of %d bytes read: %s\n",
+          s.totalBytes, ss.str().c_str());
     }
 
     resetState();
@@ -1574,35 +1719,37 @@ void readSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
   return;
 }
 // =======================================================================================
-bool readvSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool readvSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void readvSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void readvSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return;
 }
 // =======================================================================================
-bool readlinkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
-                                      scheduler& sched){
+bool readlinkSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
 
   return false;
 }
 
-void
-readlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void readlinkSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   runtimeError("readlink post-hook should never be called.");
 }
 // =======================================================================================
-bool readlinkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
-                                      scheduler& sched){
+bool readlinkatSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg2(), gs.log, s.traceePid, t);
 
   return false;
 }
 
-void
-readlinkatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void readlinkatSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   runtimeError("readlinkat post-hook should never be called.");
 }
 
@@ -1616,84 +1763,89 @@ static bool fd_is_nonblocking(state& s, int fd) {
 }
 
 // =======================================================================================
-bool recvmsgSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
-                                     scheduler& sched){
+bool recvmsgSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int flags = (int)t.arg3();
   int fd = (int)t.arg1();
-  bool nonblock = (flags & MSG_DONTWAIT) == MSG_DONTWAIT ||
-    fd_is_nonblocking(s, fd); 
-  gs.log.writeToLog(Importance::info, "recvmsg from fd " + to_string(t.arg1()) + ", nonblock: " + to_string(nonblock) + "\n");
+  bool nonblock =
+      (flags & MSG_DONTWAIT) == MSG_DONTWAIT || fd_is_nonblocking(s, fd);
+  gs.log.writeToLog(
+      Importance::info, "recvmsg from fd " + to_string(t.arg1()) +
+                            ", nonblock: " + to_string(nonblock) + "\n");
   return true;
 }
 
-void recvmsgSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
-                                      scheduler& sched){
+void recvmsgSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   if (!fd_is_nonblocking(s, (int)t.arg1())) {
     replaySyscallIfBlocked(gs, s, t, sched, EAGAIN);
   }
 }
 
 // =======================================================================================
-bool renameSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
-                                    scheduler& sched){
+bool renameSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg1(), gs.log, s.traceePid, t, " old path: ");
   printInfoString(t.arg2(), gs.log, s.traceePid, t, " new path: ");
   return true;
 }
 
-void renameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
-                                    scheduler& sched){
+void renameSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // nothing to do, but return value may be useful for debugging (printed by
   // handlePostSystemCall)
   return;
 }
 // =======================================================================================
-bool renameatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
-                                    scheduler& sched){
+bool renameatSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg2(), gs.log, s.traceePid, t, " renaming-ing path: ");
   printInfoString(t.arg4(), gs.log, s.traceePid, t, " to path: ");
   return true;
 }
 
-void renameatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
-                                    scheduler& sched){
+void renameatSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // nothing to do, but return value may be useful for debugging (printed by
   // handlePostSystemCall)
 }
 // =======================================================================================
-bool renameat2SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
-                                    scheduler& sched){
+bool renameat2SystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg2(), gs.log, s.traceePid, t, " renaming-ing path: ");
   printInfoString(t.arg4(), gs.log, s.traceePid, t, " to path: ");
   return true;
 }
 
-void renameat2SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
-                                    scheduler& sched){
+void renameat2SystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // nothing to do, but return value may be useful for debugging (printed by
   // handlePostSystemCall)
 }
 // =======================================================================================
-bool rmdirSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool rmdirSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
   return true;
 }
 
-void rmdirSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void rmdirSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // nothing to do, but return value may be useful for debugging (printed by
   // handlePostSystemCall)
 }
 
-bool rt_sigprocmaskSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
-					    scheduler& sched){
+bool rt_sigprocmaskSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void rt_sigprocmaskSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
-					     scheduler& sched){
+void rt_sigprocmaskSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   if (s.syscallInjected) {
     s.syscallInjected = false;
-    traceePtr<unsigned long>oldset = traceePtr<unsigned long>((unsigned long*)(s.mmapMemory.getAddr().ptr) + 1);
+    traceePtr<unsigned long> oldset = traceePtr<unsigned long>(
+        (unsigned long*)(s.mmapMemory.getAddr().ptr) + 1);
     t.writeArg1(SIG_SETMASK);
     t.writeArg2((uint64_t)oldset.ptr);
     t.writeArg3(0);
@@ -1714,10 +1866,11 @@ struct kernel_sigaction {
   unsigned long sa_restorer;
   unsigned long sa_mask;
 };
-bool rt_sigactionSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
-                                          scheduler& sched){
-  gs.log.writeToLog(Importance::info, "rt_sigaction pre-hook for signal " +
-                    to_string(t.arg1())+"\n");
+bool rt_sigactionSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  gs.log.writeToLog(
+      Importance::info,
+      "rt_sigaction pre-hook for signal " + to_string(t.arg1()) + "\n");
   const uint64_t signum = t.arg1();
   s.requestedSignalToHandle = signum;
 
@@ -1727,15 +1880,16 @@ bool rt_sigactionSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
   }
 
   // figure out what kind of handler the tracee is trying to install
-  struct kernel_sigaction sa =
-    t.readFromTracee(traceePtr<struct kernel_sigaction>((struct kernel_sigaction*) t.arg2()), t.getPid() );
+  struct kernel_sigaction sa = t.readFromTracee(
+      traceePtr<struct kernel_sigaction>((struct kernel_sigaction*)t.arg2()),
+      t.getPid());
   gs.log.writeToLog(Importance::info, "struct sigaction*: %p\n", t.arg2());
-  gs.log.writeToLog(Importance::info, "sa_flags: " +
-                    to_string(sa.sa_flags) + " " +
-                    to_string(SA_RESETHAND)+" \n");
-  gs.log.writeToLog(Importance::info, "sa_handler: " +
-                    to_string((uint64_t)sa.sa_handler__) +
-                    "\n");
+  gs.log.writeToLog(
+      Importance::info, "sa_flags: " + to_string(sa.sa_flags) + " " +
+                            to_string(SA_RESETHAND) + " \n");
+  gs.log.writeToLog(
+      Importance::info,
+      "sa_handler: " + to_string((uint64_t)sa.sa_handler__) + "\n");
 
   if (((unsigned long)SIG_IGN) == sa.sa_handler__) {
     s.requestedSignalHandler = SIGHANDLER_IGNORED;
@@ -1750,23 +1904,26 @@ bool rt_sigactionSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
       s.requestedSignalHandler = SIGHANDLER_CUSTOM;
     }
   }
-  gs.log.writeToLog(Importance::info, "signal " + to_string(signum) +
-                    " handler requested: " +
-                    to_string(s.requestedSignalHandler) + "\n");
+  gs.log.writeToLog(
+      Importance::info, "signal " + to_string(signum) + " handler requested: " +
+                            to_string(s.requestedSignalHandler) + "\n");
 
   // run the post-hook to see if signal handler installation was successful
   return true;
 }
 
-void rt_sigactionSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
-                                           scheduler& sched){
+void rt_sigactionSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.log.writeToLog(Importance::info, "rt_sigaction post-hook\n");
   if (0 == t.getReturnValue()) {
     // signal handler installation was successful
-    s.currentSignalHandlers.get()->insert({s.requestedSignalToHandle, s.requestedSignalHandler});
+    s.currentSignalHandlers.get()->insert(
+        {s.requestedSignalToHandle, s.requestedSignalHandler});
 
-    gs.log.writeToLog(Importance::info, "signal "+to_string(s.requestedSignalToHandle)+
-                      " handler of type "+to_string(s.requestedSignalHandler)+" installed\n");
+    gs.log.writeToLog(
+        Importance::info,
+        "signal " + to_string(s.requestedSignalToHandle) + " handler of type " +
+            to_string(s.requestedSignalHandler) + " installed\n");
 
     s.requestedSignalHandler = SIGHANDLER_INVALID;
     s.requestedSignalToHandle = -1;
@@ -1793,15 +1950,15 @@ int getPendingSignalInfo(pid_t pid, struct PendingSignalInfo* info) {
     return -1;
   }
 
-  char* p = NULL, *q = buff;
+  char *p = NULL, *q = buff;
 
-  while(1) {
+  while (1) {
     p = strsep(&q, "\n");
     if (!p) break;
     if (strncmp(p, "SigPnd:\t", 8) == 0) {
-      info->pending = strtoul(8+p, NULL, 16);
+      info->pending = strtoul(8 + p, NULL, 16);
     } else if (strncmp(p, "SigBlk:\t", 8) == 0) {
-      info->blocked = strtoul(8+p, NULL, 16);
+      info->blocked = strtoul(8 + p, NULL, 16);
       break;
     }
   }
@@ -1811,7 +1968,8 @@ int getPendingSignalInfo(pid_t pid, struct PendingSignalInfo* info) {
 
 // =======================================================================================
 // TODO
-bool rt_sigtimedwaitSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool rt_sigtimedwaitSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   struct timespec ourTimeout = {0};
   if (t.arg3() != 0) {
     s.userDefinedTimeout = true;
@@ -1820,25 +1978,29 @@ bool rt_sigtimedwaitSystemCall::handleDetPre(globalState& gs, state& s, ptracer&
 
   struct timespec* timeoutPtr = (struct timespec*)t.arg3();
   s.originalArg3 = (uint64_t)timeoutPtr;
-    
-  if(timeoutPtr == nullptr){
-    // Has to be created in memory.
-    struct timespec* newAddr = (struct timespec*) s.mmapMemory.getAddr().ptr;
-    t.writeToTracee(traceePtr<struct timespec>(newAddr), ourTimeout, s.traceePid);
 
-    t.writeArg3((uint64_t) newAddr);
-  }else{
+  if (timeoutPtr == nullptr) {
+    // Has to be created in memory.
+    struct timespec* newAddr = (struct timespec*)s.mmapMemory.getAddr().ptr;
+    t.writeToTracee(
+        traceePtr<struct timespec>(newAddr), ourTimeout, s.traceePid);
+
+    t.writeArg3((uint64_t)newAddr);
+  } else {
     // Already exists in memory.
     // jld: useless read from tracee memory
-    //timeval timeout = t.readFromTracee(traceePtr<timeval>(timeoutPtr), t.getPid());
-    t.writeToTracee(traceePtr<struct timespec>(timeoutPtr), ourTimeout, s.traceePid);
+    // timeval timeout = t.readFromTracee(traceePtr<timeval>(timeoutPtr),
+    // t.getPid());
+    t.writeToTracee(
+        traceePtr<struct timespec>(timeoutPtr), ourTimeout, s.traceePid);
     s.userDefinedTimeout = true;
   }
 
   return true;
 }
 
-void rt_sigtimedwaitSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void rt_sigtimedwaitSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int retval = t.getReturnValue();
   bool replay;
 
@@ -1847,11 +2009,13 @@ void rt_sigtimedwaitSystemCall::handleDetPost(globalState& gs, state& s, ptracer
     gs.log.writeToLog(Importance::info, "replay rt_sigtimedwait\n");
     t.writeArg3(s.originalArg3);
   } else {
-    gs.log.writeToLog(Importance::info, "rt_sigtimedwait returned: " + to_string(retval) + "\n");
+    gs.log.writeToLog(
+        Importance::info,
+        "rt_sigtimedwait returned: " + to_string(retval) + "\n");
     if (s.syscallInjected) {
       if (retval > 0) {
-	kill(t.getPid(), retval);
-	t.setReturnRegister((uint64_t)-EINTR);
+        kill(t.getPid(), retval);
+        t.setReturnRegister((uint64_t)-EINTR);
       }
     }
   }
@@ -1861,14 +2025,18 @@ void rt_sigtimedwaitSystemCall::handleDetPost(globalState& gs, state& s, ptracer
 
 // =======================================================================================
 // TODO
-bool rt_sigsuspendSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool rt_sigsuspendSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   unsigned long mask;
 
-  traceePtr<unsigned long> rptr = traceePtr<unsigned long>((unsigned long*)t.arg1());
+  traceePtr<unsigned long> rptr =
+      traceePtr<unsigned long>((unsigned long*)t.arg1());
   mask = t.readFromTracee(rptr, t.getPid());
   gs.log.writeToLog(Importance::info, "rt_sigsuspend, mask = 0x%lx\n", mask);
 
-  struct PendingSignalInfo info = {0,};
+  struct PendingSignalInfo info = {
+      0,
+  };
 
   // rt_sigsuspend would block until signal is received
   // we'll change it to something else nonblocking.
@@ -1879,8 +2047,10 @@ bool rt_sigsuspendSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t
   if (unmask != 0) {
     s.syscallInjected = true;
     s.originalArg1 = t.arg1();
-    traceePtr<unsigned long>set = traceePtr<unsigned long>((unsigned long*)(s.mmapMemory.getAddr().ptr));
-    traceePtr<unsigned long>oldset = traceePtr<unsigned long>((unsigned long*)(s.mmapMemory.getAddr().ptr) + 1);
+    traceePtr<unsigned long> set =
+        traceePtr<unsigned long>((unsigned long*)(s.mmapMemory.getAddr().ptr));
+    traceePtr<unsigned long> oldset = traceePtr<unsigned long>(
+        (unsigned long*)(s.mmapMemory.getAddr().ptr) + 1);
     t.writeToTracee(set, unmask, t.getPid());
     t.writeArg1(SIG_UNBLOCK);
     t.writeArg2((uint64_t)set.ptr);
@@ -1895,87 +2065,105 @@ bool rt_sigsuspendSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t
   return false;
 }
 
-void rt_sigsuspendSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void rt_sigsuspendSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   runtimeError("rt_sigsuspend is not supposed to return\n");
 }
 
-bool rt_sigpendingSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool rt_sigpendingSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
-void rt_sigpendingSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-}
+void rt_sigpendingSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {}
 
 // =======================================================================================
 // TODO
-bool sendtoSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool sendtoSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void sendtoSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void sendtoSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return;
 }
 // =======================================================================================
 // TODO
-bool sendmsgSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  gs.log.writeToLog(Importance::info, "sendmsg to fd " + to_string(t.arg1()) + "\n");
+bool sendmsgSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  gs.log.writeToLog(
+      Importance::info, "sendmsg to fd " + to_string(t.arg1()) + "\n");
   return true;
 }
 
-void sendmsgSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void sendmsgSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return;
 }
 
-bool sendmmsgSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  gs.log.writeToLog(Importance::info, "sendmmsg to fd " + to_string(t.arg1()) + "\n");
+bool sendmmsgSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  gs.log.writeToLog(
+      Importance::info, "sendmmsg to fd " + to_string(t.arg1()) + "\n");
   return true;
 }
 
-void sendmmsgSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void sendmmsgSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return;
 }
 
-bool recvfromSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  gs.log.writeToLog(Importance::info, "recvfrom fd " + to_string(t.arg1()) + "\n");
+bool recvfromSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  gs.log.writeToLog(
+      Importance::info, "recvfrom fd " + to_string(t.arg1()) + "\n");
   return true;
 }
 
-void recvfromSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void recvfromSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return;
 }
 
 // =======================================================================================
-bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool selectSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // Get the original set structs.
   // Set them in the state class.
-  if((void*) t.arg2() != NULL){
+  if ((void*)t.arg2() != NULL) {
     s.rdfsNotNull = true;
-    s.origRdfs = t.readFromTracee(traceePtr<fd_set>((fd_set*) t.arg2()), t.getPid());
+    s.origRdfs =
+        t.readFromTracee(traceePtr<fd_set>((fd_set*)t.arg2()), t.getPid());
   }
-  if((void*) t.arg3() != NULL){
+  if ((void*)t.arg3() != NULL) {
     s.wrfsNotNull = true;
-    s.origWrfs = t.readFromTracee(traceePtr<fd_set>((fd_set*) t.arg3()), t.getPid());
+    s.origWrfs =
+        t.readFromTracee(traceePtr<fd_set>((fd_set*)t.arg3()), t.getPid());
   }
-  if((void*) t.arg4() != NULL){
+  if ((void*)t.arg4() != NULL) {
     s.exfsNotNull = true;
-    s.origExfs = t.readFromTracee(traceePtr<fd_set>((fd_set*) t.arg4()), t.getPid());
+    s.origExfs =
+        t.readFromTracee(traceePtr<fd_set>((fd_set*)t.arg4()), t.getPid());
   }
 
   // Set the timeout to zero.
-  timeval* timeoutPtr = (timeval*) t.arg5();
-  s.originalArg5 = (uint64_t) timeoutPtr;
+  timeval* timeoutPtr = (timeval*)t.arg5();
+  s.originalArg5 = (uint64_t)timeoutPtr;
   timeval ourTimeout = {0};
   ourTimeout.tv_sec = 0;
 
-  if(timeoutPtr == nullptr){
+  if (timeoutPtr == nullptr) {
     // Has to be created in memory.
-    timeval* newAddr = (timeval*) s.mmapMemory.getAddr().ptr;
+    timeval* newAddr = (timeval*)s.mmapMemory.getAddr().ptr;
     t.writeToTracee(traceePtr<timeval>(newAddr), ourTimeout, s.traceePid);
 
-    t.writeArg5((uint64_t) newAddr);
-  }else{
+    t.writeArg5((uint64_t)newAddr);
+  } else {
     // Already exists in memory.
     // jld: useless read from tracee memory
-    //timeval timeout = t.readFromTracee(traceePtr<timeval>(timeoutPtr), t.getPid());
+    // timeval timeout = t.readFromTracee(traceePtr<timeval>(timeoutPtr),
+    // t.getPid());
     t.writeToTracee(traceePtr<timeval>(timeoutPtr), ourTimeout, s.traceePid);
     s.userDefinedTimeout = true;
   }
@@ -1983,31 +2171,36 @@ bool selectSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   return true;
 }
 
-void selectSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if(s.userDefinedTimeout){
+void selectSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  if (s.userDefinedTimeout) {
     s.userDefinedTimeout = false;
-    if(t.getReturnValue() == 0){
+    if (t.getReturnValue() == 0) {
       // Mark this is blocked because we don't want it to keep being picked to
-      // run off the runnableHeap. It will eventually get to run when the heaps switch.
+      // run off the runnableHeap. It will eventually get to run when the heaps
+      // switch.
       sched.preemptAndScheduleNext();
     }
   } else {
     bool replayed = replaySyscallIfBlocked(gs, s, t, sched, 0);
 
-    if(replayed){
-      if(s.rdfsNotNull){
-        t.writeToTracee(traceePtr<fd_set>((fd_set*) t.arg2()), s.origRdfs, t.getPid());
+    if (replayed) {
+      if (s.rdfsNotNull) {
+        t.writeToTracee(
+            traceePtr<fd_set>((fd_set*)t.arg2()), s.origRdfs, t.getPid());
       }
-      if(s.wrfsNotNull){
-        t.writeToTracee(traceePtr<fd_set>((fd_set*) t.arg3()), s.origWrfs, t.getPid());
+      if (s.wrfsNotNull) {
+        t.writeToTracee(
+            traceePtr<fd_set>((fd_set*)t.arg3()), s.origWrfs, t.getPid());
       }
-      if(s.exfsNotNull){
-        t.writeToTracee(traceePtr<fd_set>((fd_set*) t.arg4()), s.origExfs, t.getPid());
+      if (s.exfsNotNull) {
+        t.writeToTracee(
+            traceePtr<fd_set>((fd_set*)t.arg4()), s.origExfs, t.getPid());
       }
       s.rdfsNotNull = false;
       s.wrfsNotNull = false;
       s.exfsNotNull = false;
-      t.writeArg5((uint64_t) s.originalArg5);
+      t.writeArg5((uint64_t)s.originalArg5);
     }
   }
   return;
@@ -2015,40 +2208,47 @@ void selectSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
 // =======================================================================================
 // TODO
 
-bool set_robust_listSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool set_robust_listSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
-void set_robust_listSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void set_robust_listSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return;
 }
 
 // =======================================================================================
-bool statSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool statSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
 
   return true;
 }
 
-void statSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void statSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   handleStatFamily(gs, s, t, "stat");
   return;
 }
 // =======================================================================================
-bool statfsSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool statfsSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void statfsSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  struct statfs* statfsPtr = (struct statfs*) t.arg2();
-  if(statfsPtr == nullptr){
+void statfsSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  struct statfs* statfsPtr = (struct statfs*)t.arg2();
+  if (statfsPtr == nullptr) {
     gs.log.writeToLog(Importance::info, "statfs: statbuf null.\n");
     return;
   }
 
-  if(t.getReturnValue() == 0){
+  if (t.getReturnValue() == 0) {
     // Read values written to by system call.
     // jld: useless read from tracee memory
-    struct statfs stats; // = t.readFromTracee(traceePtr<struct statfs>(statfsPtr), s.traceePid);
+    struct statfs stats; // = t.readFromTracee(traceePtr<struct
+                         // statfs>(statfsPtr), s.traceePid);
 
     // Assume we're using this file sytem?
     zeroOutStatfs(stats);
@@ -2060,13 +2260,15 @@ void statfsSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   return;
 }
 // =======================================================================================
-bool sysinfoSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool sysinfoSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void sysinfoSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  struct sysinfo* infoPtr = (struct sysinfo *) t.arg1();
-  if(infoPtr == nullptr){
+void sysinfoSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  struct sysinfo* infoPtr = (struct sysinfo*)t.arg1();
+  if (infoPtr == nullptr) {
     return;
   }
 
@@ -2093,15 +2295,18 @@ void sysinfoSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
   return;
 }
 // =======================================================================================
-bool symlinkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool symlinkSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg1(), gs.log, s.traceePid, t, " target: ");
   printInfoString(t.arg2(), gs.log, s.traceePid, t, " linkpath: ");
   return true;
 }
 
-void symlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if(t.getReturnValue() == 0 && (char*) t.arg2() != nullptr){
-    string linkpath = t.readTraceeCString(traceePtr<char>((char*) t.arg2()), s.traceePid);
+void symlinkSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  if (t.getReturnValue() == 0 && (char*)t.arg2() != nullptr) {
+    string linkpath =
+        t.readTraceeCString(traceePtr<char>((char*)t.arg2()), s.traceePid);
     auto inode = inode_from_tracee(linkpath, s.traceePid, gs.log, -1);
     if (inode != -1UL) {
       gs.mtimeMap.addRealValue(inode);
@@ -2110,18 +2315,19 @@ void symlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
   }
 }
 // =======================================================================================
-bool symlinkatSystemCall::
-handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool symlinkatSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg1(), gs.log, s.traceePid, t, " target: ");
   // TODO Add newdirfd
   printInfoString(t.arg3(), gs.log, s.traceePid, t, " linkpath: ");
   return true;
 }
 
-void symlinkatSystemCall::
-handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if(t.getReturnValue() == 0 && (char*) t.arg3() != nullptr){
-    string linkpath = t.readTraceeCString(traceePtr<char>((char*) t.arg3()), s.traceePid);
+void symlinkatSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  if (t.getReturnValue() == 0 && (char*)t.arg3() != nullptr) {
+    string linkpath =
+        t.readTraceeCString(traceePtr<char>((char*)t.arg3()), s.traceePid);
     auto inode = inode_from_tracee(linkpath, s.traceePid, gs.log, t.arg2());
     if (inode != -1UL) {
       gs.mtimeMap.addRealValue(inode);
@@ -2130,16 +2336,17 @@ handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   }
 }
 // =======================================================================================
-bool mknodSystemCall::
-handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool mknodSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
   return true;
 }
 
-void mknodSystemCall::
-handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if(t.getReturnValue() == 0 && (char*) t.arg1() != nullptr){
-    string path = t.readTraceeCString(traceePtr<char>((char*) t.arg1()), s.traceePid);
+void mknodSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  if (t.getReturnValue() == 0 && (char*)t.arg1() != nullptr) {
+    string path =
+        t.readTraceeCString(traceePtr<char>((char*)t.arg1()), s.traceePid);
     auto inode = inode_from_tracee(path, s.traceePid, gs.log, -1);
     if (inode != -1UL) {
       gs.mtimeMap.addRealValue(inode);
@@ -2148,16 +2355,17 @@ handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   }
 }
 // =======================================================================================
-bool mknodatSystemCall::
-handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool mknodatSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg2(), gs.log, s.traceePid, t);
   return true;
 }
 
-void mknodatSystemCall::
-handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if(t.getReturnValue() == 0 && (char*) t.arg2() != nullptr){
-    string path = t.readTraceeCString(traceePtr<char>((char*) t.arg2()), s.traceePid);
+void mknodatSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  if (t.getReturnValue() == 0 && (char*)t.arg2() != nullptr) {
+    string path =
+        t.readTraceeCString(traceePtr<char>((char*)t.arg2()), s.traceePid);
     auto inode = inode_from_tracee(path, s.traceePid, gs.log, t.arg1());
     if (inode != -1UL) {
       gs.mtimeMap.addRealValue(inode);
@@ -2166,47 +2374,58 @@ handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
   }
 }
 // =======================================================================================
-bool tgkillSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  int tgid = (int) t.arg1();
-  int tid = (int) t.arg2();
-  int signal = (int) t.arg3();
-  gs.log.writeToLog(Importance::info, "tgkill(tgid = %d, tid = %d, signal = %d)\n",
-                    tgid, tid, signal);
+bool tgkillSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  int tgid = (int)t.arg1();
+  int tid = (int)t.arg2();
+  int signal = (int)t.arg3();
+  gs.log.writeToLog(
+      Importance::info, "tgkill(tgid = %d, tid = %d, signal = %d)\n", tgid, tid,
+      signal);
 
   return true;
 }
 
-void tgkillSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void tgkillSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return;
 }
 // =======================================================================================
-bool timeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool timeSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void timeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void timeSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   if (s.noopSystemCall) {
-    gs.log.writeToLog(Importance::info, "NOOP system call (getpid) setting return value to 0\n");
+    gs.log.writeToLog(
+        Importance::info,
+        "NOOP system call (getpid) setting return value to 0\n");
     s.noopSystemCall = false;
-    t.setReturnRegister(0); // pretend like the system call (that we replaced) has succeeded
+    t.setReturnRegister(
+        0); // pretend like the system call (that we replaced) has succeeded
   }
-  // This should be rare this is a vdso system call. It is unlikely someone will call it
-  // directly.
-  else{
+  // This should be rare this is a vdso system call. It is unlikely someone will
+  // call it directly.
+  else {
     gs.timeCalls++;
     int retVal = t.getReturnValue();
-    if(retVal < 0){
-      gs.log.writeToLog(Importance::info,
-                        "Time call failed: \n" + string { strerror(- retVal)});
+    if (retVal < 0) {
+      gs.log.writeToLog(
+          Importance::info, "Time call failed: \n" + string{strerror(-retVal)});
       return;
     }
 
-    time_t* timePtr = (time_t*) t.arg1();
+    time_t* timePtr = (time_t*)t.arg1();
     time_t secs_since_epoch = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
-    gs.log.writeToLog(Importance::info, "time: tloc is null, returning %d\n", secs_since_epoch);
+    gs.log.writeToLog(
+        Importance::info, "time: tloc is null, returning %d\n",
+        secs_since_epoch);
     t.writeRax(secs_since_epoch);
-    if(timePtr != nullptr){
-      t.writeToTracee(traceePtr<time_t>(timePtr), secs_since_epoch, s.traceePid);
+    if (timePtr != nullptr) {
+      t.writeToTracee(
+          traceePtr<time_t>(timePtr), secs_since_epoch, s.traceePid);
     }
     // Tick up time.
     s.incrementTime();
@@ -2218,8 +2437,8 @@ void timeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, schedu
   return;
 }
 // =======================================================================================
-bool
-timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool timer_createSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.log.writeToLog(Importance::info, "timer_create syscall pre-hook\n");
 
   // we support any clockid, but only notification via certain signals
@@ -2237,18 +2456,24 @@ timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sche
     struct sigevent se = t.readFromTracee(sep, t.getPid());
 
     switch (se.sigev_notify) {
-    case SIGEV_NONE: // don't send a signal, alarm value will be read via timer_gettime()
+    case SIGEV_NONE: // don't send a signal, alarm value will be read via
+                     // timer_gettime()
     case SIGEV_SIGNAL: // send a signal upon timer expiration
       break;
     case SIGEV_THREAD:
-      runtimeError("unsupported launching a thread on timer expiration in timer_create()");
+      runtimeError(
+          "unsupported launching a thread on timer expiration in "
+          "timer_create()");
       break;
     case SIGEV_THREAD_ID:
-      runtimeError("unsupported sending a signal to a specific thread in timer_create()");
+      runtimeError(
+          "unsupported sending a signal to a specific thread in "
+          "timer_create()");
       break;
     default:
-      runtimeError("unsupported sigev_notify value in timer_create() " +
-                          to_string(se.sigev_notify));
+      runtimeError(
+          "unsupported sigev_notify value in timer_create() " +
+          to_string(se.sigev_notify));
       break;
     }
 
@@ -2257,73 +2482,85 @@ timer_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sche
     // delivered, however, and we catch that error later in timer_settime().
 
     ti.sendSignal = (SIGEV_SIGNAL == se.sigev_notify);
-    ti.signum = ti.sendSignal ? se.sigev_signo : -1 ;
-    // TODO: JLD: we aren't seting siginfo_t fields si_code and si_value appropriately
-    ti.signalHandlerData = ti.sendSignal ? se.sigev_value.sival_ptr : nullptr ;
+    ti.signum = ti.sendSignal ? se.sigev_signo : -1;
+    // TODO: JLD: we aren't seting siginfo_t fields si_code and si_value
+    // appropriately
+    ti.signalHandlerData = ti.sendSignal ? se.sigev_value.sival_ptr : nullptr;
   }
 
   timerID_t timerid = s.timerCreateTimers.get()->size();
   s.timerCreateTimers.get()->insert({timerid, ti});
 
-  gs.log.writeToLog(Importance::info, "created new timer "+to_string(timerid)+"\n");
+  gs.log.writeToLog(
+      Importance::info, "created new timer " + to_string(timerid) + "\n");
 
   // write timerid into tracee memory
   gs.log.writeToLog(Importance::info, "writing timerid to %p\n", t.arg3());
-  t.writeToTracee(traceePtr<uint64_t>((uint64_t*)t.arg3()), timerid, s.traceePid);
+  t.writeToTracee(
+      traceePtr<uint64_t>((uint64_t*)t.arg3()), timerid, s.traceePid);
 
   // convert timer_create() into nop
   replaceSystemCallWithNoop(gs, s, t);
-  // in getpid post-hook we set return value to 0 so tracee thinks timer_create has succeeded
+  // in getpid post-hook we set return value to 0 so tracee thinks timer_create
+  // has succeeded
 
   // run the post-hook, which will be the getpid cleanup
   return true;
 }
 
-void timer_createSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
-                                      scheduler& sched){
+void timer_createSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   runtimeError("timer_create post-hook should never be called.");
 }
 // =======================================================================================
-bool timer_deleteSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t,
-                                          scheduler& sched){
+bool timer_deleteSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   timerID_t timerid = t.arg1();
-  gs.log.writeToLog(Importance::info, "timer_delete pre-hook for timer " +
-                    to_string(timerid) + "\n");
+  gs.log.writeToLog(
+      Importance::info,
+      "timer_delete pre-hook for timer " + to_string(timerid) + "\n");
 
-  if(!s.timerCreateTimers.get()->count(timerid)){
-    runtimeError("invalid timerid "+to_string(timerid));
+  if (!s.timerCreateTimers.get()->count(timerid)) {
+    runtimeError("invalid timerid " + to_string(timerid));
   }
   return true;
 }
 
-void timer_deleteSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t,
-                                           scheduler& sched){
+void timer_deleteSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   t.setReturnRegister(0);
 }
 // =======================================================================================
-bool timer_getoverrunSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool timer_getoverrunSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   timerID_t timerid = t.arg1();
-  gs.log.writeToLog(Importance::info, "timer_getoverrun pre-hook for timer "+to_string(timerid)+"\n");
+  gs.log.writeToLog(
+      Importance::info,
+      "timer_getoverrun pre-hook for timer " + to_string(timerid) + "\n");
   if (!s.timerCreateTimers.get()->count(timerid)) {
-    runtimeError("invalid timerid "+to_string(timerid));
+    runtimeError("invalid timerid " + to_string(timerid));
   }
   return true;
 }
 
-void timer_getoverrunSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void timer_getoverrunSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   t.setReturnRegister(0);
 }
 
 // =======================================================================================
-bool timer_gettimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool timer_gettimeSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   timerID_t timerid = t.arg1();
-  gs.log.writeToLog(Importance::info, "timer_gettime pre-hook for timer "+to_string(timerid)+"\n");
+  gs.log.writeToLog(
+      Importance::info,
+      "timer_gettime pre-hook for timer " + to_string(timerid) + "\n");
 
   if (!s.timerCreateTimers.get()->count(timerid)) {
-    runtimeError("invalid timerid "+to_string(timerid));
+    runtimeError("invalid timerid " + to_string(timerid));
   }
 
-  struct itimerspec *isp = (struct itimerspec*) t.arg2();
+  struct itimerspec* isp = (struct itimerspec*)t.arg2();
   if (isp != nullptr) {
     // timer has expired
     struct itimerspec is;
@@ -2341,19 +2578,21 @@ bool timer_gettimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t
   return true;
 }
 
-
-void timer_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void timer_gettimeSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   t.setReturnRegister(0);
 }
 // =======================================================================================
-bool timer_settimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-
-  gs.log.writeToLog(Importance::info, "timer_settime pre-hook for timer "+to_string(t.arg1())+"\n");
+bool timer_settimeSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  gs.log.writeToLog(
+      Importance::info,
+      "timer_settime pre-hook for timer " + to_string(t.arg1()) + "\n");
 
   timerID_t timerid = t.arg1();
 
   if (!s.timerCreateTimers.get()->count(timerid)) {
-    runtimeError("invalid timerid "+to_string(timerid));
+    runtimeError("invalid timerid " + to_string(timerid));
   }
 
   timerInfo tinfo = s.timerCreateTimers.get()->at(timerid);
@@ -2368,14 +2607,14 @@ bool timer_settimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t
   return true;
 }
 
-void timer_settimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-
-}
+void timer_settimeSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {}
 // =======================================================================================
-bool getitimerSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) {
+bool getitimerSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.log.writeToLog(Importance::info, "getitimer pre-hook\n");
 
-  struct itimerval *ivp = (struct itimerval*) t.arg2();
+  struct itimerval* ivp = (struct itimerval*)t.arg2();
   if (ivp != nullptr) {
     // say that timer has expired
     struct itimerval iv;
@@ -2392,11 +2631,13 @@ bool getitimerSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
   return true;
 }
 
-void getitimerSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) {
+void getitimerSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   t.setReturnRegister(0);
 }
 // =======================================================================================
-bool setitimerSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) {
+bool setitimerSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.log.writeToLog(Importance::info, "setitimer pre-hook\n");
 
   int whichTimer = t.arg1();
@@ -2408,16 +2649,17 @@ bool setitimerSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sc
   case ITIMER_PROF:
     return sendTraceeSignalNow(SIGPROF, gs, s, t, sched);
   default:
-    runtimeError("invalid timer for setitimer "+to_string(whichTimer));
+    runtimeError("invalid timer for setitimer " + to_string(whichTimer));
   }
 
   return true;
 }
 
-void setitimerSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) {
-}
+void setitimerSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {}
 
-bool timerfd_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool timerfd_createSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.log.writeToLog(Importance::info, "timerfd_create syscall pre-hook\n");
 
   int flags = t.arg2();
@@ -2429,7 +2671,8 @@ bool timerfd_createSystemCall::handleDetPre(globalState& gs, state& s, ptracer& 
   return true;
 }
 
-void timerfd_createSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) {
+void timerfd_createSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int fd = t.getReturnValue();
   int clockid = t.arg1();
   int flags = t.arg2();
@@ -2437,26 +2680,26 @@ void timerfd_createSystemCall::handleDetPost(globalState& gs, state& s, ptracer&
   t.writeArg2(s.originalArg2);
 
   if (fd >= 0) {
-    struct itimerspec it =
-      {
-       {0, 0},
-       {0, 0},
-      };
+    struct itimerspec it = {
+        {0, 0},
+        {0, 0},
+    };
     s.timerfds->insert({fd, it});
-    gs.log.writeToLog(Importance::info, "timerfd_create(%d, %d) = %d\n",
-		      clockid, flags, fd);
+    gs.log.writeToLog(
+        Importance::info, "timerfd_create(%d, %d) = %d\n", clockid, flags, fd);
   }
 }
 
-bool timerfd_settimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool timerfd_settimeSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int fd = t.arg1();
-  struct itimerspec *spec = (itimerspec*)s.mmapMemory.getAddr().ptr;
-  auto value = t.readFromTracee(traceePtr<struct itimerspec>((struct itimerspec*)t.arg3()), s.traceePid);
+  struct itimerspec* spec = (itimerspec*)s.mmapMemory.getAddr().ptr;
+  auto value = t.readFromTracee(
+      traceePtr<struct itimerspec>((struct itimerspec*)t.arg3()), s.traceePid);
   (*s.timerfds)[fd] = value;
-  struct itimerspec timer =
-    {
-     {0, 0},
-     {0, 0},
+  struct itimerspec timer = {
+      {0, 0},
+      {0, 0},
   };
   if (value.it_interval.tv_sec != 0 || value.it_interval.tv_nsec != 0) {
     timer.it_interval.tv_sec = LONG_MAX;
@@ -2474,7 +2717,8 @@ bool timerfd_settimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer&
   return true;
 }
 
-void timerfd_settimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) {
+void timerfd_settimeSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int fd = t.arg1();
   int retval = t.getReturnValue();
   gs.log.writeToLog(Importance::info, "timerfd_setttime returned %d\n", retval);
@@ -2484,17 +2728,20 @@ void timerfd_settimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer
   if (retval == 0 && t.arg4() != 0) {
     auto it = s.timerfds->find(fd);
     if (it != s.timerfds->end()) {
-      t.writeToTracee(traceePtr<struct itimerspec>((struct itimerspec*)t.arg4()),
-		      it->second, s.traceePid);
+      t.writeToTracee(
+          traceePtr<struct itimerspec>((struct itimerspec*)t.arg4()),
+          it->second, s.traceePid);
     }
   }
 }
 
-bool timerfd_gettimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool timerfd_gettimeSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void timerfd_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) {
+void timerfd_gettimeSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int fd = t.arg1();
   int retval = t.getReturnValue();
   if (retval == 0 && t.arg2() != 0) {
@@ -2503,10 +2750,10 @@ void timerfd_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer
     if (it != s.timerfds->end()) {
       auto timer = it->second;
       if (timer.it_value.tv_sec != 0 || timer.it_value.tv_nsec != 0) {
-	// timer is active.
-	// cannot be 0 otherwise timer is disarmed.	
-	timer.it_value.tv_sec = 0;
-	timer.it_value.tv_nsec = 1;
+        // timer is active.
+        // cannot be 0 otherwise timer is disarmed.
+        timer.it_value.tv_sec = 0;
+        timer.it_value.tv_nsec = 1;
       }
       t.writeToTracee(rptr, timer, s.traceePid);
     }
@@ -2514,22 +2761,24 @@ void timerfd_gettimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer
 }
 
 // =======================================================================================
-bool timesSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool timesSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
-void timesSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void timesSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // Failure nothing for us to do.
-  if((clock_t) t.getReturnValue() == -1){
+  if ((clock_t)t.getReturnValue() == -1) {
     return;
   }
 
-  tms* bufPtr = (tms*) t.arg1();
-  if(bufPtr != nullptr){
+  tms* bufPtr = (tms*)t.arg1();
+  if (bufPtr != nullptr) {
     tms myTms = {
-      .tms_utime = 0,
-      .tms_stime = 0,
-      .tms_cutime = 0,
-      .tms_cstime = 0,
+        .tms_utime = 0,
+        .tms_stime = 0,
+        .tms_cutime = 0,
+        .tms_cstime = 0,
     };
 
     t.writeToTracee(traceePtr<tms>(bufPtr), myTms, s.traceePid);
@@ -2539,26 +2788,32 @@ void timesSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   s.incrementTime();
 }
 // =======================================================================================
-bool unameSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool unameSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
-void unameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void unameSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // Populate the utsname struct with our own generic data.
-  struct utsname* utsnamePtr = (struct utsname*) t.arg1();
+  struct utsname* utsnamePtr = (struct utsname*)t.arg1();
 
   // example struct utsname from acggrid28
-  //uname({sysname="Linux", nodename="acggrid28", release="4.4.114-42-default", version="#1 SMP Tue Feb 6 10:58:10 UTC 2018 (b6ee9ae)", machine="x86_64", domainname="(none)"}
-  if(utsnamePtr != nullptr){
+  // uname({sysname="Linux", nodename="acggrid28", release="4.4.114-42-default",
+  // version="#1 SMP Tue Feb 6 10:58:10 UTC 2018 (b6ee9ae)", machine="x86_64",
+  // domainname="(none)"}
+  if (utsnamePtr != nullptr) {
     struct utsname myUts = {}; // initializes to all zeroes
 
     // compiler-time check to ensure that each member is large enough
-    // magic due to https://stackoverflow.com/questions/3553296/c-sizeof-single-struct-member
+    // magic due to
+    // https://stackoverflow.com/questions/3553296/c-sizeof-single-struct-member
     const uint32_t MEMBER_LENGTH = 60;
     if (sizeof(((struct utsname*)0)->sysname) < MEMBER_LENGTH ||
         sizeof(((struct utsname*)0)->release) < MEMBER_LENGTH ||
         sizeof(((struct utsname*)0)->version) < MEMBER_LENGTH ||
         sizeof(((struct utsname*)0)->machine) < MEMBER_LENGTH) {
-      runtimeError("unameSystemCall::handleDetPost: struct utsname members too small!");
+      runtimeError(
+          "unameSystemCall::handleDetPost: struct utsname members too small!");
     }
 
     // NB: this is our standard environment
@@ -2572,216 +2827,239 @@ void unameSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   return;
 }
 // =======================================================================================
-bool
-unlinkSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool unlinkSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
   return true;
 }
 
-void
-unlinkSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void unlinkSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // nothing to do, but return value may be useful for debugging (printed by
   // handlePostSystemCall)
   return;
 }
 // =======================================================================================
-bool
-unlinkatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool unlinkatSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   printInfoString(t.arg2(), gs.log, s.traceePid, t);
   return true;
 }
 
-void
-unlinkatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void unlinkatSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // nothing to do, but return value may be useful for debugging (printed by
   // handlePostSystemCall)
   return;
 }
 
 // =======================================================================================
-bool utimeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool utimeSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.timeCalls++;
-  // Set times to our own logical time for deterministic time only if times is null.
-  if((const struct utimbuf*) t.arg2() != nullptr){
+  // Set times to our own logical time for deterministic time only if times is
+  // null.
+  if ((const struct utimbuf*)t.arg2() != nullptr) {
     // user specified his/her own time which should be deterministic.
     return false;
   }
   s.originalArg2 = t.arg2();
 
   // Enough space for 2 timespec structs.
-  utimbuf* ourUtimbuf = (utimbuf*) s.mmapMemory.getAddr().ptr;
+  utimbuf* ourUtimbuf = (utimbuf*)s.mmapMemory.getAddr().ptr;
 
   // Create our own struct with our time.
   // TODO: In the future we might want to unify this with our mtimeMapper.
   utimbuf clockTime = {
-    .actime = (__time_t)gs.timestamps,
-    .modtime = (__time_t)gs.timestamps,
+      .actime = (__time_t)gs.timestamps,
+      .modtime = (__time_t)gs.timestamps,
   };
 
   // Write our struct to the tracee's memory.
   t.writeToTracee(traceePtr<utimbuf>(ourUtimbuf), clockTime, s.traceePid);
 
   // Point system call to new address.
-  t.writeArg2((uint64_t) ourUtimbuf);
+  t.writeArg2((uint64_t)ourUtimbuf);
   s.incrementTime();
 
   // Needed to restore the original value in register.
   return true;
 }
 
-void utimeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void utimeSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // Restore value of register.
   t.writeArg2(s.originalArg2);
 }
 // =======================================================================================
-bool utimesSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool utimesSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.timeCalls++;
-  // Set times to our own logical time for deterministic time only if times is null.
-  if((const struct timeval*) t.arg2() != nullptr){
+  // Set times to our own logical time for deterministic time only if times is
+  // null.
+  if ((const struct timeval*)t.arg2() != nullptr) {
     // user specified his/her own time which should be deterministic.
     return false;
   }
 
-  // We need somewhere to store a timespec struct if our struct is null. We will write
-  // this data below the current stack pointer accounting for the red zone, known to be
-  // 128 bytes.
+  // We need somewhere to store a timespec struct if our struct is null. We will
+  // write this data below the current stack pointer accounting for the red
+  // zone, known to be 128 bytes.
   s.originalArg2 = t.arg2();
   // Enough space for 2 timeval structs.
-  timeval* ourTimeval = (timeval*) s.mmapMemory.getAddr().ptr;
+  timeval* ourTimeval = (timeval*)s.mmapMemory.getAddr().ptr;
 
   // Create our own struct with our time.
   // TODO: In the future we might want to unify this with our mtimeMapper.
   timeval clockTime = {
-    .tv_sec = (__time_t)gs.timestamps,
-    .tv_usec = 0,
+      .tv_sec = (__time_t)gs.timestamps,
+      .tv_usec = 0,
   };
 
   // Write our struct to the tracee's memory.
-  t.writeToTracee(traceePtr<timeval>(& (ourTimeval[0])), clockTime, s.traceePid);
-  t.writeToTracee(traceePtr<timeval>(& (ourTimeval[1])), clockTime, s.traceePid);
+  t.writeToTracee(traceePtr<timeval>(&(ourTimeval[0])), clockTime, s.traceePid);
+  t.writeToTracee(traceePtr<timeval>(&(ourTimeval[1])), clockTime, s.traceePid);
 
   // Point system call to new address.
-  t.writeArg2((uint64_t) ourTimeval);
+  t.writeArg2((uint64_t)ourTimeval);
   s.incrementTime();
 
   // Needed to restore the original value in register.
   return true;
 }
 
-void utimesSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void utimesSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // Restore value of register.
   t.writeArg2(s.originalArg2);
 }
 // =======================================================================================
-bool utimensatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  // Set times to our own logical time for deterministic time only if times is null.
-  const struct timespec* origTimespec = (const struct timespec*) t.arg3();
-  if(origTimespec != nullptr){
+bool utimensatSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  // Set times to our own logical time for deterministic time only if times is
+  // null.
+  const struct timespec* origTimespec = (const struct timespec*)t.arg3();
+  if (origTimespec != nullptr) {
     // user specified his/her own time which should be deterministic.
-    if(gs.log.getDebugLevel() > 0){
+    if (gs.log.getDebugLevel() > 0) {
       // log tracee-specified struct timespec for validation
       struct timespec times[2];
-      readVmTraceeRaw(traceePtr<struct timespec>((struct timespec*) origTimespec), times, sizeof(times), s.traceePid);
-      gs.log.writeToLog(Importance::info,
-                        "atime.tv_sec:%lu atime.tv_nsec:%ld mtime.tv_sec:%lu mtime.tv_nsec:%ld \n",
-                        times[0].tv_sec, times[0].tv_nsec, times[1].tv_sec, times[1].tv_nsec);
+      readVmTraceeRaw(
+          traceePtr<struct timespec>((struct timespec*)origTimespec), times,
+          sizeof(times), s.traceePid);
+      gs.log.writeToLog(
+          Importance::info,
+          "atime.tv_sec:%lu atime.tv_nsec:%ld mtime.tv_sec:%lu "
+          "mtime.tv_nsec:%ld \n",
+          times[0].tv_sec, times[0].tv_nsec, times[1].tv_sec, times[1].tv_nsec);
     }
     return false;
   }
 
-  // We need somewhere to store a timespec struct if our struct is null. We will write
-  // this data below the current stack pointer accounting for the red zone, known to be
-  // 128 bytes.
+  // We need somewhere to store a timespec struct if our struct is null. We will
+  // write this data below the current stack pointer accounting for the red
+  // zone, known to be 128 bytes.
   s.originalArg3 = t.arg3();
   // Enough space for 2 timespec structs.
-  struct timespec* ourTimespec = (struct timespec*) s.mmapMemory.getAddr().ptr;
+  struct timespec* ourTimespec = (struct timespec*)s.mmapMemory.getAddr().ptr;
 
   // Create our own struct with our time.
   // TODO: In the future we might want to unify this with our mtimeMapper.
   struct timespec clockTime = {
-    .tv_sec = (__time_t)gs.timestamps,  // (time_t) s.getLogicalTime(),
-    .tv_nsec = 0, //(time_t) s.getLogicalTime()
+      .tv_sec = (__time_t)gs.timestamps, // (time_t) s.getLogicalTime(),
+      .tv_nsec = 0, //(time_t) s.getLogicalTime()
   };
 
   // Write our struct to the tracee's memory.
-  t.writeToTracee(traceePtr<struct timespec>(& (ourTimespec[0])), clockTime, s.traceePid);
-  t.writeToTracee(traceePtr<struct timespec>(& (ourTimespec[1])), clockTime, s.traceePid);
+  t.writeToTracee(
+      traceePtr<struct timespec>(&(ourTimespec[0])), clockTime, s.traceePid);
+  t.writeToTracee(
+      traceePtr<struct timespec>(&(ourTimespec[1])), clockTime, s.traceePid);
 
   // Point system call to new address.
-  t.writeArg3((uint64_t) ourTimespec);
+  t.writeArg3((uint64_t)ourTimespec);
   s.incrementTime();
 
   // Needed to restore the original value in register.
   return true;
 }
 
-void utimensatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void utimensatSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // Restore value of register.
   t.writeArg3(s.originalArg3);
 }
 // =======================================================================================
-bool futimesatSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool futimesatSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // NB: this mapping to utimensat is fragile, and assumes struct timeval has
   // the same layout as struct timespec. I try to codify it as a compile-time
   // check here.
-  static_assert(sizeof(struct timeval) == sizeof(struct timespec), "translating futimesat into utimensat is unsafe");
+  static_assert(
+      sizeof(struct timeval) == sizeof(struct timespec),
+      "translating futimesat into utimensat is unsafe");
   s.originalArg4 = t.arg4();
   t.writeArg4(0);
   t.changeSystemCall(SYS_utimensat);
   return true;
 }
 
-void futimesatSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void futimesatSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // Restore value of register.
   t.writeArg4(s.originalArg4);
 }
 // =======================================================================================
-bool writeSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool writeSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.log.writeToLog(Importance::info, "File descriptor: %d\n", t.arg1());
   gs.log.writeToLog(Importance::info, "Bytes to write %d\n", t.arg3());
 
   return true;
 }
 
-void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void writeSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int fd = t.arg1();
   bool preemptAndTryLater = false;
 
-  auto resetState = [&](){
-                      // Nothing left to write.
-                      gs.log.writeToLog(Importance::info, "All bytes written.\n");
-                      t.setReturnRegister(s.totalBytes);
+  auto resetState = [&]() {
+    // Nothing left to write.
+    gs.log.writeToLog(Importance::info, "All bytes written.\n");
+    t.setReturnRegister(s.totalBytes);
 
-                      t.writeArg2(s.beforeRetry.rsi);
-                      t.writeArg3(s.beforeRetry.rdx);
+    t.writeArg2(s.beforeRetry.rsi);
+    t.writeArg3(s.beforeRetry.rdx);
 
-                      s.firstTrySystemcall = true;
-                      s.totalBytes = 0;
-                    };
+    s.firstTrySystemcall = true;
+    s.totalBytes = 0;
+  };
 
   // Pipe exists in our map and it's set to non blocking.
-  if(s.countFdStatus(fd) != 0 && s.getFdStatus(fd) == descriptorType::nonBlocking){
-    gs.log.writeToLog(Importance::info,
-                      "write found with non-blocking pipe!\n");
+  if (s.countFdStatus(fd) != 0 &&
+      s.getFdStatus(fd) == descriptorType::nonBlocking) {
+    gs.log.writeToLog(
+        Importance::info, "write found with non-blocking pipe!\n");
     int retval = t.getReturnValue();
     // for non-blocking io, if it returns -EAGAIN on the 1st try, let it through
-    // if it returns -EAGAIN after the retry logic, return bytes already read/wrote
-    if(retval == -EAGAIN){
+    // if it returns -EAGAIN after the retry logic, return bytes already
+    // read/wrote
+    if (retval == -EAGAIN) {
       if (s.firstTrySystemcall) {
-	resetState();
-	t.setReturnRegister((uint64_t)-EAGAIN);
+        resetState();
+        t.setReturnRegister((uint64_t)-EAGAIN);
       } else {
-	auto totalBytes = s.totalBytes;
-	resetState();
-	t.setReturnRegister(totalBytes);
+        auto totalBytes = s.totalBytes;
+        resetState();
+        t.setReturnRegister(totalBytes);
       }
       return;
     }
-  }else{
+  } else {
     preemptAndTryLater = replaySyscallIfBlocked(gs, s, t, sched, EAGAIN);
-    // We have not read all bytes, but pipe has nothing, set ourselves as blocked and we
-    // will retry later.
-    if(preemptAndTryLater){
+    // We have not read all bytes, but pipe has nothing, set ourselves as
+    // blocked and we will retry later.
+    if (preemptAndTryLater) {
       gs.writeRetryEvents++;
       return;
     }
@@ -2790,47 +3068,49 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   size_t bytes_written = t.getReturnValue();
   gs.log.writeToLog(Importance::info, "bytesWritten: %d.\n", bytes_written);
 
-  if((int) bytes_written < 0){
-    gs.log.writeToLog(Importance::info, "Returned negative: %d.\n",
-                      bytes_written);
+  if ((int)bytes_written < 0) {
+    gs.log.writeToLog(
+        Importance::info, "Returned negative: %d.\n", bytes_written);
     return;
   }
 
   s.totalBytes += bytes_written;
-  if(s.firstTrySystemcall){
+  if (s.firstTrySystemcall) {
     s.firstTrySystemcall = false;
     s.beforeRetry = t.getRegs();
   }
   gs.log.writeToLog(Importance::info, "total bytes: %d.\n", bytes_written);
-  gs.log.writeToLog(Importance::info, "before retry rdx: %d.\n", s.beforeRetry.rdx);
-
+  gs.log.writeToLog(
+      Importance::info, "before retry rdx: %d.\n", s.beforeRetry.rdx);
 
   // Finally wrote all bytes user wanted.
 
   // The zero case should not really happen. But our fuse tests allow for this
   // behavior so we catch it here. Otherwise we forever try to read 0 bytes.
   // https://stackoverflow.com/questions/41904221/can-write2-return-0-bytes-written-and-what-to-do-if-it-does?utm_medium=organic&utm_source=google_rich_qa&utm_campaign=google_rich_qa
-  if(s.totalBytes == s.beforeRetry.rdx ||
-     bytes_written == 0){
-
+  if (s.totalBytes == s.beforeRetry.rdx || bytes_written == 0) {
     if (gs.log.getDebugLevel() > 0 && s.totalBytes > 0) {
       // NB: this operation is very expensive!
-      unsigned char* buffer = (unsigned char*) malloc(s.totalBytes);
-      readVmTraceeRaw(traceePtr<unsigned char>((unsigned char*) s.beforeRetry.rsi), buffer, s.totalBytes, s.traceePid);
+      unsigned char* buffer = (unsigned char*)malloc(s.totalBytes);
+      readVmTraceeRaw(
+          traceePtr<unsigned char>((unsigned char*)s.beforeRetry.rsi), buffer,
+          s.totalBytes, s.traceePid);
       unsigned char sha1[SHA_DIGEST_LENGTH] = {0};
       SHA1(buffer, s.totalBytes, sha1);
       free(buffer);
       stringstream ss;
       ss << std::hex << std::setw(2) << std::setfill('0');
       for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
-        ss << (unsigned short) sha1[i];
+        ss << (unsigned short)sha1[i];
       }
-      gs.log.writeToLog(Importance::info, "sha1 checksum of %d bytes written: %s\n",
-                        s.totalBytes, ss.str().c_str());
+      gs.log.writeToLog(
+          Importance::info, "sha1 checksum of %d bytes written: %s\n",
+          s.totalBytes, ss.str().c_str());
     }
     resetState();
-  }else{
-    gs.log.writeToLog(Importance::info, "Not all bytes written: Replaying system call!\n");
+  } else {
+    gs.log.writeToLog(
+        Importance::info, "Not all bytes written: Replaying system call!\n");
     t.writeArg2(t.arg2() + bytes_written);
     t.writeArg3(t.arg3() - bytes_written);
     replaySystemCall(gs, t, t.getSystemCallNumber());
@@ -2839,9 +3119,10 @@ void writeSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   return;
 }
 // =======================================================================================
-bool wait4SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool wait4SystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   s.wait4Blocking = (t.arg3() & WNOHANG) == 0;
-  gs.log.writeToLog(Importance::info, "wait4(%d)\n", (int) t.arg1());
+  gs.log.writeToLog(Importance::info, "wait4(%d)\n", (int)t.arg1());
   gs.log.writeToLog(Importance::info, "Making this a non-blocking wait4\n");
 
   // Make this a non blocking hang!
@@ -2849,11 +3130,12 @@ bool wait4SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, schedu
   t.writeArg3(s.originalArg3 | WNOHANG);
   return true;
 }
-void wait4SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if(s.wait4Blocking){
+void wait4SystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  if (s.wait4Blocking) {
     gs.log.writeToLog(Importance::info, "Blocking wait4 found\n");
     replaySyscallIfBlocked(gs, s, t, sched, 0);
-  }else{
+  } else {
     gs.log.writeToLog(Importance::info, "Non-blocking wait4 found\n");
     preemptIfBlocked(gs, s, t, sched, EAGAIN);
   }
@@ -2863,9 +3145,10 @@ void wait4SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sched
   return;
 }
 // =======================================================================================
-bool waitidSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool waitidSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   s.wait4Blocking = (t.arg4() & WNOHANG) == 0;
-  gs.log.writeToLog(Importance::info, "waitid(%d)\n", (int) t.arg1());
+  gs.log.writeToLog(Importance::info, "waitid(%d)\n", (int)t.arg1());
   gs.log.writeToLog(Importance::info, "Making this a non-blocking waitid\n");
 
   // Make this a non blocking hang!
@@ -2873,11 +3156,12 @@ bool waitidSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   t.writeArg4(s.originalArg4 | WNOHANG);
   return true;
 }
-void waitidSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
-  if(s.wait4Blocking){
+void waitidSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  if (s.wait4Blocking) {
     gs.log.writeToLog(Importance::info, "Blocking waitid found\n");
     replaySyscallIfBlocked(gs, s, t, sched, 0);
-  }else{
+  } else {
     gs.log.writeToLog(Importance::info, "Non-blocking waitid found\n");
     preemptIfBlocked(gs, s, t, sched, EAGAIN);
   }
@@ -2887,23 +3171,29 @@ void waitidSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
   return;
 }
 // =======================================================================================
-bool writevSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool writevSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void writevSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void writevSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // TODO: Handle bytes written.
   return;
 }
 // =======================================================================================
 
 // =======================================================================================
-bool socketSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool socketSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int domain = t.arg1();
 
   if (domain == AF_INET || domain == AF_INET6) {
     if (!gs.allow_network) {
-      gs.log.writeToLog(Importance::inter, "socket syscall disabled, add `--allow-network` to enable socket syscall\n");
+      gs.log.writeToLog(
+          Importance::inter,
+          "socket syscall disabled, add `--allow-network` to enable socket "
+          "syscall\n");
       cancelSystemCall(gs, s, t);
       t.setReturnRegister(-ENOSYS);
       return false;
@@ -2913,7 +3203,8 @@ bool socketSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   return true;
 }
 
-void socketSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void socketSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int fd = (int)t.getReturnValue();
   if (fd < 0) {
     return;
@@ -2930,26 +3221,31 @@ void socketSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sche
     (*s.fdStatus)[fd] = descriptorType::nonBlocking;
   }
 
-  gs.log.writeToLog(Importance::info, "socket returned " + to_string(fd) + "\n");
+  gs.log.writeToLog(
+      Importance::info, "socket returned " + to_string(fd) + "\n");
 }
 // =======================================================================================
 
 // =======================================================================================
-bool listenSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool listenSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
 }
 
-void listenSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void listenSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int retval = (int)t.getReturnValue();
 
-  gs.log.writeToLog(Importance::info, "listen returned " + to_string(retval) + "\n");
+  gs.log.writeToLog(
+      Importance::info, "listen returned " + to_string(retval) + "\n");
 
   return;
 }
 // =======================================================================================
 
 // =======================================================================================
-bool acceptSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) {
+bool acceptSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   cancelSystemCall(gs, s, t);
   t.writeArg4(0);
   replaySystemCall(gs, t, SYS_accept4);
@@ -2958,7 +3254,8 @@ bool acceptSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sched
   return false;
 }
 
-void acceptSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void acceptSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   runtimeError("should never run into SYS_accept posthook");
 }
 // =======================================================================================
@@ -2970,16 +3267,18 @@ static int get_proc_fd_flags(pid_t pid, int pid_fd) {
   int fd = open(path, O_RDONLY);
   if (fd < 0) return 0;
 
-  char buff[4096] = {0,};
+  char buff[4096] = {
+      0,
+  };
 
   while (1) {
     ssize_t n = read(fd, buff, 4096);
     if (n < 0) {
       if (errno == EINTR) {
-	continue;
+        continue;
       } else {
-	close(fd);
-	return 0;
+        close(fd);
+        return 0;
       }
     }
     break;
@@ -2987,18 +3286,18 @@ static int get_proc_fd_flags(pid_t pid, int pid_fd) {
 
   close(fd);
 
-  char* p = (char*)buff, *q = (char*)buff;
+  char *p = (char*)buff, *q = (char*)buff;
 
   const char prefix[] = "flags:";
   int prefix_len = strlen(prefix);
-  while(1) {
+  while (1) {
     p = strsep(&q, "\n");
     if (!p) break;
     if (strncmp(prefix, p, prefix_len) == 0) {
       p += prefix_len;
-      while(p) {
-	if (*p == ' ' || *p == '\t') ++p;
-	break;
+      while (p) {
+        if (*p == ' ' || *p == '\t') ++p;
+        break;
       }
       return (int)strtoul(p, NULL, 8);
     }
@@ -3007,7 +3306,8 @@ static int get_proc_fd_flags(pid_t pid, int pid_fd) {
 }
 
 // =======================================================================================
-bool accept4SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool accept4SystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int fd = t.arg1();
   int flags = t.arg4();
 
@@ -3024,31 +3324,35 @@ bool accept4SystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, sche
   /* blocking accept4, simulating nonblocking io */
   s.userDefinedTimeout = true; // XXX: we have no timeout, borrow a variable
   s.originalArg1 = fd_flags;
-  gs.log.writeToLog(Importance::info, "fd %d flags = 0x%x, nonblocking?: %d\n",
-		    fd, fd_flags, (fd_flags & O_NONBLOCK) == O_NONBLOCK);
+  gs.log.writeToLog(
+      Importance::info, "fd %d flags = 0x%x, nonblocking?: %d\n", fd, fd_flags,
+      (fd_flags & O_NONBLOCK) == O_NONBLOCK);
 
   return true;
 }
 
-void accept4SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void accept4SystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int fd = (int)t.arg1();
   int flags = (int)t.arg4();
   int retval = (int)t.getReturnValue();
 
   if (retval >= 0) {
-    if ( (flags & SOCK_NONBLOCK) == SOCK_NONBLOCK) {
+    if ((flags & SOCK_NONBLOCK) == SOCK_NONBLOCK) {
       (*s.fdStatus.get())[retval] = descriptorType::nonBlocking;
     } else {
       (*s.fdStatus.get())[retval] = descriptorType::blocking;
     }
-    gs.log.writeToLog(Importance::info, "accept4(%d) returned new fd %d\n", fd, retval);
+    gs.log.writeToLog(
+        Importance::info, "accept4(%d) returned new fd %d\n", fd, retval);
     return;
   }
 
   if (s.userDefinedTimeout) {
     /* both EAGAIN/EWOULDBLOCK are valid return values for nonblocking mode */
-    if(retval == -EAGAIN || retval == -EWOULDBLOCK) {
-      gs.log.writeToLog(Importance::info, "accetp4 would have blocked! Replaying\n");
+    if (retval == -EAGAIN || retval == -EWOULDBLOCK) {
+      gs.log.writeToLog(
+          Importance::info, "accetp4 would have blocked! Replaying\n");
       gs.replayDueToBlocking++;
       sched.preemptAndScheduleNext();
       replaySystemCall(gs, t, t.getSystemCallNumber());
@@ -3059,16 +3363,19 @@ void accept4SystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, sch
   return;
 }
 // =======================================================================================
-bool shutdownSystemCall::handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched){
+bool shutdownSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.log.writeToLog(Importance::info, "shutdown(%d, %d)\n", t.arg1(), t.arg2());
 
   return true;
 }
 
-void shutdownSystemCall::handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched){
+void shutdownSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
   int retval = (int)t.getReturnValue();
 
-  gs.log.writeToLog(Importance::info, "shutdown returned " + to_string(retval) + "\n");
+  gs.log.writeToLog(
+      Importance::info, "shutdown returned " + to_string(retval) + "\n");
 
   if (retval == 0) {
     int fd = t.arg1();
