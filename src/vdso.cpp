@@ -12,32 +12,33 @@
 /// more recent kernel also adds clock_getres
 /// The symbols can be found in .dynsym section of the DSO
 /// This file parse those symbols from .dynsym section, following the ELF
-/// spec defined at: https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.intro.html
+/// spec defined at:
+/// https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.intro.html
 ///
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 
 #include <inttypes.h>
 
 #include <fcntl.h>
 #include <unistd.h>
 
-#include <string>
-#include <algorithm>
-#include <sstream>
-#include <iostream>
-#include <stdexcept>
-#include <cstring>
-#include <vector>
-#include <tuple>
-#include <cstdlib>
-#include <cstdio>
-#include <cassert>
-#include <map>
 #include <elf.h>
+#include <algorithm>
+#include <cassert>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
+#include <map>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <tuple>
+#include <vector>
 
-#include "vdso.hpp"
 #include "util.hpp"
+#include "vdso.hpp"
 
 /*
  * byte code for the new psudo vdso functions which do the actual syscalls.
@@ -78,33 +79,38 @@ static const unsigned char __vdso_gettimeofday[] = {
   , 0x00 };
 // clang-format on
 
-std::map<std::string, std::basic_string<unsigned char>> vdsoGetCandidateData(void) {
+std::map<std::string, std::basic_string<unsigned char>> vdsoGetCandidateData(
+    void) {
   std::map<std::string, std::basic_string<unsigned char>> res;
 
   std::basic_string<unsigned char> vdso_time(__vdso_time, sizeof(__vdso_time));
-  std::basic_string<unsigned char> vdso_clock_gettime(__vdso_clock_gettime, sizeof(__vdso_clock_gettime));
-  std::basic_string<unsigned char> vdso_getcpu(__vdso_getcpu, sizeof(__vdso_getcpu));
-  std::basic_string<unsigned char> vdso_gettimeofday(__vdso_gettimeofday, sizeof(__vdso_gettimeofday));
+  std::basic_string<unsigned char> vdso_clock_gettime(
+      __vdso_clock_gettime, sizeof(__vdso_clock_gettime));
+  std::basic_string<unsigned char> vdso_getcpu(
+      __vdso_getcpu, sizeof(__vdso_getcpu));
+  std::basic_string<unsigned char> vdso_gettimeofday(
+      __vdso_gettimeofday, sizeof(__vdso_gettimeofday));
 
-  assert( (vdso_time.size() & 0xf) == 0);
-  assert( (vdso_clock_gettime.size() & 0xf) == 0);
-  assert( (vdso_getcpu.size() & 0xf) == 0);
-  assert( (vdso_gettimeofday.size() & 0xf) == 0);
+  assert((vdso_time.size() & 0xf) == 0);
+  assert((vdso_clock_gettime.size() & 0xf) == 0);
+  assert((vdso_getcpu.size() & 0xf) == 0);
+  assert((vdso_gettimeofday.size() & 0xf) == 0);
 
-  res["__vdso_time"]          = vdso_time;
+  res["__vdso_time"] = vdso_time;
   res["__vdso_clock_gettime"] = vdso_clock_gettime;
-  res["__vdso_getcpu"]        = vdso_getcpu;
-  res["__vdso_gettimeofday"]  = vdso_gettimeofday;
+  res["__vdso_getcpu"] = vdso_getcpu;
+  res["__vdso_gettimeofday"] = vdso_gettimeofday;
 
   return res;
 }
 
-std::ostream& operator<< (std::ostream &out, ProcMapEntry const& e) {
-  out << std::hex << e.procMapBase << '-' << e.procMapBase + e.procMapSize << ' ';
-  out << ( (e.procMapPerms & ProcMapPermRead)? 'r': '-');
-  out << ( (e.procMapPerms & ProcMapPermWrite)? 'w': '-');
-  out << ( (e.procMapPerms & ProcMapPermExec)? 'x': '-');
-  out << ( (e.procMapPerms & ProcMapPermPrivate)? 'p': '-') << ' ';
+std::ostream& operator<<(std::ostream& out, ProcMapEntry const& e) {
+  out << std::hex << e.procMapBase << '-' << e.procMapBase + e.procMapSize
+      << ' ';
+  out << ((e.procMapPerms & ProcMapPermRead) ? 'r' : '-');
+  out << ((e.procMapPerms & ProcMapPermWrite) ? 'w' : '-');
+  out << ((e.procMapPerms & ProcMapPermExec) ? 'x' : '-');
+  out << ((e.procMapPerms & ProcMapPermPrivate) ? 'p' : '-') << ' ';
   out << e.procMapOffset << ' ';
   out << (e.procMapDev >> 8) << ':' << (e.procMapDev & 0xffL) << ' ';
   out << e.procMapInode << "\t\t";
@@ -112,31 +118,30 @@ std::ostream& operator<< (std::ostream &out, ProcMapEntry const& e) {
   return out;
 }
 
-static int parseProcMapEntry(char* line, struct ProcMapEntry& res)
-{
-  char* p, *q;
+static int parseProcMapEntry(char* line, struct ProcMapEntry& res) {
+  char *p, *q;
 
   p = line;
 
   res.procMapBase = strtoull(p, &q, 16);
-  res.procMapSize = strtoull(1+q, &p, 16) - res.procMapBase;
-  while(*p == ' ' || *p == '\t' ) ++p;
+  res.procMapSize = strtoull(1 + q, &p, 16) - res.procMapBase;
+  while (*p == ' ' || *p == '\t') ++p;
 
   res.procMapPerms = 0;
 
-  if(*p++ == 'r') res.procMapPerms |= ProcMapPermRead;
-  if(*p++ == 'w') res.procMapPerms |= ProcMapPermWrite;
-  if(*p++ == 'x') res.procMapPerms |= ProcMapPermExec;
-  if(*p++ == 'p') res.procMapPerms |= ProcMapPermPrivate;
+  if (*p++ == 'r') res.procMapPerms |= ProcMapPermRead;
+  if (*p++ == 'w') res.procMapPerms |= ProcMapPermWrite;
+  if (*p++ == 'x') res.procMapPerms |= ProcMapPermExec;
+  if (*p++ == 'p') res.procMapPerms |= ProcMapPermPrivate;
 
-  while(*p == ' ' || *p == '\t' ) ++p;
+  while (*p == ' ' || *p == '\t') ++p;
   res.procMapOffset = strtoul(p, &q, 16);
-  while(*q == ' ' || *q == '\t' ) ++q;
+  while (*q == ' ' || *q == '\t') ++q;
   res.procMapDev = strtoul(q, &p, 16) * 256;
-  res.procMapDev += strtoul(1+p, &q, 16);
-  while(*q == ' ' || *q == '\t' ) ++q;
+  res.procMapDev += strtoul(1 + p, &q, 16);
+  while (*q == ' ' || *q == '\t') ++q;
   res.procMapInode = strtoul(q, &p, 16);
-  while(*p == ' ' || *p == '\t' ) ++p;
+  while (*p == ' ' || *p == '\t') ++p;
   if (*p == '\0') {
     res.procMapName = {};
   } else {
@@ -145,8 +150,7 @@ static int parseProcMapEntry(char* line, struct ProcMapEntry& res)
   return 0;
 }
 
-std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid)
-{
+std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid) {
   int fd;
   char mapsFile[32];
   char* buffer;
@@ -161,7 +165,7 @@ std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid)
     return {};
   }
 
-  buffer = new char [buffer_size];
+  buffer = new char[buffer_size];
   if (!buffer) {
     close(fd);
     return res;
@@ -172,7 +176,7 @@ std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid)
     auto nb = read(fd, buffer + nr, buffer_size - nr);
     if (nb < 0) {
       if (errno == EINTR) continue;
-      delete [] buffer;
+      delete[] buffer;
       close(fd);
       return res;
     } else if (nb == 0) {
@@ -184,23 +188,22 @@ std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid)
   close(fd);
   buffer[nr] = '\0';
 
-  char* line, *text = buffer;
+  char *line, *text = buffer;
   struct ProcMapEntry mapEntry;
-  while((line = strsep(&text, "\n")) != NULL ) {
+  while ((line = strsep(&text, "\n")) != NULL) {
     if (parseProcMapEntry(line, mapEntry) == 0) {
       res.push_back(mapEntry);
     }
   }
 
-  delete [] buffer;
+  delete[] buffer;
   return res;
 }
 
-static int vdsoGetMapEntry(pid_t pid, struct ProcMapEntry& entry)
-{
+static int vdsoGetMapEntry(pid_t pid, struct ProcMapEntry& entry) {
   auto entries = parseProcMapEntries(pid);
 
-  for (auto ent: entries) {
+  for (auto ent : entries) {
     if (ent.procMapName == "[vdso]") {
       entry = ent;
       return 0;
@@ -209,8 +212,7 @@ static int vdsoGetMapEntry(pid_t pid, struct ProcMapEntry& entry)
   return -1;
 }
 
-std::vector<std::string> vdsoGetFuncNames(void)
-{
+std::vector<std::string> vdsoGetFuncNames(void) {
   std::vector<std::string> res;
 
   res.push_back("__vdso_clock_gettime");
@@ -226,9 +228,10 @@ std::vector<std::string> vdsoGetFuncNames(void)
  * return as std::tuple<symbol_address, symbol_size, symbol/section_alignment>
  * NB: symbol address is relative (just an offset).
  */
-std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>> vdsoGetSymbols(pid_t pid)
-{
-  std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>> res;
+std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>>
+vdsoGetSymbols(pid_t pid) {
+  std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>>
+      res;
   struct ProcMapEntry vdsoMapEntry;
 
   if (vdsoGetMapEntry(pid, vdsoMapEntry) != 0) {
@@ -236,8 +239,8 @@ std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>> v
   }
 
   unsigned long base = vdsoMapEntry.procMapBase;
-  Elf64_Ehdr *ehdr = (Elf64_Ehdr*)base;
-  Elf64_Shdr* shbase = (Elf64_Shdr*)(base + ehdr->e_shoff), *dynsym = NULL;
+  Elf64_Ehdr* ehdr = (Elf64_Ehdr*)base;
+  Elf64_Shdr *shbase = (Elf64_Shdr*)(base + ehdr->e_shoff), *dynsym = NULL;
   const char* strtab = NULL;
 
   for (auto i = 0; i < ehdr->e_shnum; i++) {
@@ -245,22 +248,24 @@ std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>> v
     if (sh->sh_type == SHT_DYNSYM) {
       dynsym = sh;
     } else if (sh->sh_type == SHT_STRTAB && (sh->sh_flags & SHF_ALLOC)) {
-      strtab = (const char*)(base + sh -> sh_offset);
+      strtab = (const char*)(base + sh->sh_offset);
     }
   }
   if (!dynsym || !strtab) return res;
 
   for (auto i = 0; i < dynsym->sh_size / dynsym->sh_entsize; i++) {
-    Elf64_Sym* sym = (Elf64_Sym*)(base + dynsym->sh_offset + i * dynsym->sh_entsize);
+    Elf64_Sym* sym =
+        (Elf64_Sym*)(base + dynsym->sh_offset + i * dynsym->sh_entsize);
     const char* name = (const char*)((unsigned long)strtab + sym->st_name);
     if (ELF64_ST_BIND(sym->st_info) == STB_GLOBAL &&
-	ELF64_ST_TYPE(sym->st_info) == STT_FUNC) {
+        ELF64_ST_TYPE(sym->st_info) == STT_FUNC) {
       assert(sym->st_shndx < ehdr->e_shnum);
-      unsigned long alignment = sym->st_shndx < ehdr->e_shnum?
-	shbase[sym->st_shndx].sh_addralign: 16;
+      unsigned long alignment = sym->st_shndx < ehdr->e_shnum
+                                    ? shbase[sym->st_shndx].sh_addralign
+                                    : 16;
       res[name] = std::tie(sym->st_value, sym->st_size, alignment);
     }
   }
-  
+
   return res;
 }

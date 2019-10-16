@@ -1,33 +1,39 @@
 #ifndef UTIL_SYSTEM_CALLS
 #define UTIL_SYSTEM_CALLS
 
-#include "ptracer.hpp"
-#include "globalState.hpp"
-#include "state.hpp"
-#include "logger.hpp"
-#include "scheduler.hpp"
 #include <optional>
+#include "globalState.hpp"
+#include "logger.hpp"
+#include "ptracer.hpp"
+#include "scheduler.hpp"
+#include "state.hpp"
 
 /**
- * Compare returned value of system call (rax) vs the blocking value (errnoValue negated),
- * e.g. EAGAIN. If equal, system call would have blocked, log it, preempt current running
- * process, and schedule someone else.
- * Does not replay system call!
+ * Compare returned value of system call (rax) vs the blocking value (errnoValue
+ * negated), e.g. EAGAIN. If equal, system call would have blocked, log it,
+ * preempt current running process, and schedule someone else. Does not replay
+ * system call!
  */
-bool preemptIfBlocked(globalState& gs, state& s, ptracer& t, scheduler& sched,
-                      int64_t errornoValue);
+bool preemptIfBlocked(
+    globalState& gs,
+    state& s,
+    ptracer& t,
+    scheduler& sched,
+    int64_t errornoValue);
 
 /**
- * Utility functions related to dettraceSystemCall.cpp, that is, helper functions for the
- * pre and post hooks.
+ * Utility functions related to dettraceSystemCall.cpp, that is, helper
+ * functions for the pre and post hooks.
  */
 void zeroOutStatfs(struct statfs& stats);
 
 /**
- * All stat functions can be handled the same, newfstatat is special. Pass the name of
- * the function to syscallName if it's "newfstatat" it's treated specially.
+ * All stat functions can be handled the same, newfstatat is special. Pass the
+ * name of the function to syscallName if it's "newfstatat" it's treated
+ * specially.
  */
-void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName);
+void handleStatFamily(
+    globalState& gs, state& s, ptracer& t, string syscallName);
 
 /**
  * Helper function to print path for system call.
@@ -37,17 +43,21 @@ void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName)
  * @arg postFix: This is a default argument. Usually " path:" unless something
  * else is given.
  */
-void printInfoString(uint64_t addr, logger &log, pid_t traceePid, ptracer& t,
-                     string postFix = " path: ");
+void printInfoString(
+    uint64_t addr,
+    logger& log,
+    pid_t traceePid,
+    ptracer& t,
+    string postFix = " path: ");
 
 void injectPause(globalState& gs, state& s, ptracer& t);
 
-pair<int,int> getPipeFds(globalState& gs, state& s, ptracer& t);
+pair<int, int> getPipeFds(globalState& gs, state& s, ptracer& t);
 
-/* Turn system call into a noop by changing it into a time. This should be called from
- *the pre hook only! We use time (a vdso system call), since we don't expect it to be
- * called often, unlike getpid, which is expensive to use as a noop since it is called a
- * lot.
+/* Turn system call into a noop by changing it into a time. This should be
+ *called from the pre hook only! We use time (a vdso system call), since we
+ *don't expect it to be called often, unlike getpid, which is expensive to use
+ *as a noop since it is called a lot.
  */
 void replaceSystemCallWithNoop(globalState& gs, state& s, ptracer& t);
 
@@ -65,36 +75,39 @@ void cancelSystemCall(globalState& gs, state& s, ptracer& t);
 void failSystemCall(globalState& gs, state& s, ptracer& t, int err);
 
 /**
- * Go through "/proc/$tracee_pid/fd/$fd" to get the file descriptor represented by fd.
- * Basically, do a stat by looking at /proc/ section of the tracee.
- * Calls stat("/proc/$tracee_pid/fd/$fd") which dereferences symbolic link. This is fine,
- * unless your path _is_ a symbolic link. You will end up derreferencing too many symbolic
- * links!
- * Assumes that `fd` is currently open for traceePid.
+ * Go through "/proc/$tracee_pid/fd/$fd" to get the file descriptor represented
+ * by fd. Basically, do a stat by looking at /proc/ section of the tracee. Calls
+ * stat("/proc/$tracee_pid/fd/$fd") which dereferences symbolic link. This is
+ * fine, unless your path _is_ a symbolic link. You will end up derreferencing
+ * too many symbolic links! Assumes that `fd` is currently open for traceePid.
  */
 ino_t readInodeFor(logger& log, pid_t traceePid, int fd);
 
 /**
  * Takes care of resolution for a path relative to the tracee process.
- * Properly handles relative paths (cwd), and chroots, to reach correct file from the
- * tracee's point of view.
- * Uses traceeDirFd to mimic semantics of *at symstem calls, e.g. mkdirat. See man 2 mkdirat
- * for specific semantics. Use value -1 as poor man's optional type NONE.
- * Assumes that `traceeDirFd` is currently open for traceePid.
+ * Properly handles relative paths (cwd), and chroots, to reach correct file
+ * from the tracee's point of view. Uses traceeDirFd to mimic semantics of *at
+ * symstem calls, e.g. mkdirat. See man 2 mkdirat for specific semantics. Use
+ * value -1 as poor man's optional type NONE. Assumes that `traceeDirFd` is
+ * currently open for traceePid.
  */
-ino_t inode_from_tracee(const string& traceePath, pid_t traceePid, logger& log,
-                        int traceeDirFd);
+ino_t inode_from_tracee(
+    const string& traceePath, pid_t traceePid, logger& log, int traceeDirFd);
 
 /**
  *
- * Replays system call if the value of errnoValue is equal to the errno value that the libc
- * call would have returned. Also logs event in logger. For example for read:
- *   replaySyscallIfBlocked(s, t, sched, EAGAIN);
+ * Replays system call if the value of errnoValue is equal to the errno value
+ * that the libc call would have returned. Also logs event in logger. For
+ * example for read: replaySyscallIfBlocked(s, t, sched, EAGAIN);
  *
  * @return: true if call was replayed, else false.
  */
-bool replaySyscallIfBlocked(globalState& gs, state& s, ptracer& t,
-                            scheduler& sched, int64_t errnoValue);
+bool replaySyscallIfBlocked(
+    globalState& gs,
+    state& s,
+    ptracer& t,
+    scheduler& sched,
+    int64_t errnoValue);
 
 /**
  * Replay system call by rewinding the PC register. Does NOT restore old
@@ -132,36 +145,41 @@ void replaySystemCall(globalState& gs, ptracer& t, uint64_t systemCall);
    tracee receives the signal, its handler will run and pause() will then
    return.
 */
-bool sendTraceeSignalNow(int signum, globalState& gs, state& s, ptracer& t,
-                         scheduler& sched);
+bool sendTraceeSignalNow(
+    int signum, globalState& gs, state& s, ptracer& t, scheduler& sched);
 
 /**
- * Given a path used by the tracee, either relative or absolute, resolve the exact file the
- * tracee refered to. Uses combination of /proc/traceePid/cwd, /proc/traceePid/root, to
- * resolve path. Takes optional dirfd argument, for tracee calls using *at.
+ * Given a path used by the tracee, either relative or absolute, resolve the
+ * exact file the tracee refered to. Uses combination of /proc/traceePid/cwd,
+ * /proc/traceePid/root, to resolve path. Takes optional dirfd argument, for
+ * tracee calls using *at.
  */
-string resolve_tracee_path(const string& traceePath, pid_t traceePid, logger& log,
-                           int traceeDirFd);
+string resolve_tracee_path(
+    const string& traceePath, pid_t traceePid, logger& log, int traceeDirFd);
 
 /**
  * Check if a file relative to a tracee exists. Calls resolve_tracee_path,
  * uses stat on file to emulate behavior of open() and openat().
  */
-bool tracee_file_exists(const string& traceePath, pid_t traceePid, logger& log,
-                        int traceeDirFd);
+bool tracee_file_exists(
+    const string& traceePath, pid_t traceePid, logger& log, int traceeDirFd);
 /**
- * Handler for open and openat. Checks if the file exists and sets s.fileExisted,
- * if O_CREAT was set. This way we know whether a new file was created if the system
- * call suceeds.
+ * Handler for open and openat. Checks if the file exists and sets
+ * s.fileExisted, if O_CREAT was set. This way we know whether a new file was
+ * created if the system call suceeds.
  */
-void handlePreOpens(globalState& gs, state& s, ptracer& t, int dirfd,
-                    traceePtr<char> charpath, int flags);
+void handlePreOpens(
+    globalState& gs,
+    state& s,
+    ptracer& t,
+    int dirfd,
+    traceePtr<char> charpath,
+    int flags);
 /**
- * Handler for open and openat. Checks if the file previously existed, if it didn't
- * and O_CREAT was set, we know a new file was created. Handles O_TMPFILE by knowing
- * this file is brand new and using the fd returned from open/openat to get the
- * anonymous inode.
+ * Handler for open and openat. Checks if the file previously existed, if it
+ * didn't and O_CREAT was set, we know a new file was created. Handles O_TMPFILE
+ * by knowing this file is brand new and using the fd returned from open/openat
+ * to get the anonymous inode.
  */
 void handlePostOpens(globalState& gs, state& s, ptracer& t, int flags);
 #endif
-

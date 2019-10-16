@@ -1,24 +1,24 @@
 #ifndef _MY_TEMPFILE_H
 #define _MY_TEMPFILE_H
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <stdio.h>
 #include <assert.h>
-#include <string.h>
+#include <fcntl.h>
 #include <limits.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
-#include <memory>
-#include <tuple>
 #include <fstream>
+#include <memory>
 #include <string>
+#include <tuple>
 
 #if defined _WIN32
-  #define PATH_SEPERATOR  '\\';
+#define PATH_SEPERATOR '\\';
 #else
-  #define PATH_SEPEARTOR  '/';
+#define PATH_SEPEARTOR '/';
 #endif
 
 class TempDir {
@@ -26,12 +26,11 @@ private:
   std::string name;
   pid_t owner_pid;
   bool mounted;
+
 public:
   TempDir();
   TempDir(const std::string& prefix = "", bool doMount = false);
-  std::string path(void) const {
-    return name;
-  }
+  std::string path(void) const { return name; }
   virtual ~TempDir();
 };
 
@@ -39,13 +38,12 @@ class NamedTempFile {
 private:
   FILE* file;
   std::string name;
+
 public:
   NamedTempFile();
   NamedTempFile(TempDir& dir);
   NamedTempFile(const std::string& path);
-  std::string path(void) const {
-    return name;
-  }
+  std::string path(void) const { return name; }
 
   unsigned long seek(unsigned long offset) {
     fseek(file, (long)offset, SEEK_SET);
@@ -67,7 +65,7 @@ public:
     return fwrite(to, sizeof(to), 1, file);
   }
 
-  template <typename T>  
+  template <typename T>
   size_t write(const T* to, size_t size, size_t nmemb) {
     return fwrite(to, size, nmemb, file);
   }
@@ -82,6 +80,7 @@ public:
 class TempFile {
 private:
   FILE* file;
+
 public:
   TempFile();
   TempFile(TempDir& dir);
@@ -111,25 +110,20 @@ public:
     return fwrite(to, size, nmemb, file);
   }
 
-  virtual ~TempFile() {
-    fclose(file);
-  }
+  virtual ~TempFile() { fclose(file); }
 };
 
 class TempPath {
 private:
   std::string name;
+
 public:
   TempPath();
   TempPath(TempDir& dir);
   TempPath(const std::string& scoped_path);
-  std::string path(void) const {
-    return name;
-  }
+  std::string path(void) const { return name; }
 
-  virtual ~TempPath() {
-    unlink(name.c_str());
-  }
+  virtual ~TempPath() { unlink(name.c_str()); }
 };
 
 #endif

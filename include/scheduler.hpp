@@ -4,15 +4,17 @@
 #include "logger.hpp"
 #include "state.hpp"
 
+#include <map>
 #include <queue>
 #include <set>
-#include <map>
 
 using namespace std;
 
 /**
- * Stateful class to keep track of all currently running processes in our process tree.
- * Returns which process should run next based on our scheduling policy. Keeps track
+ * Stateful class to keep track of all currently running processes in our
+ process tree.
+ * Returns which process should run next based on our scheduling policy. Keeps
+ track
  * of blocked/runnable processes.
 
  * Detects deadlocks in program and throws error, if this ever happens.
@@ -22,7 +24,7 @@ using namespace std;
  * Then tries the blocked processes (and swaps the heaps).
  */
 
-class scheduler{
+class scheduler {
 public:
   scheduler(pid_t startingPid, logger& log);
 
@@ -35,8 +37,8 @@ public:
 
   /**
    * Mark this process as exited. Let other's run. We need our children to run
-   * and finish before we get a ptrace nonEventExit. We actually remove the process
-   * when our last child has itself ended.
+   * and finish before we get a ptrace nonEventExit. We actually remove the
+   * process when our last child has itself ended.
    * @param process pid of finished process
    */
   void markFinishedAndScheduleNext(pid_t process);
@@ -94,7 +96,7 @@ public:
       blockedHeap.pop();
     }
   }
-  
+
 private:
   logger& log; /**< log file wrapper */
 
@@ -106,8 +108,8 @@ private:
   /**
    * Two max heaps: runnableHeap and blockedHeap.
    * Processes with higher PIDs go first.
-   * Run all runnable processes. When we run out of these, switch the names of the heaps,
-   * and continue.
+   * Run all runnable processes. When we run out of these, switch the names of
+   * the heaps, and continue.
    */
   priority_queue<pid_t> runnableHeap;
   priority_queue<pid_t> blockedHeap;

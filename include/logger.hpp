@@ -1,13 +1,13 @@
 #ifndef LOGGER_H
 #define LOGGER_H
 
-#include <unistd.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <unistd.h>
 #include "util.hpp"
 
-#include<string>
+#include <string>
 
 using namespace std;
 
@@ -16,15 +16,15 @@ using namespace std;
  * Options to pass to libDetLog() for importance of message.
  */
 enum class Importance {
-  inter,     /*< We intercepted this system call */
-  info,      /*< Less important information */
-  extra,     /*< Extra information not useful most of the time. */
+  inter, /*< We intercepted this system call */
+  info, /*< Less important information */
+  extra, /*< Extra information not useful most of the time. */
 };
 
 /**
  * Enum of log color.
  */
-enum class Color{
+enum class Color {
   green,
   red,
   blue,
@@ -40,7 +40,8 @@ public:
   /**
    * Constructor.
    * Requires file to write to and debug level to use.
-   * @param logFile: Path to write log file to. A unique suffix will be appended.
+   * @param logFile: Path to write log file to. A unique suffix will be
+   * appended.
    * @param debugLevel debugging level
    * @param useColor whether to use color in logging (default true)
    */
@@ -97,15 +98,19 @@ private:
    */
   const int debugLevel;
 
-  const bool useColor;   /**< Flag to tell us to use colors or not! Useful for writing output to files without annoying color sequences in file. */
+  const bool
+      useColor; /**< Flag to tell us to use colors or not! Useful for writing
+                   output to files without annoying color sequences in file. */
 
-  FILE* fin;   /**< File pointer to write to.   */
+  FILE* fin; /**< File pointer to write to.   */
 
-  bool padding;   /**< Add a 2 space padding to the string to print. Useful for nested messages. */
+  bool padding; /**< Add a 2 space padding to the string to print. Useful for
+                   nested messages. */
 
   uint64_t logEntryID = 0;
 
-  bool logPrintfFormattingEnabled; /**< Whether to enable interpretation of printf format specifiers within log messages */
-  
+  bool logPrintfFormattingEnabled; /**< Whether to enable interpretation of
+                                      printf format specifiers within log
+                                      messages */
 };
 #endif
