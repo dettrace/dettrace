@@ -18,7 +18,10 @@ public:
    * @param mtimeMap map of inode to modification times
    */
   globalState(logger& log, ValueMapper<ino_t, ino_t> inodeMap,
-              ValueMapper<ino_t, time_t> mtimeMap, bool kernelPre4_12);
+              ValueMapper<ino_t, time_t> mtimeMap, bool kernelPre4_12,
+	      unsigned prngSeed,
+	      unsigned long timestamps,
+	      bool allow_network = false);
 
   /** 
    * A pseudorandom number generator to implement getrandom()
@@ -118,6 +121,23 @@ public:
    * to the map anyways to avoid special cases for the process owner vs threads.
    */
   unordered_map<pid_t, pid_t> threadGroupNumber;
+
+  /**
+   * Allow non-deterministic socket/networking
+   */
+  bool allow_network;
+
+  /**
+   * Initial timestamps on files
+   */
+  unsigned long timestamps;
+
+  /**
+   * allow trap CPUID. this can be set to false
+   * when arch_prctl(SET_CPUID) returned error
+   * which can happen in old CPUs or in certain VM.
+   */
+  bool allow_trapCPUID;
 };
 
 #endif

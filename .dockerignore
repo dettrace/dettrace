@@ -35,6 +35,8 @@ test/samplePrograms/shTestFile
 test/samplePrograms/waitOnChild
 test/samplePrograms/multipleThreads
 test/samplePrograms/simpleThreads
+src/dettrace
 .git/
 ./benchmarking
 bin/
+*.tbz

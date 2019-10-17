@@ -1033,6 +1033,64 @@ public:
 };
 // =======================================================================================
 /**
+ *  ssize_t sendmsg(int sockfd, const struct msghdr* msg, int flags);
+ *
+ * If sendmsg() is used on a connection-mode (SOCK_STREAM, SOCK_SEQPACKET) socket,
+ * the arguments dest_addr and addrlen are ignored (and the error EISCONN may be
+ * returned when they are not NULL and 0), and the error ENOTCONN is returned when
+ * the socket was not actually connected. Otherwise, the address of the target is
+ * given by dest_addr with addrlen specifying its size.  For sendmsg(), the address
+ * of the target is given by msg.msg_name, with msg.msg_namelen specifying its size.
+ *
+ */
+class sendmsgSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_sendmsg;
+  const string syscallName = "sendmsg";
+};
+
+// =======================================================================================
+/**
+ *  int sendmsg(int sockfd, struct mmsghdr* msgvec, unsigned int vlen,
+                int flags);
+ *
+ * The  sendmmsg()  system  call  is an extension of sendmsg(2) that allows
+ * the caller to transmit multiple messages on a socket using a single system
+ * call.  (This has performance benefits for some applications.)
+ */
+class sendmmsgSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_sendmmsg;
+  const string syscallName = "sendmmsg";
+};
+
+// =======================================================================================
+/**
+ *  ssize_t recvfrom(int sockfd, void* buf, size_t len, int flags,
+                     struct sockaddr* src_addr, socklen_t* addrlen);
+ *
+ * The  recv(),  recvfrom(),  and recvmsg() calls are used to receive messages
+ * from a socket. They may be used to receive data on both connectionless and 
+ * connection-oriented sockets.  This page first describes common features of
+ * all three system calls, and then describes the  differences between the calls.
+ */
+class recvfromSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_recvfrom;
+  const string syscallName = "recvfrom";
+};
+
+// =======================================================================================
+/**
  * int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
  *            struct timeval *timeout);
  *
@@ -1063,6 +1121,20 @@ public:
 };
 // =======================================================================================
 /**
+ * int rt_sigprocmask(int how, const sigset_t* set, const sigset_t* oldset, size_t sigsetsize);
+ *
+ * change signal mask for calling thread.
+ */
+class rt_sigprocmaskSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_rt_sigprocmask;
+  const string syscallName = "rt_sigprocmask";
+};
+// =======================================================================================
+/**
  * int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
  *
  * Setup a signal handler. Currently only used for determinizing alarm()
@@ -1074,6 +1146,49 @@ public:
 
   const int syscallNumber = SYS_rt_sigaction;
   const string syscallName = "rt_sigaction";
+};
+// =======================================================================================
+/**
+ * int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
+ *
+ * Setup a signal handler. Currently only used for determinizing alarm()
+ */
+class rt_sigtimedwaitSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_rt_sigtimedwait;
+  const string syscallName = "rt_sigtimedwait";
+};
+
+// =======================================================================================
+/**
+ * int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
+ *
+ * Setup a signal handler. Currently only used for determinizing alarm()
+ */
+class rt_sigsuspendSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_rt_sigsuspend;
+  const string syscallName = "rt_sigsuspend";
+};
+// =======================================================================================
+/**
+ * int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
+ *
+ * Setup a signal handler. Currently only used for determinizing alarm()
+ */
+class rt_sigpendingSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_rt_sigpending;
+  const string syscallName = "rt_sigpending";
 };
 // =======================================================================================
 /**
@@ -1304,6 +1419,48 @@ public:
   const int syscallNumber = SYS_setitimer;
   const string syscallName = "setitimer";
 };
+
+// =======================================================================================
+/**
+ * int timerfd_create(clockid_t clockid, int flags);
+ */
+class timerfd_createSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_timerfd_create;
+  const string syscallName = "timerfd_create";
+};
+
+// =======================================================================================
+/**
+ * int timerfd_settime(clockid_t clockid, int flags,
+                       const struct itimerspec* new_value,
+                       struct itimerspec* old_value);
+ */
+class timerfd_settimeSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_timerfd_settime;
+  const string syscallName = "timerfd_settime";
+};
+
+// =======================================================================================
+/**
+ * int timerfd_gettime(clockid_t clockid, struct itimerspec* curr_value);
+ */
+class timerfd_gettimeSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_timerfd_gettime;
+  const string syscallName = "timerfd_gettime";
+};
+
 // =======================================================================================
 /**
  * clock_t times(struct tms *buf);
@@ -1532,6 +1689,15 @@ public:
   const string syscallName = "wait4";
 };
 // =======================================================================================
+class waitidSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_waitid;
+  const string syscallName = "waitid";
+};
+// =======================================================================================
 /**
  * ssize_t writev(int fd, const struct iovec *iov, int iovcnt)
  *
@@ -1571,6 +1737,80 @@ public:
   const int syscallNumber = SYS_write;
   const string syscallName = "write";
 };
+
+// =======================================================================================
+/**
+ * int socket(int domain, int type, int protocol);
+ *
+ * socket()  creates  an endpoint for communication and returns a file descriptor that refers to
+ * that endpoint.  The file descriptor returned by a successful call will be the lowest-numbered
+ * file descriptor not currently open for the process.
+ */
+class socketSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_socket;
+  const string syscallName = "socket";
+};
+
+// =======================================================================================
+/**
+ * int listen(int sockfd, int backlog)
+ *
+ * listen()  marks the socket referred to by sockfd as a passive socket, that is, as a 
+ * socket that will be used to accept incoming connection requests using accept(2).
+ */
+class listenSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_listen;
+  const string syscallName = "listen";
+};
+
+// =======================================================================================
+/**
+ * int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
+ */
+class acceptSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_accept;
+  const string syscallName = "accept";
+};
+
+// =======================================================================================
+/**
+ * int accept4(int sockfd, struct sockaddr *addr,
+ *             socklen_t *addrlen, int flags);
+ */
+class accept4SystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_accept4;
+  const string syscallName = "accept4";
+};
+
+// =======================================================================================
+/**
+ * int shutdown(int sockfd, int how)
+ */
+class shutdownSystemCall {
+public:
+  static bool handleDetPre(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+  static void handleDetPost(globalState& gs, state& s, ptracer& t, scheduler& sched) ;
+
+  const int syscallNumber = SYS_shutdown;
+  const string syscallName = "shutdown";
+};
+
 // =======================================================================================
 // Iterate through our vector of entries, which represent the binary memory for linux_dirents
 // or linux_dirent64. We virtualize the inodes and add entries to our inodeMap.

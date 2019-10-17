@@ -105,16 +105,16 @@ void handleStatFamily(globalState& gs, state& s, ptracer& t, string syscallName)
     // Use inode to check if we created this file during our run.
     time_t virtualMtime = gs.mtimeMap.realValueExists(inode) ?
       gs.mtimeMap.getVirtualValue(inode) :
-      0; // This was an old file that has not been opened for modification.
+      (__time_t)gs.timestamps; // This was an old file that has not been opened for modification.
 
     /* Time of last access */
-    myStat.st_atim = timespec { .tv_sec =  0,
+    myStat.st_atim = timespec { .tv_sec =  (__time_t)gs.timestamps,
                                 .tv_nsec = 0 };
     /* Time of last modification */
     myStat.st_mtim = timespec { .tv_sec =  virtualMtime,
                                 .tv_nsec = 0 };
     /* Time of last status change */
-    myStat.st_ctim = timespec { .tv_sec = 0,
+    myStat.st_ctim = timespec { .tv_sec = (__time_t)gs.timestamps,
                                 .tv_nsec = 0 };
 
     // TODO: I'm surprised this doesn't break things. I guess so far, we have only used
@@ -245,16 +245,14 @@ pair<int,int> getPipeFds(globalState& gs, state& s, ptracer& t){
 }
 
 // =======================================================================================
-bool tracee_file_exists(string traceePath, pid_t traceePid, logger& log,
+bool tracee_file_exists(const string& traceePath, pid_t traceePid, logger& log,
                    int traceeDirFd) {
   // Create full absolute path in the hostOS file system.
   string resolvedPath = resolve_tracee_path(traceePath, traceePid, log, traceeDirFd);
 
-  resolvedPath.append("/");
-  resolvedPath.append(traceePath);
-  log.writeToLog(Importance::info, "fullpath: %s\n", resolvedPath.c_str());
+  if (resolvedPath.empty()) return false;
 
-   struct stat statbuf = {0};
+  struct stat statbuf = {0};
   int res = stat(resolvedPath.c_str(), &statbuf);
   int err = errno;
   if (res == 0) {
@@ -262,28 +260,33 @@ bool tracee_file_exists(string traceePath, pid_t traceePid, logger& log,
   } else if (err == ENOENT /*|| err == ENOTDIR might be needed later */) {
     return false;
   } else {
-    runtimeError("Unable to check for existance of file: " + to_string(errno));
+    log.writeToLog(Importance::info, "Unable to check for existance of file: " + resolvedPath + ", error: " + strerror(errno));
+    return false;
   }
 
   // Can never happen, here to avoid spurious warning.
   return false;
 }
 // =======================================================================================
-ino_t inode_from_tracee(string traceePath, pid_t traceePid, logger& log,
+ino_t inode_from_tracee(const string& traceePath, pid_t traceePid, logger& log,
                         int traceeDirFd) {
   // Create full absolute path in the hostOS file system.
   string resolvedPath = resolve_tracee_path(traceePath, traceePid, log, traceeDirFd);
-  resolvedPath.append("/");
-  resolvedPath.append(traceePath);
-  log.writeToLog(Importance::info, "fullpath: %s\n", resolvedPath.c_str());
+
+  if (resolvedPath.empty()) {
+    log.writeToLog(Importance::info, string { "inode_from_tracee, cannot resolve " } + traceePath +
+		   "for pid: " + to_string(traceePid));
+    return -1;
+  }
 
   struct stat statbuf = {0};
   // If this is a symbolic link, we want the actual symbolic links and not the file it
   // points to! So we lstat
   int res = lstat(resolvedPath.c_str(), &statbuf);
   if (res < 0) {
-    runtimeError("Unable to stat file in "
-                       "tracee from /proc/. errno: " + to_string(res));
+    log.writeToLog(Importance::info, "Unable to stat file " + traceePath + " => " + resolvedPath +
+		   " tracee, error: " + strerror(errno) + " (" + to_string(errno) + ")");
+    return -1;
   }
 
   if (S_ISLNK(statbuf.st_mode)) {
@@ -320,8 +323,8 @@ ino_t readInodeFor(logger& log, pid_t traceePid, int fd){
 bool sendTraceeSignalNow(int signum, globalState& gs,
                                 state& s, ptracer& t, scheduler& sched) {
   enum sighandler_type sh = SIGHANDLER_DEFAULT;
-  if (s.currentSignalHandlers.count(signum)) {
-    sh = s.currentSignalHandlers[signum];
+  if (s.currentSignalHandlers.get()->count(signum)) {
+    sh = s.currentSignalHandlers.get()->at(signum);
   }
 
   switch (sh) {
@@ -332,7 +335,7 @@ bool sendTraceeSignalNow(int signum, globalState& gs,
     // TODO: JLD is this a race? the tracee isn't technically paused yet
     t.changeSystemCall(SYS_pause);
     s.signalInjected = true;
-    s.currentSignalHandlers[signum] = SIGHANDLER_DEFAULT; // go back to default next time
+    (*s.currentSignalHandlers.get())[signum] = SIGHANDLER_DEFAULT; // go back to default next time
     int retVal = syscall(SYS_tgkill, t.getPid(), t.getPid(), signum);
     if (0 != retVal) {
       runtimeError("sending myself signal "+to_string(signum)+" failed, tgkill returned " + to_string(retVal));
@@ -377,10 +380,8 @@ bool sendTraceeSignalNow(int signum, globalState& gs,
   return false;
 }
 // =======================================================================================
-string resolve_tracee_path(string traceePath, pid_t traceePid, logger& log,
+string resolve_tracee_path(const string& traceePath, pid_t traceePid, logger& log,
                         int traceeDirFd) {
-  log.writeToLog(Importance::info, "Resolving path for: %s\n", traceePath.c_str());
-
   // Some system calls take empty path and use traceeDirFd exclusively to refer to a file
   // see O_PATH option in `man 2 open`. We do not support this right now...
   if (traceePath == "") {
@@ -412,11 +413,14 @@ string resolve_tracee_path(string traceePath, pid_t traceePid, logger& log,
   char pathbuf[PATH_MAX + 1] = {0};
   int ret = readlink(prefixProcFd.c_str(), pathbuf, PATH_MAX);
   if (ret == -1) {
-    runtimeError("Unable to read cwd from tracee: " + to_string(traceePid) +
-                        " errno: " + to_string(errno));
+    log.writeToLog(Importance::info, "Unable to read cwd from tracee: " + to_string(traceePid) +
+		   " errno: " + to_string(errno));
+    return "";
   }
 
-  return string { pathbuf };
+  auto res = string { pathbuf } + "/" + traceePath;
+  log.writeToLog(Importance::info, "Resolving path %s => %s\n", traceePath.c_str(), res.c_str());
+  return res;
 }
 // =======================================================================================
 void handlePreOpens(globalState& gs, state& s, ptracer& t, int dirfd,

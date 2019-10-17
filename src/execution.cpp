@@ -48,10 +48,13 @@ bool kernelCheck(int a, int b, int c){
 execution::execution(int debugLevel, pid_t startingPid, bool useColor,
                      string logFile, bool printStatistics,
                      pthread_t devRandomPthread, pthread_t devUrandomPthread,
-                     map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs):
+                     map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs,
+		     unsigned prngSeed,
+		     bool allow_network, unsigned long epoch, unsigned long timestamps,
+                     unsigned long clock_step):
   kernelPre4_8 {kernelCheck(4,8,0)},
   log {logFile, debugLevel, useColor},
-  silentLogger {"NONE", 0},
+  silentLogger {"", 0},
   printStatistics{printStatistics},
   devRandomPthread{devRandomPthread},
   devUrandomPthread{devUrandomPthread},
@@ -62,13 +65,21 @@ execution::execution(int debugLevel, pid_t startingPid, bool useColor,
     log,
     ValueMapper<ino_t, ino_t> {log, "inode map", 1},
     ValueMapper<ino_t, time_t> {log, "mtime map", 1},
-    kernelCheck(4,12,0)
+    kernelCheck(4,12,0),
+    prngSeed,
+    timestamps,
+    allow_network
   },
   myScheduler {startingPid, log},
   debugLevel {debugLevel},
-  vdsoFuncs(vdsoFuncs) {
+  vdsoFuncs(vdsoFuncs),
+  epoch(epoch),
+  timestamps(timestamps),
+  clock_step(clock_step),
+  prngSeed(prngSeed)
+  {
     // Set state for first process.
-    states.emplace(startingPid, state{startingPid, debugLevel});
+    states.emplace(startingPid, state{startingPid, debugLevel, epoch, clock_step});
     myGlobalState.threadGroups.insert({startingPid, startingPid});
     myGlobalState.threadGroupNumber.insert({startingPid, startingPid});
 
@@ -228,8 +239,9 @@ void execution::handlePostSystemCall(state& currState){
   log.unsetPadding();
   return;
 }
+
 // =======================================================================================
-void execution::runProgram(){
+int execution::runProgram(){
   // When using seccomp, we run with PTRACE_CONT, but seccomp only reports pre-hook
   // events. To get post hook events we must call ptrace with PTRACE_SYSCALL intead.
   // This happens in @getNextEvent.
@@ -307,8 +319,8 @@ void execution::runProgram(){
     */
     if(ret == ptraceEvent::eventExit){
       auto msg = log.makeTextColored(Color::blue, "Process [%d] has finished. "
-                                         "With ptraceEventExit.\n");
-      log.writeToLog(Importance::inter, msg, traceesPid);
+				     "With ptraceEventExit, exit_code: %d.");
+      log.writeToLog(Importance::inter, msg, traceesPid, exit_code);
       states.at(traceesPid).callPostHook = false;
 
       bool isExitGroup = states.at(traceesPid).isExitGroup;
@@ -521,6 +533,7 @@ void execution::runProgram(){
     exit(1);
   }
 
+  return exit_code;
   // Add a check for states.empty(). Not adding it now since I don't want a bunch of packages.
   // to fail over this :b
 }
@@ -560,20 +573,15 @@ pid_t execution::handleForkEvent(const pid_t traceesPid, bool isThread){
   // This is where we add new children to the thread group leader.
   processTree.insert(make_pair(threadGroup, newChildPid));
 
+  state& parent_state = states.at(traceesPid);
   // Share fdStatus. Processes get their own, threads share with thread group.
   if(isThread){
-    states.emplace(newChildPid, state {newChildPid, debugLevel,
-                                         states.at(threadGroup).fdStatus});
+    states.emplace(newChildPid, parent_state.cloned(newChildPid));
   } else {
     // Deep Copy!
-    unordered_map<int, descriptorType> fds = *states.at(threadGroup).fdStatus.get();
-    states.emplace(newChildPid, state {newChildPid, debugLevel, fds});
+    states.emplace(newChildPid, parent_state.forked(newChildPid));
   }
   // Add this new process to our states.
-
-  
-  // Inheret file descriptor set from our parent.
-  states.at(newChildPid).fdStatus = states.at(threadGroup).fdStatus;
 
   log.writeToLog(Importance::info,
                  log.makeTextColored(Color::blue,"Added process [%d] to states map.\n"),
@@ -586,8 +594,8 @@ pid_t execution::handleForkEvent(const pid_t traceesPid, bool isThread){
   // attributes to MAP_PRIVATE. new child's `mmapMemory` hence must be inherited
   // from parent process, to be consistent with fork() semantic.
   // TODO for threads we may not need to do this?!
-  states.at(newChildPid).mmapMemory.doesExist = true;
-  states.at(newChildPid).mmapMemory.setAddr(states.at(traceesPid).mmapMemory.getAddr());
+  //states.at(newChildPid).mmapMemory.doesExist = true;
+  //states.at(newChildPid).mmapMemory.setAddr(states.at(traceesPid).mmapMemory.getAddr());
 
   // Wait for child to be ready.
   log.writeToLog(Importance::info, log.makeTextColored(Color::blue,
@@ -742,7 +750,7 @@ void execution::handleExecEvent(pid_t pid) {
 
   // TODO When does this ever happen?
   if (states.find(pid) == states.end()){
-      states.emplace(pid, state {pid, debugLevel} );
+    states.emplace(pid, state {pid, debugLevel, epoch, clock_step} );
   }
   // Reset file descriptor state, it is wiped after execve.
   states.at(pid).fdStatus = make_shared<unordered_map<int, descriptorType>>();
@@ -773,14 +781,57 @@ bool execution::handleSeccomp(const pid_t traceesPid){
   // Get registers from tracee.
   tracer.updateState(traceesPid);
 
-  if(!states.at(traceesPid).CPUIDTrapSet && !myGlobalState.kernelPre4_12 && NULL == getenv("DETTRACE_NO_CPUID_INTERCEPTION")){
-    //check if CPUID needs to be set, if it does, set trap
-    trapCPUID(myGlobalState, states.at(traceesPid), tracer);
+  if (myGlobalState.allow_trapCPUID) {
+      if(!states.at(traceesPid).CPUIDTrapSet && !myGlobalState.kernelPre4_12 && NULL == getenv("DETTRACE_NO_CPUID_INTERCEPTION")){
+	//check if CPUID needs to be set, if it does, set trap
+	trapCPUID(myGlobalState, states.at(traceesPid), tracer);
+      }
   }
 
   auto callPostHook = handlePreSystemCall( states.at(traceesPid), traceesPid );
   return callPostHook;
 }
+
+struct CPUIDRegs {
+  unsigned eax;
+  unsigned ebx;
+  unsigned ecx;
+  unsigned edx;
+};
+
+static const struct CPUIDRegs cpuids[] =
+  {
+   { 0x0000000D, 0x756E6547, 0x6C65746E, 0x49656E69, },
+   { 0x00000663, 0x00000800, 0x80202001, 0x078BFBFD, },
+   { 0x00000001, 0x00000000, 0x0000004D, 0x002C307D, },
+   { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
+   { 0x00000120, 0x01C0003F, 0x0000003F, 0x00000001, },
+   { 0x00000000, 0x00000000, 0x00000003, 0x00000000, },
+   { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
+   { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
+   { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
+   { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
+   { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
+   { 0x00000000, 0x00000001, 0x00000100, 0x00000001, },
+   { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
+   { 0x00000000, 0x00000000, 0x00000000, 0x00000000, },
+  };
+
+static const struct CPUIDRegs extended_cpuids[] =
+  {
+   { 0x8000000A, 0x756E6547,0x6C65746E,0x49656E69, },
+   { 0x00000663, 0x00000000,0x00000001,0x20100800, },
+   { 0x554D4551, 0x72695620,0x6C617574,0x55504320, },
+   { 0x72657620, 0x6E6F6973,0x352E3220,0x0000002B, },
+   { 0x00000000, 0x00000000,0x00000000,0x00000000, },
+   { 0x01FF01FF, 0x01FF01FF,0x40020140,0x40020140, },
+   { 0x00000000, 0x42004200,0x02008140,0x00808140, },
+   { 0x00000000, 0x00000000,0x00000000,0x00000000, },
+   { 0x00003028, 0x00000000,0x00000000,0x00000000, },
+   { 0x00000000, 0x00000000,0x00000000,0x00000000, },
+   { 0x00000000, 0x00000000,0x00000000,0x00000000, },
+};
+
 // =======================================================================================
 void execution::handleSignal(int sigNum, const pid_t traceesPid){
   if(sigNum == SIGSEGV) {
@@ -817,12 +868,15 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
       states.at(traceesPid).signalToDeliver = 0;
 
       auto coloredMsg = log.makeTextColored(Color::blue, msg);
+
+      // force a preemption to avoid possible busy reading TSCs.
+      // myScheduler.preemptAndScheduleNext();
       log.writeToLog(Importance::inter, coloredMsg, traceesPid, sigNum);
       return;
     } else if ((curr_insn32 << 16) ==0xA20F0000) {
       struct user_regs_struct regs = tracer.getRegs();
 
-      auto msg = "[%d] Tracer: intercepted cpuid instruction at %p. %rax == 0x%p, %rcx == 0x%p\n";
+      auto msg = "[%d] Tracer: intercepted cpuid instruction at %p. %rax == %p, %rcx == %p\n";
       auto coloredMsg = log.makeTextColored(Color::blue, msg);
       log.writeToLog(Importance::inter, coloredMsg, traceesPid, regs.rip, regs.rax, regs.rcx);
 
@@ -834,72 +888,35 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid){
 
       // fill in canonical cpuid return values
 
+      const unsigned long nleafs = sizeof(cpuids) / sizeof(cpuids[0]);
+      assert(nleafs == 1 +  cpuids[0].eax);
+
+      const unsigned long nleafs_ext = 0x80000000ul + sizeof(extended_cpuids) / sizeof(extended_cpuids[0]);
+      assert(nleafs_ext == 1 + extended_cpuids[0].eax);
+
       switch (regs.rax) {
-      case 0x0:
-        tracer.writeRax( 0x00000002 ); // max supported %eax argument. Set to 4 to narrow support (IE Pentium 4).  For reference, Sandy Bridge has 0xD and Kaby Lake 0x16
-        tracer.writeRbx( 0x756e6547 ); // "GenuineIntel" string
-        tracer.writeRdx( 0x49656e69 );
-        tracer.writeRcx( 0x6c65746e );
-        //tracer.writeRcx( 0x6c6c6c6c ); // for debugging, returns "GenuineIllll" instead
-        break;
-      case 0x01: // basic features
-        tracer.writeRax( 0x306c3 );
-        tracer.writeRbx( 0x4100800 );
-        tracer.writeRdx( 0xbfebfbff );
-        tracer.writeRcx( 0x7ffafbff );
-        break;
-      case 0x02: // TLB/Cache/Prefetch Information
-        // say that we have no caches, TLBs or prefetchers
-        tracer.writeRax( 0x80000001 );
-        tracer.writeRbx( 0x80000000 );
-        tracer.writeRcx( 0x80000000 );
-        tracer.writeRdx( 0x80000000 );
-        break;
-      case 0x03:
-        tracer.writeRax( 0x0 );
-        tracer.writeRbx( 0x0 );
-        tracer.writeRdx( 0x0 );
-        tracer.writeRcx( 0x0 );
-        break;
-      case 0x04:
-        tracer.writeRax( 0x0 );
-        tracer.writeRbx( 0x0 );
-        tracer.writeRdx( 0x0 );
-        tracer.writeRcx( 0x0 );
-        break;
-      case 0x07:
-        tracer.writeRax( 0x0 );
-        tracer.writeRbx( 0x0 );
-        tracer.writeRdx( (1ul << 10) | /* MD_CLEAR */
-                         (1ul << 26) | /* IBRS/IBPB */
-                         (1ul << 27) | /* STIBP */
-                         (1ul << 28) | /* L1D_FLUSH */
-                         (1ul << 29) | /* IA32_ARCH_CAPABILITIES */
-                         (1ul << 31) | /* SSBD */
-                         0 );
-        tracer.writeRcx( 0x0 );
-        break;
-      case 0x80000000:
-        tracer.writeRax( 0x80000000 );
-        tracer.writeRbx( 0x0 );
-        tracer.writeRdx( 0x0 );
-        tracer.writeRcx( 0x0 );
-        break;
-      case 0x80000001:
-        tracer.writeRax( 0x0 );
-        tracer.writeRbx( 0x0 );
-        tracer.writeRcx( 0x21 );
-        tracer.writeRdx( 0x2c100800 );
-        break;
-      case 0x80000006: // L2 cache
-        tracer.writeRax( 0x0 );
-        tracer.writeRbx( 0x0 );
-        tracer.writeRdx( 0x0 );
-        // size=2MB, 16-way set associative, line size = 64B
-        tracer.writeRcx( 0x08008140 );
-        break;
+      case 0x0 ... nleafs:
+	{
+	  long leaf = regs.rax;
+	  const struct CPUIDRegs& cpuid = cpuids[leaf];
+	  tracer.writeRax(cpuid.eax);
+	  tracer.writeRbx(cpuid.ebx);
+	  tracer.writeRcx(cpuid.ecx);
+	  tracer.writeRdx(cpuid.edx);
+	}
+	break;
+      case 0x80000000ul ... nleafs_ext:
+	{
+	  long leaf = regs.rax - 0x80000000ul;
+	  const struct CPUIDRegs& cpuid_ext = extended_cpuids[leaf];
+	  tracer.writeRax(cpuid_ext.eax);
+	  tracer.writeRbx(cpuid_ext.ebx);
+	  tracer.writeRcx(cpuid_ext.ecx);
+	  tracer.writeRdx(cpuid_ext.edx);
+	}
+	break;
       default:
-        runtimeError("CPUID unsupported %eax argument");
+        runtimeError("CPUID unsupported %eax = " + to_string(regs.rax));
       }
 
       return;
@@ -1111,11 +1128,32 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_rmdir:
     return rmdirSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_rt_sigprocmask:
+    return rt_sigprocmaskSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_rt_sigaction:
     return rt_sigactionSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_rt_sigtimedwait:
+    return rt_sigtimedwaitSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_rt_sigsuspend:
+    return rt_sigsuspendSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_rt_sigpending:
+    return rt_sigpendingSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_sendto:
     return sendtoSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_sendmsg:
+    return sendmsgSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_sendmmsg:
+    return sendmmsgSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_recvfrom:
+    return recvfromSystemCall::handleDetPre(gs, s, t, sched);
 
   case SYS_select:
     return selectSystemCall::handleDetPre(gs, s, t, sched);
@@ -1168,6 +1206,15 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_timer_settime:
     return timer_settimeSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_timerfd_create:
+    return timerfd_createSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_timerfd_settime:
+    return timerfd_settimeSystemCall::handleDetPre(gs, s, t, sched);
+
+  case SYS_timerfd_gettime:
+    return timerfd_gettimeSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_times:
     return timesSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -1195,11 +1242,24 @@ bool execution::callPreHook(int syscallNumber, globalState& gs,
   case SYS_wait4:
     return wait4SystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_waitid:
+    return waitidSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_write:
     return writeSystemCall::handleDetPre(gs, s, t, sched);
 
   case SYS_writev:
    return writevSystemCall::handleDetPre(gs, s, t, sched);
+  case SYS_socket:
+    return socketSystemCall::handleDetPre(gs, s, t, sched);
+  case SYS_listen:
+    return listenSystemCall::handleDetPre(gs, s, t, sched);
+  case SYS_accept:
+    return acceptSystemCall::handleDetPre(gs, s, t, sched);
+  case SYS_accept4:
+    return accept4SystemCall::handleDetPre(gs, s, t, sched);
+  case SYS_shutdown:
+    return shutdownSystemCall::handleDetPre(gs, s, t, sched);
   }
 
   // Generic system call. Throws error.
@@ -1401,11 +1461,32 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
   case SYS_rmdir:
     return rmdirSystemCall::handleDetPost(gs, s, t, sched);
 
+  case SYS_rt_sigprocmask:
+    return rt_sigprocmaskSystemCall::handleDetPost(gs, s, t, sched);
+
   case SYS_rt_sigaction:
     return rt_sigactionSystemCall::handleDetPost(gs, s, t, sched);
 
+  case SYS_rt_sigtimedwait:
+    return rt_sigtimedwaitSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_rt_sigsuspend:
+    return rt_sigsuspendSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_rt_sigpending:
+    return rt_sigpendingSystemCall::handleDetPost(gs, s, t, sched);
+
   case SYS_sendto:
     return sendtoSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_sendmsg:
+    return sendmsgSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_sendmmsg:
+    return sendmmsgSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_recvfrom:
+    return recvfromSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_select:
     return selectSystemCall::handleDetPost(gs, s, t, sched);
@@ -1458,6 +1539,15 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
   case SYS_timer_settime:
     return timer_settimeSystemCall::handleDetPost(gs, s, t, sched);
 
+  case SYS_timerfd_create:
+    return timerfd_createSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_timerfd_settime:
+    return timerfd_settimeSystemCall::handleDetPost(gs, s, t, sched);
+
+  case SYS_timerfd_gettime:
+    return timerfd_gettimeSystemCall::handleDetPost(gs, s, t, sched);
+
   case SYS_times:
     return timesSystemCall::handleDetPost(gs, s, t, sched);
 
@@ -1485,11 +1575,24 @@ void execution::callPostHook(int syscallNumber, globalState& gs,
   case SYS_wait4:
     return wait4SystemCall::handleDetPost(gs, s, t, sched);
 
+  case SYS_waitid:
+    return waitidSystemCall::handleDetPost(gs, s, t, sched);
+
   case SYS_write:
     return writeSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_writev:
    return writevSystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_socket:
+    return socketSystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_listen:
+    return listenSystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_accept:
+    return acceptSystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_accept4:
+    return accept4SystemCall::handleDetPost(gs, s, t, sched);
+  case SYS_shutdown:
+    return shutdownSystemCall::handleDetPost(gs, s, t, sched);
   }
 
   // Generic system call. Throws error.
@@ -1604,6 +1707,7 @@ ptraceEvent execution::getPtraceEvent(const int status){
   // Check if tracee has exited.
   if (WIFEXITED(status)){
     log.writeToLog(Importance::extra, "nonEventExit\n");
+    exit_code = WEXITSTATUS(status);
     return ptraceEvent::nonEventExit;
   }
 
@@ -1641,6 +1745,7 @@ ptraceEvent execution::getPtraceEvent(const int status){
 #endif
 
   if( ptracer::isPtraceEvent(status, PTRACE_EVENT_EXIT) ){
+    exit_code = WEXITSTATUS(status);
     return ptraceEvent::eventExit;
   }
 
@@ -1652,6 +1757,7 @@ ptraceEvent execution::getPtraceEvent(const int status){
   // Check if the child was terminated by a signal. This can happen after when we,
   //the tracer, intercept a signal of the tracee and deliver it.
   if(WIFSIGNALED(status)){
+    exit_code = WTERMSIG(status);
     return ptraceEvent::terminatedBySignal;
   }
 
@@ -1766,7 +1872,6 @@ ptraceEvent execution::handleExitedThread(pid_t currentPid) {
 pair<bool, ptraceEvent> execution::loopOnWaitpid(pid_t currentPid) {
   // Threads may not respond to ptrace calls since it has exited. Check waitpid to see
   // if an exit status was delivered to us.
-  bool done = false;
   int status;
 
   // Attempt blocking wait. Will error if thread no longer responds.

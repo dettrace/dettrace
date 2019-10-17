@@ -5,8 +5,10 @@
 #include <sys/reg.h>
 #include <sys/types.h>
 #include <sys/user.h>
+#include <sys/timerfd.h>
 #include <sys/vfs.h>
 #include <unordered_map>
+#include <unordered_set>
 #include <sys/select.h>
 #include <memory>
 
@@ -57,8 +59,17 @@ private:
    * information. The clock starts at this number to avoid seeing
    * files "in the future", if we were to start at zero.
    */
-  unsigned long clock = 744847200UL * state::MICRO_SECS_PER_SEC;
+  unsigned long clock;
 
+  /**
+   * epoch in seconds passed from execution environment
+   */
+  unsigned long epoch;
+
+  /**
+   * The number of microseconds to increment the clock by.
+   */
+  unsigned long clock_step;
 public:
   static const long MICRO_SECS_PER_SEC = 1000000L;
  /**
@@ -68,21 +79,18 @@ public:
    * @param traceePid pid of tracee
    * @param debugLevel debug level to be used
    */
-  state(pid_t traceePid, int debugLevel);
+  explicit state(pid_t traceePid, int debugLevel, unsigned long epoch,
+                 unsigned long clock_step);
 
   /**
-   * Same as a above, but takes in a fdStatus map to share. Used by threads to share
-   * map with parents.
+   * fork a new state when fork/vfork is called
    */
-  state(pid_t traceePid, int debugLevel,
-        shared_ptr<unordered_map<int, descriptorType>> parentFdStatus);
+  state forked(pid_t childPid) const;
 
   /**
-   * Same as a above, but takes in a fdStatus map to deep copy. Used by child process to
-   * inheret from parents.
+   * cloned a new state when clone is called
    */
-  state(pid_t traceePid, int debugLevel,
-        unordered_map<int, descriptorType> fdStatus);
+  state cloned(pid_t childPid) const;
 
   /**
    * Keep track of file descriptor status for blocking descriptors, as set by the
@@ -204,10 +212,10 @@ public:
   int requestedSignalToHandle = -1;
 
   /** Track, for each signal, what kind of handler this tracee currently has registered. */
-  unordered_map<int, enum sighandler_type> currentSignalHandlers;
+  shared_ptr<unordered_map<int, enum sighandler_type>> currentSignalHandlers;
 
   /** track timers created via timer_create */
-  unordered_map<timerID_t, timerInfo> timerCreateTimers;
+  shared_ptr<unordered_map<timerID_t, timerInfo>> timerCreateTimers;
 
   bool rdfsNotNull = false; /**< Indicates whether rdfs is NULL. */
   bool wrfsNotNull = false; /**< Indicates whether wrfs is NULL. */
@@ -239,6 +247,7 @@ public:
   uint64_t originalArg3 = 0; /**< original register arg 3 */
   uint64_t originalArg4 = 0; /**< original register arg 4 */
   uint64_t originalArg5 = 0; /**< original register arg 5 */
+  uint64_t originalArg6 = 0; /**< original register arg 5 */
 
   /**
    * Debug level. Mainly used by the dettraceSytemCall classes to avoid doing unnecesary
@@ -255,7 +264,7 @@ public:
    * Function to increase value of internal logical clock.
    */
   void incrementTime() {
-    ++clock;
+    clock += clock_step;
   }
 
   /**
@@ -285,7 +294,55 @@ public:
    */
   bool canGetStuck = false;
 
-  
+  /**
+   * poll retry count
+   * poll can choose a negative timeout for wait indefinitely
+   * or a positive timeout (in mili-seconds) to wait only certain amount of time
+   * we replay poll syscall for only `timeout` of times, by simply assume every
+   * retry is roughly 1-milli-sec.
+   */
+  long poll_retry_count;
+
+  /**
+   * poll retry maximum
+   */
+  long poll_retry_maximum;
+
+  /**
+   * remote socket file descriptors, unix domain sockets excluded.
+   */
+  std::shared_ptr<std::unordered_set<int>> remote_sockfds;
+
+  /**
+   * check whether a file descriptor is a remote socket fd
+   */
+  bool fd_is_remote(int fd) const {
+    return remote_sockfds->find(fd) != remote_sockfds->end();
+  }
+
+  /**
+   * timerfds
+   */
+  std::shared_ptr<std::unordered_map<int, struct itimerspec>> timerfds;
+
+  /**
+   * check whether a file descriptor is a timerfd
+   */
+  bool fd_is_timerfd(int fd) const {
+    return timerfds->find(fd) != timerfds->end();
+  }
+
+  /**
+   * signalfds
+   */
+  std::shared_ptr<std::unordered_set<int>> signalfds;
+
+  /**
+   * check whether a file descriptor is a signalfd
+   */
+  bool fd_is_signalfd(int fd) const {
+    return signalfds->find(fd) != signalfds->end();
+  }
 };
 
 #endif

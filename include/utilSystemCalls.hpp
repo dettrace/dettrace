@@ -7,6 +7,7 @@
 #include "logger.hpp"
 #include "scheduler.hpp"
 #include <optional>
+
 /**
  * Compare returned value of system call (rax) vs the blocking value (errnoValue negated),
  * e.g. EAGAIN. If equal, system call would have blocked, log it, preempt current running
@@ -81,7 +82,7 @@ ino_t readInodeFor(logger& log, pid_t traceePid, int fd);
  * for specific semantics. Use value -1 as poor man's optional type NONE.
  * Assumes that `traceeDirFd` is currently open for traceePid.
  */
-ino_t inode_from_tracee(string traceePath, pid_t traceePid, logger& log,
+ino_t inode_from_tracee(const string& traceePath, pid_t traceePid, logger& log,
                         int traceeDirFd);
 
 /**
@@ -139,14 +140,14 @@ bool sendTraceeSignalNow(int signum, globalState& gs, state& s, ptracer& t,
  * tracee refered to. Uses combination of /proc/traceePid/cwd, /proc/traceePid/root, to
  * resolve path. Takes optional dirfd argument, for tracee calls using *at.
  */
-string resolve_tracee_path(string traceePath, pid_t traceePid, logger& log,
+string resolve_tracee_path(const string& traceePath, pid_t traceePid, logger& log,
                            int traceeDirFd);
 
 /**
  * Check if a file relative to a tracee exists. Calls resolve_tracee_path,
  * uses stat on file to emulate behavior of open() and openat().
  */
-bool tracee_file_exists(string traceePath, pid_t traceePid, logger& log,
+bool tracee_file_exists(const string& traceePath, pid_t traceePid, logger& log,
                         int traceeDirFd);
 /**
  * Handler for open and openat. Checks if the file exists and sets s.fileExisted,
