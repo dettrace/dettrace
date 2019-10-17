@@ -1,5 +1,5 @@
 # binaries that are simple to build (1 source file, same name as binary)
-SIMPLE_ROOTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat  sigsegv sigill sigabrt kill alarm-handler alarm-nohandler alarm-ignore selectWithoutTimeout selectWithTimeout getdents getdents64 pollWithoutTimeout pollWithPositiveTimeout pollWithNegativeTimeout rdtsc rdtscp nanosleep nanosleep-par alarm-resethand readDevRandom readDevRandomMultiple readDevUrandom exec-mkstemp complex_mkdirat_dirfd mkdir mkdirat_fdcwd mknod mknod_fullpath open_already_exists openat_already_exists simpleCreat simple_mkdirat_dirfd symlink symlinkat vdso-funcs multithreaded multipleThreads processAndThread processThreadProcess processThreadThread pthreadJoin pthreadNoJoin ptpThreadJoin ptpThreadNoJoin twoPthreadsJoin twoPthreadsNoJoin tenThreadJoin tenThreadNoJoin exitgroup exitgroupMainProcess condvar-parent-wait condvar-thread-wait sigsuspend sigtimedwait-no-timeout sigtimedwait-timeout-0s sigtimedwait-timeout-1s confdir3 timerfd1 # execveMainThread execveThreads open_tmpfile deadlockingPipe
+SIMPLE_ROOTS=simpleFork inverseFork nestedFork vfork clock_gettime getpid uname pipe getRandom waitOnChild fchownat forkAndPipe helloWorld 2writers1reader fuse-single-read fuse-single-write open openat creat  sigsegv sigill sigabrt kill alarm-handler alarm-nohandler alarm-ignore selectWithoutTimeout selectWithTimeout getdents getdents64 pollWithoutTimeout pollWithPositiveTimeout pollWithNegativeTimeout rdtsc rdtscp nanosleep nanosleep-par alarm-resethand readDevRandom readDevRandomMultiple readDevUrandom exec-mkstemp complex_mkdirat_dirfd mkdir mkdirat_fdcwd mknod mknod_fullpath open_already_exists openat_already_exists simpleCreat simple_mkdirat_dirfd symlink symlinkat vdso-funcs multithreaded multipleThreads processAndThread processThreadProcess processThreadThread pthreadJoin pthreadNoJoin ptpThreadJoin ptpThreadNoJoin twoPthreadsJoin twoPthreadsNoJoin tenThreadJoin tenThreadNoJoin exitgroup exitgroupMainProcess condvar-parent-wait condvar-thread-wait sigsuspend sigtimedwait-no-timeout sigtimedwait-timeout-0s sigtimedwait-timeout-1s confdir3 timerfd1 cpuid_fault # execveMainThread execveThreads open_tmpfile deadlockingPipe
 
 ifndef DETTRACE_NO_CPUID_INTERCEPTION
 SIMPLE_ROOTS := $(SIMPLE_ROOTS) cpuid
@@ -62,6 +62,11 @@ rdinsn.ok: rdinsn.bin
 	@$(DETTRACE) ./rdinsn.bin rdrand > ActualOutputs/rdrand.output
 	@echo "   Testing rdseed..."
 	@$(DETTRACE) ./rdinsn.bin rdseed > ActualOutputs/rdseed.output
+
+cpuid_fault.ok: cpuid_fault.bin
+	@echo "   Testing cpuid_fault works on host..."
+	@./cpuid_fault.bin > ActualOutputs/cpuid_fault.output
+	@$(DIFF_CMD) ActualOutputs/cpuid_fault.output ExpectedOutputs/cpuid_fault.output
 
 # NB: disable special cpu insn test for now
 # cpuid.ok: cpuid
