@@ -1117,6 +1117,9 @@ void ioctlSystemCall::handleDetPost(
     }
   }
     return;
+  case TIOCSWINSZ: {
+  }
+    return;
   case TIOCGPGRP:
   case SIOCSIFMAP:
   case FS_IOC_FIEMAP:
