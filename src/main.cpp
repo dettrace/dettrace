@@ -634,8 +634,9 @@ int spawnTracerTracee(void* voidArgs) {
 
     if ((args->clone_ns_flags & CLONE_NEWNS) == CLONE_NEWNS) {
       doWithCheck(
-          mount("none", "/dev/pts", "devpts", 0, nullptr),
+          mount("none", "/dev/pts", "devpts", MS_MGC_VAL, "newinstance,ptmxmode=0666"),
           "tracer mounting devpts failed");
+      mountDir("/dev/ptmx", "/dev/pts/ptmx");
     }
 
     if (!fileExists(devrandFifoPath)) {
