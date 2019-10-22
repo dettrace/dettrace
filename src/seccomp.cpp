@@ -270,8 +270,8 @@ void seccomp::loadRules(bool debug, bool convertUids) {
   intercept(SYS_recvfrom);
 
   intercept(SYS_listen);
-  noIntercept(SYS_accept);
-  noIntercept(SYS_accept4);
+  intercept(SYS_accept);
+  intercept(SYS_accept4);
   intercept(SYS_shutdown);
 
   intercept(SYS_sendto);
