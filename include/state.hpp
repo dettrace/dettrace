@@ -14,6 +14,7 @@
 
 #include "ValueMapper.hpp"
 #include "directoryEntries.hpp"
+#include "logicalclock.hpp"
 #include "mappedMemory.hpp"
 #include "ptracer.hpp"
 #include "registerSaver.hpp"
@@ -60,26 +61,20 @@ class mappedMemory;
 class state {
 private:
   /**
-   * Logical clock. Ticks only on time related system calls where the user
-   * can observe time since we want to present progress.
-   * See [Github issue](https://github.com/upenn-acg/detTrace/issues/24) for
-   * more information. The clock starts at this number to avoid seeing files "in
-   * the future", if we were to start at zero.
+   * The current logical time. Ticks only on time related system calls where the
+   * user can observe time since we want to present progress. See
+   * [Github issue](https://github.com/upenn-acg/detTrace/issues/24) for more
+   * information. The clock starts at this number to avoid seeing files "in the
+   * future", if we were to start at zero.
    */
-  unsigned long clock;
+  logical_clock::time_point clock;
 
   /**
-   * epoch in seconds passed from execution environment
+   * The duration to increment the clock by.
    */
-  unsigned long epoch;
-
-  /**
-   * The number of microseconds to increment the clock by.
-   */
-  unsigned long clock_step;
+  logical_clock::duration clock_step;
 
 public:
-  static const long MICRO_SECS_PER_SEC = 1000000L;
   /**
    * Constructor.
    * Initialize traceePid and debugLevel to the provided values, and
@@ -90,8 +85,8 @@ public:
   explicit state(
       pid_t traceePid,
       int debugLevel,
-      unsigned long epoch,
-      unsigned long clock_step);
+      logical_clock::time_point clock,
+      logical_clock::duration clock_step);
 
   /**
    * fork a new state when fork/vfork is called
@@ -291,7 +286,7 @@ public:
   /**
    * Function to get value of internal logical clock.
    */
-  unsigned long getLogicalTime() const { return clock; }
+  logical_clock::time_point getLogicalTime() const { return clock; }
 
   /**
    * We must keep track of file creation. For open and openat, we set this flag.

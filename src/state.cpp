@@ -1,12 +1,13 @@
 #include "state.hpp"
 
+#include "logicalclock.hpp"
+
 state::state(
     pid_t traceePid,
     int debugLevel,
-    unsigned long epoch,
-    unsigned long clock_step)
-    : clock(epoch * state::MICRO_SECS_PER_SEC),
-      epoch(epoch),
+    logical_clock::time_point clock,
+    logical_clock::duration clock_step)
+    : clock(clock),
       clock_step(clock_step),
       fdStatus(new unordered_map<int, descriptorType>),
       traceePid(traceePid),
@@ -35,7 +36,7 @@ descriptorType state::getFdStatus(int fd) { return fdStatus.get()->at(fd); }
 int state::countFdStatus(int fd) { return fdStatus.get()->count(fd); }
 
 state state::forked(pid_t childPid) const {
-  state childState(childPid, this->debugLevel, this->epoch, this->clock_step);
+  state childState(childPid, this->debugLevel, this->clock, this->clock_step);
   childState.CPUIDTrapSet = this->CPUIDTrapSet;
   childState.currentSignalHandlers =
       make_shared<unordered_map<int, enum sighandler_type>>(
@@ -85,12 +86,12 @@ state state::forked(pid_t childPid) const {
   childState.timerfds =
       make_shared<unordered_map<int, struct itimerspec>>(*(this->timerfds));
   childState.signalfds = make_shared<unordered_set<int>>(*(this->signalfds));
-  childState.clock = this->epoch * state::MICRO_SECS_PER_SEC;
+  childState.clock = this->clock;
   return childState;
 }
 
 state state::cloned(pid_t childPid) const {
-  state childState(childPid, this->debugLevel, this->epoch, this->clock_step);
+  state childState(childPid, this->debugLevel, this->clock, this->clock_step);
   childState.CPUIDTrapSet = this->CPUIDTrapSet;
   childState.currentSignalHandlers = this->currentSignalHandlers;
   childState.dirEntries = this->dirEntries;
@@ -134,6 +135,6 @@ state state::cloned(pid_t childPid) const {
   childState.remote_sockfds = this->remote_sockfds;
   childState.timerfds = this->timerfds;
   childState.signalfds = this->signalfds;
-  childState.clock = this->epoch * state::MICRO_SECS_PER_SEC;
+  childState.clock = this->clock;
   return childState;
 }

@@ -20,6 +20,24 @@
 using namespace std;
 
 /**
+ * Helper function for getting a value from a container
+ */
+template <
+    template <class, class, class...> class Container,
+    typename K,
+    typename V,
+    typename... Args>
+V get_with_default(
+    const Container<K, V, Args...>& container, K const& key, const V& defval) {
+  typename Container<K, V, Args...>::const_iterator it = container.find(key);
+  if (it == container.end()) {
+    return defval;
+  }
+
+  return it->second;
+}
+
+/**
  * Throws erro with dettrace tag for easy grepping. Use instead of explicit
  * throw runtime_error
  */

@@ -1,9 +1,20 @@
 #ifndef GLOBAL_STATE_H
 #define GLOBAL_STATE_H
 
+#include <unordered_map>
 #include <unordered_set>
+
 #include "PRNG.hpp"
 #include "ValueMapper.hpp"
+#include "logicalclock.hpp"
+
+/**
+ * Mapping of inodes to modification times. When we observe the creation of an
+ * inode, we add the current logical time to this map. We use this to keep track
+ * of modification times for files in order to present a consistent view of
+ * time.
+ */
+using ModTimeMap = std::unordered_map<ino_t, logical_clock::time_point>;
 
 /**
  * Class to hold global state shared among all processes, this includes the
@@ -20,16 +31,16 @@ public:
   globalState(
       logger& log,
       ValueMapper<ino_t, ino_t> inodeMap,
-      ValueMapper<ino_t, time_t> mtimeMap,
+      ModTimeMap mtimeMap,
       bool kernelPre4_12,
       unsigned prngSeed,
-      unsigned long timestamps,
+      logical_clock::time_point epoch,
       bool allow_network = false);
 
   /**
-   * A pseudorandom number generator to implement getrandom()
+   * Reference to our global program logger.
    */
-  PRNG prng;
+  logger& log;
 
   /**
    * Isomorphism between inodes and virtual inodes.
@@ -39,7 +50,7 @@ public:
   /**
    * Tracker of modification times.
    */
-  ValueMapper<ino_t, time_t> mtimeMap;
+  ModTimeMap mtimeMap;
 
   /**
    * Using kernel version < 4.12 . 4.12 and above needed for CPUID.
@@ -47,9 +58,16 @@ public:
   bool kernelPre4_12;
 
   /**
-   * Reference to our global program logger.
+   * A pseudorandom number generator to implement getrandom()
    */
-  logger& log;
+  PRNG prng;
+
+  /**
+   * The number of microseconds since the Unix epoch. This is used as the
+   * default value for file modification times if it doesn't exist in
+   * `mtimeMap`.
+   */
+  logical_clock::time_point epoch;
 
   // Kept here as they're ticked up in the function hooks.
   /**
@@ -130,11 +148,6 @@ public:
    * Allow non-deterministic socket/networking
    */
   bool allow_network;
-
-  /**
-   * Initial timestamps on files
-   */
-  unsigned long timestamps;
 
   /**
    * allow trap CPUID. this can be set to false

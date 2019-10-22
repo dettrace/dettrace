@@ -58,9 +58,8 @@ execution::execution(
     map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs,
     unsigned prngSeed,
     bool allow_network,
-    unsigned long epoch,
-    unsigned long timestamps,
-    unsigned long clock_step)
+    logical_clock::time_point epoch,
+    logical_clock::duration clock_step)
     : kernelPre4_8{kernelCheck(4, 8, 0)},
       log{logFile, debugLevel, useColor},
       silentLogger{"", 0},
@@ -70,18 +69,15 @@ execution::execution(
       // Waits for first process to be ready!
       tracer{startingPid},
       // Create our global state once, share across class.
-      myGlobalState{log,
-                    ValueMapper<ino_t, ino_t>{log, "inode map", 1},
-                    ValueMapper<ino_t, time_t>{log, "mtime map", 1},
-                    kernelCheck(4, 12, 0),
-                    prngSeed,
-                    timestamps,
-                    allow_network},
+      myGlobalState{
+          log,          ValueMapper<ino_t, ino_t>{log, "inode map", 1},
+          ModTimeMap{}, kernelCheck(4, 12, 0),
+          prngSeed,     epoch,
+          allow_network},
       myScheduler{startingPid, log},
       debugLevel{debugLevel},
       vdsoFuncs(vdsoFuncs),
       epoch(epoch),
-      timestamps(timestamps),
       clock_step(clock_step),
       prngSeed(prngSeed) {
   // Set state for first process.

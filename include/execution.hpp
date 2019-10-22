@@ -5,6 +5,7 @@
 #include "dettraceSystemCall.hpp"
 #include "globalState.hpp"
 #include "logger.hpp"
+#include "logicalclock.hpp"
 #include "ptracer.hpp"
 #include "scheduler.hpp"
 #include "state.hpp"
@@ -161,30 +162,14 @@ private:
   /**
    * starting epoch
    */
-  unsigned long epoch = execution::default_epoch;
-
-  /**
-   * starting timestamps
-   */
-  unsigned long timestamps = execution::default_epoch;
-
-  unsigned long clock_step = execution::default_clock_step;
+  logical_clock::time_point epoch;
+  logical_clock::duration clock_step;
 
   int exit_code;
 
   unsigned prngSeed;
 
 public:
-  /**
-   * default epoch
-   */
-  static const unsigned long default_epoch = 744847200UL;
-
-  /**
-   * Default number of microseconds to increment the clock by.
-   */
-  static const unsigned long default_clock_step = 1;
-
   /**
    * Constructor.
    * @param debugLevel debug paramater level (1-5)
@@ -205,10 +190,9 @@ public:
       pthread_t devUrandomPthread,
       map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs,
       unsigned prngSeed,
-      bool allow_network = false,
-      unsigned long epoch = execution::default_epoch,
-      unsigned long timestamps = execution::default_epoch,
-      unsigned long clock_step = execution::default_clock_step);
+      bool allow_network,
+      logical_clock::time_point epoch,
+      logical_clock::duration clock_step);
 
   /**
    * Handles exit from current process.

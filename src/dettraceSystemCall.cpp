@@ -38,6 +38,7 @@
 #include <optional>
 
 #include "dettraceSystemCall.hpp"
+#include "execution.hpp"
 #include "ptracer.hpp"
 #include "utilSystemCalls.hpp"
 
@@ -166,11 +167,7 @@ void clock_gettimeSystemCall::handleDetPost(
   struct timespec* tp = (struct timespec*)t.arg2();
 
   if (tp != nullptr) {
-    struct timespec myTp = {};
-    // TODO: One day, unify time.
-    myTp.tv_sec = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
-    myTp.tv_nsec = 1000UL * (s.getLogicalTime() % state::MICRO_SECS_PER_SEC);
-
+    const auto myTp = logical_clock::to_timespec(s.getLogicalTime());
     t.writeToTracee(traceePtr<struct timespec>(tp), myTp, t.getPid());
     s.incrementTime();
     // preempt current task avoid some task busy checking current time
@@ -275,8 +272,9 @@ void creatSystemCall::handleDetPost(
   // here to be safe. (Not sure how we could use this information to optimze
   // anyways.)
   auto inode = readInodeFor(gs.log, s.traceePid, t.getReturnValue());
-  gs.mtimeMap.addRealValue(inode);
+  gs.mtimeMap[inode] = s.getLogicalTime();
   gs.inodeMap.addRealValue(inode);
+  s.incrementTime();
 
   return;
 }
@@ -1001,14 +999,13 @@ void getrusageSystemCall::handleDetPost(
     // are overwritten below
     struct rusage usage; // = t.readFromTracee(traceePtr<struct
                          // rusage>(usagePtr), t.getPid());
+    const auto time = logical_clock::to_timeval(s.getLogicalTime());
+
     /* user CPU time used */
-    usage.ru_utime = timeval{
-        .tv_sec = (long)s.getLogicalTime() / state::MICRO_SECS_PER_SEC,
-        .tv_usec = (long)s.getLogicalTime() % state::MICRO_SECS_PER_SEC};
+    usage.ru_utime = time;
+    usage.ru_utime = time;
     /* system CPU time used */
-    usage.ru_stime = timeval{
-        .tv_sec = (long)s.getLogicalTime() / state::MICRO_SECS_PER_SEC,
-        .tv_usec = (long)s.getLogicalTime() % state::MICRO_SECS_PER_SEC};
+    usage.ru_stime = time;
     usage.ru_maxrss = LONG_MAX; /* maximum resident set size */
     usage.ru_ixrss = LONG_MAX; /* integral shared memory size */
     usage.ru_idrss = LONG_MAX; /* integral unshared data size */
@@ -1040,13 +1037,11 @@ void gettimeofdaySystemCall::handleDetPost(
     globalState& gs, state& s, ptracer& t, scheduler& sched) {
   gs.log.writeToLog(
       Importance::info, "Inside gettimeofday post-hook, sending tv_sec=%d\n",
-      s.getLogicalTime() / state::MICRO_SECS_PER_SEC);
+      s.getLogicalTime().time_since_epoch().count());
   gs.timeCalls++;
   struct timeval* tp = (struct timeval*)t.arg1();
   if (nullptr != tp) {
-    struct timeval myTv = {};
-    myTv.tv_sec = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
-    myTv.tv_usec = s.getLogicalTime() % state::MICRO_SECS_PER_SEC;
+    const auto myTv = logical_clock::to_timeval(s.getLogicalTime());
 
     t.writeToTracee(traceePtr<struct timeval>(tp), myTv, t.getPid());
     s.incrementTime();
@@ -1148,7 +1143,7 @@ void ioctlSystemCall::handleDetPost(
 #endif
     return;
   case RTC_RD_TIME: {
-    time_t logicalTime = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
+    const auto logicalTime = logical_clock::to_time_t(s.getLogicalTime());
     struct tm tm = {};
 
     s.incrementTime();
@@ -1160,11 +1155,11 @@ void ioctlSystemCall::handleDetPost(
     }
   } break;
   case RTC_EPOCH_READ: {
-    unsigned long logicalTime = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
+    const auto logicalTime = logical_clock::to_time_t(s.getLogicalTime());
     s.incrementTime();
 
     if (t.arg3()) {
-      traceePtr<unsigned long> rptr((unsigned long*)t.arg3());
+      traceePtr<time_t> rptr((time_t*)t.arg3());
       t.writeToTracee(rptr, logicalTime, t.getPid());
     }
   } break;
@@ -1271,8 +1266,9 @@ void mkdirSystemCall::handleDetPost(
         t.readTraceeCString(traceePtr<char>((char*)t.arg1()), s.traceePid);
     auto inode = inode_from_tracee(strPath, s.traceePid, gs.log, -1);
     if (inode != -1UL) {
-      gs.mtimeMap.addRealValue(inode);
+      gs.mtimeMap[inode] = s.getLogicalTime();
       gs.inodeMap.addRealValue(inode);
+      s.incrementTime();
     }
   }
 }
@@ -1292,8 +1288,9 @@ void mkdiratSystemCall::handleDetPost(
     string strPath = t.readTraceeCString(traceePtr<char>(path), s.traceePid);
     auto inode = inode_from_tracee(strPath, s.traceePid, gs.log, t.arg1());
     if (inode != -1UL) {
-      gs.mtimeMap.addRealValue(inode);
+      gs.mtimeMap[inode] = s.getLogicalTime();
       gs.inodeMap.addRealValue(inode);
+      s.incrementTime();
     }
   }
 }
@@ -2323,8 +2320,9 @@ void symlinkSystemCall::handleDetPost(
         t.readTraceeCString(traceePtr<char>((char*)t.arg2()), s.traceePid);
     auto inode = inode_from_tracee(linkpath, s.traceePid, gs.log, -1);
     if (inode != -1UL) {
-      gs.mtimeMap.addRealValue(inode);
+      gs.mtimeMap[inode] = s.getLogicalTime();
       gs.inodeMap.addRealValue(inode);
+      s.incrementTime();
     }
   }
 }
@@ -2344,8 +2342,9 @@ void symlinkatSystemCall::handleDetPost(
         t.readTraceeCString(traceePtr<char>((char*)t.arg3()), s.traceePid);
     auto inode = inode_from_tracee(linkpath, s.traceePid, gs.log, t.arg2());
     if (inode != -1UL) {
-      gs.mtimeMap.addRealValue(inode);
+      gs.mtimeMap[inode] = s.getLogicalTime();
       gs.inodeMap.addRealValue(inode);
+      s.incrementTime();
     }
   }
 }
@@ -2363,8 +2362,9 @@ void mknodSystemCall::handleDetPost(
         t.readTraceeCString(traceePtr<char>((char*)t.arg1()), s.traceePid);
     auto inode = inode_from_tracee(path, s.traceePid, gs.log, -1);
     if (inode != -1UL) {
-      gs.mtimeMap.addRealValue(inode);
+      gs.mtimeMap[inode] = s.getLogicalTime();
       gs.inodeMap.addRealValue(inode);
+      s.incrementTime();
     }
   }
 }
@@ -2382,8 +2382,9 @@ void mknodatSystemCall::handleDetPost(
         t.readTraceeCString(traceePtr<char>((char*)t.arg2()), s.traceePid);
     auto inode = inode_from_tracee(path, s.traceePid, gs.log, t.arg1());
     if (inode != -1UL) {
-      gs.mtimeMap.addRealValue(inode);
+      gs.mtimeMap[inode] = s.getLogicalTime();
       gs.inodeMap.addRealValue(inode);
+      s.incrementTime();
     }
   }
 }
@@ -2432,7 +2433,7 @@ void timeSystemCall::handleDetPost(
     }
 
     time_t* timePtr = (time_t*)t.arg1();
-    time_t secs_since_epoch = s.getLogicalTime() / state::MICRO_SECS_PER_SEC;
+    time_t secs_since_epoch = logical_clock::to_time_t(s.getLogicalTime());
     gs.log.writeToLog(
         Importance::info, "time: tloc is null, returning %d\n",
         secs_since_epoch);
@@ -2798,7 +2799,7 @@ void timesSystemCall::handleDetPost(
     t.writeToTracee(traceePtr<tms>(bufPtr), myTms, s.traceePid);
   }
 
-  t.setReturnRegister(s.getLogicalTime());
+  t.setReturnRegister(s.getLogicalTime().time_since_epoch().count());
   s.incrementTime();
 }
 // =======================================================================================
@@ -2884,9 +2885,10 @@ bool utimeSystemCall::handleDetPre(
 
   // Create our own struct with our time.
   // TODO: In the future we might want to unify this with our mtimeMapper.
+  const auto epoch = logical_clock::to_time_t(gs.epoch);
   utimbuf clockTime = {
-      .actime = (__time_t)gs.timestamps,
-      .modtime = (__time_t)gs.timestamps,
+      .actime = epoch,
+      .modtime = epoch,
   };
 
   // Write our struct to the tracee's memory.
@@ -2925,10 +2927,7 @@ bool utimesSystemCall::handleDetPre(
 
   // Create our own struct with our time.
   // TODO: In the future we might want to unify this with our mtimeMapper.
-  timeval clockTime = {
-      .tv_sec = (__time_t)gs.timestamps,
-      .tv_usec = 0,
-  };
+  const auto clockTime = logical_clock::to_timeval(gs.epoch);
 
   // Write our struct to the tracee's memory.
   t.writeToTracee(traceePtr<timeval>(&(ourTimeval[0])), clockTime, s.traceePid);
@@ -2979,10 +2978,7 @@ bool utimensatSystemCall::handleDetPre(
 
   // Create our own struct with our time.
   // TODO: In the future we might want to unify this with our mtimeMapper.
-  struct timespec clockTime = {
-      .tv_sec = (__time_t)gs.timestamps, // (time_t) s.getLogicalTime(),
-      .tv_nsec = 0, //(time_t) s.getLogicalTime()
-  };
+  const auto clockTime = logical_clock::to_timespec(gs.epoch);
 
   // Write our struct to the tracee's memory.
   t.writeToTracee(
