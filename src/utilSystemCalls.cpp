@@ -137,7 +137,7 @@ void handleStatFamily(
     // myStat.st_uid = 65534;         /* User ID of owner */
     // myStat.st_gid = 1;         /* Group ID of owner */
 
-    myStat.st_rdev = 1; /* Device ID (if special file) */
+    // myStat.st_rdev = 1; /* Device ID (if special file) */
 
     // Program will stall if we put some arbitrary value here: TODO.
     // myStat.st_size = 512;        /* Total size, in bytes */

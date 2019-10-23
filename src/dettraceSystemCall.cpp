@@ -714,6 +714,21 @@ void fstatSystemCall::handleDetPost(
   handleStatFamily(gs, s, t, "fstat");
   return;
 }
+
+/* glibc does not exports below macros */
+#define DEVFS_SUPER_MAGIC 0x1373
+#define DEVPTS_SUPER_MAGIC 0x1cd1
+
+static void interceptStatfs(traceePtr<struct statfs> rptr, ptracer& t) {
+  auto st = t.readFromTracee(rptr, t.getPid());
+  if (st.f_type != DEVPTS_SUPER_MAGIC && st.f_type != DEVFS_SUPER_MAGIC) {
+    struct statfs stats;
+    memset(&stats, 0, sizeof(stats));
+    zeroOutStatfs(stats);
+    t.writeToTracee(rptr, stats, t.getPid());
+  }
+}
+
 // =======================================================================================
 bool fstatfsSystemCall::handleDetPre(
     globalState& gs, state& s, ptracer& t, scheduler& sched) {
@@ -730,18 +745,9 @@ void fstatfsSystemCall::handleDetPost(
   }
 
   if (t.getReturnValue() == 0) {
-    // Read values written to by system call.
-
-    // jld: filling in myStatfs from tracee memory does not seem to be used at
-    // all, as zeroOutStatfs() overwrites all its fields.
-    struct statfs myStatfs; //= t.readFromTracee(traceePtr<struct
-                            // statfs>(statfsPtr), s.traceePid);
-
-    // Assume we're using this file sytem?
-    zeroOutStatfs(myStatfs);
-
-    // Write back result for child.
-    t.writeToTracee(traceePtr<struct statfs>(statfsPtr), myStatfs, s.traceePid);
+    interceptStatfs(traceePtr<struct statfs>(statfsPtr), t);
+  } else {
+    printf("statfs returned %d\n", t.getReturnValue());
   }
 
   return;
@@ -1072,6 +1078,11 @@ bool ioctlSystemCall::handleDetPre(
     failSystemCall(gs, s, t, err);
     return false;
   } break;
+  case TCSBRK: {
+    int err = EINVAL;
+    failSystemCall(gs, s, t, err);
+    return false;
+  } break;
   case RTC_SET_TIME:
   case RTC_EPOCH_SET: {
     int err = EPERM;
@@ -1081,8 +1092,9 @@ bool ioctlSystemCall::handleDetPre(
   case RTC_RD_TIME:
   case RTC_EPOCH_READ:
     return true;
+  default:
+    return true;
   }
-  return true;
 }
 void ioctlSystemCall::handleDetPost(
     globalState& gs, state& s, ptracer& t, scheduler& sched) {
@@ -1106,6 +1118,14 @@ void ioctlSystemCall::handleDetPost(
   case SIOCGIFHWADDR:
   case SIOCGIFADDR:
     return;
+  case TIOCGPTN:
+    return;
+  case TIOCSPTLCK: /* unlockpt */
+    return;
+  case TIOCGPTPEER:
+    return;
+  case TIOCSCTTY:
+    return;
   // simulate vt100.
   case TIOCGWINSZ: {
     if (t.arg3() && t.getReturnValue() == 0) {
@@ -1115,6 +1135,9 @@ void ioctlSystemCall::handleDetPost(
       auto rptr = traceePtr<struct winsize>((struct winsize*)t.arg3());
       t.writeToTracee(rptr, winsz, s.traceePid);
     }
+  }
+    return;
+  case TIOCSWINSZ: {
   }
     return;
   case TIOCGPGRP:
@@ -2245,16 +2268,7 @@ void statfsSystemCall::handleDetPost(
   }
 
   if (t.getReturnValue() == 0) {
-    // Read values written to by system call.
-    // jld: useless read from tracee memory
-    struct statfs stats; // = t.readFromTracee(traceePtr<struct
-                         // statfs>(statfsPtr), s.traceePid);
-
-    // Assume we're using this file sytem?
-    zeroOutStatfs(stats);
-
-    // Write back result for child.
-    t.writeToTracee(traceePtr<struct statfs>(statfsPtr), stats, s.traceePid);
+    interceptStatfs(traceePtr<struct statfs>(statfsPtr), t);
   }
 
   return;
