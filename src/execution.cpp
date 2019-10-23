@@ -821,8 +821,14 @@ bool execution::handleSeccomp(const pid_t traceesPid) {
     // Fetch real system call from register.
     tracer.updateState(traceesPid);
     syscallNum = tracer.getSystemCallNumber();
-    runtimeError(
-        "No filter rule for system call: " + systemCallMappings[syscallNum]);
+    if (0 <= syscallNum && syscallNum < SYSTEM_CALL_COUNT) {
+      runtimeError(
+          "No filter rule for system call: " + systemCallMappings[syscallNum]);
+    } else {
+      runtimeError(
+          "No filter rule for system call with unknown number: " +
+          to_string(syscallNum));
+    }
   }
 
   // TODO: Right now we update this information on every exit and entrance, as a
