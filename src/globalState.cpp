@@ -3,17 +3,17 @@
 globalState::globalState(
     logger& log,
     ValueMapper<ino_t, ino_t> inodeMap,
-    ValueMapper<ino_t, time_t> mtimeMap,
+    ModTimeMap mtimeMap,
     bool kernelPre4_12,
     unsigned prngSeed,
-    unsigned long timestamps,
+    logical_clock::time_point epoch,
     bool allow_network)
-    : prng(prngSeed),
+    : log(log),
       inodeMap{inodeMap},
       mtimeMap{mtimeMap},
       kernelPre4_12{kernelPre4_12},
-      log(log),
-      allow_network(allow_network),
-      timestamps(timestamps) {
+      prng(prngSeed),
+      epoch(epoch),
+      allow_network(allow_network) {
   allow_trapCPUID = true;
 }

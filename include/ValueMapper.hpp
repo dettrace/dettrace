@@ -19,8 +19,6 @@ protected:
    * C++ doesn't support that unless I use phantom types and wrapper classes...
    */
 
-  unordered_map<Virtual, Real>
-      virtualToRealValue; /**< A mapping from Virtual to Real. */
   unordered_map<Real, Virtual>
       realToVirtualValue; /**< A mapping from Real to Virtual. */
   Virtual freshValue; /**< Next available Virtual value to be added to map. */
@@ -65,32 +63,9 @@ public:
         Importance::extra,
         "  (Real value was: " + to_string(realValue) + ")\n");
 
-    Virtual vValue = freshValue;
+    Virtual vValue = freshValue++;
     realToVirtualValue[realValue] = vValue;
-    virtualToRealValue[vValue] = realValue;
-    freshValue++;
     return vValue;
-  }
-
-  /**
-   * Get the real value from the virtual value.
-   * Throws error if virtual value does not exist in map.
-   * @param virtualValue virtual value of process.
-   * @return real value that is mapped to the virtual one.
-   */
-  Real getRealValue(Virtual virtualValue) {
-    // does element exist?
-    if (virtualToRealValue.find(virtualValue) != virtualToRealValue.end()) {
-      Real realValue = virtualToRealValue.at(virtualValue);
-      myLogger.writeToLog(
-          Importance::extra, mappingName + "getRealValue(" +
-                                 to_string(virtualValue) +
-                                 ") = " + to_string(realValue) + "\n");
-      return realValue;
-    }
-    throw runtime_error(
-        "dettrace runtime exception: " + mappingName + ": getRealValue(" +
-        to_string(virtualValue) + ") does not exist\n");
   }
 
   /**
@@ -129,46 +104,6 @@ public:
                                to_string(realValue) +
                                ") = " + to_string(keyExists) + "\n");
     return keyExists;
-  }
-
-  /**
-   * Check if virtual value is already in map for virtual values.
-   * @param virtualValue virtual value to check for.
-   * @return True if virtual value exists, otherwise False.
-   */
-  bool virtualValueExists(Virtual virtualValue) {
-    bool keyExists =
-        virtualToRealValue.find(virtualValue) != virtualToRealValue.end();
-    myLogger.writeToLog(
-        Importance::extra, mappingName + "realValueExists(" +
-                               to_string(virtualValue) +
-                               ") = " + to_string(keyExists) + "\n");
-    return keyExists;
-  }
-
-  /**
-   * Given a real value, erase the entry from the map.
-   * Throws error if key does not exist in map.
-   * @param key real value of the entry to be erased.
-   */
-  void eraseBasedOnKey(Real key) {
-    Virtual value;
-    try {
-      value = realToVirtualValue.at(key);
-    } catch (...) {
-      throw runtime_error(
-          "dettrace runtime exception: Key does not exist in real to virtual "
-          "map.\n");
-    }
-
-    // We know it's there. We just checked.
-    realToVirtualValue.erase(key);
-    auto res = virtualToRealValue.erase(value);
-    if (res == 0) {
-      throw runtime_error(
-          "dettrace runtime exception: value does not exist in virtual to real "
-          "map.\n");
-    }
   }
 };
 

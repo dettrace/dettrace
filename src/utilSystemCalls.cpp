@@ -3,6 +3,8 @@
 #include <fcntl.h>
 #include <sstream>
 
+#include "util.hpp"
+
 // File local functions.
 
 bool preemptIfBlocked(
@@ -102,18 +104,14 @@ void handleStatFamily(
         Importance::extra, "(device,inode) = (%lu,%lu)\n", myStat.st_dev,
         inode);
     // Use inode to check if we created this file during our run.
-    time_t virtualMtime =
-        gs.mtimeMap.realValueExists(inode)
-            ? gs.mtimeMap.getVirtualValue(inode)
-            : (__time_t)gs.timestamps; // This was an old file that has not been
-                                       // opened for modification.
+    const auto mtime = get_with_default(gs.mtimeMap, inode, gs.epoch);
 
     /* Time of last access */
-    myStat.st_atim = timespec{.tv_sec = (__time_t)gs.timestamps, .tv_nsec = 0};
+    myStat.st_atim = logical_clock::to_timespec(gs.epoch);
     /* Time of last modification */
-    myStat.st_mtim = timespec{.tv_sec = virtualMtime, .tv_nsec = 0};
+    myStat.st_mtim = logical_clock::to_timespec(mtime);
     /* Time of last status change */
-    myStat.st_ctim = timespec{.tv_sec = (__time_t)gs.timestamps, .tv_nsec = 0};
+    myStat.st_ctim = logical_clock::to_timespec(gs.epoch);
 
     // TODO: I'm surprised this doesn't break things. I guess so far, we have
     // only used single device filesystems.
@@ -594,8 +592,9 @@ void handlePostOpens(globalState& gs, state& s, ptracer& t, int flags) {
     gs.log.writeToLog(Importance::info, "A new file was created\n!");
     // Use fd to get inode.
     auto inode = readInodeFor(gs.log, s.traceePid, t.getReturnValue());
-    gs.mtimeMap.addRealValue(inode);
+    gs.mtimeMap[inode] = s.getLogicalTime();
     gs.inodeMap.addRealValue(inode);
+    s.incrementTime();
   }
   s.fileExisted = false;
   gs.log.writeToLog(

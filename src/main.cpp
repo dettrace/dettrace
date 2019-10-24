@@ -43,6 +43,7 @@
 #include "execution.hpp"
 #include "fakefs.hpp"
 #include "logger.hpp"
+#include "logicalclock.hpp"
 #include "ptracer.hpp"
 #include "seccomp.hpp"
 #include "state.hpp"
@@ -106,9 +107,8 @@ struct programArgs {
   std::vector<std::string> traceeArgs;
 
   unsigned timeoutSeconds;
-  unsigned long epoch;
-  unsigned long timestamps;
-  unsigned long clock_step;
+  logical_clock::time_point epoch;
+  logical_clock::duration clock_step;
   unsigned long clone_ns_flags;
 
   unsigned short prng_seed;
@@ -128,9 +128,8 @@ struct programArgs {
     this->convertUids = false;
     this->alreadyInChroot = false;
     this->timeoutSeconds = 0;
-    this->epoch = execution::default_epoch;
-    this->timestamps = execution::default_epoch;
-    this->clock_step = execution::default_clock_step;
+    this->epoch = logical_clock::from_time_t(744847200UL);
+    this->clock_step = chrono::microseconds(1);
     this->allow_network = false;
     this->with_aslr = false;
     this->clone_ns_flags = 0;
@@ -692,8 +691,7 @@ int spawnTracerTracee(void* voidArgs) {
         args->printStatistics, devRandomPthread,
         devUrandomPthread,     cloneArgs->vdsoSyms,
         args->prng_seed,       args->allow_network,
-        args->epoch,           args->timestamps,
-        args->clock_step,
+        args->epoch,           args->clock_step,
     };
 
     globalExeObject = &exe;
@@ -781,12 +779,6 @@ programArgs parseProgramArguments(int argc, char* argv[]) {
       // "the container. These timestamps change deterministically as execution proceeds."
       "The default is `1993-08-08,22:00:00`. Also accepts a `now` value which "
       "permits nondeterministically setting the initial system time to the host time. ",
-      cxxopts::value<std::string>())
-    ( "timestamps",
-      // TODO: provide an option to let real timestamps through.
-      // Right now the initial stamps are always constant.
-      "Set initial file timestamps (atime,ctime,mtime). Accepts `yyyy-mm-dd,HH:MM:SS` (utc). "
-      "If unset, this defaults to value used for --epoch.",
       cxxopts::value<std::string>())
     ( "clock-step",
       "The number of microseconds to increment the clock each time it is queried.",
@@ -1008,7 +1000,7 @@ programArgs parseProgramArguments(int argc, char* argv[]) {
       if (result["epoch"].count()) {
         auto ts = result["epoch"].as<std::string>();
         if (ts == "now") {
-          args.epoch = time(NULL);
+          args.epoch = logical_clock::now();
         } else {
           struct tm tm;
           if (!strptime(ts.c_str(), "%Y-%m-%d,%H:%M:%S", &tm)) {
@@ -1017,29 +1009,14 @@ programArgs parseProgramArguments(int argc, char* argv[]) {
             runtimeError(errmsg);
           }
           tm.tm_isdst = -1; /* dst auto detect */
-          args.epoch = timegm(&tm);
+          args.epoch = logical_clock::from_time_t(timegm(&tm));
         }
-      }
-    }
-    // timestamps
-    {
-      if (result["timestamps"].count()) {
-        auto ts = result["timestamps"].as<std::string>();
-        struct tm tm;
-        if (!strptime(ts.c_str(), "%Y-%m-%d,%H:%M:%S", &tm)) {
-          string errmsg("invalid time for --timestamps: ");
-          errmsg += ts;
-          runtimeError(errmsg);
-        }
-        tm.tm_isdst = -1; /* dst auto detect */
-        args.timestamps = timegm(&tm);
-      } else {
-        args.timestamps = args.epoch;
       }
     }
 
     if (result["clock-step"].count()) {
-      args.clock_step = result["clock-step"].as<unsigned long>();
+      args.clock_step =
+          chrono::microseconds(result["clock-step"].as<unsigned long>());
     }
 
     if (result["in-docker"].as<bool>()) {
