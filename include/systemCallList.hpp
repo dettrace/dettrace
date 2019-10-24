@@ -7,12 +7,23 @@
  * The count of system calls.
  * @see systemCallMappings
  */
-const int SYSTEM_CALL_COUNT = 326;
+const int SYSTEM_CALL_COUNT = 333;
 
 /**
- * A list of system calls. This was compiled from the header file:
- * /usr/include/x86_64-linux-gnu/bits/syscall.h on Ubuntu 16.04 LTS,
- * Kernel version: 4.4.0-93-generic
+ * A list of system calls. This information was scraped from
+ * <sys/syscall.h> using the syscalls Rust crate:
+ *
+ * $ git clone https://github.com/wangbj/syscalls && cd syscalls/
+ * $ git checkout ef90cdfb1f31a9601ed44a40e737b189edf1c7c4
+ * $ rustup install nightly-2019-10-24
+ * $ rustup run nightly-2019-10-24 cargo build
+ * $ find . -iname "nr.rs" | xargs cat
+ *
+ * The most recent information in this list was determined by running
+ * the above script on an Ubuntu 18.04 LTS (Linux version 4.15.0-54-generic)
+ * machine. If you are using a more recent version of the Linux kernel,
+ * you may have additional system calls that are not present in this list.
+ * If so, please run the script and add them!
  */
 const std::string systemCallMappings[SYSTEM_CALL_COUNT] = {
     "read",
@@ -340,6 +351,13 @@ const std::string systemCallMappings[SYSTEM_CALL_COUNT] = {
     "execveat",
     "userfaultfd",
     "membarrier",
-    "mlock2"};
+    "mlock2",
+    "copy_file_range",
+    "preadv2",
+    "pwritev2",
+    "pkey_mprotect",
+    "pkey_alloc",
+    "pkey_free",
+    "statx"};
 
 #endif
