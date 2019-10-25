@@ -1,6 +1,8 @@
 #ifndef LOGICAL_CLOCK_H
 #define LOGICAL_CLOCK_H
 
+#include <linux/stat.h> // for statx_timestamp
+#include <sys/syscall.h> /* For SYS_statx */
 #include <sys/time.h> // for timeval
 #include <chrono>
 #include <ctime> // for time_t
@@ -33,6 +35,14 @@ struct logical_clock {
   // timeval conversions
   static timeval to_timeval(const time_point& t) noexcept;
   static time_point from_timeval(const timeval& tv) noexcept;
+
+#ifdef SYS_statx
+  // statx_timestamp conversions
+  static struct statx_timestamp to_statx_timestamp(
+      const time_point& t) noexcept;
+  static time_point from_statx_timestamp(
+      const struct statx_timestamp& ts) noexcept;
+#endif
 };
 
 #endif // LOGICAL_CLOCK_H

@@ -301,6 +301,10 @@ void seccomp::loadRules(bool debug, bool convertUids) {
   // noIntercept(SYS_shmat);
   // noIntercept(SYS_shmdt);
   // noIntercept(SYS_shmctl);
+
+#ifdef SYS_statx
+  intercept(SYS_statx);
+#endif
 }
 
 void seccomp::noIntercept(uint16_t systemCall) {

@@ -2092,6 +2092,30 @@ public:
   const string syscallName = "shutdown";
 };
 
+#ifdef SYS_statx
+// =======================================================================================
+/**
+ * int statx(int dirfd, const char *pathname, int flags,
+ *           unsigned int mask, struct statx *statxbuf);
+ *
+ * statx() is like stat(), but eXtended. Correspondingly, it uses struct statx
+ * instead of its cousin, struct stat, which is used in stat, lstat, fstat, etc.
+ *
+ * FILESYSTEM RELATED.
+ * TODO: Figure out semantics of all fields in struct statx* statxbuf.
+ */
+class statxSystemCall {
+public:
+  static bool handleDetPre(
+      globalState& gs, state& s, ptracer& t, scheduler& sched);
+  static void handleDetPost(
+      globalState& gs, state& s, ptracer& t, scheduler& sched);
+
+  const int syscallNumber = SYS_statx;
+  const string syscallName = "statx";
+};
+#endif
+
 // =======================================================================================
 // Iterate through our vector of entries, which represent the binary memory for
 // linux_dirents or linux_dirent64. We virtualize the inodes and add entries to

@@ -1320,6 +1320,11 @@ bool execution::callPreHook(
     return accept4SystemCall::handleDetPre(gs, s, t, sched);
   case SYS_shutdown:
     return shutdownSystemCall::handleDetPre(gs, s, t, sched);
+
+#ifdef SYS_statx
+  case SYS_statx:
+    return statxSystemCall::handleDetPre(gs, s, t, sched);
+#endif
   }
 
   // Generic system call. Throws error.
@@ -1658,6 +1663,11 @@ void execution::callPostHook(
     return accept4SystemCall::handleDetPost(gs, s, t, sched);
   case SYS_shutdown:
     return shutdownSystemCall::handleDetPost(gs, s, t, sched);
+
+#ifdef SYS_statx
+  case SYS_statx:
+    return statxSystemCall::handleDetPost(gs, s, t, sched);
+#endif
   }
 
   // Generic system call. Throws error.

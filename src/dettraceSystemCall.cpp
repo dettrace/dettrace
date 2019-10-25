@@ -27,6 +27,7 @@
 #include <linux/fs.h>
 #include <linux/futex.h>
 #include <linux/rtc.h>
+#include <linux/stat.h>
 #include <sys/resource.h>
 #include <sys/sysinfo.h>
 #include <sys/time.h>
@@ -3397,3 +3398,101 @@ void shutdownSystemCall::handleDetPost(
 
   return;
 }
+
+#ifdef SYS_statx
+// =======================================================================================
+bool statxSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  printInfoString(t.arg1(), gs.log, s.traceePid, t);
+
+  return true;
+}
+
+/**
+ * This is largely cargo-culted from handleStatFamily().
+ */
+void statxSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  struct statx* statxPtr = (struct statx*)t.arg5();
+
+  if (statxPtr == nullptr) {
+    gs.log.writeToLog(Importance::info, "statx: statbuf null.\n");
+    return;
+  }
+
+  int retVal = t.getReturnValue();
+  if (retVal == 0) {
+    struct statx myStatx =
+        t.readFromTracee(traceePtr<struct statx>(statxPtr), s.traceePid);
+    ino_t inode = myStatx.stx_ino;
+    gs.log.writeToLog(
+        Importance::extra,
+        "(device_maj_id,device_min_id,inode) = (%lu,%lu,%lu)\n",
+        myStatx.stx_dev_major, myStatx.stx_dev_minor, inode);
+    // Use inode to check if we created this file during our run.
+    const auto mtime = get_with_default(gs.mtimeMap, inode, gs.epoch);
+
+    /* Time of last access */
+    myStatx.stx_atime = logical_clock::to_statx_timestamp(gs.epoch);
+    /* Time of last modification */
+    myStatx.stx_mtime = logical_clock::to_statx_timestamp(mtime);
+    /* Time of last status change */
+    myStatx.stx_ctime = logical_clock::to_statx_timestamp(gs.epoch);
+    /* Time of creation */
+    myStatx.stx_btime = logical_clock::to_statx_timestamp(gs.epoch);
+
+    // TODO: I'm surprised this doesn't break things. I guess so far, we have
+    // only used single device filesystems.
+    myStatx.stx_dev_major = 0; /* Major ID of device containing file */
+    myStatx.stx_dev_minor = 1; /* Minor ID of device containing file */
+
+    myStatx.stx_ino = gs.inodeMap.realValueExists(inode)
+                          ? gs.inodeMap.getVirtualValue(inode)
+                          : gs.inodeMap.addRealValue(inode);
+
+    // stx_mode holds the permissions to the file. If we zero it out libc
+    // functions will think we don't have access to this file. Hence we keep our
+    // permissions as part of the stat.
+    //
+    //   __u16 stx_mode;        /* File type and mode */
+    gs.log.writeToLog(Importance::info, "stx_mode:0%o\n", myStatx.stx_mode);
+
+    myStatx.stx_nlink = 1; /* Number of hard links */
+
+    // These should never be set! The container handles group and user id
+    // through setting these will lead to inconistencies which will manifest
+    // themselves as weird permission denied errors for some system calls.
+    // myStatx.stx_uid = 65534;         /* User ID of owner */
+    // myStatx.stx_gid = 1;         /* Group ID of owner */
+
+    // myStatx.stx_rdev_major = 0; /* Major Device ID (if special file) */
+    // myStatx.stx_rdev_minor = 1; /* Minor Device ID (if special file) */
+
+    // Program will stall if we put some arbitrary value here: TODO.
+    // myStatx.stx_size = 512;        /* Total size, in bytes */
+    if (S_ISDIR(myStatx.stx_mode)) {
+      // joe: I haven't seen irreproducible file sizes, but I have seen the same
+      // directory contents result in different sizes across machines (with
+      // different versions of Linux, 4.15 vs 4.18). The same filesystem type
+      // (ext4), same block size, tar --sort=name and --preserve-order weren't
+      // sufficient to determinize the directory stx_size.
+      myStatx.stx_size = 16384;
+    }
+    gs.log.writeToLog(Importance::info, "stx_size:%u\n", myStatx.stx_size);
+
+    myStatx.stx_blksize = 512; /* Block size for filesystem I/O */
+
+    // TODO: could return actual value here?
+    myStatx.stx_blocks = 1; /* Number of 512B blocks allocated */
+
+    // TODO: Figure out what to do with these (not present in struct stat)
+    // myStatx.stx_mask = ???;
+    // myStatx.stx_attributes = ???;
+    // myStatx.stx_attributes_mask = ???;
+
+    // Write back result for child.
+    t.writeToTracee(traceePtr<struct statx>(statxPtr), myStatx, s.traceePid);
+  }
+  return;
+}
+#endif
