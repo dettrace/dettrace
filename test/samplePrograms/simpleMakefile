@@ -1,0 +1,13 @@
+all: one two three four
+
+one:
+	echo Hi
+
+two:
+	V=3
+
+three:
+	touch three
+
+four: three
+	cp three four

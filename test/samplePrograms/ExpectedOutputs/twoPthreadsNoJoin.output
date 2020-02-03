@@ -1,0 +1,8 @@
+Process spawning thread1 with pthread create.
+Thread1 spawning thread2 with pthread create.
+Thread2 trying to read from pipe.
+Thread1 made thread2.
+Thread1 wrote this many bytes: 100
+Thread1 is done.
+Process made thread1.
+Process is exiting.

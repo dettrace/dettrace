@@ -1,0 +1,4 @@
+Hello from parent
+Hello from thread!
+Waiting for child to finish.
+All done!

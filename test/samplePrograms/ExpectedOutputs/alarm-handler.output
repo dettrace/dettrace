@@ -1,0 +1,3 @@
+counter=0
+Received signal 14
+ siginfo_t fields: signo:14 errno:0 code:-6

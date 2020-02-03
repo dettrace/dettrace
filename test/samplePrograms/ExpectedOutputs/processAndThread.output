@@ -1,0 +1,9 @@
+Process - my pid is: 2
+Process - my ppid is: 1
+Creating new thread.
+Thread - my tid is: 5
+Thread - my ppid is: 1
+Thread wants to read from pipe.
+Thread created! Thread pid: 5
+Process just wrote this many bytes: 100
+Just gonna exit now.

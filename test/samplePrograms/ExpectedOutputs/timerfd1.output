@@ -1,0 +1,11 @@
+timerfd_create fd: 3
+[0] read expired count: 1
+[1] read expired count: 1
+[2] read expired count: 1
+[3] read expired count: 1
+[4] read expired count: 1
+[5] read expired count: 1
+[6] read expired count: 1
+[7] read expired count: 1
+[8] read expired count: 1
+[9] read expired count: 1

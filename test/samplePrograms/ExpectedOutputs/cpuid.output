@@ -1,0 +1,46 @@
+Probing with eax=0 for vendor info...
+vendor_id is GenuineIntelProbing with eax=1 for version and features...
+version is 0x0663
+features are 0x80202000
+
+C compiler thinks RDRAND is OFF...
+Using cpuid.h:
+Highest supported __get_cpuid input (aka eax value, cpuid leaf): 13
+Result of __get_cpuid(1) eax|ebx|ecx|edx: 00000663 00000800 80202001 078BFBFD
+  supported features: fpu CMPXCHG8B CMOV MMX FXSAVE SSE SSE2 SSE3 CMPXCHG16B  (extended/ecx:) LAHF_LM TBM 
+  unsupported features: PCLMUL SSSE3 FMA SSE4_1 SSE4_2 MOVBE POPCNT AES XSAVE OSXSAVE AVX F16C RDRND ABM SSE4a PRFCHW XOP LWP FMA4 MWAITX 
+
+   Extended Features (eax == 7)
+   ----------------------------
+Result of __get_cpuid(7) eax|ebx|ecx|edx: 00000000 00000000 00000000 00000000
+  supported features: 
+  UNsupported features:  FSGSBASE BMI HLE AVX2 BMI2 RTM MPX AVX512F AVX512DQ RDSEED ADX AVX512IFMA CLFLUSHOPT CLWB AVX512PF AVX512CD SHA AVX512BW AVX512VL AVX512VBMI
+
+Now dumping ALL CPUID results in raw form:
+__get_cpuid(0) eax|ebx|ecx|edx: 0000000D 756E6547 6C65746E 49656E69
+__get_cpuid(1) eax|ebx|ecx|edx: 00000663 00000800 80202001 078BFBFD
+__get_cpuid(2) eax|ebx|ecx|edx: 00000001 00000000 0000004D 002C307D
+__get_cpuid(3) eax|ebx|ecx|edx: 00000000 00000000 00000000 00000000
+__get_cpuid(4) eax|ebx|ecx|edx: 00000120 01C0003F 0000003F 00000001
+__get_cpuid(5) eax|ebx|ecx|edx: 00000000 00000000 00000003 00000000
+__get_cpuid(6) eax|ebx|ecx|edx: 00000000 00000000 00000000 00000000
+__get_cpuid(7) eax|ebx|ecx|edx: 00000000 00000000 00000000 00000000
+__get_cpuid(8) eax|ebx|ecx|edx: 00000000 00000000 00000000 00000000
+__get_cpuid(9) eax|ebx|ecx|edx: 00000000 00000000 00000000 00000000
+__get_cpuid(10) eax|ebx|ecx|edx: 00000000 00000000 00000000 00000000
+__get_cpuid(11) eax|ebx|ecx|edx: 00000000 00000001 00000100 00000001
+__get_cpuid(12) eax|ebx|ecx|edx: 00000000 00000000 00000000 00000000
+__get_cpuid(13) eax|ebx|ecx|edx: 00000000 00000000 00000000 00000000
+Highest supported __get_cpuid (extended) input (aka eax value, cpuid leaf): 2147483658
+__get_cpuid(80000000) eax|ebx|ecx|edx: { 8000000A, 756E6547, 6C65746E, 49656E69, },
+__get_cpuid(80000001) eax|ebx|ecx|edx: { 00000663, 00000000, 00000001, 20100800, },
+__get_cpuid(80000002) eax|ebx|ecx|edx: { 554D4551, 72695620, 6C617574, 55504320, },
+__get_cpuid(80000003) eax|ebx|ecx|edx: { 72657620, 6E6F6973, 352E3220, 0000002B, },
+__get_cpuid(80000004) eax|ebx|ecx|edx: { 00000000, 00000000, 00000000, 00000000, },
+__get_cpuid(80000005) eax|ebx|ecx|edx: { 01FF01FF, 01FF01FF, 40020140, 40020140, },
+__get_cpuid(80000006) eax|ebx|ecx|edx: { 00000000, 42004200, 02008140, 00808140, },
+__get_cpuid(80000007) eax|ebx|ecx|edx: { 00000000, 00000000, 00000000, 00000000, },
+__get_cpuid(80000008) eax|ebx|ecx|edx: { 00003028, 00000000, 00000000, 00000000, },
+__get_cpuid(80000009) eax|ebx|ecx|edx: { 00000000, 00000000, 00000000, 00000000, },
+__get_cpuid(8000000a) eax|ebx|ecx|edx: { 00000000, 00000000, 00000000, 00000000, },
+Exiting successfully.
