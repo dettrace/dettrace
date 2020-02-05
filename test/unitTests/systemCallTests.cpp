@@ -244,7 +244,7 @@ TEST_CASE("utime", "utime"){
 
   REQUIRE(myStat.st_atim.tv_sec == 744847200);
   REQUIRE(myStat.st_atim.tv_nsec == 0);
-  REQUIRE(myStat.st_mtim.tv_sec == 2);
+  REQUIRE(myStat.st_mtim.tv_sec == 744847200);
   REQUIRE(myStat.st_mtim.tv_nsec == 0);
 }
 
@@ -260,7 +260,7 @@ TEST_CASE("times", "times"){
   struct tms buf;
   clock_t time = times(&buf);
   // Nobody.
-  REQUIRE(time == 744847200000038);
+  REQUIRE(time == 744847200000037);
   REQUIRE(buf.tms_utime == 0);
   REQUIRE(buf.tms_stime == 0);
   REQUIRE(buf.tms_cutime == 0);
