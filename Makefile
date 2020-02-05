@@ -7,12 +7,15 @@ BUILDID := $(shell git rev-list --count HEAD 2> /dev/null || echo 0)
 PKGNAME := $(NAME)_$(VERSION)-$(BUILDID)
 
 # Compilation options
-CXX := clang++
-CC := clang
+# CXX := clang
+# CC := clang
+CXX ?= g++
+CC ?= gcc
+CLANG_TIDY := /bin/echo
 DEFINES := -D_GNU_SOURCE=1 -D_POSIX_C_SOURCE=20181101 -D__USE_XOPEN=1 -DAPP_VERSION=\"$(VERSION)\" -DAPP_BUILDID=\"$(BUILDID)\"
 INCLUDE := -I include -I cxxopts/include
-CXXFLAGS := -g -O3 -std=c++14 -Wall $(INCLUDE) $(DEFINES)
-CFLAGS := -g -O3 -Wall -Wshadow $(INCLUDE) $(DEFINES)
+CXXFLAGS += -g -O3 -std=c++14 -Wall $(INCLUDE) $(DEFINES)
+CFLAGS += -g -O3 -Wall -Wshadow $(INCLUDE) $(DEFINES)
 LIBS := -pthread -lseccomp
 
 # Source files and objects to build.
@@ -43,7 +46,10 @@ dep = $(obj:.o=.d)
 	tests
 
 # Top-level Makefile to capture different actions you can take.
-all: build
+all:
+	which $(CXX)
+	$(CXX) --version
+	$(MAKE) build
 
 # Shorthand for `dynamic`.
 build: dynamic
@@ -66,7 +72,7 @@ bin/$(NAME)-static: bin $(obj)
 # Compile the source files and generate a dep file at the same time so that
 # incremental builds work (relatively) correctly.
 src/%.o: src/%.cpp VERSION
-	clang-tidy $< -- $(CXXFLAGS)
+	$(CLANG_TIDY) $< -- $(CXXFLAGS)
 	$(CXX) -c -MMD $(CXXFLAGS) $< -o $@
 
 -include $(dep)
