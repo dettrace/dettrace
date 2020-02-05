@@ -1,0 +1,12 @@
+Process spawning thread1 with pthread create.
+Thread 1 pid: 2
+Thread1 spawning thread2 with pthread create.
+Thread 2 pid: 2
+Thread2 trying to read from pipe.
+Thread1 made thread2.
+Thread1 wrote this many bytes: 100
+Thread1 is done.
+Process made thread1.
+Thread2 read this many bytes: 100
+Thread2 is done.
+Process is exiting.
