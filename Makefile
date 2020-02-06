@@ -137,8 +137,14 @@ $(PKGNAME).deb: bin/$(NAME)-static ci/create_deb.sh VERSION
 	./ci/create_deb.sh "$(NAME)" "$(VERSION)-$(BUILDID)"
 
 # Installs the Debian package.
-install: $(PKGNAME).deb
+install-deb: $(PKGNAME).deb
 	sudo dpkg -i $^
+
+install:
+	@echo "Installing into DESTDIR="$(DESTDIR)
+	mkdir -p $(DESTDIR)
+	touch $(DESTDIR)/output_test
+	cp -a bin root $(DESTDIR)
 
 # Builds a docker image suitable for development.
 docker-dev: Dockerfile.dev

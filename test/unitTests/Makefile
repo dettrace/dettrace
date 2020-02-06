@@ -13,6 +13,7 @@ build: systemCallTests
 systemCallTests: $(obj)
 	$(CXX) $^ -o $@
 
+check: run
 run: systemCallTests
 	../../bin/dettrace ./systemCallTests | tee .unit-test-output
 	@grep --quiet "All tests passed" .unit-test-output
