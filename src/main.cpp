@@ -162,7 +162,7 @@ void sigalrmHandler(int _) {
   assert(nullptr != globalExeObject);
   globalExeObject->killAllProcesses();
   // TODO: print out message about timeout expiring
-  runtimeError("dettrace timeout expired\n");
+  runtimeError("cloudseal timeout expired\n");
 }
 // =======================================================================================
 

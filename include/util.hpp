@@ -41,7 +41,7 @@ V get_with_default(
  * Throws erro with dettrace tag for easy grepping. Use instead of explicit
  * throw runtime_error
  */
-void runtimeError(string error);
+void runtimeError(string error) __attribute__((noreturn));
 
 extern unordered_map<int, string> futexCommands;
 extern unordered_map<int, string> futexAdditionalFlags;

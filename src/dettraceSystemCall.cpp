@@ -2398,6 +2398,19 @@ bool tgkillSystemCall::handleDetPre(
       Importance::info, "tgkill(tgid = %d, tid = %d, signal = %d)\n", tgid, tid,
       signal);
 
+  if (signal == SIGABRT && tgid == s.traceePid &&
+      tgid == tid /* TODO: when we support threads, we should also compare against tracee's tid (from gettid) */) {
+    // ok
+  } else {
+    gs.log.writeToLog(
+        Importance::info,
+        "tgkillSystemCall::handleDetPre: tracee vtgid=" + to_string(tgid) +
+            " vtid=" + to_string(tid) + " ptgid=" + to_string(s.traceePid) +
+            " trying to send unsupported signal=" + to_string(signal));
+    // runtimeError("tgkillSystemCall::handleDetPre: tracee trying to send
+    // unsupported signal");
+  }
+
   return true;
 }
 

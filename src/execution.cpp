@@ -1,5 +1,6 @@
 #include "execution.hpp"
 #include "dettraceSystemCall.hpp"
+#include "fingerprinter.hpp"
 #include "logger.hpp"
 #include "ptracer.hpp"
 #include "scheduler.hpp"
@@ -178,6 +179,10 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid) {
 
   bool callPostHook =
       callPreHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
+  if (syscallNum != SYS_arch_prctl) {
+    fingerprinter::callPreHook(
+        syscallNum, myGlobalState, currState, tracer, myScheduler);
+  }
 
   if (kernelPre4_8) {
     // Next event will be a sytem call pre-exit event as older kernels make us
@@ -244,6 +249,10 @@ void execution::handlePostSystemCall(state& currState) {
   }
 
   callPostHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
+  if (syscallNum != SYS_arch_prctl) {
+    fingerprinter::callPostHook(
+        syscallNum, myGlobalState, currState, tracer, myScheduler);
+  }
 
   log.writeToLog(
       Importance::info, "Value after handler: %d\n", tracer.getReturnValue());
@@ -258,7 +267,7 @@ int execution::runProgram() {
   // pre-hook events. To get post hook events we must call ptrace with
   // PTRACE_SYSCALL intead. This happens in @getNextEvent.
 
-  log.writeToLog(Importance::inter, "dettrace starting up\n");
+  log.writeToLog(Importance::inter, "cloudseal starting up\n");
 
   // Once all process' have ended. We exit.
   bool exitLoop = false;
@@ -1841,7 +1850,7 @@ ptraceEvent execution::getPtraceEvent(const int status) {
     return ptraceEvent::terminatedBySignal;
   }
 
-  runtimeError("Uknown event on dettrace::getNextEvent()");
+  runtimeError("Uknown event on execution::getPtraceEvent()");
   // Can never happen, here to avoid spurious warning.
   return ptraceEvent::nonEventExit;
 }

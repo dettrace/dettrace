@@ -2,19 +2,9 @@ variables:
     DETTRACE_NO_CPUID_INTERCEPTION: 1
 
 pool:
-  vmImage: 'Ubuntu-16.04'
+  vmImage: 'ubuntu-16.04'
 
 steps:
-- task: InstallSSHKey@0
-  inputs:
-    hostName: github.com,192.30.253.112 ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==
-    sshPublicKey: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDSJxPZ28c1oXptZOmiDwFOhrB6XP+hu8LLE5S/m/pt+GlOPRhJ3apMMNUtwBaZjhrwaaVlpFNw8uHgRWkdhJPYiuGAYDumWyFmaS6MxDggPQfI4p6Sitb4brtUx8PBLChhgwFDFwUTzcVWzGJ2YpdjbHuH5BZzdcxQimnKbpgtQCCNnpmAbGbRD/JnGMVQ1POGj19M5a7SLnIb/0avM1yaRJjSVymJpgCcz/OOLqQi9l8v4rUBAvhC51ijB0GXteSJg/DszI/04RmjdOmupHoNp/WMkitMDLgUxenB5rMXR6O0n3Z/EnpKNFbbtLOcgfLkg2ClwtAn1fYBB/6vDb5LxMD6U6iVr9BvkUGkYal9l0L49f9Ug+H1LjOPekA9Si2ae4By6k0G/dqwkPH3A2M01rpkpqA0WnkMMef9AQx1efZUnJUVquI7x61W4FN5fB5e97bnwjtXQAlFI5OMgzifyqOVokWoCg7vRV8fkUUK4uqIgbZde9rC2iooVDKOrmSGJa08FwJ0CTjhMppt/EUtyg0UYTt8OF/h/T+nWcQ/4uQsuUdFumzh95cV+Za1vBaZIPCXJKaog/NlA5T8fXbM/qG6Ce2uiwbyOnoPfrqsxyaYYCZ68hhfnCK4T74lv8JhPPYp4UdZgJJI0E17+x3ze2jgmSt2vKiJjC04FrIgSw== detbox-project@azure-pipelines
-    sshKeySecureFile: id_rsa_azure_pipelines
-
-- checkout: self
-  submodules: true
-  persistCredentials: true
-
 - script: |
     lsb_release -a
     uname -a
