@@ -33,9 +33,9 @@ CXX_BINARIES= $(addsuffix .bin,$(CXX_ROOTS))
 DETTRACE=../../bin/dettrace --
 DIFF_CMD=diff
 
-build: $(SIMPLE_BINARIES) $(PARAM_BINARIES) $(BROADWELL_BINARIES) $(RT_BINARIES) $(CXX_BINARIES)
+CC ?= clang
 
-CC=clang
+build: $(SIMPLE_BINARIES) $(PARAM_BINARIES) $(BROADWELL_BINARIES) $(RT_BINARIES) $(CXX_BINARIES)
 
 run: test
 test: test-binaries test-scripts
