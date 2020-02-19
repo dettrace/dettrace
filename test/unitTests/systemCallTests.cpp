@@ -114,7 +114,11 @@ TEST_CASE("getuid", "getuid"){
 void statFamilyTests(struct stat statbuf){
   CHECK(statbuf.st_uid == 0);
   CHECK(statbuf.st_dev == 1);
-  CHECK(statbuf.st_ino == 8);
+
+  // FIXME: Definite portability problem:
+  CHECK(statbuf.st_ino >= 8); // 8 on Azure Devops [2020.02.19], e.g.:
+                              // https://dev.azure.com/upenn-acg/detTrace/_build/results?buildId=459&view=logs&j=12f1170f-54f2-53f3-20dd-22fc7dff55f9&t=bd05475d-acb5-5619-3ccb-c46842dbc997
+  CHECK(statbuf.st_ino <= 9); // 9 on ubuntu 18.04 local machine
   CHECK(statbuf.st_blksize == 512);
   CHECK(statbuf.st_blocks == 1);
   CHECK(statbuf.st_gid == 0);
