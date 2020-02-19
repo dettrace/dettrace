@@ -28,14 +28,15 @@ int main(){
 
   withError(symlinkat(fulltarget, dirfd, symlink_name), "create symlink");
 
-  struct stat myStat;
-  withError(lstat(symlink_name, &myStat), "stat");
-  time_t mtime = myStat.st_mtime;
-  ino_t inode = myStat.st_ino;
+  struct stat st;
+  withError(lstat(symlink_name, &st), "stat");
+  ino_t inode = st.st_ino;
 
   withError(unlink(symlink_target), "Unlink "symlink_target);
   withError(unlink(symlink_name), "Unlink symlink");
-  printf("mtime %ld\n", mtime);
+
+  printf("mtime tv_sec = %ld, tv_nsec = %ld\n",
+         st.st_mtim.tv_sec, st.st_mtim.tv_nsec);
   return 0;
 }
 

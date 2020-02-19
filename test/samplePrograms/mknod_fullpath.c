@@ -23,13 +23,13 @@ int main(){
   unlink(fullpath);
   withError(mknod(fullpath, S_IFREG, 0), "cannot mknod");
 
-  struct stat myStat;
-  withError(lstat(file, &myStat), "stat");
-  time_t mtime = myStat.st_mtime;
+  struct stat st;
+  withError(lstat(file, &st), "stat");
   withError(unlink(file), "Unlink "file);
 
   // Second file created.
-  printf("mtime %ld\n", mtime);
+  printf("mtime tv_sec = %ld, tv_nsec = %ld\n",
+         st.st_mtim.tv_sec, st.st_mtim.tv_nsec);
 
   return 0;
 }

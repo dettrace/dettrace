@@ -14,29 +14,21 @@
 int withError(int returnCode, char* call);
 
 int main(){
-  int fd = withError(creat("temp1.txt", S_IRWXU), "creat1");
+  int fd1 = withError(creat("temp1.txt", S_IRWXU), "creat1");
   int fd2 = withError(creat("temp2.txt", S_IRWXU), "creat2");
 
-  struct stat myStat;
-  withError(fstat(fd, &myStat), "fstat");
-  struct stat myStat2;
-  withError(fstat(fd2, &myStat2), "fstat");
+  struct stat stat1;
+  withError(fstat(fd1, &stat1), "fstat");
+  struct stat stat2;
+  withError(fstat(fd2, &stat2), "fstat");
 
-  time_t time = myStat.st_mtime;
-  time_t time2 = myStat2.st_mtime;
-
-  system("rm -f temp.txt");
+  system("rm -f temp1.txt");
   system("rm -f temp2.txt");
 
-  if(time != 1){
-    printf("Error expected 1 as our mtime, actual %ld", time);
-    exit(1);
-  }
-
-  if(time2 != 2){
-    printf("Error expected 2 as our mtime2, actual %ld", time);
-    exit(1);
-  }
+  printf("mtime1 tv_sec = %ld, tv_nsec = %ld\n",
+         stat1.st_mtim.tv_sec, stat1.st_mtim.tv_nsec);
+  printf("mtime2 tv_sec = %ld, tv_nsec = %ld\n",
+         stat2.st_mtim.tv_sec, stat2.st_mtim.tv_nsec);
 
   return 0;
 }

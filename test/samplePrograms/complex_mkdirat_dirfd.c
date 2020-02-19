@@ -41,8 +41,8 @@ int withError(int returnCode, char* call){
 }
 
 void print_mtime(char* file, int dirfd){
-  struct stat myStat;
-  withError(fstatat(dirfd, dir, &myStat, 0), "fstatat");
-  time_t mtime = myStat.st_mtime;
-  printf("file mtime %lu\n", mtime);
+  struct stat st;
+  withError(fstatat(dirfd, dir, &st, 0), "fstatat");
+  printf("file mtime tv_sec = %ld, tv_nsec = %ld\n",
+         st.st_mtim.tv_sec, st.st_mtim.tv_nsec);
 }

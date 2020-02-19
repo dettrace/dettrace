@@ -14,25 +14,24 @@
 int withError(int returnCode, char* call);
 
 int main(){
-  int fd = withError(syscall(SYS_open, "temp.txt", O_CREAT|O_WRONLY|O_TRUNC),
+  int fd1 = withError(syscall(SYS_open, "temp1.txt", O_CREAT|O_WRONLY|O_TRUNC),
                      "open");
 
   int fd2 = withError(syscall(SYS_open, "temp2.txt", O_CREAT|O_WRONLY|O_TRUNC),
                      "open");
 
-  struct stat myStat;
-  withError(fstat(fd, &myStat), "fstat");
-  struct stat myStat2;
-  withError(fstat(fd2, &myStat2), "fstat");
+  struct stat stat1;
+  withError(fstat(fd1, &stat1), "fstat");
+  struct stat stat2;
+  withError(fstat(fd2, &stat2), "fstat");
 
-  time_t time = myStat.st_mtime;
-  time_t time2 = myStat2.st_mtime;
-
-  system("rm -f temp.txt");
+  system("rm -f temp1.txt");
   system("rm -f temp2.txt");
 
-  printf("mtime %ld\n", time);
-  printf("mtime2 %ld\n", time2);
+  printf("mtime1 tv_sec = %ld, tv_nsec = %ld\n",
+         stat1.st_mtim.tv_sec, stat1.st_mtim.tv_nsec);
+  printf("mtime2 tv_sec = %ld, tv_nsec = %ld\n",
+         stat2.st_mtim.tv_sec, stat2.st_mtim.tv_nsec);
 
   return 0;
 }
