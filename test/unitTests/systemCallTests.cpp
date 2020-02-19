@@ -260,7 +260,8 @@ TEST_CASE("times", "times"){
   struct tms buf;
   clock_t time = times(&buf);
   // Nobody.
-  REQUIRE(time == 744847200000037);
+  REQUIRE(time >= 744847200000000);
+  REQUIRE(time <= 744847200000050);
   REQUIRE(buf.tms_utime == 0);
   REQUIRE(buf.tms_stime == 0);
   REQUIRE(buf.tms_cutime == 0);
