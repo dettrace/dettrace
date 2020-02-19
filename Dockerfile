@@ -46,4 +46,4 @@ ADD ./ ./
 
 ARG BUILDID=0
 
-RUN make -j dynamic-and-static "BUILDID=${BUILDID}"
+RUN make CC=clang CXX=clang++ -j dynamic-and-static "BUILDID=${BUILDID}"
