@@ -118,7 +118,7 @@ test-docker: clean docker
 ifdef DETTRACE_NO_CPUID_INTERCEPTION
 	docker run --env DETTRACE_NO_CPUID_INTERCEPTION=1 $(DOCKER_RUN_ARGS) make CC=clang CXX=clang++ -j tests
 else
-	docker run $(DOCKER_RUN_ARGS) make -j tests
+	docker run $(DOCKER_RUN_ARGS) make CC=clang CXX=clang++ -j tests
 endif
 
 clean:
