@@ -9,8 +9,8 @@ PKGNAME := $(NAME)_$(VERSION)-$(BUILDID)
 # Compilation options
 # CXX := clang
 # CC := clang
-CXX ?= clang++
-CC ?= clang
+CXX := clang++
+CC := clang
 CLANG_TIDY := /bin/echo
 DEFINES := -D_GNU_SOURCE=1 -D_POSIX_C_SOURCE=20181101 -D__USE_XOPEN=1 -DAPP_VERSION=\"$(VERSION)\" -DAPP_BUILDID=\"$(BUILDID)\"
 INCLUDE := -I include -I cxxopts/include
