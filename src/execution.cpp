@@ -179,12 +179,10 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid) {
 
   bool callPostHook =
       callPreHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
-  /*
   if (syscallNum != SYS_arch_prctl) {
     fingerprinter::callPreHook(
         syscallNum, myGlobalState, currState, tracer, myScheduler);
   }
-  */
 
   if (kernelPre4_8) {
     // Next event will be a sytem call pre-exit event as older kernels make us
@@ -251,12 +249,10 @@ void execution::handlePostSystemCall(state& currState) {
   }
 
   callPostHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
-  /*
   if (syscallNum != SYS_arch_prctl) {
     fingerprinter::callPostHook(
         syscallNum, myGlobalState, currState, tracer, myScheduler);
   }
-  */
 
   log.writeToLog(
       Importance::info, "Value after handler: %d\n", tracer.getReturnValue());
