@@ -115,6 +115,13 @@ run-docker: docker
 run-docker-non-interactive: docker
 	docker run $(DOCKER_RUN_ARGS) $(DOCKER_RUN_COMMAND)
 
+test-docker: clean docker
+ifdef DETTRACE_NO_CPUID_INTERCEPTION
+	docker run --env DETTRACE_NO_CPUID_INTERCEPTION=1 $(DOCKER_RUN_ARGS) make -j tests
+else
+	docker run $(DOCKER_RUN_ARGS) make -j tests
+endif
+
 clean:
 	$(RM) -rf -- bin *.deb
 	$(RM) -- $(obj) $(dep)
@@ -178,15 +185,3 @@ check-formatting:
 hooks:
 	rm -rf -- .git/hooks
 	ln -sf ../.githooks .git/hooks
-
-test-docker: docker-dev
-	docker run \
-		--rm \
-		--privileged \
-		--userns=host \
-		-it \
-		-e DETTRACE_NO_CPUID_INTERCEPTION=1 \
-		-v "$(shell pwd):/code" \
-		-u "$(shell id -u):$(shell id -g)" \
-		"${NAME}:dev" \
-		make test NAME=dettrace
