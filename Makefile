@@ -179,7 +179,7 @@ hooks:
 	rm -rf -- .git/hooks
 	ln -sf ../.githooks .git/hooks
 
-test-docker: docker-dev
+test-docker: clean docker-dev
 	docker run \
                 --rm \
                 --privileged \
