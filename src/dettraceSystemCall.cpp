@@ -42,10 +42,6 @@
 #include "ptracer.hpp"
 #include "utilSystemCalls.hpp"
 
-#include <openssl/sha.h>
-#include <iomanip>
-#include <sstream>
-
 // Enable tracee reads that are not strictly necessary for functionality, but
 // are enabled for instrumentation or sanity checking. For example, verify,
 // before system call replay, that RIP points at a valid system call insn.
@@ -1707,26 +1703,6 @@ void readSystemCall::handleDetPost(
   if (bytes_read == 0 || // EOF
       s.totalBytes == s.beforeRetry.rdx) { // original bytes requested
     gs.log.writeToLog(Importance::info, "EOF or read all bytes.\n");
-
-    if (gs.log.getDebugLevel() > 0 && s.totalBytes > 0) {
-      // NB: this operation is very expensive!
-      unsigned char* buffer = (unsigned char*)malloc(s.totalBytes);
-      readVmTraceeRaw(
-          traceePtr<unsigned char>((unsigned char*)s.beforeRetry.rsi), buffer,
-          s.totalBytes, s.traceePid);
-      unsigned char sha1[SHA_DIGEST_LENGTH] = {0};
-      SHA1(buffer, s.totalBytes, sha1);
-      free(buffer);
-      stringstream ss;
-      ss << std::hex << std::setw(2) << std::setfill('0');
-      for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
-        ss << (unsigned short)sha1[i];
-      }
-      gs.log.writeToLog(
-          Importance::info, "sha1 checksum of %d bytes read: %s\n",
-          s.totalBytes, ss.str().c_str());
-    }
-
     resetState();
   } else {
     gs.log.writeToLog(Importance::info, "Got less bytes than requested.\n");
@@ -3112,24 +3088,6 @@ void writeSystemCall::handleDetPost(
   // behavior so we catch it here. Otherwise we forever try to read 0 bytes.
   // https://stackoverflow.com/questions/41904221/can-write2-return-0-bytes-written-and-what-to-do-if-it-does?utm_medium=organic&utm_source=google_rich_qa&utm_campaign=google_rich_qa
   if (s.totalBytes == s.beforeRetry.rdx || bytes_written == 0) {
-    if (gs.log.getDebugLevel() > 0 && s.totalBytes > 0) {
-      // NB: this operation is very expensive!
-      unsigned char* buffer = (unsigned char*)malloc(s.totalBytes);
-      readVmTraceeRaw(
-          traceePtr<unsigned char>((unsigned char*)s.beforeRetry.rsi), buffer,
-          s.totalBytes, s.traceePid);
-      unsigned char sha1[SHA_DIGEST_LENGTH] = {0};
-      SHA1(buffer, s.totalBytes, sha1);
-      free(buffer);
-      stringstream ss;
-      ss << std::hex << std::setw(2) << std::setfill('0');
-      for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
-        ss << (unsigned short)sha1[i];
-      }
-      gs.log.writeToLog(
-          Importance::info, "sha1 checksum of %d bytes written: %s\n",
-          s.totalBytes, ss.str().c_str());
-    }
     resetState();
   } else {
     gs.log.writeToLog(
