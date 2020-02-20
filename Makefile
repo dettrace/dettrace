@@ -59,14 +59,12 @@ bin:
 # This only builds a dynamically linked binary.
 dynamic: bin/$(NAME)
 bin/$(NAME): bin $(obj) VERSION
-	$(CXX) $(CXXFLAGS) $(obj) $(LIBS) -o $@ \
-		$(shell pkg-config --libs libcrypto)
+	$(CXX) $(CXXFLAGS) $(obj) $(LIBS) -o $@
 
 # This only builds a statically linked binary.
 static: bin/$(NAME)-static
 bin/$(NAME)-static: bin $(obj)
-	$(CXX) $(CXXFLAGS) -static $(obj) $(LIBS) -o $@ \
-		$(shell pkg-config --static --libs libcrypto)
+	$(CXX) $(CXXFLAGS) -static $(obj) $(LIBS) -o $@
 
 # Compile the source files and generate a dep file at the same time so that
 # incremental builds work (relatively) correctly.
