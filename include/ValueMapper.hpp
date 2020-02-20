@@ -46,7 +46,7 @@ public:
    * @param realValue: realValue to add.
    * @return the mapped virtual value.
    */
-  virtual Virtual addRealValue(Real realValue) {
+  Virtual addRealValue(Real realValue) {
     // it is nondet whether this realValue (typically an inode) has been seen
     // before, so we need to print either way to keep log message IDs
     // deterministic
