@@ -56,6 +56,6 @@ RUN apt-get update -y && apt-get install -y python3 bsdmainutils dnsutils curl
 
 COPY --from=0 /code/*.deb /root/
 RUN dpkg --install /root/*.deb
-WORKDIR /usr/share/cloudseal/examples
+WORKDIR /usr/share/dettrace/examples
 
 RUN echo 'export PS1="\w \[\033[1;36m\]$ \[\033[0m\]"' >> /root/.bashrc
