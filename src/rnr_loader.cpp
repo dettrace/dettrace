@@ -2,8 +2,8 @@
 #include <sys/types.h>
 
 #include "rnr_loader.hpp"
-#include "utilSystemCalls.hpp"
 #include "util.hpp"
+#include "utilSystemCalls.hpp"
 
 using namespace std;
 
