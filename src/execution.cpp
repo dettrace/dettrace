@@ -1,8 +1,8 @@
 #include "execution.hpp"
 #include "dettraceSystemCall.hpp"
-#include "fingerprinter.hpp"
 #include "logger.hpp"
 #include "ptracer.hpp"
+#include "rnr_loader.hpp"
 #include "scheduler.hpp"
 #include "state.hpp"
 #include "systemCallList.hpp"
@@ -180,8 +180,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid) {
   bool callPostHook =
       callPreHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
   if (syscallNum != SYS_arch_prctl) {
-    fingerprinter::callPreHook(
-        syscallNum, myGlobalState, currState, tracer, myScheduler);
+    rnr::callPreHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
   }
 
   if (kernelPre4_8) {
@@ -250,7 +249,7 @@ void execution::handlePostSystemCall(state& currState) {
 
   callPostHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
   if (syscallNum != SYS_arch_prctl) {
-    fingerprinter::callPostHook(
+    rnr::callPostHook(
         syscallNum, myGlobalState, currState, tracer, myScheduler);
   }
 

@@ -29,9 +29,9 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
-#include <cstdlib>
 
 #include <cassert>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <memory>
@@ -45,13 +45,13 @@
 #include "logger.hpp"
 #include "logicalclock.hpp"
 #include "ptracer.hpp"
+#include "rnr_loader.hpp"
 #include "seccomp.hpp"
 #include "state.hpp"
 #include "systemCallList.hpp"
 #include "tempfile.hpp"
 #include "util.hpp"
 #include "vdso.hpp"
-
 #define CXXOPTS_NO_RTTI 1 // no rtti for cxxopts, this should be default.
 #define CXXOPTS_VECTOR_DELIMITER '\0'
 #include <cxxopts.hpp>
@@ -114,6 +114,8 @@ struct programArgs {
   unsigned short prng_seed;
   bool in_docker;
 
+  std::string rnr;
+
   programArgs(int argc, char* argv[]) {
     this->argc = argc;
     this->argv = argv;
@@ -138,6 +140,7 @@ struct programArgs {
     this->with_etc_overrides = true;
     this->prng_seed = 0;
     this->in_docker = false;
+    this->rnr = "";
   }
 };
 // =======================================================================================
@@ -918,6 +921,9 @@ programArgs parseProgramArguments(int argc, char* argv[]) {
     ( "timeoutSeconds",
       "Tear down all tracee processes with SIGKILL after this many seconds. The default is `0` (i.e., indefinite).",
       cxxopts::value<unsigned long>()->default_value("0"))
+    ( "rnr",
+      "provide an optional record and replay dynamic shared object to run during syscall enter/exit.",
+      cxxopts::value<std::string>()->default_value(""))
     ( "program",
       "program to run",
       cxxopts::value<std::string>())
@@ -1023,6 +1029,12 @@ programArgs parseProgramArguments(int argc, char* argv[]) {
       args.in_docker = true;
       args.clone_ns_flags = 0;
       base_env = "host";
+    }
+
+    if (result["rnr"].count() > 0) {
+      args.rnr = result["rnr"].as<std::string>();
+
+      rnr::loadRnr(args.rnr);
     }
 
     if (result["volume"].count()) {
