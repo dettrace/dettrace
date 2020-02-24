@@ -13,7 +13,9 @@ GTAGS
 initramfs.cpio
 src/dettrace-static
 *.bin
-/bin/
+bin/
 benchmarking/*.time
 *.deb
 *.tmp
+*.tbz
+version

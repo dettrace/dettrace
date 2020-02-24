@@ -15,7 +15,7 @@ DEFINES := -D_GNU_SOURCE=1 -D_POSIX_C_SOURCE=20181101 -D__USE_XOPEN=1 -DAPP_VERS
 INCLUDE := -I include -I cxxopts/include
 CXXFLAGS += -g -O3 -std=c++14 -Wall $(INCLUDE) $(DEFINES)
 CFLAGS += -g -O3 -Wall -Wshadow $(INCLUDE) $(DEFINES)
-LIBS := -pthread -lseccomp
+LIBS := -ldl -pthread -lseccomp
 
 # Source files and objects to build.
 src = $(wildcard src/*.cpp)
@@ -114,13 +114,6 @@ run-docker: docker
 run-docker-non-interactive: docker
 	docker run $(DOCKER_RUN_ARGS) $(DOCKER_RUN_COMMAND)
 
-test-docker: clean docker
-ifdef DETTRACE_NO_CPUID_INTERCEPTION
-	docker run --env DETTRACE_NO_CPUID_INTERCEPTION=1 $(DOCKER_RUN_ARGS) make CC=clang CXX=clang++ -j tests
-else
-	docker run $(DOCKER_RUN_ARGS) make CC=clang CXX=clang++ -j tests
-endif
-
 clean:
 	$(RM) -rf -- bin *.deb
 	$(RM) -- $(obj) $(dep)
@@ -184,3 +177,14 @@ check-formatting:
 hooks:
 	rm -rf -- .git/hooks
 	ln -sf ../.githooks .git/hooks
+
+test-docker: clean docker-dev
+	docker run \
+                --rm \
+                --privileged \
+                --userns=host \
+                -e DETTRACE_NO_CPUID_INTERCEPTION=1 \
+                -v "$(shell pwd):/code" \
+                -u "$(shell id -u):$(shell id -g)" \
+                "$(NAME):dev" \
+                make test CC=clang CXX=clang++ NAME=dettrace

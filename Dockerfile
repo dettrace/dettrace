@@ -1,3 +1,4 @@
+# STAGE 1: Build the tool.
 FROM ubuntu:18.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -46,4 +47,15 @@ ADD ./ ./
 
 ARG BUILDID=0
 
-RUN make CC=clang CXX=clang++ -j dynamic-and-static "BUILDID=${BUILDID}"
+RUN make -j deb "BUILDID=${BUILDID}"
+
+# STAGE 2:
+# Copy only the deployment files into the final image:
+FROM ubuntu:18.04
+RUN apt-get update -y && apt-get install -y python3 bsdmainutils dnsutils curl
+
+COPY --from=0 /code/*.deb /root/
+RUN dpkg --install /root/*.deb
+WORKDIR /usr/share/dettrace/examples
+
+RUN echo 'export PS1="\w \[\033[1;36m\]$ \[\033[0m\]"' >> /root/.bashrc
