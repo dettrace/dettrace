@@ -67,8 +67,8 @@ static pid_t gettid(void) { return syscall(SYS_gettid); }
 
 TempDir::TempDir() { TempDir("", false); }
 
-TempDir::TempDir(const std::string& prefix, bool doMount) {
-  owner_pid = gettid();
+TempDir::TempDir(const std::string& prefix, bool doMount)
+    : owner_pid(gettid()), mounted(false) {
   std::string path(P_tmpdir);
   path += PATH_SEPEARTOR;
   path += prefix;
