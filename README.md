@@ -14,9 +14,7 @@ Currently, this project requires the following dependencies:
 
 ```
 clang # Building C++ code base
-libssl-dev # Hashing of bytes from read system call.
 libseccomp-dev # Helper library for finer-grained system call filtering.
-libarchive-dev # TBD
 ```
 
 This project relies on the [libseccomp library](https://github.com/seccomp/libseccomp). Please install. For hassle free, we recommend installing from your system's standard repository of packages.
