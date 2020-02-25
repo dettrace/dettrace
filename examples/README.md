@@ -96,13 +96,13 @@ $ head -c 16 /dev/urandom | hexdump
 Again, we see random data being generated. Next, run the same command with
 `dettrace`:
 ```shell
-$ dettrace head -c 16 /dev/urandom | hexdump
+$ dettrace -- head -c 16 /dev/urandom | hexdump
 0000000 3211 d873 5fc1 a37b d83b cf8d ea15 69c2
 0000010
-$ dettrace head -c 16 /dev/urandom | hexdump
+$ dettrace -- head -c 16 /dev/urandom | hexdump
 0000000 3211 d873 5fc1 a37b d83b cf8d ea15 69c2
 0000010
-$ dettrace head -c 16 /dev/urandom | hexdump
+$ dettrace -- head -c 16 /dev/urandom | hexdump
 0000000 3211 d873 5fc1 a37b d83b cf8d ea15 69c2
 0000010
 ```
