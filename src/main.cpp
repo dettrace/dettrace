@@ -41,7 +41,6 @@
 #include <seccomp.h>
 #include "dettraceSystemCall.hpp"
 #include "execution.hpp"
-#include "fakefs.hpp"
 #include "logger.hpp"
 #include "logicalclock.hpp"
 #include "ptracer.hpp"
