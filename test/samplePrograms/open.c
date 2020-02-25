@@ -28,9 +28,9 @@ int main(){
   system("rm -f temp1.txt");
   system("rm -f temp2.txt");
 
-  printf("mtime1 tv_sec = %ld, tv_nsec = %ld\n",
+  printf("mtime1 tv_sec = %ld\n  tv_nsec = %ld\n",
          stat1.st_mtim.tv_sec, stat1.st_mtim.tv_nsec);
-  printf("mtime2 tv_sec = %ld, tv_nsec = %ld\n",
+  printf("mtime2 tv_sec = %ld\n  tv_nsec = %ld\n",
          stat2.st_mtim.tv_sec, stat2.st_mtim.tv_nsec);
 
   return 0;
