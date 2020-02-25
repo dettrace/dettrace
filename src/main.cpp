@@ -56,8 +56,13 @@
 #define CXXOPTS_VECTOR_DELIMITER '\0'
 #include <cxxopts.hpp>
 
-/**
- * Useful link for understanding ptrace as it works with execve.
+// Allow the build to override the location of the root file system. Useful if
+// the installer needs to put the rootfs elsewhere.
+#ifndef DETTRACE_ROOTFS
+#define DETTRACE_ROOTFS ""
+#endif
+
+/** * Useful link for understanding ptrace as it works with execve.
  * https://stackoverflow.com/questions/7514837/why-does
  * https://stackoverflow.com/questions/47006441/ptrace-catching-many-traps-for-execve/47039345#47039345
  */
@@ -79,14 +84,11 @@ struct programArgs {
   int debugLevel;
   std::string pathToChroot;
   std::vector<MountPoint> volume;
-  std::string pathToExe;
   std::string logFile;
   std::string workdir;
 
   bool useColor;
   bool printStatistics;
-  // User is using --chroot flag.
-  bool userChroot;
   // We sometimes want to run dettrace inside a chrooted enviornment.
   // Annoyingly, Linux does not let us create a user namespace if the current
   // process is chrooted. This is a feature. So we handle this special case, by
@@ -120,10 +122,8 @@ struct programArgs {
     this->argc = argc;
     this->argv = argv;
     this->debugLevel = 0;
-    this->pathToChroot = "";
+    this->pathToChroot = DETTRACE_ROOTFS;
     this->useContainer = false;
-    this->userChroot = false;
-    this->pathToExe = "";
     this->useColor = true;
     this->logFile = "";
     this->printStatistics = false;
@@ -368,7 +368,7 @@ static std::vector<std::unique_ptr<char[]>> make_argv(
  * @arg tempdir: either empty string or tempdir to use, for cpio chroot.
  */
 int runTracee(programArgs* args) {
-  string pathToExe = args->pathToExe;
+  const auto& pathToChroot = args->pathToChroot;
 
   {
     if (!args->with_aslr) {
@@ -394,15 +394,15 @@ int runTracee(programArgs* args) {
     }
 
     if (args->with_proc_overrides) {
-      mountDir(pathToExe + "/../root/proc/meminfo", "/proc/meminfo");
-      mountDir(pathToExe + "/../root/proc/stat", "/proc/stat");
-      mountDir(pathToExe + "/../root/proc/filesystems", "/proc/filesystems");
+      mountDir(pathToChroot + "/proc/meminfo", "/proc/meminfo");
+      mountDir(pathToChroot + "/proc/stat", "/proc/stat");
+      mountDir(pathToChroot + "/proc/filesystems", "/proc/filesystems");
     }
     if (args->with_etc_overrides) {
-      mountDir(pathToExe + "/../root/etc/hosts", "/etc/hosts");
-      mountDir(pathToExe + "/../root/etc/passwd", "/etc/passwd");
-      mountDir(pathToExe + "/../root/etc/group", "/etc/group");
-      mountDir(pathToExe + "/../root/etc/ld.so.cache", "/etc/ld.so.cache");
+      mountDir(pathToChroot + "/etc/hosts", "/etc/hosts");
+      mountDir(pathToChroot + "/etc/passwd", "/etc/passwd");
+      mountDir(pathToChroot + "/etc/group", "/etc/group");
+      mountDir(pathToChroot + "/etc/ld.so.cache", "/etc/ld.so.cache");
     }
 
     if (args->clone_ns_flags & CLONE_NEWNS) {
@@ -1113,14 +1113,8 @@ programArgs parseProgramArguments(int argc, char* argv[]) {
     std::copy(
         traceeArgs.begin(), traceeArgs.end(), std::back_inserter(args.args));
 
-    args.pathToExe = getExePath();
-
     if (args.pathToChroot == "") {
-      args.userChroot = false;
-      const string defaultRoot = "/../root/";
-      args.pathToChroot = args.pathToExe + defaultRoot;
-    } else {
-      args.userChroot = true;
+      args.pathToChroot = getExePath() + "/../root/";
     }
 
     // Detect if we're inside a chroot by attempting to make a user namespace.
@@ -1132,7 +1126,6 @@ programArgs parseProgramArguments(int argc, char* argv[]) {
         exit(1);
       }
       // Treat current enviornment as our chroot.
-      args.userChroot = true;
       args.pathToChroot = "/";
     }
   } catch (cxxopts::option_not_exists_exception& e) {
