@@ -81,7 +81,13 @@ setup:
 %.ok: %.bin setup
 	@echo "   Testing $(basename $<)..."
 	@python3 timeout.py 5s $(DETTRACE) ./$< > ActualOutputs/$(basename $<).output
-	@$(DIFF_CMD) ActualOutputs/$(basename $<).output ExpectedOutputs/$(basename $<).output
+	@python3 timeout.py 5s $(DETTRACE) ./$< > ActualOutputs/$(basename $<).output2
+# Require exactly the same output for consecutive runs on the same machine:
+	@$(DIFF_CMD) ActualOutputs/$(basename $<).output ActualOutputs/$(basename $<).output2
+# Allow some lee-way for currently non-PORTABLE output:
+	@grep -v NONPORTABLE ActualOutputs/$(basename $<).output   > ActualOutputs/$(basename $<).output.stripped
+	@grep -v NONPORTABLE ExpectedOutputs/$(basename $<).output > ExpectedOutputs/$(basename $<).output.stripped
+	@$(DIFF_CMD) ActualOutputs/$(basename $<).output.stripped ExpectedOutputs/$(basename $<).output.stripped
 
 # SHELL_SCRIPTS tests:
 %.ok: %.sh setup

@@ -1,5 +1,5 @@
 timer_create returned 0
-created timerid 0x602260
+NONPORTABLE: created timerid 0x563d8b1db260, residing at address 0x7ffd357263b8, size 8
 counter=0
 Received signal 14
  siginfo_t fields: signo:14 errno:0 code:-6 overrun:0 timerid:1

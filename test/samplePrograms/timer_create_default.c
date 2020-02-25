@@ -66,7 +66,8 @@ int main() {
   printf("timer_create returned %d\n", rv);
   assert( 0 == rv );
 
-  printf("created timerid %p\n", timerid);
+  // TODO: Apparent portability bug here (see issue 262)
+  printf("NONPORTABLE: created timerid %p, residing at address %p, size %ld\n", timerid, &timerid, sizeof(timerid));
   
   struct itimerspec ts;
   ts.it_interval.tv_sec = ts.it_interval.tv_nsec = 0; // 1-shot timer
