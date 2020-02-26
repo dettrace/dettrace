@@ -97,29 +97,48 @@ void handleStatFamily(
 
   int retVal = t.getReturnValue();
   if (retVal == 0) {
-    struct stat myStat =
+    struct stat theirStat =
         t.readFromTracee(traceePtr<struct stat>(statPtr), s.traceePid);
-    ino_t inode = myStat.st_ino;
+    struct stat myStat; // Start clean.
+    memset(&myStat, 0, sizeof(myStat));
+    // Ignored/overwritten: st_dev, st_ino, st_nlink, st_blksize, st_blocks
+    myStat.st_mode = theirStat.st_mode;
+    myStat.st_uid = theirStat.st_uid;
+    myStat.st_gid = theirStat.st_gid;
+    myStat.st_rdev = theirStat.st_rdev; // Audit this.
+    myStat.st_size = theirStat.st_size;
+
+    ino_t realinode = theirStat.st_ino;
     gs.log.writeToLog(
-        Importance::extra, "(device,inode) = (%lu,%lu)\n", myStat.st_dev,
-        inode);
+        Importance::extra, "(device,realinode) = (%lu,%lu)\n", theirStat.st_dev,
+        realinode);
     // Use inode to check if we created this file during our run.
-    const auto mtime = get_with_default(gs.mtimeMap, inode, gs.epoch);
+    const auto mtime = get_with_default(gs.mtimeMap, realinode, gs.epoch);
+
+    gs.log.writeToLog(
+        Importance::extra, " realinode in mtimeMap %d, resulting mtime: %d\n",
+        gs.mtimeMap.find(realinode) != gs.mtimeMap.end(), mtime);
 
     /* Time of last access */
     myStat.st_atim = logical_clock::to_timespec(gs.epoch);
-    /* Time of last modification */
-    myStat.st_mtim = logical_clock::to_timespec(mtime);
     /* Time of last status change */
     myStat.st_ctim = logical_clock::to_timespec(gs.epoch);
+    /* Time of last modification */
+    myStat.st_mtim = logical_clock::to_timespec(mtime);
+
+    // TODO: I suspect there is some remaining bug related to #263.
+    // Perhaps it has to do with all the conversions between time formats.
+    // However, I don't think we really need nanosecond granularity for stat
+    // results, so returning a constant here:
+    myStat.st_mtim.tv_nsec = 999;
 
     // TODO: I'm surprised this doesn't break things. I guess so far, we have
     // only used single device filesystems.
     myStat.st_dev = 1; /* ID of device containing file */
 
-    myStat.st_ino = gs.inodeMap.realValueExists(inode)
-                        ? gs.inodeMap.getVirtualValue(inode)
-                        : gs.inodeMap.addRealValue(inode);
+    myStat.st_ino = gs.inodeMap.realValueExists(realinode)
+                        ? gs.inodeMap.getVirtualValue(realinode)
+                        : gs.inodeMap.addRealValue(realinode);
 
     // st_mode holds the permissions to the file. If we zero it out libc
     // functions will think we don't have access to this file. Hence we keep our
@@ -148,6 +167,9 @@ void handleStatFamily(
       myStat.st_size = 16384;
     }
     gs.log.writeToLog(Importance::info, "st_size:%u\n", myStat.st_size);
+    gs.log.writeToLog(
+        Importance::info, "overwriting tracee stat struct, copying %u bytes\n",
+        sizeof(struct stat));
 
     myStat.st_blksize = 512; /* Block size for filesystem I/O */
 

@@ -251,7 +251,7 @@ TEST_CASE("utime", "utime"){
   REQUIRE(myStat.st_atim.tv_sec == 744847200);
   REQUIRE(myStat.st_atim.tv_nsec == 0);
   REQUIRE(myStat.st_mtim.tv_sec == 744847200);
-  REQUIRE(myStat.st_mtim.tv_nsec == 33000);
+  REQUIRE(myStat.st_mtim.tv_nsec == 999);
 }
 
 TEST_CASE("uid/gid", "uid/gid"){

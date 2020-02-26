@@ -1,4 +1,6 @@
+Full mtime1, bytes: 96 119 101 44 0 0 0 0 -25 3 0 0 0 0 0 0 
+Full mtime2, bytes: 96 119 101 44 0 0 0 0 -25 3 0 0 0 0 0 0 
 mtime1 tv_sec = 744847200
-  tv_nsec = 0
+  tv_nsec = 999
 mtime2 tv_sec = 744847200
-NONPORTABLE  tv_nsec = 0
+  tv_nsec = 999
