@@ -30,9 +30,11 @@ int main(){
 
   printf("mtime1 tv_sec = %ld\n  tv_nsec = %ld\n",
          stat1.st_mtim.tv_sec, stat1.st_mtim.tv_nsec);
-  printf("mtime2 tv_sec = %ld\n  tv_nsec = %ld\n",
-         stat2.st_mtim.tv_sec, stat2.st_mtim.tv_nsec);
-
+  printf("mtime2 tv_sec = %ld\n",
+         stat2.st_mtim.tv_sec);
+  printf("NONPORTABLE  tv_nsec = %ld\n",
+         stat2.st_mtim.tv_nsec);
+  
   return 0;
 }
 
