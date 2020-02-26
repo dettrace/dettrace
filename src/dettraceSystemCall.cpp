@@ -2492,7 +2492,7 @@ bool timer_createSystemCall::handleDetPre(
     ti.signalHandlerData = ti.sendSignal ? se.sigev_value.sival_ptr : nullptr;
   }
 
-  timerID_t timerid = s.timerCreateTimers.get()->size();
+  timerID_t timerid = s.timerCreateTimers.get()->size() + 11000;
   s.timerCreateTimers.get()->insert({timerid, ti});
 
   gs.log.writeToLog(

@@ -83,7 +83,8 @@ setup:
 	@python3 timeout.py 5s $(DETTRACE) ./$< > ActualOutputs/$(basename $<).output
 	@python3 timeout.py 5s $(DETTRACE) ./$< > ActualOutputs/$(basename $<).output2
 # Require exactly the same output for consecutive runs on the same machine:
-	@$(DIFF_CMD) ActualOutputs/$(basename $<).output ActualOutputs/$(basename $<).output2
+	@$(DIFF_CMD) ActualOutputs/$(basename $<).output ActualOutputs/$(basename $<).output2 || \
+          (echo "ERROR: NONDETERMINISM detected between runs 1 and 2."; exit 1)
 # Allow some lee-way for currently non-PORTABLE output.
 # Note this will not allow EMPTY ExpectedOutputs:
 	@grep -v NONPORTABLE ActualOutputs/$(basename $<).output   > ActualOutputs/$(basename $<).output.stripped

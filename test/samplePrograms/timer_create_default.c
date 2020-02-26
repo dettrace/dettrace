@@ -9,12 +9,17 @@
 #include <ucontext.h>
 #include <stdatomic.h>
 
+#include <unistd.h> /* For syscall() */
+#include <sys/syscall.h> /* For SYS_xxx definitions */
+
 atomic_int counter = 0;
 
 static void handle_alarm(int sig, siginfo_t *si, void *ctxt) {
   printf("counter=%d\n", atomic_load(&counter));
 
-  printf("Received signal %d\n siginfo_t fields: signo:%d errno:%d code:%d overrun:%d timerid:%d\n",
+  // TODO: we are currently FAILING to rewrite the si_timerid here, which is leaking the raw kernel value.
+  // signo=14 is SIGALRM:
+  printf("Received signal %d\n siginfo_t fields: signo:%d errno:%d code:%d overrun:%d si_timerid:%d\n",
          sig, si->si_signo, si->si_errno, si->si_code, si->si_overrun, si->si_timerid);
 
   // TODO: re-enable these extra checks if we switch to a run-twice-and-compare-outputs model
@@ -59,20 +64,24 @@ int main() {
   int rv = sigaction(SIGALRM, &sa, NULL);  
   assert( 0 == rv );
   
-  timer_t timerid;
-  //printf("initial timerid: %p\n", timerid);
+  timer_t timerid = 0;
+  printf("initial timerid: %lu\n", (unsigned long)timerid);
+
   // by default, send our process a SIGALRM
-  rv = timer_create(CLOCK_MONOTONIC, NULL, &timerid);
+  rv = syscall(SYS_timer_create, CLOCK_MONOTONIC, NULL, &timerid);
   printf("timer_create returned %d\n", rv);
   assert( 0 == rv );
 
   // TODO: Apparent portability bug here (see issue 262)
-  printf("NONPORTABLE: created timerid %p, residing at address %p, size %ld\n", timerid, &timerid, sizeof(timerid));
+  printf("created timerid %lu\n  residing at address %p, size %ld\n",
+	 (unsigned long)timerid, &timerid, sizeof(timerid));
   
   struct itimerspec ts;
   ts.it_interval.tv_sec = ts.it_interval.tv_nsec = 0; // 1-shot timer
   ts.it_value.tv_sec = ts.it_value.tv_nsec = 1; // 1 second from now
-  rv = timer_settime(timerid, 0, &ts, NULL);
+  rv = syscall(SYS_timer_settime, timerid, 0, &ts, NULL);
+  printf("after timer_settime, timerid %lu\n", (unsigned long)timerid);  
+  
   assert( 0 == rv );
 
   while (true) {
