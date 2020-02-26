@@ -7,9 +7,9 @@
 #include <inttypes.h>
 
 static void handler(int sig, siginfo_t *si, void *ctxt) {
-  printf("Received signal %d\n  valid siginfo_t fields: signo:%d errno:%d code:%d addr:%p\n",
-         sig,
-         si->si_signo, si->si_errno, si->si_code,si->si_addr);
+  printf("Received signal %d\n  valid siginfo_t fields: signo:%d errno:%d code:%d\n",
+         sig, si->si_signo, si->si_errno, si->si_code);
+  printf("NONPORTABLE   addr:%p\n", si->si_addr);
   // TODO: re-enable these extra checks if we switch to a run-twice-and-compare-outputs model
   /* printf("  other (technically undefined) siginfo_t fields: pid:%d uid:%d status:%d utime:%ld stime:%ld value:%p int:%d ptr:%p overrun:%d timerid:%d band:%ld fd:%d addr_lsb:%d lower:%p upper:%p call_addr:%p syscall:%d uarch:%u\n", */
   /*        si->si_pid, si->si_uid, si->si_status, */

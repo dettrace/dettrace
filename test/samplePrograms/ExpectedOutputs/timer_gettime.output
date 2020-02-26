@@ -1,4 +1,4 @@
 timer_create returned 0
-created timerid 0x602260
+NONPORTABLE created timerid 0x602260
 it_interval.tv_sec=0 it_interval.tv_nsec=0
 it_value.tv_sec=0 it_value.tv_nsec=0

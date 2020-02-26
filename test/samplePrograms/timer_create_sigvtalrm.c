@@ -16,7 +16,7 @@ static void handle_alarm(int sig, siginfo_t *si, void *ctxt) {
 
   printf("Received signal %d\n siginfo_t fields: signo:%d errno:%d code:%d overrun:%d timerid:%d\n",
          sig, si->si_signo, si->si_errno, si->si_code, si->si_overrun, si->si_timerid);
-
+  
   // TODO: re-enable these extra checks if we switch to a run-twice-and-compare-outputs model
   /* printf("(technically undefined) siginfo_t fields: pid:%d uid:%d status:%d utime:%ld stime:%ld value:%p int:%d ptr:%p addr:%p band:%ld fd:%d addr_lsb:%d lower:%p upper:%p call_addr:%p syscall:%d uarch:%u\n", */
   /*        si->si_pid, si->si_uid, si->si_status, */
@@ -70,12 +70,14 @@ int main() {
   printf("timer_create returned %d\n", rv);
   assert( 0 == rv );
 
-  printf("created timerid %p\n", timerid);
+  printf("NONPORTABLE created timerid %p\n", timerid);
   
   struct itimerspec ts;
   ts.it_interval.tv_sec = ts.it_interval.tv_nsec = 0; // 1-shot timer
   ts.it_value.tv_sec = ts.it_value.tv_nsec = 1; // 1 second from now
   rv = timer_settime(timerid, 0, &ts, NULL);
+  printf("after settime, timerid %p\n", timerid);
+  
   assert( 0 == rv );
 
   while (true) {

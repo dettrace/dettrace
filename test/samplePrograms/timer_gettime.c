@@ -18,7 +18,7 @@ int main() {
   printf("timer_create returned %d\n", rv);
   assert( 0 == rv );
 
-  printf("created timerid %p\n", timerid);
+  printf("NONPORTABLE created timerid %p\n", timerid);
   
   struct itimerspec ts;
   rv = timer_gettime(timerid, &ts);

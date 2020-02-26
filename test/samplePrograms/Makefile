@@ -84,10 +84,15 @@ setup:
 	@python3 timeout.py 5s $(DETTRACE) ./$< > ActualOutputs/$(basename $<).output2
 # Require exactly the same output for consecutive runs on the same machine:
 	@$(DIFF_CMD) ActualOutputs/$(basename $<).output ActualOutputs/$(basename $<).output2
-# Allow some lee-way for currently non-PORTABLE output:
+# Allow some lee-way for currently non-PORTABLE output.
+# Note this will not allow EMPTY ExpectedOutputs:
 	@grep -v NONPORTABLE ActualOutputs/$(basename $<).output   > ActualOutputs/$(basename $<).output.stripped
 	@grep -v NONPORTABLE ExpectedOutputs/$(basename $<).output > ExpectedOutputs/$(basename $<).output.stripped
 	@$(DIFF_CMD) ActualOutputs/$(basename $<).output.stripped ExpectedOutputs/$(basename $<).output.stripped
+	@if grep -q NONPORTABLE ExpectedOutputs/$(basename $<).output; then \
+	  grep NONPORTABLE ActualOutputs/$(basename $<).output   > ActualOutputs/$(basename $<).output.nonport || true; \
+	  grep NONPORTABLE ExpectedOutputs/$(basename $<).output > ExpectedOutputs/$(basename $<).output.nonport || true; \
+	  $(DIFF_CMD) ActualOutputs/$(basename $<).output.nonport ExpectedOutputs/$(basename $<).output.nonport || echo "WARNING: differences in NONPORTABLE sections of output."; fi
 
 # SHELL_SCRIPTS tests:
 %.ok: %.sh setup

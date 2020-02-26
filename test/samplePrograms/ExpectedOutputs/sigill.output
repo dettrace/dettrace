@@ -1,2 +1,3 @@
 Received signal 4
-  valid siginfo_t fields: signo:4 errno:0 code:2 addr:0x40066b
+  valid siginfo_t fields: signo:4 errno:0 code:2
+NONPORTABLE   addr:0x40066b
