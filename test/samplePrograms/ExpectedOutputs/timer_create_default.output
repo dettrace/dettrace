@@ -1,7 +1,7 @@
 initial timerid: 0
 timer_create returned 0
 created timerid 11000
-  residing at address 0x7fffffffeba8, size 8
+  (NONPORTABLE) residing at address 0x7fffffffeba8, size 8
 counter=0
 Received signal 14
  siginfo_t fields: signo:14 errno:0 code:-6 overrun:0 si_timerid:1

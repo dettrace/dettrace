@@ -73,8 +73,14 @@ int main() {
   assert( 0 == rv );
 
   // TODO: Apparent portability bug here (see issue 262)
-  printf("created timerid %lu\n  residing at address %p, size %ld\n",
-	 (unsigned long)timerid, &timerid, sizeof(timerid));
+  printf("created timerid %lu\n", (unsigned long)timerid);
+
+  // TODO: between different machines / ubuntu versions, we're getting different addresses here.  
+  // for example, 0x7fffffffeba8 vs 0x7fffffffebc0
+  // here:   https://dev.azure.com/upenn-acg/detTrace/_build/results?buildId=512&view=logs&j=12f1170f-54f2-53f3-20dd-22fc7dff55f9&t=bd05475d-acb5-5619-3ccb-c46842dbc997
+  // But these surely have different fingerprints/hashes, because there must be different input files in the base image.
+  printf("  (NONPORTABLE) residing at address %p, size %ld\n",
+	 &timerid, sizeof(timerid));
   
   struct itimerspec ts;
   ts.it_interval.tv_sec = ts.it_interval.tv_nsec = 0; // 1-shot timer

@@ -89,7 +89,8 @@ setup:
 # Note this will not allow EMPTY ExpectedOutputs:
 	@grep -v NONPORTABLE ActualOutputs/$(basename $<).output   > ActualOutputs/$(basename $<).output.stripped
 	@grep -v NONPORTABLE ExpectedOutputs/$(basename $<).output > ExpectedOutputs/$(basename $<).output.stripped
-	@$(DIFF_CMD) ActualOutputs/$(basename $<).output.stripped ExpectedOutputs/$(basename $<).output.stripped
+	@$(DIFF_CMD) ActualOutputs/$(basename $<).output.stripped ExpectedOutputs/$(basename $<).output.stripped || \
+          (echo "ERROR: ACTUAL output (above) did not match EXPECTED (below)."; exit 1)
 	@if grep -q NONPORTABLE ExpectedOutputs/$(basename $<).output; then \
 	  grep NONPORTABLE ActualOutputs/$(basename $<).output   > ActualOutputs/$(basename $<).output.nonport || true; \
 	  grep NONPORTABLE ExpectedOutputs/$(basename $<).output > ExpectedOutputs/$(basename $<).output.nonport || true; \
