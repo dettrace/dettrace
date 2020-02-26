@@ -29,6 +29,8 @@
 #include <sys/types.h>
 #include <climits>
 
+#include <linux/membarrier.h>
+
 using namespace std;
 
 /*
@@ -269,4 +271,21 @@ TEST_CASE("times", "times"){
   REQUIRE(buf.tms_stime == 0);
   REQUIRE(buf.tms_cutime == 0);
   REQUIRE(buf.tms_cstime == 0);
+}
+
+
+static int membarrier(int cmd, int flags)
+{
+    return syscall(__NR_membarrier, cmd, flags);
+}
+
+TEST_CASE("membarrier", "membarrier"){
+  int support = membarrier(MEMBARRIER_CMD_QUERY, 0);
+  REQUIRE( support >= 0 );  
+  REQUIRE( (support & MEMBARRIER_CMD_SHARED) == MEMBARRIER_CMD_SHARED);
+  membarrier(MEMBARRIER_CMD_SHARED, 0);
+    
+  // CMD_GLOBAL is quite new and would require we increase our kernel lower bound:
+  // REQUIRE( support & MEMBARRIER_CMD_GLOBAL == MEMBARRIER_CMD_GLOBAL);
+  // membarrier(MEMBARRIER_CMD_GLOBAL, 0);  
 }

@@ -296,7 +296,11 @@ void seccomp::loadRules(bool debug, bool convertUids) {
 
   intercept(SYS_write);
 
-  noIntercept(SYS_mbind);
+  noIntercept(SYS_mbind);  
+
+  // TODO: we may need to determinize MEMBARRIER_CMD_QUERY
+  noIntercept(SYS_membarrier);
+
   // noIntercept(SYS_shmget);
   // noIntercept(SYS_shmat);
   // noIntercept(SYS_shmdt);
