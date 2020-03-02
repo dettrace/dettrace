@@ -369,12 +369,13 @@ static std::vector<std::unique_ptr<char[]>> make_argv(
 int runTracee(programArgs* args) {
   const auto& pathToChroot = args->pathToChroot;
 
-  {
-    if (!args->with_aslr) {
-      // Disable ASLR for our child
-      doWithCheck(
-          personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");
-    }
+  if (!args->with_aslr) {
+    // Disable ASLR for our child
+    doWithCheck(
+        personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");
+  }
+
+  if (!args->alreadyInChroot) {
     if (!fileExists("/dev/null")) {
       // we're running under reprotest as sudo, so we can use real mknod
       // hat tip to:
