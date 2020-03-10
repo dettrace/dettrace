@@ -63,7 +63,11 @@ static std::pair<int, std::string> make_temp_file(const std::string& dir = "") {
   return std::make_pair(fd, path);
 }
 
-static pid_t gettid(void) { return syscall(SYS_gettid); }
+
+pid_t gettid(void) __THROW {
+  return syscall(SYS_gettid);
+}
+
 
 TempDir::TempDir() { TempDir("", false); }
 
