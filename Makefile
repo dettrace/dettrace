@@ -69,7 +69,12 @@ bin/$(NAME)-static: bin $(obj)
 # Compile the source files and generate a dep file at the same time so that
 # incremental builds work (relatively) correctly.
 src/%.o: src/%.cpp VERSION
+# Check if clang-tidy is installed. If not, skip formatting.
+ifeq (, $(shell which $(CLANG_TIDY)))
+	@echo "Skipping formating via clang-tidy"
+else
 	$(CLANG_TIDY) $< -- $(CXXFLAGS)
+endif
 	$(CXX) -c -MMD $(CXXFLAGS) $< -o $@
 
 -include $(dep)
