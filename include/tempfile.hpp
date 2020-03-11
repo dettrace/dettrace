@@ -21,7 +21,7 @@
 #define PATH_SEPEARTOR '/';
 #endif
 
-pid_t gettid(void);
+pid_t gettid(void) __THROW;
 
 class TempDir {
 private:
