@@ -63,16 +63,16 @@ static std::pair<int, std::string> make_temp_file(const std::string& dir = "") {
   return std::make_pair(fd, path);
 }
 
-
-pid_t gettid(void) __THROW {
-  return syscall(SYS_gettid);
-}
-
+// glibc only started providing this function in version 3.30, which is still
+// pretty recent. Thus, we define this ourselves to support older systems.
+namespace {
+pid_t _gettid() __THROW { return syscall(SYS_gettid); }
+} // namespace
 
 TempDir::TempDir() { TempDir("", false); }
 
 TempDir::TempDir(const std::string& prefix, bool doMount)
-    : owner_pid(gettid()), mounted(false) {
+    : owner_pid(_gettid()), mounted(false) {
   std::string path(P_tmpdir);
   path += PATH_SEPEARTOR;
   path += prefix;
@@ -94,7 +94,7 @@ TempDir::TempDir(const std::string& prefix, bool doMount)
 }
 
 TempDir::~TempDir() {
-  pid_t this_pid = gettid();
+  pid_t this_pid = _gettid();
 
   if (this_pid == owner_pid) {
     if (this->mounted) {
