@@ -2,6 +2,7 @@
 #define EXECUTION_H
 
 #include "ValueMapper.hpp"
+#include "dettrace.hpp"
 #include "dettraceSystemCall.hpp"
 #include "globalState.hpp"
 #include "logger.hpp"
@@ -11,6 +12,7 @@
 #include "state.hpp"
 #include "systemCallList.hpp"
 #include "util.hpp"
+#include "vdso.hpp"
 
 #include <map>
 #include <stack>
@@ -67,17 +69,6 @@ private:
    * Whether to print statistics to stdout or not.
    */
   bool printStatistics;
-
-  /**
-   * The pthread_t for the /dev/random thread, which we cancel when dettrace
-   * exits.
-   */
-  pthread_t devRandomPthread;
-  /**
-   * The pthread_t for the /dev/urandom thread, which we cancel when dettrace
-   * exits.
-   */
-  pthread_t devUrandomPthread;
 
   /**
    * ptrace wrapper.
@@ -155,7 +146,7 @@ private:
    */
   uint32_t processSpawnEvents = 0;
 
-  map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs;
+  VDSOSymbols vdsoFuncs;
 
   void disableVdso(pid_t traceesPid);
 
@@ -169,6 +160,10 @@ private:
 
   unsigned prngSeed;
 
+  SysEnter sys_enter_hook = nullptr;
+  SysExit sys_exit_hook = nullptr;
+  void* user_data;
+
 public:
   /**
    * Constructor.
@@ -177,7 +172,6 @@ public:
    * @param useColor Toggles color in logging process
    * @param Using kernel version < 4.8.
    * @param logFile file to write log messages to, if "" use stderr
-   * @param devRandomPthread
    */
 
   execution(
@@ -186,13 +180,14 @@ public:
       bool useColor,
       string logFile,
       bool printStatistics,
-      pthread_t devRandomPthread,
-      pthread_t devUrandomPthread,
-      map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs,
+      VDSOSymbols vdsoFuncs,
       unsigned prngSeed,
       bool allow_network,
       logical_clock::time_point epoch,
-      logical_clock::duration clock_step);
+      logical_clock::duration clock_step,
+      SysEnter sys_enter_hook,
+      SysExit sys_exit_hook,
+      void* user_data);
 
   /**
    * Handles exit from current process.

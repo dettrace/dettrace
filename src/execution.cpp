@@ -1,4 +1,5 @@
 #include "execution.hpp"
+#include "dettrace.hpp"
 #include "dettraceSystemCall.hpp"
 #include "logger.hpp"
 #include "ptracer.hpp"
@@ -54,19 +55,18 @@ execution::execution(
     bool useColor,
     string logFile,
     bool printStatistics,
-    pthread_t devRandomPthread,
-    pthread_t devUrandomPthread,
-    map<string, tuple<unsigned long, unsigned long, unsigned long>> vdsoFuncs,
+    VDSOSymbols vdsoFuncs,
     unsigned prngSeed,
     bool allow_network,
     logical_clock::time_point epoch,
-    logical_clock::duration clock_step)
+    logical_clock::duration clock_step,
+    SysEnter sys_enter_hook,
+    SysExit sys_exit_hook,
+    void* user_data)
     : kernelPre4_8{kernelCheck(4, 8, 0)},
       log{logFile, debugLevel, useColor},
       silentLogger{"", 0},
       printStatistics{printStatistics},
-      devRandomPthread{devRandomPthread},
-      devUrandomPthread{devUrandomPthread},
       // Waits for first process to be ready!
       tracer{startingPid},
       // Create our global state once, share across class.
@@ -80,7 +80,10 @@ execution::execution(
       vdsoFuncs(vdsoFuncs),
       epoch(epoch),
       clock_step(clock_step),
-      prngSeed(prngSeed) {
+      prngSeed(prngSeed),
+      sys_enter_hook(sys_enter_hook),
+      sys_exit_hook(sys_exit_hook),
+      user_data(user_data) {
   // Set state for first process.
   states.emplace(
       startingPid, state{startingPid, debugLevel, epoch, clock_step});
@@ -179,8 +182,11 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid) {
 
   bool callPostHook =
       callPreHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
-  if (syscallNum != SYS_arch_prctl) {
-    rnr::callPreHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
+
+  if (sys_enter_hook && syscallNum != SYS_arch_prctl) {
+    rnr::callPreHook(
+        user_data, sys_enter_hook, syscallNum, myGlobalState, currState, tracer,
+        myScheduler);
   }
 
   if (kernelPre4_8) {
@@ -248,9 +254,10 @@ void execution::handlePostSystemCall(state& currState) {
   }
 
   callPostHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
-  if (syscallNum != SYS_arch_prctl) {
+  if (sys_exit_hook && syscallNum != SYS_arch_prctl) {
     rnr::callPostHook(
-        syscallNum, myGlobalState, currState, tracer, myScheduler);
+        user_data, sys_exit_hook, syscallNum, myGlobalState, currState, tracer,
+        myScheduler);
   }
 
   log.writeToLog(
@@ -526,12 +533,6 @@ int execution::runProgram() {
         " Uknown return value for ptracer::getNextEvent()\n");
   }
 
-  // DEVRAND STEP 5: clean up /dev/[u]random fifo threads
-  doWithCheck(
-      pthread_cancel(devRandomPthread), "pthread_cancel /dev/random pthread");
-  doWithCheck(
-      pthread_cancel(devUrandomPthread), "pthread_cancel /dev/urandom pthread");
-
   auto msg = log.makeTextColored(
       Color::blue, "All processes done. Finished successfully!\n");
   log.writeToLog(Importance::info, msg);
@@ -688,11 +689,10 @@ void execution::disableVdso(pid_t pid) {
     auto data = vdsoGetCandidateData();
 
     for (auto func : vdsoFuncs) {
-      unsigned long offset, oldVdsoSize, vdsoAlignment;
-      tie(offset, oldVdsoSize, vdsoAlignment) = func.second;
-      unsigned long target = vdsoMap.procMapBase + offset;
-      unsigned long nbUpper = alignUp(oldVdsoSize, vdsoAlignment);
-      unsigned long nb = alignUp(data[func.first].size(), vdsoAlignment);
+      const auto& sym = func.second;
+      unsigned long target = vdsoMap.procMapBase + sym.offset;
+      unsigned long nbUpper = alignUp(sym.size, sym.alignment);
+      unsigned long nb = alignUp(data[func.first].size(), sym.alignment);
       assert(nb <= nbUpper);
 
       for (auto i = 0; i < nb / sizeof(long); i++) {

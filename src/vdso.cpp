@@ -162,6 +162,7 @@ std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid) {
 
   fd = open(mapsFile, O_RDONLY);
   if (fd < 0) {
+    perror("Failed to open /proc/self/maps");
     return {};
   }
 
@@ -228,10 +229,8 @@ std::vector<std::string> vdsoGetFuncNames(void) {
  * return as std::tuple<symbol_address, symbol_size, symbol/section_alignment>
  * NB: symbol address is relative (just an offset).
  */
-std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>>
-vdsoGetSymbols(pid_t pid) {
-  std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>>
-      res;
+VDSOSymbols vdsoGetSymbols(pid_t pid) {
+  VDSOSymbols res;
   struct ProcMapEntry vdsoMapEntry;
 
   if (vdsoGetMapEntry(pid, vdsoMapEntry) != 0) {
@@ -263,7 +262,7 @@ vdsoGetSymbols(pid_t pid) {
       unsigned long alignment = sym->st_shndx < ehdr->e_shnum
                                     ? shbase[sym->st_shndx].sh_addralign
                                     : 16;
-      res[name] = std::tie(sym->st_value, sym->st_size, alignment);
+      res[name] = VDSOSymbol{sym->st_value, sym->st_size, alignment};
     }
   }
 

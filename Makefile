@@ -15,7 +15,7 @@ DEFINES := -D_GNU_SOURCE=1 -D_POSIX_C_SOURCE=20181101 -D__USE_XOPEN=1 -DAPP_VERS
 INCLUDE := -I include -I cxxopts/include
 CXXFLAGS += -g -O3 -std=c++14 -Wall $(INCLUDE) $(DEFINES)
 CFLAGS += -g -O3 -Wall -Wshadow $(INCLUDE) $(DEFINES)
-LIBS := -ldl -pthread -lseccomp
+LIBS := -pthread -lseccomp
 
 # Source files and objects to build.
 src = $(wildcard src/*.cpp)
