@@ -63,7 +63,7 @@ private:
   /**
    * The current logical time. Ticks only on time related system calls where the
    * user can observe time since we want to present progress. See
-   * [Github issue](https://github.com/upenn-acg/detTrace/issues/24) for more
+   * [Github issue](https://github.com/dettrace/dettrace/issues/24) for more
    * information. The clock starts at this number to avoid seeing files "in the
    * future", if we were to start at zero.
    */

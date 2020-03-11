@@ -1,7 +1,7 @@
 
 # DetTrace: A Reproducible Container Abstraction
 
-[![Build Status](https://dev.azure.com/upenn-acg/detTrace/_apis/build/status/upenn-acg.detTrace?branchName=master)](https://dev.azure.com/upenn-acg/detTrace/_build/latest?definitionId=1&branchName=master)
+[![Build Status](https://dev.azure.com/upenn-acg/detTrace/_apis/build/status/dettrace.dettrace?branchName=master)](https://dev.azure.com/upenn-acg/detTrace/_build/latest?definitionId=1&branchName=master)
 
 Here, we give an overview of the command line interface for Dettrace as well as common Dettrace workflows. We describe the steps necessary to build Dettrace, software dependencies, hardware requirements, and compiler toolchains. Furthermore, we show various example use-cases for Dettrace and using chroot environments.
 

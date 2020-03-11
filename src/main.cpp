@@ -437,7 +437,7 @@ int runTracee(programArgs* args) {
 
   // Create environment.
   // NOTE: gcc needs to be somewhere along PATH or it gets very confused, see
-  // https://github.com/upenn-acg/detTrace/issues/23
+  // https://github.com/dettrace/dettrace/issues/23
   auto envs = make_envp(args->envs);
 
   // Set up seccomp + bpf filters using libseccomp.
