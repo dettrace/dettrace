@@ -152,8 +152,8 @@ long ptracer::doPtrace(
     }
   } else if (-1 == val) {
     runtimeError(
-        "Ptrace failed with error: " + string{strerror(errno)} + "on thread " +
-        to_string(pid) + " " + " with request " + to_string(request) + "\n");
+        "Ptrace failed with error: " + string{strerror(errno)} + " on thread " +
+        to_string(pid) + " with request " + to_string(request) + "\n");
   }
   return val;
 }

@@ -1,56 +1,23 @@
-#include <dirent.h>
 #include <getopt.h>
-#include <pthread.h>
 #include <string.h>
-#include <sys/personality.h>
-#include <sys/prctl.h>
-#include <sys/ptrace.h>
-#include <sys/reg.h> /* For constants ORIG_EAX, etc */
-#include <sys/select.h>
-#include <sys/syscall.h> /* For SYS_write, etc */
-#include <sys/sysmacros.h>
 #include <sys/types.h>
-#include <sys/user.h>
-#include <sys/vfs.h>
 #include <sys/wait.h>
 
 #include <errno.h>
-#include <fcntl.h>
-#include <libgen.h>
-#include <limits.h>
-#include <sched.h>
-#include <signal.h>
-#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <sys/mount.h>
-#include <sys/prctl.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
 #include <cassert>
 #include <cstdlib>
-#include <cstring>
 #include <iostream>
-#include <memory>
-#include <tuple>
+#include <string>
 #include <vector>
 
-#include <seccomp.h>
-#include "dettraceSystemCall.hpp"
-#include "execution.hpp"
-#include "logger.hpp"
+#include "dettrace.hpp"
 #include "logicalclock.hpp"
-#include "ptracer.hpp"
-#include "rnr_loader.hpp"
-#include "seccomp.hpp"
-#include "state.hpp"
-#include "systemCallList.hpp"
-#include "tempfile.hpp"
 #include "util.hpp"
-#include "vdso.hpp"
 #define CXXOPTS_NO_RTTI 1 // no rtti for cxxopts, this should be default.
 #define CXXOPTS_VECTOR_DELIMITER '\0'
 #include <cxxopts.hpp>
@@ -88,10 +55,10 @@ struct programArgs {
 
   bool useColor;
   bool printStatistics;
-  // We sometimes want to run dettrace inside a chrooted enviornment.
+  // We sometimes want to run dettrace inside a chrooted environment.
   // Annoyingly, Linux does not let us create a user namespace if the current
   // process is chrooted. This is a feature. So we handle this special case, by
-  // allowing dettrace to treat the current enviornment as a chroot.
+  // allowing dettrace to treat the current environment as a chroot.
   bool alreadyInChroot;
   bool convertUids;
   bool useContainer;
@@ -108,14 +75,12 @@ struct programArgs {
   std::vector<std::string> traceeArgs;
 
   unsigned timeoutSeconds;
-  logical_clock::time_point epoch;
-  logical_clock::duration clock_step;
+  time_t epoch;
+  unsigned long clock_step;
   unsigned long clone_ns_flags;
 
   unsigned short prng_seed;
   bool in_docker;
-
-  std::string rnr;
 
   programArgs(int argc, char* argv[]) {
     this->argc = argc;
@@ -129,8 +94,8 @@ struct programArgs {
     this->convertUids = false;
     this->alreadyInChroot = false;
     this->timeoutSeconds = 0;
-    this->epoch = logical_clock::from_time_t(744847200UL);
-    this->clock_step = chrono::microseconds(1);
+    this->epoch = 744847200UL;
+    this->clock_step = 1;
     this->allow_network = false;
     this->with_aslr = false;
     this->clone_ns_flags = 0;
@@ -139,42 +104,18 @@ struct programArgs {
     this->with_etc_overrides = true;
     this->prng_seed = 0;
     this->in_docker = false;
-    this->rnr = "";
   }
 };
 // =======================================================================================
 programArgs parseProgramArguments(int argc, char* argv[]);
-int runTracee(programArgs* args);
-int spawnTracerTracee(void* args);
-ptraceEvent getNextEvent(pid_t currentPid, pid_t& traceesPid, int& status);
+static int run_main(programArgs& args);
 
-static string devrandFifoPath, devUrandFifoPath;
-
-static bool fileExists(const string& directory);
-static void mountDir(const string& source, const string& target);
-static void createFileIfNotExist(const string& path);
-
-// See user_namespaces(7)
-static void update_map(char* mapping, char* map_file);
-static void proc_setgroups_write(pid_t pid, const char* str);
+static std::vector<std::unique_ptr<char[]>> make_argv(
+    std::vector<std::string>& args);
+static std::vector<std::unique_ptr<char[]>> make_envp(
+    std::unordered_map<std::string, std::string>& envvars);
 
 // =======================================================================================
-static execution* globalExeObject = nullptr;
-void sigalrmHandler(int _) {
-  assert(nullptr != globalExeObject);
-  globalExeObject->killAllProcesses();
-  // TODO: print out message about timeout expiring
-  runtimeError("dettrace timeout expired\n");
-}
-// =======================================================================================
-
-struct CloneArgs {
-  programArgs* args;
-  std::unique_ptr<TempDir> tmpdir;
-  std::map<std::string, std::tuple<unsigned long, unsigned long, unsigned long>>
-      vdsoSyms;
-  CloneArgs(programArgs* args) { this->args = args; }
-};
 
 /**
  * Given a program through the command line, spawn a child thread, call PTRACEME
@@ -184,7 +125,11 @@ struct CloneArgs {
 int main(int argc, char** argv) {
   programArgs args = parseProgramArguments(argc, argv);
 
-  // Check for debug enviornment variable.
+  return run_main(args);
+}
+
+static int run_main(programArgs& args) {
+  // Check for debug environment variable.
   char* debugEnvvar = secure_getenv("dettraceDebug");
   if (debugEnvvar != nullptr) {
     string str{debugEnvvar};
@@ -208,76 +153,58 @@ int main(int argc, char** argv) {
   }
   int cloneFlags = args.clone_ns_flags;
 
-  // our own user namespace. Other namepspace commands require CAP_SYS_ADMIN to
-  // work. Namespaces must must be done before fork. As changes don't apply
-  // until after fork, to all child processes.
-  const int STACK_SIZE(1024 * 1024);
-  static char child_stack[STACK_SIZE]; /* Space for child's stack */
-
-  doWithCheck(
-      prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0),
-      "Pre-clone prctl error: setting no new privs");
-
-  // get vDSO symbols before clone/fork
-  // only offets are used so it doesn't really matter
-  // we read it from tracer or tracee.
-  CloneArgs cloneArgs(&args);
-  auto syms = vdsoGetSymbols(getpid());
-  if (4 > syms.size()) {
-    runtimeError(
-        "VDSO symbol map has only " + to_string(syms.size()) +
-        ", expect at least 4!");
-  }
-  cloneArgs.vdsoSyms = syms;
-
   // Requires SIGCHILD otherwise parent won't be notified of parent exit.
   // We use clone instead of unshare so that the current process does not live
   // in the new user namespace, this is a requirement for writing multiple UIDs
   // into the uid mappings.
-  pid_t pid = clone(
-      spawnTracerTracee, child_stack + STACK_SIZE, cloneFlags | SIGCHLD,
-      (void*)&cloneArgs);
+
+  // Create program arguments.
+  auto argv = make_argv(args.args);
+  assert(argv.size() > 0);
+
+  // Create environment.
+  // NOTE: gcc needs to be somewhere along PATH or it gets very confused, see
+  // https://github.com/dettrace/dettrace/issues/23
+  auto envs = make_envp(args.envs);
+
+  TraceOptions options{
+      .program = argv[0].get(),
+      .argv = (char* const*)(argv.data()),
+      .envs = (char* const*)(envs.data()),
+      .workdir = args.workdir.c_str(),
+      .clone_ns_flags = cloneFlags,
+      .timeout = args.timeoutSeconds,
+      .sys_enter = nullptr,
+      .sys_exit = nullptr,
+      .user_data = nullptr,
+      .epoch = args.epoch,
+      .clock_step = args.clock_step,
+      .prng_seed = args.prng_seed,
+      .allow_network = args.allow_network,
+      .with_aslr = args.with_aslr,
+      .convert_uids = args.convertUids,
+      .mount =
+          {
+              .chroot_dir = args.pathToChroot.c_str(),
+              .with_devrand_overrides = args.with_devrand_overrides,
+              .with_proc_overrides = args.with_proc_overrides,
+              .with_etc_overrides = args.with_etc_overrides,
+          },
+      .debug_level = args.debugLevel,
+      .use_color = args.useColor,
+      .print_statistics = args.printStatistics,
+      .log_file = args.logFile.c_str(),
+  };
+
+  pid_t pid = dettrace(&options);
   if (pid == -1) {
-    string reason = strerror(errno);
-    cerr << "clone failed:\n  " + reason << endl;
     return 1;
   }
-  // This is modified code from user_namespaces(7)
-  // see https://lwn.net/Articles/532593/
-  /* Update the UID and GID maps for children in their namespace, notice we do
-     not live in that namespace. We use clone instead of unshare to avoid moving
-     us into to the namespace. This allows us, in the future, to extend the
-     mappings to other uids when running as root (not currently implemented, but
-     notice this cannot be done when using unshare.)*/
-  if ((args.clone_ns_flags & CLONE_NEWUSER) == CLONE_NEWUSER) {
-    char map_path[PATH_MAX];
-    const int MAP_BUF_SIZE = 100;
-    char map_buf[MAP_BUF_SIZE];
-    char* uid_map;
-    char* gid_map;
 
-    uid_t uid = getuid();
-    gid_t gid = getgid();
-
-    // Set up container to hostOS UID and GID mappings
-    snprintf(map_path, PATH_MAX, "/proc/%d/uid_map", pid);
-    snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long)uid);
-    uid_map = map_buf;
-    update_map(uid_map, map_path);
-
-    // Set GID Map
-    string deny = "deny";
-    proc_setgroups_write(pid, deny.c_str());
-    snprintf(map_path, PATH_MAX, "/proc/%d/gid_map", pid);
-    snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long)gid);
-    gid_map = map_buf;
-    update_map(gid_map, map_path);
-  }
-
+  // Propagate Child's exit status to use as our own exit status.
   int status;
-
-  // Propegate Child's exit status to use as our own exit status.
   doWithCheck(waitpid(pid, &status, 0), "cannot wait for child");
+
   if (WIFEXITED(status)) {
     return WEXITSTATUS(status);
   } else if (WIFSIGNALED(status)) {
@@ -359,365 +286,6 @@ static std::vector<std::unique_ptr<char[]>> make_argv(
   argv.push_back(nullptr);
 
   return argv;
-}
-
-// =======================================================================================
-/**
- * Child will become the process the user wishes through call to execvpe.
- * @arg tempdir: either empty string or tempdir to use, for cpio chroot.
- */
-int runTracee(programArgs* args) {
-  const auto& pathToChroot = args->pathToChroot;
-
-  if (!args->with_aslr) {
-    // Disable ASLR for our child
-    doWithCheck(
-        personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");
-  }
-
-  if (!args->alreadyInChroot) {
-    if (!fileExists("/dev/null")) {
-      // we're running under reprotest as sudo, so we can use real mknod
-      // hat tip to:
-      // https://unix.stackexchange.com/questions/27279/how-to-create-dev-null
-      dev_t dev = makedev(1, 3);
-      mode_t mode =
-          S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
-      doWithCheck(mknod("/dev/null", mode, dev), "mknod");
-    }
-
-    if (args->with_devrand_overrides) {
-      createFileIfNotExist("/dev/random");
-      mountDir(devrandFifoPath, "/dev/random");
-      createFileIfNotExist("/dev/urandom");
-      mountDir(devUrandFifoPath, "/dev/urandom");
-    }
-
-    if (args->with_proc_overrides) {
-      mountDir(pathToChroot + "/proc/meminfo", "/proc/meminfo");
-      mountDir(pathToChroot + "/proc/stat", "/proc/stat");
-      mountDir(pathToChroot + "/proc/filesystems", "/proc/filesystems");
-    }
-    if (args->with_etc_overrides) {
-      mountDir(pathToChroot + "/etc/hosts", "/etc/hosts");
-      mountDir(pathToChroot + "/etc/passwd", "/etc/passwd");
-      mountDir(pathToChroot + "/etc/group", "/etc/group");
-      mountDir(pathToChroot + "/etc/ld.so.cache", "/etc/ld.so.cache");
-    }
-
-    if (args->clone_ns_flags & CLONE_NEWNS) {
-      for (auto v : args->volume) {
-        mountDir(v.source, v.target);
-      }
-      // this have to be done before mount /dev/{u}random because
-      // the source file is under previous /tmp
-      doWithCheck(
-          mount("none", "/tmp", "tmpfs", 0, NULL),
-          "mount /tmp as tmpfs failed");
-    }
-
-    // set working dir
-    doWithCheck(
-        chdir(args->workdir.c_str()), "unable to chdir to " + args->workdir);
-  }
-
-  // trap on rdtsc/rdtscp insns
-  doWithCheck(
-      prctl(PR_SET_TSC, PR_TSC_SIGSEGV, 0, 0, 0), "Pre-clone prctl error");
-  doWithCheck(
-      prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0),
-      "Pre-clone prctl error: setting no new privs");
-
-  // Perform execve based on user command.
-  ptracer::doPtrace(PTRACE_TRACEME, 0, NULL, NULL);
-
-  // Create program arguments.
-  auto argv = make_argv(args->args);
-  assert(argv.size() > 0);
-
-  // Create environment.
-  // NOTE: gcc needs to be somewhere along PATH or it gets very confused, see
-  // https://github.com/dettrace/dettrace/issues/23
-  auto envs = make_envp(args->envs);
-
-  // Set up seccomp + bpf filters using libseccomp.
-  // Default action to take when no rule applies to system call. We send a
-  // PTRACE_SECCOMP event message to the tracer with a unique data: INT16_MAX
-  seccomp myFilter{args->debugLevel, args->convertUids};
-
-  // Stop ourselves until the tracer is ready. This ensures the tracer has time
-  // to get set up.
-  raise(SIGSTOP);
-
-  myFilter.loadFilterToKernel();
-
-  // execvpe() duplicates the actions of the shell in searching  for  an
-  // executable file if the specified filename does not contain a slash (/)
-  // character.
-  int val =
-      execvpe(argv[0].get(), (char* const*)argv.data(), (char**)envs.data());
-  if (val == -1) {
-    if (errno == ENOENT) {
-      cerr << "Unable to exec your program (" << argv[0].get()
-           << "). No such executable found\n"
-           << endl;
-      cerr << "This program may not exist inside the chroot." << endl;
-      cerr << "Only programs in bin/ or in this directory tree are mounted."
-           << endl;
-    }
-    cerr << "Unable to exec your program. Reason:\n  "
-         << string{strerror(errno)} << endl;
-    cerr << "Ending tracer with SIGABTR signal." << endl;
-
-    // Parent is waiting for us to exec so it can trace traceeCommand, this
-    // isn't going to happen. End parent with signal.
-    pid_t ppid = getppid();
-    syscall(SYS_tgkill, ppid, ppid, SIGABRT);
-  }
-
-  return 0;
-}
-
-static pthread_cond_t devRandThreadReady = PTHREAD_COND_INITIALIZER;
-static pthread_mutex_t devRandThreadMutex = PTHREAD_MUTEX_INITIALIZER;
-
-struct DevRandThreadParam {
-  std::string fifoPath;
-  unsigned int prngSeed;
-};
-
-/**
- * DEVRAND STEP 3: thread that writes pseudorandom output to a /dev/[u]random
- * fifo
- */
-static void* devRandThread(void* param_) {
-  struct DevRandThreadParam* param = (struct DevRandThreadParam*)param_;
-  const char* fifoPath = param->fifoPath.c_str();
-
-  pthread_mutex_lock(&devRandThreadMutex);
-  // allow this thread to be unilaterally killed when tracer exits
-  int oldCancelType;
-  doWithCheck(
-      pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldCancelType),
-      "pthread_setcanceltype");
-
-  // fprintf(stderr, "[devRandThread] using fifo  %s, seed: %x\n", fifoPath,
-  // param->prngSeed);
-
-  PRNG prng(param->prngSeed);
-
-  uint32_t totalBytesWritten = 0;
-  uint16_t random = 0;
-  bool getNewRandom = true;
-
-  // NB: if the fifo is ever closed by all readers/writers, then contents
-  // buffered within it get dropped. This leads to nondeterministic results, so
-  // we always keep the fifo open here. We open the fifo for writing AND reading
-  // as that eliminates EPIPE ("other end of pipe closed") errors when the
-  // tracee has closed the fifo and we call write(). Instead, our write() call
-  // will block once the fifo fills up. Once a tracee starts reading, the buffer
-  // will drain and our write() will get unblocked. However, no bytes should get
-  // lost during this process, ensuring the tracee(s) always see(s) a
-  // deterministic sequence of reads.
-  int fd = open(fifoPath, O_RDWR);
-  doWithCheck(fd, string("open: ") + fifoPath);
-  pthread_cond_signal(&devRandThreadReady);
-  pthread_mutex_unlock(&devRandThreadMutex);
-
-  while (true) {
-    if (getNewRandom) {
-      random = prng.get();
-    }
-    int bytesWritten = write(fd, &random, 2);
-    if (2 != bytesWritten) {
-      perror("[devRandThread] error writing to fifo");
-      // need to try writing these bytes again so that the fifo generates
-      // deterministic output
-      getNewRandom = false;
-
-    } else {
-      fsync(fd);
-      getNewRandom = true;
-      totalBytesWritten += 2;
-      // printf("[devRandThread] wrote %u bytes so far...\n",
-      // totalBytesWritten);
-    }
-  }
-
-  close(fd);
-  return NULL;
-}
-
-static inline void closeAllFds(void) {
-  for (int fd = 3; fd < 256; fd++) {
-    close(fd);
-  }
-}
-
-static void doTracerCleanup(bool umountTmpfs, std::unique_ptr<TempDir> tmpdir) {
-  closeAllFds();
-
-  if (umountTmpfs) {
-    umount("/tmp");
-  }
-
-  unlink(devrandFifoPath.c_str());
-  unlink(devUrandFifoPath.c_str());
-
-  auto path = tmpdir->path();
-  unlink(path.c_str());
-}
-
-// =======================================================================================
-/**
- * Spawn two processes, a parent and child, the parent will become the tracer,
- * and child will be tracee.
- */
-int spawnTracerTracee(void* voidArgs) {
-  CloneArgs* cloneArgs = static_cast<CloneArgs*>(voidArgs);
-  auto args = cloneArgs->args;
-  auto vdsoSyms = cloneArgs->vdsoSyms;
-
-  int pipefds[2];
-
-  doWithCheck(pipe2(pipefds, O_CLOEXEC), "spawnTracerTracee pipe2 failed");
-
-  // Properly set up propegation rules for mounts created by dettrace, that is
-  // make this a slave mount (and all mounts underneath this one) so that
-  // changes inside this mount are not propegated to the parent mount. This
-  // makes sure we don't pollute the host OS' mount space with entries made by
-  // us here.
-  if ((args->clone_ns_flags & CLONE_NEWNS) &&
-      (args->clone_ns_flags & CLONE_NEWUSER)) {
-    doWithCheck(
-        mount("none", "/", NULL, MS_SLAVE | MS_REC, 0),
-        "failed to mount / as slave");
-  }
-
-  cloneArgs->tmpdir = std::make_unique<TempDir>("dt-");
-
-  // TODO assert is bad (does not print buffered log output).
-  // Switch to throw runtime exception.
-  if ((args->clone_ns_flags & CLONE_NEWPID) == CLONE_NEWPID) {
-    pid_t first_pid;
-    if ((first_pid = getpid()) != 1) {
-      string errmsg("PID of first process expected to be 1, got: ");
-      errmsg += to_string(first_pid);
-      errmsg += "\n";
-      runtimeError(errmsg);
-    }
-  }
-
-  // DEVRAND STEP 1: create unique /dev/[u]random fifos before we fork, so
-  // that their names are available to tracee
-  {
-    TempPath tmpnamBuffer(*cloneArgs->tmpdir);
-    devrandFifoPath = tmpnamBuffer.path() + "-random.fifo";
-    devUrandFifoPath = tmpnamBuffer.path() + "-urandom.fifo";
-  }
-
-  doWithCheck(mkfifo(devrandFifoPath.c_str(), 0666), "mkfifo");
-  doWithCheck(mkfifo(devUrandFifoPath.c_str(), 0666), "mkfifo");
-
-  pid_t pid = fork();
-  if (pid < 0) {
-    runtimeError("fork() failed.\n");
-    exit(EXIT_FAILURE);
-  } else if (pid > 0) {
-    // We must mount proc so that the tracer sees the same PID and /proc/
-    // directory as the tracee. The tracee will do the same so it sees /proc/
-    // under it's chroot.
-    if ((args->clone_ns_flags & CLONE_NEWNS) == CLONE_NEWNS &&
-        (args->clone_ns_flags & CLONE_NEWPID) == CLONE_NEWPID) {
-      doWithCheck(
-          mount("none", "/proc/", "proc", MS_MGC_VAL, nullptr),
-          "tracer mounting proc failed");
-    }
-
-    if ((args->clone_ns_flags & CLONE_NEWNS) == CLONE_NEWNS) {
-      doWithCheck(
-          mount(
-              "none", "/dev/pts", "devpts", MS_MGC_VAL,
-              "newinstance,ptmxmode=0666"),
-          "tracer mounting devpts failed");
-      mountDir("/dev/ptmx", "/dev/pts/ptmx");
-    }
-
-    if (!fileExists(devrandFifoPath)) {
-      runtimeError("cannot create psudo /dev/random fifo");
-    }
-
-    if (!fileExists(devUrandFifoPath)) {
-      runtimeError("cannot create psudo /dev/urandom fifo");
-    }
-
-    // DEVRAND STEP 2: spawn a thread to write to each fifo
-    pthread_t devRandomPthread, devUrandomPthread;
-
-    unsigned short seed1 = args->prng_seed + 1234567890;
-    unsigned short seed2 = args->prng_seed + 234567890;
-    struct DevRandThreadParam params[2] = {
-        {devrandFifoPath, seed1},
-        {devUrandFifoPath, seed2},
-    };
-    // NB: we copy *FifoPath to the heap as our stack storage goes away: these
-    // allocations DO get leaked If we wanted to not leak them, devRandThread
-    // could copy to its stack and free the heap copy
-    pthread_mutex_lock(&devRandThreadMutex);
-    doWithCheck(
-        pthread_create(
-            &devRandomPthread, NULL, devRandThread, (void*)&params[0]),
-        "pthread_create /dev/random pthread");
-    pthread_cond_wait(&devRandThreadReady, &devRandThreadMutex);
-    // we should unlock then lock the mutex again, but just leave the mutex
-    // locked assuming: unlock -> lock = ID?
-    doWithCheck(
-        pthread_create(
-            &devUrandomPthread, NULL, devRandThread, (void*)&params[1]),
-        "pthread_create /dev/urandom pthread");
-    pthread_cond_wait(&devRandThreadReady, &devRandThreadMutex);
-    pthread_mutex_unlock(&devRandThreadMutex);
-    pthread_mutex_destroy(&devRandThreadMutex);
-
-    // allow tracee to unblock. it maybe dangerous if tracee runs too early,
-    // when devrandPthread and/or devUrandPthread is not ready: the tracee could
-    // have exited before the pthreads are created, hence the FifoPath might
-    // have be deleted by the tracee already.
-    int ready = 1;
-    doWithCheck(
-        write(pipefds[1], (const void*)&ready, sizeof(int)),
-        "spawnTracerTracee, pipe write");
-
-    execution exe{
-        args->debugLevel,      pid,
-        args->useColor,        args->logFile,
-        args->printStatistics, devRandomPthread,
-        devUrandomPthread,     cloneArgs->vdsoSyms,
-        args->prng_seed,       args->allow_network,
-        args->epoch,           args->clock_step,
-    };
-
-    globalExeObject = &exe;
-    struct sigaction sa;
-    sa.sa_handler = sigalrmHandler;
-    doWithCheck(sigemptyset(&sa.sa_mask), "sigemptyset");
-    sa.sa_flags = 0;
-    doWithCheck(sigaction(SIGALRM, &sa, NULL), "sigaction(SIGALRM)");
-    alarm(args->timeoutSeconds);
-
-    int exit_code = exe.runProgram();
-
-    // do exra house keeping.
-    doTracerCleanup(true, std::move(cloneArgs->tmpdir));
-    return exit_code;
-  } else if (pid == 0) {
-    int ready = 0;
-    doWithCheck(
-        read(pipefds[0], &ready, sizeof(int)), "spawnTracerTracee, pipe read");
-    assert(ready == 1);
-    return runTracee(args);
-  }
-  return -1;
 }
 
 // unwrap_or (default) OptionValue
@@ -921,9 +489,6 @@ programArgs parseProgramArguments(int argc, char* argv[]) {
     ( "timeoutSeconds",
       "Tear down all tracee processes with SIGKILL after this many seconds. The default is `0` (i.e., indefinite).",
       cxxopts::value<unsigned long>()->default_value("0"))
-    ( "rnr",
-      "provide an optional record and replay dynamic shared object to run during syscall enter/exit.",
-      cxxopts::value<std::string>()->default_value(""))
     ( "program",
       "program to run",
       cxxopts::value<std::string>())
@@ -1006,7 +571,7 @@ programArgs parseProgramArguments(int argc, char* argv[]) {
       if (result["epoch"].count()) {
         auto ts = result["epoch"].as<std::string>();
         if (ts == "now") {
-          args.epoch = logical_clock::now();
+          args.epoch = logical_clock::to_time_t(logical_clock::now());
         } else {
           struct tm tm;
           if (!strptime(ts.c_str(), "%Y-%m-%d,%H:%M:%S", &tm)) {
@@ -1015,26 +580,19 @@ programArgs parseProgramArguments(int argc, char* argv[]) {
             runtimeError(errmsg);
           }
           tm.tm_isdst = -1; /* dst auto detect */
-          args.epoch = logical_clock::from_time_t(timegm(&tm));
+          args.epoch = timegm(&tm);
         }
       }
     }
 
     if (result["clock-step"].count()) {
-      args.clock_step =
-          chrono::microseconds(result["clock-step"].as<unsigned long>());
+      args.clock_step = result["clock-step"].as<unsigned long>();
     }
 
     if (result["in-docker"].as<bool>()) {
       args.in_docker = true;
       args.clone_ns_flags = 0;
       base_env = "host";
-    }
-
-    if (result["rnr"].count() > 0) {
-      args.rnr = result["rnr"].as<std::string>();
-
-      rnr::loadRnr(args.rnr);
     }
 
     if (result["volume"].count()) {
@@ -1125,7 +683,7 @@ programArgs parseProgramArguments(int argc, char* argv[]) {
             "We detected you are not currently running inside a chroot env.\n");
         exit(1);
       }
-      // Treat current enviornment as our chroot.
+      // Treat current environment as our chroot.
       args.pathToChroot = "/";
     }
   } catch (cxxopts::option_not_exists_exception& e) {
@@ -1134,119 +692,4 @@ programArgs parseProgramArguments(int argc, char* argv[]) {
     exit(1);
   }
   return args;
-}
-// =======================================================================================
-/**
- * Use stat to check if file/directory exists to mount.
- * @return boolean if file exists
- */
-static bool fileExists(const string& file) {
-  struct stat sb;
-
-  return (stat(file.c_str(), &sb) == 0);
-}
-
-/**
- * Wrapper around mount with strings.
- */
-static void mountDir(const string& source, const string& target) {
-  /* Check if source path exists*/
-  if (!fileExists(source)) {
-    runtimeError(
-        "Trying to mount " + source + " => " + target +
-        ". Source file does not exist.\n");
-  }
-
-  /* Check if target path exists*/
-  if (!fileExists(target)) {
-    runtimeError(
-        "Trying to mount " + source + " => " + target +
-        ". Target file does not exist.\n");
-  }
-
-  // TODO: Marking it as private here shouldn't be necessary since we already
-  // unshared the entire namespace as private? Notice that we want a bind mount,
-  // so MS_BIND is necessary. MS_REC is also necessary to properly work when
-  // mounting dirs that are themselves bind mounts, otherwise you will get an
-  // error EINVAL as per `man 2 mount`: EINVAL In an unprivileged mount
-  // namespace (i.e., a mount namespace owned by  a  user
-  //             namespace  that  was created by an unprivileged user), a bind
-  //             mount operation (MS_BIND)  was  attempted  without  specifying
-  //             (MS_REC),  which  would  have revealed the filesystem tree
-  //             underneath one of the submounts of the directory being bound.
-
-  // Note this line causes spurious false positives when running under valgrind.
-  // It's okay that these areguments are nullptr.
-  doWithCheck(
-      mount(
-          source.c_str(), target.c_str(), nullptr,
-          MS_BIND | MS_PRIVATE | MS_REC, nullptr),
-      "Unable to bind mount: " + source + " to " + target);
-}
-// =======================================================================================
-static void update_map(char* mapping, char* map_file) {
-  int fd = open(map_file, O_WRONLY);
-  if (fd == -1) {
-    fprintf(stderr, "ERROR: open %s: %s\n", map_file, strerror(errno));
-    exit(EXIT_FAILURE);
-  }
-  ssize_t map_len = strlen(mapping);
-  if (write(fd, mapping, map_len) != map_len) {
-    fprintf(stderr, "ERROR: write %s: %s\n", map_file, strerror(errno));
-    exit(EXIT_FAILURE);
-  }
-
-  close(fd);
-}
-// =======================================================================================
-/* Linux 3.19 made a change in the handling of setgroups(2) and the
-   'gid_map' file to address a security issue. The issue allowed
-   *unprivileged* users to employ user namespaces in order to drop
-   The upshot of the 3.19 changes is that in order to update the
-   'gid_maps' file, use of the setgroups() system call in this
-   user namespace must first be disabled by writing "deny" to one of
-   the /proc/PID/setgroups files for this namespace.  That is the
-   purpose of the following function. */
-static void proc_setgroups_write(pid_t pid, const char* str) {
-  char setgroups_path[PATH_MAX];
-  int fd;
-
-  snprintf(setgroups_path, PATH_MAX, "/proc/%d/setgroups", pid);
-
-  fd = open(setgroups_path, O_WRONLY);
-  if (fd == -1) {
-    /* We may be on a system that doesn't support
-       /proc/PID/setgroups. In that case, the file won't exist,
-       and the system won't impose the restrictions that Linux 3.19
-       added. That's fine: we don't need to do anything in order
-       to permit 'gid_map' to be updated.
-       However, if the error from open() was something other than
-       the ENOENT error that is expected for that case,  let the
-       user know. */
-
-    if (errno != ENOENT)
-      fprintf(stderr, "ERROR: open %s: %s\n", setgroups_path, strerror(errno));
-    return;
-  }
-
-  if (write(fd, str, strlen(str)) == -1)
-    fprintf(stderr, "ERROR: write %s: %s\n", setgroups_path, strerror(errno));
-
-  close(fd);
-}
-
-// =======================================================================================
-// Create a blank file with sensible permissions.
-static void createFileIfNotExist(const string& path) {
-  if (fileExists(path)) {
-    return;
-  }
-
-  int fd;
-  doWithCheck(
-      (fd = open(path.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH)),
-      "Unable to create file: " + path);
-  if (fd >= 0) close(fd);
-
-  return;
 }
