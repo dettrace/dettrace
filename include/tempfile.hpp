@@ -21,6 +21,8 @@
 #define PATH_SEPEARTOR '/';
 #endif
 
+pid_t gettid(void);
+
 class TempDir {
 private:
   std::string name;
