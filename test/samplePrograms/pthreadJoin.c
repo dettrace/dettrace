@@ -12,7 +12,7 @@ const int bytesToRead = 100;
 const int bytesToWrite = 100;
 int pipefd[2];
 
-int thread_func(void *arg){
+void* thread_func(void *arg){
   printf("Thread - my pid is: %d\n", getpid());
   printf("Thread - my ppid is: %d\n", getppid());
   printf("Thread wants to read from pipe.\n");

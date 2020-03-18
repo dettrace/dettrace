@@ -22,7 +22,7 @@ int main(){
   struct stat myStat;
   withError(stat(file, &myStat), "stat");
   time_t mtime = myStat.st_mtime;
-  ino_t inode = myStat.st_ino;
+  // ino_t inode = myStat.st_ino;
 
   system("rm -rf "file);
   printf("mtime %ld\n", mtime);

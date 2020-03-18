@@ -1,4 +1,4 @@
-#define _GNU_SOURCE
+
 #include <dirent.h>     /* Defines DT_* constants */
 #include <fcntl.h>
 #include <stdio.h>

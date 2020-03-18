@@ -1,4 +1,4 @@
-#define _GNU_SOURCE
+
 #include <pthread.h>
 #include <sched.h>
 #include <errno.h>
@@ -17,23 +17,23 @@ const int bytesToRead = 100;
 const int bytesToWrite = 100;
 int pipefd[2];
 
-int second_thread(void *arg){
+void* second_thread(void *arg){
   printf("Thread2 trying to write to pipe.\n");
   char buf[bytesToWrite];
   int bytes = write(pipefd[1], buf, bytesToWrite);
   printf("Thread2 wrote this many bytes: %d\n", bytes);
   printf("Thread2 is done.\n");
   fflush(NULL);
-  return 0;
+  return NULL;
 }
 
-int first_thread(void *arg){
+void* first_thread(void *arg){
   char buffer[bytesToRead];
   int b = read(pipefd[0], buffer, bytesToRead);
   printf("Thread1 read this many bytes: %d\n", b);
   printf("Thread1 is done.\n");
   fflush(NULL);
-  return 0;
+  return NULL;
 }
 
 int main(void){
@@ -46,9 +46,9 @@ int main(void){
   printf("Process spawning thread1 with pthread create.\n");
   pthread_t thread1;
   pthread_t thread2;
-  int p = pthread_create(&thread1, NULL, first_thread, NULL);
+  pthread_create(&thread1, NULL, first_thread, NULL);
   printf("Process spawning thread2 with pthread create.\n");
-  int p2 = pthread_create(&thread2, NULL, second_thread, NULL);
+  pthread_create(&thread2, NULL, second_thread, NULL);
   pthread_join(thread1, NULL);
   pthread_join(thread2, NULL);
   

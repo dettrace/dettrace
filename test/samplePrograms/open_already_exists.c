@@ -1,3 +1,6 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -37,8 +40,8 @@ int main(){
   system("rm -f temp.txt");
 
   printf("mtime %ld\n", time);
-  printf("mtime2 %ld\n", time);
-  printf("mtime3 %ld\n", time);
+  printf("mtime2 %ld\n", time2);
+  printf("mtime3 %ld\n", time3);
 
   return 0;
 }

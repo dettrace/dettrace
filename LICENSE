@@ -1,4 +1,4 @@
-Copyright 2017-2019
+Copyright 2017-2020
 
 This work is a product of joint-authorship, with source files herein
 owned by the below contributors, unless otherwise specified in a file
@@ -10,10 +10,15 @@ or subdirectory of this DetTrace repository.
    - Kelly Renee Shiptoski <kelly.shiptoski@gmail.com>
  * Cloudseal Inc, via contributions of:
    - Omar Navarro Leija <gatoWololo@gmail.com>
+   - Jason White <github@jasonwhite.io>
    - Joseph Devietti <joe@devietti.net>
    - Kelly Renee Shiptoski <kelly.shiptoski@gmail.com>
    - Ryan Glenn Scott <ryan.gl.scott@gmail.com>
    - Ryan Rhodes Newton <rrnewton@gmail.com>
+ * Facebook, Inc. and its affiliates. Based on contributions of:
+   - Baojun Wang <wangbj@fb.com>
+   - Jason White <jasonwhite@fb.com>
+   - Ryan Rhodes Newton <newton@fb.com>   
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in

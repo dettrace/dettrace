@@ -1,4 +1,4 @@
-#define _GNU_SOURCE
+
 #include <sched.h>
 #include <errno.h>
 #include <stdio.h>
@@ -21,14 +21,14 @@ int pipefd[2];
 // Process spawns thread with clone().
 // Thread blocks trying to read from a pipe.
 // Can the process still exit?
-int thread_func(void *arg){
+void* thread_func(void *arg){
   printf("Thread wants to read from pipe.\n");
   char buf[bytesToRead];
-  int bytes = read(pipefd[0], buf, bytesToRead);
-  return 0;
+  read(pipefd[0], buf, bytesToRead);
+  return NULL;
 }
 
-int other_func(void *arg){
+void* other_func(void *arg){
   printf("Special thread triggering exit_group.\n");
     _exit(EXIT_SUCCESS);
 }
@@ -44,20 +44,22 @@ int main(void){
   }
 
   pthread_t threads[10];
-  int t[10];
+  // int t[10];
   for(int i = 0; i < 9; i++){
     //void* child_stack = malloc(STACK_SIZE);
     //int thread_pid;
     printf("Creating new thread.\n");
     //thread_pid = clone(thread_func, child_stack+STACK_SIZE, CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, NULL);
-    t[i] = pthread_create(&threads[i], NULL, thread_func, NULL);
+    // t[i] =
+    pthread_create(&threads[i], NULL, thread_func, NULL);
   }
 
   //void* child_stack = malloc(STACK_SIZE);
   //int thread_pid;
   printf("Creating special thread.\n");
   //thread_pid = clone(other_func, child_stack+STACK_SIZE, CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, NULL);
-  t[9] = pthread_create(&threads[9], NULL, other_func, NULL);
+  // t[9] =
+  pthread_create(&threads[9], NULL, other_func, NULL);
   
   for(int i = 0; i < 10; i++){
     pthread_join(threads[i], NULL);

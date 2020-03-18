@@ -5,7 +5,7 @@
 #include <unistd.h>
 
 // TODO: Thread function.
-void thread_func(void *arg){
+void* thread_func(void *arg){
   printf("Thread's pid: %d\n", getpid());
   printf("Thread's ppid: %d\n", getppid());
   pthread_exit(NULL);
