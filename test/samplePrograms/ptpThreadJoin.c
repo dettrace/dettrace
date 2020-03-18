@@ -16,7 +16,7 @@ const int bytesToRead = 100;
 const int bytesToWrite = 100;
 int pipefd[2];
 
-int thread_func(void *arg){
+void* thread_func(void *arg){
   printf("Thread1 forking P2.\n");
   printf("Thread 1 pid: %d\n", getpid());
   printf("Thread 1 ppid: %d\n", getppid());
@@ -31,7 +31,7 @@ int thread_func(void *arg){
     printf("Child process read this many bytes: %d\n", bytes);
     printf("Child process done.\n");
     printf("Child process parent pid is now: %d\n", getppid());
-    return 0;
+    return NULL;
   }
   
   // Thread writes to pipe.
@@ -53,7 +53,7 @@ int main(void){
   printf("Parent process ppid: %d\n", getppid());
   
   pthread_t thread1;
-  int p = pthread_create(&thread1, NULL, thread_func, NULL);
+  pthread_create(&thread1, NULL, thread_func, NULL);
   printf("Process made thread.\n");
   pthread_join(thread1, NULL);
 

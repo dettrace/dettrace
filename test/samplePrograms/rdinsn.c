@@ -51,11 +51,12 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  int (*rdinsn)(unsigned long long*);
+  // int (*rdinsn)(unsigned long long*);
   if (0 == strcmp("rdrand",argv[1])) {
-    rdinsn = rdrand;
+    // rdinsn = rdrand;
   } else if (0 == strcmp("rdseed",argv[1])) {
-    rdinsn = rdseed;
+    // UNFINISHED!
+    // rdinsn = rdseed;
   } else {
     printUsage(argv[0]);
     return 1;

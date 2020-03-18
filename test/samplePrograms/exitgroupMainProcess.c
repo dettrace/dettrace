@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #include <sched.h>
 #include <errno.h>
 #include <stdio.h>
@@ -21,11 +20,11 @@ int pipefd[2];
 // Process spawns thread with clone().
 // Thread blocks trying to read from a pipe.
 // Can the process still exit?
-int thread_func(void *arg){
+void* thread_func(void *arg){
   printf("Thread wants to read from pipe.\n");
   char buf[bytesToRead];
-  int bytes = read(pipefd[0], buf, bytesToRead);
-  return 0;
+  read(pipefd[0], buf, bytesToRead);
+  return NULL;
 }
 
 int main(void){
@@ -39,10 +38,9 @@ int main(void){
   }
 
   pthread_t threads[10];
-  int t[10];
   for(int i = 0; i < 10; i++){
     printf("Creating new thread.\n");
-    t[i] = pthread_create(&threads[i], NULL, thread_func, NULL);
+    pthread_create(&threads[i], NULL, thread_func, NULL);
   }
 
   // Give some time for threads to spawn...

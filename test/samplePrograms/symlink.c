@@ -29,7 +29,7 @@ int main(){
 
   struct stat st;
   withError(lstat(symlink_name, &st), "stat");
-  ino_t inode = st.st_ino;
+  // ino_t inode = st.st_ino;
 
   withError(unlink(symlink_target), "Unlink "symlink_target);
   withError(unlink(symlink_name), "Unlink symlink");

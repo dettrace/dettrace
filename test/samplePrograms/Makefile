@@ -44,18 +44,18 @@ test-scripts: $(patsubst %.sh, %.ok, $(SHELL_SCRIPTS))
 
 # compile each sample program binary
 $(SIMPLE_BINARIES): %.bin: %.c
-	@$(CC) $< -Wall -g -o $@ -pthread -std=gnu99
+	@$(CC) $< -Wall -Werror -g -o $@ -pthread -std=gnu99
 
 # HW RNG tests need >=broadwell codegen
 $(BROADWELL_BINARIES): %.bin: %.c
-	@$(CC) $< -Wall -g -o $@ -pthread -std=gnu99 -march=broadwell
+	@$(CC) $< -Wall -Werror -g -o $@ -pthread -std=gnu99 -march=broadwell
 
 # timer_create tests need to link with -lrt
 $(RT_BINARIES): %.bin: %.c
-	@$(CC) $< -Wall -g -o $@ -std=gnu99 -lrt
+	@$(CC) $< -Wall -Werror -g -o $@ -std=gnu99 -lrt
 
 $(CXX_BINARIES): %.bin: %.cpp
-	@$(CXX) $< -Wall -g -o $@ -std=gnu++11
+	@$(CXX) $< -Wall -Werror -g -o $@ -std=gnu++11
 
 rdinsn.ok: rdinsn.bin
 	@echo "   Testing rdrand..."
