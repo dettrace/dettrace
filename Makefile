@@ -1,17 +1,18 @@
 # Name of the package. The version number should be modified in the VERSION
 # file.
 NAME := dettrace
-VERSION := $(shell cat VERSION)
+VERSIONFILE= ./VERSION
+DTVERSION := $(shell cat $(VERSIONFILE))
 BUILDID := $(shell git rev-list --count HEAD 2> /dev/null || echo 0)
 
-PKGNAME := $(NAME)_$(VERSION)-$(BUILDID)
+PKGNAME := $(NAME)_$(DTVERSION)-$(BUILDID)
 
 # Compilation options
 CXX := clang++
 CC := clang
 CLANG_TIDY := clang-tidy
 
-DEFINES := -D_GNU_SOURCE=1 -D_POSIX_C_SOURCE=20181101 -D__USE_XOPEN=1 -DAPP_VERSION=\"$(VERSION)\" -DAPP_BUILDID=\"$(BUILDID)\"
+DEFINES := -D_GNU_SOURCE=1 -D_POSIX_C_SOURCE=20181101 -D__USE_XOPEN=1 -DAPP_VERSION=\"$(DTVERSION)\" -DAPP_BUILDID=\"$(BUILDID)\"
 INCLUDE := -I include -I cxxopts/include
 CXXFLAGS += -g -O3 -std=c++14 -Wall $(INCLUDE) $(DEFINES)
 CFLAGS += -g -O3 -Wall -Wshadow $(INCLUDE) $(DEFINES)
@@ -58,7 +59,7 @@ bin:
 
 # This only builds a dynamically linked binary.
 dynamic: bin/$(NAME)
-bin/$(NAME): bin $(obj) VERSION
+bin/$(NAME): bin $(obj) $(VERSIONFILE)
 	$(CXX) $(CXXFLAGS) $(obj) $(LIBS) -o $@
 
 # This only builds a statically linked binary.
@@ -68,7 +69,7 @@ bin/$(NAME)-static: bin $(obj)
 
 # Compile the source files and generate a dep file at the same time so that
 # incremental builds work (relatively) correctly.
-src/%.o: src/%.cpp VERSION
+src/%.o: src/%.cpp $(VERSIONFILE)
 # Check if clang-tidy is installed. If not, skip formatting.
 ifeq (, $(shell which $(CLANG_TIDY)))
 	@echo "Skipping formating via clang-tidy"
@@ -101,14 +102,14 @@ run-tests: build-tests build
 
 # Build the system inside Docker.  This produces an image shippable to Dockerhub.
 docker:
-	docker build -t "$(NAME):$(VERSION)" -t "$(NAME):latest" --build-arg "BUILDID=$(BUILDID)" .
+	docker build -t "$(NAME):$(DTVERSION)" -t "$(NAME):latest" --build-arg "BUILDID=$(BUILDID)" .
 
 
-tarball: ${NAME}_alpha_pkg_${VERSION}.tbz
-${NAME}_alpha_pkg_${VERSION}.tbz: docker
-	docker run -i --rm --workdir /usr/share/${NAME} "$(NAME):$(VERSION)" tar cf - . | bzip2 > ${NAME}_alpha_pkg_${VERSION}.tbz
+tarball: ${NAME}_alpha_pkg_${DTVERSION}.tbz
+${NAME}_alpha_pkg_${DTVERSION}.tbz: docker
+	docker run -i --rm --workdir /usr/share/${NAME} "$(NAME):$(DTVERSION)" tar cf - . | bzip2 > ${NAME}_alpha_pkg_${DTVERSION}.tbz
 
-DOCKER_RUN_ARGS=--rm --privileged --userns=host $(OTHER_DOCKER_ARGS) $(NAME):$(VERSION)
+DOCKER_RUN_ARGS=--rm --privileged --userns=host $(OTHER_DOCKER_ARGS) $(NAME):$(DTVERSION)
 
 # Run the same image we built.
 run-docker: docker
@@ -128,8 +129,8 @@ clean:
 
 # Build a Debian package.
 deb: $(PKGNAME).deb
-$(PKGNAME).deb: bin/$(NAME)-static ci/create_deb.sh VERSION
-	./ci/create_deb.sh "$(NAME)" "$(VERSION)-$(BUILDID)"
+$(PKGNAME).deb: bin/$(NAME)-static ci/create_deb.sh $(VERSIONFILE)
+	./ci/create_deb.sh "$(NAME)" "$(DTVERSION)-$(BUILDID)"
 
 # Installs the Debian package.
 install-deb: $(PKGNAME).deb
