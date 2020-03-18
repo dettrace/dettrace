@@ -5,6 +5,33 @@
 
 Here, we give an overview of the command line interface for Dettrace as well as common Dettrace workflows. We describe the steps necessary to build Dettrace, software dependencies, hardware requirements, and compiler toolchains. Furthermore, we show various example use-cases for Dettrace and using chroot environments.
 
+## Quick Start
+
+To quickly run something deterministically, use Docker.  Clone this repository and build:
+
+```bash
+docker build -t dettrace .
+docker run -it --rm --privileged dettrace
+```
+
+Or pull and run from DockerHub:
+
+```bash
+docker run -it --rm --privileged dettrace/dettrace
+```
+
+Once inside the container (in privileged mode with CAP_SYS_ADMIN), you can run under dettrace:
+
+```bash
+> dettrace  --epoch="1980-01-01,00:00:00" date
+Tue Jan  1 00:00:00 UTC 1980
+```
+
+In this simple example, by controlling the container config, we
+controlled the virtual time exposed through system calls inside the
+reproducible container.
+
+
 ## Description
 
 The latest version of Dettrace can be found on GitHub at https://github.com/dettrace/dettrace.
@@ -63,17 +90,25 @@ You are now ready to use Dettrace and the chroot (see below).
 
 ## Experiment workflow
 
-Dettrace is a command line tool which makes it easy to make computation reproducible. You can simply prepend the command you are interested in determinizing with `./path/to/dettrace`. For example:
+Dettrace is a command line tool which makes it easy to make computation reproducible. You can simply prepend the command you are interested in determinizing with `./path/to/dettrace`, but if you want to execute a command containing hyphenated flags, be sure to separate it with ` -- `.
+For example:
 
 ```bash
-> ./bin/dettrace ls -ahl
+> ./bin/dettrace -- ls -ahl
 -rw-r--r-- 1 root ... Jan 1 1970 initramfs.cpio
 drwxr-xr-x 1 root ... Jan 1 1970 root
 -rw-r--r-- 1 root ... Jan 1 1970 shell.nix
 drwxr-xr-x 1 root ... Jan 1 1970 src
 ...
 ```
-Note the dates of all files are now deterministic! Dettrace will determinize the specified program along with any subprocesses that are spawned. Furthermore, Dettrace containerizes the program to guarantee a reproducible starting filesystem.
+Note the modification dates of all files are now deterministic! Dettrace will determinize the specified program along with any subprocesses that are spawned. Furthermore, Dettrace containerizes the program to guarantee a reproducible starting filesystem.  For example `/tmp` must always start empty, and if we generate a temp file it must be deterministic:
+
+```bash
+> ./bin/dettrace -- ls /tmp
+> ./bin/dettrace -- bash -c 'mktemp; ls /tmp'
+/tmp/tmp.GF2eacAJCh
+tmp.GF2eacAJCh
+```
 
 Similarly we may create a file and then `stat` the file with Dettrace:
 ```bash
@@ -90,35 +125,7 @@ Change: 1970-01-01 00:00:00.000000000 +0000
 ```
 Notice the file's metadata is now deterministic!
 
-We didn't specify a container when calling Dettrace with these simple commands. Yet, when running commands:
-```bash
-> ./bin/dettrace pwd
-/build
-> ./bin/dettrace ls /
-bin/ build/ dettrace/ dev/ etc/ lib/ ...
-```
-
-We see the current working directory (CWD) is `/build` and listing the root directory looks vastly different from the host's root directory. This is because when no container is specified Dettrace will create a minimal one based on the `root/` directory found at the top level of the Dettrace repository.
-
-Running:
-```bash
-> ls root
-bin/ build/ dettrace/ dev/ etc/ lib/ ...
-```
-
-We can see this directory holds what looks like a minimal Linux filesystem. For this reason, Dettrace needs to be able to find the `root/` directory, which Dettrace expects will always be `../root/` relative to the location of the binary.
-
-While running the command without a chroot is easy, it does not guarantee reproducibility since the starting filesystem state may be different from run to run. Therefore we use the chroot flag to specify the chroot image created in the build step (see above). We can use this chroot as the starting image for Dettrace:
-```
-./bin/dettrace --chroot path/to/stretch/ ls
-```
-
-This command will now run deterministically using the chroot as the starting image.
-Dettrace also supports running inside Docker containers, see the Makefile and Dockerfile
-to see how this is done for our own tests.
-
-A chroot or containerized environment is the standard and recommend way to use Dettrace.
-
+The current release of dettrace does not build its a custom chroot environment for executing each command.  Rather, you can control the base filesystem image using existing container technology like Docker.  Running dettrace inside a Docker container will expose the `/` file system including CWD.
 
 ## Evaluation and expected result
 
@@ -135,7 +142,7 @@ Dettrace comes with dozens of sample nondeterministic programs meant to stress t
 
 Let's do a reproducible build! For simplicity we will use Dettrace itself as the program to build reproducibly. From the root directory of the Dettrace repository:
 ```bash
-./bin/dettrace make -C src/
+./bin/dettrace -- make -C src/
 ```
 
 This will build Dettrace deterministically under Dettrace. You can use a program like `hashdeep` to hash the binary outputs of programs and ensure the results are deterministic
