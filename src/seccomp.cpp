@@ -131,6 +131,8 @@ void seccomp::loadRules(bool debug, bool convertUids) {
   noIntercept(SYS_setresgid);
   noIntercept(SYS_setresuid);
   noIntercept(SYS_setreuid);
+  noIntercept(SYS_setfsgid);
+  noIntercept(SYS_setfsuid);
   noIntercept(SYS_setuid);
   // This seems to be, surprisingly, deterministic. The affinity is set/get by
   // us so it should always be the same mask. User cannot actually observe
