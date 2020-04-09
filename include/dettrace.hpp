@@ -36,14 +36,14 @@ typedef long (*SysExit)(
     unsigned long arg4,
     unsigned long arg5);
 
+/// Represents a mount. These parameters are passed directly to mount(2).
 typedef struct {
-  // Path to the chroot directory.
-  const char* chroot_dir;
-
-  bool with_devrand_overrides;
-  bool with_proc_overrides;
-  bool with_etc_overrides;
-} MountOptions;
+  const char* source;
+  const char* target;
+  const char* fstype;
+  unsigned long flags;
+  const void* data;
+} Mount;
 
 /**
  * Options for Dettrace.
@@ -99,7 +99,14 @@ typedef struct {
 
   bool convert_uids;
 
-  MountOptions mount;
+  // NULL terminated array of mounts.
+  Mount* const* mounts;
+
+  // Directory to chroot into.
+  const char* chroot_dir;
+
+  // Mount our own deterministic /dev/[u]random fifo pipes.
+  bool with_devrand_overrides;
 
   // Logging options
   int debug_level;

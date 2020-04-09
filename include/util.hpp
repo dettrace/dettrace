@@ -68,7 +68,8 @@ int parseNum(const char* const numToParse);
  *                     an the clib function returned -1 (failed)
  * @return the return value of the clib function.
  */
-int doWithCheck(int returnValue, string errorMessage);
+int doWithCheck(int returnValue, const char* errorMessage);
+void sysError(const char* context);
 
 // =======================================================================================
 /**

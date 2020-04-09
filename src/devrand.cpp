@@ -69,7 +69,10 @@ void* RandThread::runThread(void* data_) {
   // lost during this process, ensuring the tracee(s) always see(s) a
   // deterministic sequence of reads.
   int fd = open(t->fifo.c_str(), O_RDWR);
-  doWithCheck(fd, std::string("open: ") + t->fifo);
+  if (fd == -1) {
+    auto err = std::string("open: ") + t->fifo;
+    sysError(err.c_str());
+  }
   pthread_cond_signal(&t->thread_ready);
   pthread_mutex_unlock(&t->thread_mutex);
 

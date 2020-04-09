@@ -167,6 +167,16 @@ static int run_main(programArgs& args) {
   // https://github.com/dettrace/dettrace/issues/23
   auto envs = make_envp(args.envs);
 
+  // TODO: Mount things from our rootfs
+  //
+  // If args.with_proc_overrides is true, then we should mount "/proc/meminfo",
+  // "/proc/stat", and "/proc/filesystems".
+  //
+  // If args.with_etc_overrides is true, then we should mount "/etc/hosts",
+  // "/etc/passwd", "/etc/group", and "/etc/ld.so.cache".
+  std::vector<std::unique_ptr<Mount>> mounts;
+  mounts.push_back(nullptr);
+
   TraceOptions options{
       .program = argv[0].get(),
       .argv = (char* const*)(argv.data()),
@@ -183,13 +193,9 @@ static int run_main(programArgs& args) {
       .allow_network = args.allow_network,
       .with_aslr = args.with_aslr,
       .convert_uids = args.convertUids,
-      .mount =
-          {
-              .chroot_dir = args.pathToChroot.c_str(),
-              .with_devrand_overrides = args.with_devrand_overrides,
-              .with_proc_overrides = args.with_proc_overrides,
-              .with_etc_overrides = args.with_etc_overrides,
-          },
+      .mounts = (Mount* const*)(mounts.data()),
+      .chroot_dir = args.pathToChroot.c_str(),
+      .with_devrand_overrides = args.with_devrand_overrides,
       .debug_level = args.debugLevel,
       .use_color = args.useColor,
       .print_statistics = args.printStatistics,

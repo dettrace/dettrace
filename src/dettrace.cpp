@@ -39,8 +39,8 @@ static pid_t _dettrace(const TraceOptions* opts);
 static int _dettrace_child(const CloneArgs* opts);
 static int runTracee(
     const TraceOptions& opts,
-    const std::string& devrandFifoPath,
-    const std::string& devUrandFifoPath);
+    const char* devrandFifoPath,
+    const char* devUrandFifoPath);
 
 // See user_namespaces(7)
 static void update_map(char* mapping, char* map_file);
@@ -73,28 +73,27 @@ void sigalrmHandler(int _) {
  * Use stat to check if file/directory exists to mount.
  * @return boolean if file exists
  */
-static bool fileExists(const std::string& file) {
+static bool fileExists(const char* file) {
   struct stat sb;
-
-  return (stat(file.c_str(), &sb) == 0);
+  return (stat(file, &sb) == 0);
 }
 
 /**
  * Wrapper around mount with strings.
  */
-static void mountDir(const std::string& source, const std::string& target) {
+static void mountDir(const char* source, const char* target) {
   /* Check if source path exists*/
   if (!fileExists(source)) {
     runtimeError(
-        "Trying to mount " + source + " => " + target +
-        ". Source file does not exist.\n");
+        "Trying to mount " + std::string{source} + " => " +
+        std::string{target} + ". Source file does not exist.\n");
   }
 
   /* Check if target path exists*/
   if (!fileExists(target)) {
     runtimeError(
-        "Trying to mount " + source + " => " + target +
-        ". Target file does not exist.\n");
+        "Trying to mount " + std::string{source} + " => " +
+        std::string{target} + ". Target file does not exist.\n");
   }
 
   // TODO: Marking it as private here shouldn't be necessary since we already
@@ -110,26 +109,30 @@ static void mountDir(const std::string& source, const std::string& target) {
 
   // Note this line causes spurious false positives when running under valgrind.
   // It's okay that these areguments are nullptr.
-  doWithCheck(
-      mount(
-          source.c_str(), target.c_str(), nullptr,
-          MS_BIND | MS_PRIVATE | MS_REC, nullptr),
-      "Unable to bind mount: " + source + " to " + target);
+  if (mount(source, target, nullptr, MS_BIND | MS_PRIVATE | MS_REC, nullptr) ==
+      -1) {
+    auto err = "Unable to bind mount: " + std::string{source} + " to " +
+               std::string{target};
+    sysError(err.c_str());
+  }
 }
 
 /**
  * Creates a blank file with sensible permissions.
  */
 static void createFileIfNotExist(const std::string& path) {
-  if (fileExists(path)) {
+  if (fileExists(path.c_str())) {
     return;
   }
 
-  int fd;
-  doWithCheck(
-      (fd = open(path.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH)),
-      "Unable to create file: " + path);
-  if (fd >= 0) close(fd);
+  int fd = open(path.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH);
+  if (fd == -1) {
+    auto err = "Unable to create file: " + path;
+    sysError(err.c_str());
+  }
+  if (fd >= 0) {
+    close(fd);
+  }
 
   return;
 }
@@ -142,7 +145,7 @@ static pid_t _dettrace(const TraceOptions* opts) {
   // our own user namespace. Other namespace commands require CAP_SYS_ADMIN to
   // work. Namespaces must must be done before fork. As changes don't apply
   // until after fork, to all child processes.
-  const int STACK_SIZE(1024 * 1024);
+  const int STACK_SIZE(1024 * 4096);
   static char child_stack[STACK_SIZE]; /* Space for child's stack */
 
   doWithCheck(
@@ -193,8 +196,7 @@ static pid_t _dettrace(const TraceOptions* opts) {
     update_map(uid_map, map_path);
 
     // Set GID Map
-    string deny = "deny";
-    proc_setgroups_write(child, deny.c_str());
+    proc_setgroups_write(child, "deny");
     snprintf(map_path, PATH_MAX, "/proc/%d/gid_map", child);
     snprintf(map_buf, MAP_BUF_SIZE, "0 %ld 1", (long)gid);
     gid_map = map_buf;
@@ -239,21 +241,28 @@ static int _dettrace_child(const CloneArgs* clone_args) {
 
   doWithCheck(pipe2(pipefds, O_CLOEXEC), "spawnTracerTracee pipe2 failed");
 
-  auto tmpdir = std::make_unique<TempDir>("dt-");
-
-  std::string devrandFifoPath;
-  std::string devUrandFifoPath;
-
-  // DEVRAND STEP 1: create unique /dev/[u]random fifos before we fork, so
-  // that their names are available to tracee
+  // Create fifo files for /dev/random and /dev/urandom. We can't use the normal
+  // C++ish way because we need to avoid any allocations before the `fork()`
+  // happens.
+  char devrandFifoPath[] = "/tmp/dt-XXXXXX";
   {
-    TempPath tmpnamBuffer(*tmpdir);
-    devrandFifoPath = tmpnamBuffer.path() + "-random.fifo";
-    devUrandFifoPath = tmpnamBuffer.path() + "-urandom.fifo";
+    int fd =
+        doWithCheck(mkstemp(devrandFifoPath), "failed to mkstemp devrand fifo");
+    unlink(devrandFifoPath);
+    doWithCheck(
+        mkfifo(devrandFifoPath, 0666), "failed creating /dev/random fifo");
+    close(fd);
   }
 
-  doWithCheck(mkfifo(devrandFifoPath.c_str(), 0666), "mkfifo");
-  doWithCheck(mkfifo(devUrandFifoPath.c_str(), 0666), "mkfifo");
+  char devUrandFifoPath[] = "/tmp/dt-XXXXXX";
+  {
+    int fd = doWithCheck(
+        mkstemp(devUrandFifoPath), "failed to mkstemp devurand fifo");
+    unlink(devUrandFifoPath);
+    doWithCheck(
+        mkfifo(devUrandFifoPath, 0666), "failed creating /dev/urandom fifo");
+    close(fd);
+  }
 
   pid_t pid = fork();
   if (pid < 0) {
@@ -342,11 +351,8 @@ static int _dettrace_child(const CloneArgs* clone_args) {
 
     umount("/tmp");
 
-    unlink(devrandFifoPath.c_str());
-    unlink(devUrandFifoPath.c_str());
-
-    auto path = tmpdir->path();
-    unlink(path.c_str());
+    unlink(devrandFifoPath);
+    unlink(devUrandFifoPath);
 
     return exit_code;
   } else if (pid == 0) {
@@ -363,18 +369,15 @@ static int _dettrace_child(const CloneArgs* clone_args) {
 // This function runs in the child (i.e., the tracee).
 static int runTracee(
     const TraceOptions& opts,
-    const std::string& devrandFifoPath,
-    const std::string& devUrandFifoPath) {
+    const char* devrandFifoPath,
+    const char* devUrandFifoPath) {
   if (!opts.with_aslr) {
     // Disable ASLR for our child
     doWithCheck(
         personality(PER_LINUX | ADDR_NO_RANDOMIZE), "Unable to disable ASLR");
   }
 
-  if (opts.mount.chroot_dir &&
-      (opts.clone_ns_flags & CLONE_NEWNS) == CLONE_NEWNS) {
-    const auto pathToChroot = std::string{opts.mount.chroot_dir};
-
+  if ((opts.clone_ns_flags & CLONE_NEWNS) == CLONE_NEWNS) {
     if (!fileExists("/dev/null")) {
       // we're running under reprotest as sudo, so we can use real mknod
       // hat tip to:
@@ -385,29 +388,51 @@ static int runTracee(
       doWithCheck(mknod("/dev/null", mode, dev), "mknod");
     }
 
-    if (opts.mount.with_devrand_overrides) {
+    if (opts.with_devrand_overrides) {
       createFileIfNotExist("/dev/random");
       mountDir(devrandFifoPath, "/dev/random");
       createFileIfNotExist("/dev/urandom");
       mountDir(devUrandFifoPath, "/dev/urandom");
     }
 
-    if (opts.mount.with_proc_overrides) {
-      mountDir(pathToChroot + "/proc/meminfo", "/proc/meminfo");
-      mountDir(pathToChroot + "/proc/stat", "/proc/stat");
-      mountDir(pathToChroot + "/proc/filesystems", "/proc/filesystems");
-    }
+    // if (opts.mount.chroot_dir) {
+    //  const auto pathToChroot = std::string{opts.mount.chroot_dir};
 
-    if (opts.mount.with_etc_overrides) {
-      mountDir(pathToChroot + "/etc/hosts", "/etc/hosts");
-      mountDir(pathToChroot + "/etc/passwd", "/etc/passwd");
-      mountDir(pathToChroot + "/etc/group", "/etc/group");
-      mountDir(pathToChroot + "/etc/ld.so.cache", "/etc/ld.so.cache");
-    }
+    //  if (opts.mount.with_proc_overrides) {
+    //    mountDir(pathToChroot + "/proc/meminfo", "/proc/meminfo");
+    //    mountDir(pathToChroot + "/proc/stat", "/proc/stat");
+    //    mountDir(pathToChroot + "/proc/filesystems", "/proc/filesystems");
+    //  }
 
-    // for (auto v : args->volume) {
-    //  mountDir(v.source, v.target);
+    //  if (opts.mount.with_etc_overrides) {
+    //    mountDir(pathToChroot + "/etc/hosts", "/etc/hosts");
+    //    mountDir(pathToChroot + "/etc/passwd", "/etc/passwd");
+    //    mountDir(pathToChroot + "/etc/group", "/etc/group");
+    //    mountDir(pathToChroot + "/etc/ld.so.cache", "/etc/ld.so.cache");
+    //  }
     //}
+
+    if (opts.mounts) {
+      auto mounts = opts.mounts;
+
+      while (const Mount* m = *mounts) {
+        if (mount(m->source, m->target, m->fstype, m->flags, m->data) == -1) {
+          auto err = "Unable to bind mount: " +
+                     std::string{m->source ? m->source : "none"} + " to " +
+                     std::string{m->target ? m->target : "none"};
+          sysError(err.c_str());
+        }
+        ++mounts;
+      }
+    }
+
+    // chroot
+    if (opts.chroot_dir) {
+      if (chroot(opts.chroot_dir) == -1) {
+        auto err = std::string{"unable to chroot to "} + opts.chroot_dir;
+        sysError(err.c_str());
+      }
+    }
 
     // this have to be done before mount /dev/{u}random because the source file
     // is under previous /tmp
@@ -417,8 +442,10 @@ static int runTracee(
 
   // set working dir
   if (opts.workdir) {
-    doWithCheck(
-        chdir(opts.workdir), std::string{"unable to chdir to "} + opts.workdir);
+    if (chdir(opts.workdir) == -1) {
+      auto err = std::string{"unable to chdir to "} + opts.workdir;
+      sysError(err.c_str());
+    }
   }
 
   // trap on rdtsc/rdtscp insns

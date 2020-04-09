@@ -72,12 +72,19 @@ int parseNum(const char* const numToParse) {
   return num;
 }
 /*======================================================================================*/
-int doWithCheck(int returnValue, string errorMessage) {
-  string reason = strerror(errno);
+int doWithCheck(int returnValue, const char* errorMessage) {
   if (returnValue == -1) {
-    runtimeError(errorMessage + ":\n  " + reason);
+    sysError(errorMessage);
   }
 
   return returnValue;
 }
+
+void sysError(const char* context) {
+  std::string message = strerror(errno);
+  message += ":\n  ";
+  message += context;
+  runtimeError(message);
+}
+
 /*======================================================================================*/
