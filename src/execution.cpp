@@ -669,7 +669,7 @@ static inline unsigned long alignUp(unsigned long size, int align) {
 }
 
 void execution::disableVdso(pid_t pid) {
-  const int MAX_PROC_MAP_ENTRY = 256;
+  const int MAX_PROC_MAP_ENTRY = 8192;
   struct ProcMapEntry vdsoMap, vvarMap, mapEntries[MAX_PROC_MAP_ENTRY];
   auto nbMapEntries = parseProcMapEntries(pid, mapEntries, MAX_PROC_MAP_ENTRY);
 
