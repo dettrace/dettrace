@@ -32,7 +32,8 @@
 
 struct CloneArgs {
   const TraceOptions* opts;
-  VDSOSymbols vdso_syms;
+  VDSOSymbol* vdso;
+  int nb_vdso;
 };
 
 static pid_t _dettrace(const TraceOptions* opts);
@@ -152,16 +153,19 @@ static pid_t _dettrace(const TraceOptions* opts) {
       prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0),
       "Pre-clone prctl error: setting no new privs");
 
-  auto clone_args = CloneArgs{
-      opts,
-      vdsoGetSymbols(getpid()),
-  };
-
-  if (clone_args.vdso_syms.size() < 4) {
+  struct VDSOSymbol vdso[8];
+  int nbVdsos = vdsoGetSymbols(getpid(), vdso, 8);
+  if (nbVdsos < 4) {
     runtimeError(
-        "VDSO symbol map has only " + to_string(clone_args.vdso_syms.size()) +
+        "VDSO symbol map has only " + to_string(nbVdsos) +
         ", expect at least 4!");
   }
+
+  auto clone_args = CloneArgs {
+    opts,
+    vdso,
+    nbVdsos,
+  };
 
   pid_t child = clone(
       (int (*)(void*))_dettrace_child, child_stack + STACK_SIZE,
@@ -321,7 +325,8 @@ static int _dettrace_child(const CloneArgs* clone_args) {
                   opts->use_color,
                   log_file,
                   opts->print_statistics,
-                  clone_args->vdso_syms,
+                  clone_args->vdso,
+                  clone_args->nb_vdso,
                   opts->prng_seed,
                   opts->allow_network,
                   logical_clock::from_time_t(opts->epoch),

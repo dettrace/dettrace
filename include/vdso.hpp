@@ -13,29 +13,40 @@ enum ProcMapPerm {
 };
 
 struct ProcMapEntry {
-  uint64_t procMapBase;
+  unsigned long procMapBase;
   long procMapSize;
   long procMapPerms;
   unsigned long procMapOffset;
   unsigned long procMapDev;
   unsigned long procMapInode;
-  std::string procMapName;
+  char procMapName[80];
 };
 
 std::ostream& operator<<(std::ostream& out, ProcMapEntry const& e);
 
-std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid);
-std::map<std::string, std::basic_string<unsigned char>> vdsoGetCandidateData(
-    void);
+enum VDSOFunc {
+  VDSO_clock_gettime = 0,
+  VDSO_getcpu,
+  VDSO_gettimeofday,
+  VDSO_time,
+};
 
 struct VDSOSymbol {
+  enum VDSOFunc func;
   unsigned long offset;
   unsigned long size;
   unsigned long alignment;
+  const unsigned char* code;
+  unsigned int code_size;
 };
 
-using VDSOSymbols = std::map<std::string, VDSOSymbol>;
+/// parse /proc/<pid>/maps
+/// returns number of entries parsed.
+int parseProcMapEntries(pid_t pid, ProcMapEntry* ep, int size);
 
-VDSOSymbols vdsoGetSymbols(pid_t pid);
+/// get vdso symbols information from /proc
+/// NB: offset is relative.
+/// returns number of vdso symbols parsed.
+int vdsoGetSymbols(pid_t pid, struct VDSOSymbol* vdso, int size);
 
 #endif

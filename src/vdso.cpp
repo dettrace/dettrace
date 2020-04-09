@@ -17,7 +17,7 @@
 ///
 #include <sys/stat.h>
 #include <sys/types.h>
-
+#include <sys/mman.h>
 #include <inttypes.h>
 
 #include <fcntl.h>
@@ -79,31 +79,6 @@ static const unsigned char __vdso_gettimeofday[] = {
   , 0x00 };
 // clang-format on
 
-std::map<std::string, std::basic_string<unsigned char>> vdsoGetCandidateData(
-    void) {
-  std::map<std::string, std::basic_string<unsigned char>> res;
-
-  std::basic_string<unsigned char> vdso_time(__vdso_time, sizeof(__vdso_time));
-  std::basic_string<unsigned char> vdso_clock_gettime(
-      __vdso_clock_gettime, sizeof(__vdso_clock_gettime));
-  std::basic_string<unsigned char> vdso_getcpu(
-      __vdso_getcpu, sizeof(__vdso_getcpu));
-  std::basic_string<unsigned char> vdso_gettimeofday(
-      __vdso_gettimeofday, sizeof(__vdso_gettimeofday));
-
-  assert((vdso_time.size() & 0xf) == 0);
-  assert((vdso_clock_gettime.size() & 0xf) == 0);
-  assert((vdso_getcpu.size() & 0xf) == 0);
-  assert((vdso_gettimeofday.size() & 0xf) == 0);
-
-  res["__vdso_time"] = vdso_time;
-  res["__vdso_clock_gettime"] = vdso_clock_gettime;
-  res["__vdso_getcpu"] = vdso_getcpu;
-  res["__vdso_gettimeofday"] = vdso_gettimeofday;
-
-  return res;
-}
-
 std::ostream& operator<<(std::ostream& out, ProcMapEntry const& e) {
   out << std::hex << e.procMapBase << '-' << e.procMapBase + e.procMapSize
       << ' ';
@@ -118,68 +93,60 @@ std::ostream& operator<<(std::ostream& out, ProcMapEntry const& e) {
   return out;
 }
 
-static int parseProcMapEntry(char* line, struct ProcMapEntry& res) {
+/// parse a single (line of) /proc/<pid>maps.
+static int parseProcMapEntry(char* line, struct ProcMapEntry* ep) {
   char *p, *q;
 
   p = line;
 
-  res.procMapBase = strtoull(p, &q, 16);
-  res.procMapSize = strtoull(1 + q, &p, 16) - res.procMapBase;
+  ep->procMapBase = strtoull(p, &q, 16);
+  ep->procMapSize = strtoull(1 + q, &p, 16) - ep->procMapBase;
   while (*p == ' ' || *p == '\t') ++p;
 
-  res.procMapPerms = 0;
+  ep->procMapPerms = 0;
 
-  if (*p++ == 'r') res.procMapPerms |= ProcMapPermRead;
-  if (*p++ == 'w') res.procMapPerms |= ProcMapPermWrite;
-  if (*p++ == 'x') res.procMapPerms |= ProcMapPermExec;
-  if (*p++ == 'p') res.procMapPerms |= ProcMapPermPrivate;
+  if (*p++ == 'r') ep->procMapPerms |= ProcMapPermRead;
+  if (*p++ == 'w') ep->procMapPerms |= ProcMapPermWrite;
+  if (*p++ == 'x') ep->procMapPerms |= ProcMapPermExec;
+  if (*p++ == 'p') ep->procMapPerms |= ProcMapPermPrivate;
 
   while (*p == ' ' || *p == '\t') ++p;
-  res.procMapOffset = strtoul(p, &q, 16);
+  ep->procMapOffset = strtoul(p, &q, 16);
   while (*q == ' ' || *q == '\t') ++q;
-  res.procMapDev = strtoul(q, &p, 16) * 256;
-  res.procMapDev += strtoul(1 + p, &q, 16);
+  ep->procMapDev = strtoul(q, &p, 16) * 256;
+  ep->procMapDev += strtoul(1 + p, &q, 16);
   while (*q == ' ' || *q == '\t') ++q;
-  res.procMapInode = strtoul(q, &p, 16);
+  ep->procMapInode = strtoul(q, &p, 16);
   while (*p == ' ' || *p == '\t') ++p;
-  if (*p == '\0') {
-    res.procMapName = {};
-  } else {
-    res.procMapName = p;
-  }
+  strncpy(ep->procMapName, p, sizeof(ep->procMapName) - 1);
   return 0;
 }
 
-std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid) {
-  int fd;
+/// parse /proc/<pid>/maps
+int parseProcMapEntries(pid_t pid, ProcMapEntry* ep, int size) {
+  int fd = -1, res = 0;
   char mapsFile[32];
-  char* buffer;
-  const int buffer_size = 2 << 20;
-
-  std::vector<ProcMapEntry> res;
 
   snprintf(mapsFile, 32, "/proc/%u/maps", pid);
-
   fd = open(mapsFile, O_RDONLY);
   if (fd < 0) {
     perror("Failed to open /proc/self/maps");
-    return {};
+    return 0;
   }
 
-  buffer = new char[buffer_size];
-  if (!buffer) {
-    close(fd);
-    return res;
-  }
+  unsigned long buffer_size = 0x100000;
+  unsigned char* buffer = (unsigned char*)mmap(0, buffer_size, 
+      PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  assert(buffer != (unsigned char*)-1L);
 
   unsigned long nr = 0;
+  char *line = NULL, *text = (char*)buffer;
+
   while (1) {
     auto nb = read(fd, buffer + nr, buffer_size - nr);
     if (nb < 0) {
       if (errno == EINTR) continue;
-      delete[] buffer;
-      close(fd);
-      return res;
+      goto out;
     } else if (nb == 0) {
       break;
     } else {
@@ -189,39 +156,41 @@ std::vector<ProcMapEntry> parseProcMapEntries(pid_t pid) {
   close(fd);
   buffer[nr] = '\0';
 
-  char *line, *text = buffer;
   struct ProcMapEntry mapEntry;
-  while ((line = strsep(&text, "\n")) != NULL) {
-    if (parseProcMapEntry(line, mapEntry) == 0) {
-      res.push_back(mapEntry);
+  while (res < size && (line = strsep(&text, "\n")) != NULL) {
+    if (parseProcMapEntry(line, &ep[res]) == 0) {
+      ++res;
     }
   }
 
-  delete[] buffer;
+out:
+  if (fd >= 0) close(fd);
+  munmap(buffer, buffer_size);
   return res;
 }
 
-static int vdsoGetMapEntry(pid_t pid, struct ProcMapEntry& entry) {
-  auto entries = parseProcMapEntries(pid);
+static int vdsoGetMapEntry(pid_t pid, struct ProcMapEntry* entry) {
+  const int MAX_PROC_MAP_ENTRY = 256;
+  struct ProcMapEntry mapEntries[MAX_PROC_MAP_ENTRY] = {0,};
+  int n = parseProcMapEntries(pid, mapEntries, MAX_PROC_MAP_ENTRY);
 
-  for (auto ent : entries) {
-    if (ent.procMapName == "[vdso]") {
-      entry = ent;
+  for (int i = 0; i < n; i++) {
+    if (strcmp(mapEntries[i].procMapName, "[vdso]") == 0) {
+      *entry = mapEntries[i];
       return 0;
     }
   }
   return -1;
 }
 
-std::vector<std::string> vdsoGetFuncNames(void) {
-  std::vector<std::string> res;
-
-  res.push_back("__vdso_clock_gettime");
-  res.push_back("__vdso_getcpu");
-  res.push_back("__vdso_time");
-  res.push_back("__vdso_gettimeofday");
-
-  return res;
+static const char* vdsoGetFuncNames(enum VDSOFunc func) {
+  switch(func) {
+    case VDSO_clock_gettime: return "__vdso_clock_gettime";
+    case VDSO_getcpu: return "__vdso_getcpu";
+    case VDSO_gettimeofday: return "__vdso_gettimeofday";
+    case VDSO_time: return "__vdso_time";
+    // no default let the compiler do exhaustive check
+  }
 }
 
 /**
@@ -229,11 +198,11 @@ std::vector<std::string> vdsoGetFuncNames(void) {
  * return as std::tuple<symbol_address, symbol_size, symbol/section_alignment>
  * NB: symbol address is relative (just an offset).
  */
-VDSOSymbols vdsoGetSymbols(pid_t pid) {
-  VDSOSymbols res;
+int vdsoGetSymbols(pid_t pid, VDSOSymbol* vdso, int size) {
+  int res = 0;
   struct ProcMapEntry vdsoMapEntry;
 
-  if (vdsoGetMapEntry(pid, vdsoMapEntry) != 0) {
+  if (vdsoGetMapEntry(pid, &vdsoMapEntry) != 0) {
     return res;
   }
 
@@ -252,7 +221,7 @@ VDSOSymbols vdsoGetSymbols(pid_t pid) {
   }
   if (!dynsym || !strtab) return res;
 
-  for (auto i = 0; i < dynsym->sh_size / dynsym->sh_entsize; i++) {
+  for (auto i = 0; i < dynsym->sh_size / dynsym->sh_entsize && res < size; i++) {
     Elf64_Sym* sym =
         (Elf64_Sym*)(base + dynsym->sh_offset + i * dynsym->sh_entsize);
     const char* name = (const char*)((unsigned long)strtab + sym->st_name);
@@ -262,7 +231,29 @@ VDSOSymbols vdsoGetSymbols(pid_t pid) {
       unsigned long alignment = sym->st_shndx < ehdr->e_shnum
                                     ? shbase[sym->st_shndx].sh_addralign
                                     : 16;
-      res[name] = VDSOSymbol{sym->st_value, sym->st_size, alignment};
+      if (strcmp("__vdso_clock_gettime", name) == 0) {
+        vdso[res].func = VDSO_clock_gettime;
+        vdso[res].code_size = sizeof(__vdso_clock_gettime);
+        vdso[res].code = (const unsigned char*)__vdso_clock_gettime;
+      } else if (strcmp("__vdso_getcpu", name) == 0) {
+        vdso[res].func = VDSO_getcpu;
+        vdso[res].code_size = sizeof(__vdso_getcpu);
+        vdso[res].code = (const unsigned char*)__vdso_getcpu;
+      } else if (strcmp("__vdso_gettimeofday", name) == 0) {
+        vdso[res].func = VDSO_gettimeofday;
+        vdso[res].code_size = sizeof(__vdso_gettimeofday);
+        vdso[res].code = (const unsigned char*)__vdso_gettimeofday;
+      } else if (strcmp("__vdso_time", name) == 0) {
+        vdso[res].func = VDSO_time;
+        vdso[res].code_size = sizeof(__vdso_time);
+        vdso[res].code = (const unsigned char*)__vdso_time;
+      } else {
+        continue;
+      }
+      vdso[res].offset = sym->st_value;
+      vdso[res].size = sym->st_size;
+      vdso[res].alignment = alignment;
+      ++res;
     }
   }
 

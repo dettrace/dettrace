@@ -146,7 +146,7 @@ private:
    */
   uint32_t processSpawnEvents = 0;
 
-  VDSOSymbols vdsoFuncs;
+  std::vector<VDSOSymbol> vdsoFuncs;
 
   void disableVdso(pid_t traceesPid);
 
@@ -180,7 +180,8 @@ public:
       bool useColor,
       string logFile,
       bool printStatistics,
-      VDSOSymbols vdsoFuncs,
+      VDSOSymbol* vdsoFuncs,
+      int nbVdsoFuncs,
       unsigned prngSeed,
       bool allow_network,
       logical_clock::time_point epoch,

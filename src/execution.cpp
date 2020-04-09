@@ -55,7 +55,8 @@ execution::execution(
     bool useColor,
     string logFile,
     bool printStatistics,
-    VDSOSymbols vdsoFuncs,
+    VDSOSymbol* vdsoFuncs,
+    int nbVdsoFuncs,
     unsigned prngSeed,
     bool allow_network,
     logical_clock::time_point epoch,
@@ -77,7 +78,7 @@ execution::execution(
           allow_network},
       myScheduler{startingPid, log},
       debugLevel{debugLevel},
-      vdsoFuncs(vdsoFuncs),
+      vdsoFuncs(vdsoFuncs, vdsoFuncs+nbVdsoFuncs),
       epoch(epoch),
       clock_step(clock_step),
       prngSeed(prngSeed),
@@ -668,36 +669,34 @@ static inline unsigned long alignUp(unsigned long size, int align) {
 }
 
 void execution::disableVdso(pid_t pid) {
-  struct ProcMapEntry vdsoMap, vvarMap;
-  auto procMaps = parseProcMapEntries(pid);
-  // procMaps = parseProcMapEntries(pid);
+  const int MAX_PROC_MAP_ENTRY = 256;
+  struct ProcMapEntry vdsoMap, vvarMap, mapEntries[MAX_PROC_MAP_ENTRY];
+  auto nbMapEntries = parseProcMapEntries(pid, mapEntries, MAX_PROC_MAP_ENTRY);
 
   memset(&vdsoMap, 0, sizeof(vdsoMap));
   memset(&vvarMap, 0, sizeof(vvarMap));
 
-  for (auto ent : procMaps) {
-    if (ent.procMapName == "[vdso]") {
-      vdsoMap = ent;
-    } else if (ent.procMapName == "[vvar]") {
-      vvarMap = ent;
+  for (int i = 0; i < nbMapEntries; i++) {
+    if (strcmp(mapEntries[i].procMapName, "[vdso]") == 0) {
+      vdsoMap = mapEntries[i];
+    } else if (strcmp(mapEntries[i].procMapName, "[vvar]") == 0) {
+      vvarMap = mapEntries[i];
     } else {
     }
   }
 
   // vdso is enabled by kernel command line.
   if (vdsoMap.procMapBase != 0) {
-    auto data = vdsoGetCandidateData();
-
     for (auto func : vdsoFuncs) {
-      const auto& sym = func.second;
+      const auto& sym = func;
       unsigned long target = vdsoMap.procMapBase + sym.offset;
       unsigned long nbUpper = alignUp(sym.size, sym.alignment);
-      unsigned long nb = alignUp(data[func.first].size(), sym.alignment);
+      unsigned long nb = alignUp(sym.code_size, sym.alignment);
       assert(nb <= nbUpper);
 
       for (auto i = 0; i < nb / sizeof(long); i++) {
         uint64_t val;
-        const unsigned char* z = data[func.first].c_str();
+        const unsigned char* z = func.code;
         unsigned long to = target + 8 * i;
         memcpy(&val, &z[8 * i], sizeof(val));
         ptracer::doPtrace(PTRACE_POKETEXT, pid, (void*)to, (void*)val);
