@@ -670,19 +670,14 @@ static inline unsigned long alignUp(unsigned long size, int align) {
 
 void execution::disableVdso(pid_t pid) {
   const int MAX_PROC_MAP_ENTRY = 8192;
-  struct ProcMapEntry vdsoMap, vvarMap, mapEntries[MAX_PROC_MAP_ENTRY];
-  auto nbMapEntries = parseProcMapEntries(pid, mapEntries, MAX_PROC_MAP_ENTRY);
+  struct ProcMapEntry vdsoMap, vvarMap;
 
   memset(&vdsoMap, 0, sizeof(vdsoMap));
   memset(&vvarMap, 0, sizeof(vvarMap));
 
-  for (int i = 0; i < nbMapEntries; i++) {
-    if (strcmp(mapEntries[i].procMapName, "[vdso]") == 0) {
-      vdsoMap = mapEntries[i];
-    } else if (strcmp(mapEntries[i].procMapName, "[vvar]") == 0) {
-      vvarMap = mapEntries[i];
-    } else {
-    }
+  if (proc_get_vdso_vvar(pid, &vdsoMap, &vvarMap) < 0) {
+    // found no [vdso] / [vvar], Nothing to do..
+    return;
   }
 
   // vdso is enabled by kernel command line.

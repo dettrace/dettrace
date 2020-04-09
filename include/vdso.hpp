@@ -1,9 +1,7 @@
 #ifndef _DETTRACE_VDSO_HPP
 #define _DETTRACE_VDSO_HPP
 
-#include <map>
-#include <string>
-#include <vector>
+#include <sys/types.h>
 
 enum ProcMapPerm {
   ProcMapPermRead = 0x1,
@@ -12,6 +10,8 @@ enum ProcMapPerm {
   ProcMapPermPrivate = 0x1000,
 };
 
+#define PROC_MAP_ENTRY_NAME_MAX 127
+
 struct ProcMapEntry {
   unsigned long procMapBase;
   long procMapSize;
@@ -19,10 +19,8 @@ struct ProcMapEntry {
   unsigned long procMapOffset;
   unsigned long procMapDev;
   unsigned long procMapInode;
-  char procMapName[80];
+  char procMapName[1 + PROC_MAP_ENTRY_NAME_MAX];
 };
-
-std::ostream& operator<<(std::ostream& out, ProcMapEntry const& e);
 
 enum VDSOFunc {
   VDSO_clock_gettime = 0,
@@ -42,11 +40,15 @@ struct VDSOSymbol {
 
 /// parse /proc/<pid>/maps
 /// returns number of entries parsed.
-int parseProcMapEntries(pid_t pid, ProcMapEntry* ep, int size);
+int proc_get_map_entries(pid_t pid, struct ProcMapEntry* ep, int size);
 
-/// get vdso symbols information from /proc
-/// NB: offset is relative.
-/// returns number of vdso symbols parsed.
-int vdsoGetSymbols(pid_t pid, struct VDSOSymbol* vdso, int size);
+/// parse [vdso] and [vvar] from /proc/pid/maps.
+/// returns 0 on success, -1 on failure.
+/// caller to verify vdso/vvar have been updated.
+int proc_get_vdso_vvar(pid_t pid, struct ProcMapEntry* vdso, struct ProcMapEntry* vvar);
+
+/// get vdso symbols from vdso
+/// returns number of vdso functions found.
+int proc_get_vdso_symbols(struct ProcMapEntry* vdso_entry, struct VDSOSymbol* vdso, int size);
 
 #endif

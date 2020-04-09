@@ -153,18 +153,26 @@ static pid_t _dettrace(const TraceOptions* opts) {
       prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0),
       "Pre-clone prctl error: setting no new privs");
 
-  struct VDSOSymbol vdso[8];
-  int nbVdsos = vdsoGetSymbols(getpid(), vdso, 8);
-  if (nbVdsos < 4) {
-    runtimeError(
-        "VDSO symbol map has only " + to_string(nbVdsos) +
-        ", expect at least 4!");
+  struct VDSOSymbol vdsoSyms[8];
+  struct ProcMapEntry vdso;
+  int numVdsoSyms = 0;
+
+  memset(&vdso, 0, sizeof(vdso));
+
+  if (proc_get_vdso_vvar(getpid(), &vdso, NULL) == 0 && vdso.procMapBase != 0) {
+    numVdsoSyms = proc_get_vdso_symbols(&vdso, vdsoSyms, 8);
+    if (numVdsoSyms < 4) {
+      runtimeError(
+          "VDSO symbol map has only " + to_string(numVdsoSyms) +
+          ", expect at least 4!");
+    }
   }
+
 
   auto clone_args = CloneArgs {
     opts,
-    vdso,
-    nbVdsos,
+    vdsoSyms,
+    numVdsoSyms,
   };
 
   pid_t child = clone(
