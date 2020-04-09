@@ -63,6 +63,11 @@ typedef struct {
   // Working directory to chdir() into before the execvpe().
   const char* workdir;
 
+  // stdio file descriptors.
+  int stdin;
+  int stdout;
+  int stderr;
+
   // Flags to use to when clone()ing.
   int clone_ns_flags;
 

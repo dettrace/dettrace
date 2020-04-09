@@ -181,6 +181,9 @@ static int run_main(programArgs& args) {
       .argv = (char* const*)(argv.data()),
       .envs = (char* const*)(envs.data()),
       .workdir = args.workdir.c_str(),
+      .stdin = STDIN_FILENO, // inherit stdin
+      .stdout = STDOUT_FILENO, // inherit stdout
+      .stderr = STDERR_FILENO, // inherit stderr
       .clone_ns_flags = cloneFlags,
       .timeout = args.timeoutSeconds,
       .sys_enter = nullptr,
@@ -193,7 +196,7 @@ static int run_main(programArgs& args) {
       .with_aslr = args.with_aslr,
       .convert_uids = args.convertUids,
       .mounts = (Mount* const*)(mounts.data()),
-      .chroot_dir = args.pathToChroot.c_str(),
+      .chroot_dir = nullptr,
       .with_devrand_overrides = args.with_devrand_overrides,
       .debug_level = args.debugLevel,
       .use_color = args.useColor,

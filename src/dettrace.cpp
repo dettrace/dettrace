@@ -382,6 +382,21 @@ static int runTracee(
     const TraceOptions& opts,
     const char* devrandFifoPath,
     const char* devUrandFifoPath) {
+
+  // Set stdio file descriptors. This gives the parent process the ability to
+  // control the stdio file descriptors. Note that dup2 closes the destination
+  // file descriptor and will do nothing if both file descriptor arguments are
+  // the same.
+  if (opts.stdin != -1) {
+    doWithCheck(dup2(opts.stdin, STDIN_FILENO), "dup2 stdin");
+  }
+  if (opts.stdout != -1) {
+    doWithCheck(dup2(opts.stdout, STDOUT_FILENO), "dup2 stdout");
+  }
+  if (opts.stderr != -1) {
+    doWithCheck(dup2(opts.stderr, STDERR_FILENO), "dup2 stderr");
+  }
+
   if (!opts.with_aslr) {
     // Disable ASLR for our child
     doWithCheck(
