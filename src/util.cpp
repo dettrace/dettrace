@@ -89,9 +89,17 @@ void sysError(const char* context) {
 
 /*======================================================================================*/
 
-void throw_runtime_error_if_fail(bool cond, int os_errno, const char* file, int line, const char* func, const char* desc) {
+void throw_runtime_error_if_fail(
+    bool cond,
+    int os_errno,
+    const char* file,
+    int line,
+    const char* func,
+    const char* desc) {
   if (!cond) {
-    std::string errmsg = std::string(func) + ": " + file + ":" + std::to_string(line) + ": Assertion `" + desc + "' failed.\n";
+    std::string errmsg = std::string(func) + ": " + file + ":" +
+                         std::to_string(line) + ": Assertion `" + desc +
+                         "' failed.\n";
     if (os_errno > 0) {
       errmsg += "           os error ";
       errmsg += ("(" + std::to_string(errno) + "): ");

@@ -121,10 +121,18 @@ void writeVmTraceeRaw(
   return;
 }
 
-void throw_runtime_error_if_fail(bool cond, int os_error, const char* file, int line, const char* func, const char* desc);
+void throw_runtime_error_if_fail(
+    bool cond,
+    int os_error,
+    const char* file,
+    int line,
+    const char* func,
+    const char* desc);
 
-#define VERIFY(cond) do { \
-  throw_runtime_error_if_fail(cond, errno, __FILE__, __LINE__, __func__, #cond); \
-} while(0)
+#define VERIFY(cond)                                       \
+  do {                                                     \
+    throw_runtime_error_if_fail(                           \
+        cond, errno, __FILE__, __LINE__, __func__, #cond); \
+  } while (0)
 
 #endif

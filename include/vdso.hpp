@@ -45,10 +45,12 @@ int proc_get_map_entries(pid_t pid, struct ProcMapEntry* ep, int size);
 /// parse [vdso] and [vvar] from /proc/pid/maps.
 /// returns 0 on success, -1 on failure.
 /// caller to verify vdso/vvar have been updated.
-int proc_get_vdso_vvar(pid_t pid, struct ProcMapEntry* vdso, struct ProcMapEntry* vvar);
+int proc_get_vdso_vvar(
+    pid_t pid, struct ProcMapEntry* vdso, struct ProcMapEntry* vvar);
 
 /// get vdso symbols from vdso
 /// returns number of vdso functions found.
-int proc_get_vdso_symbols(struct ProcMapEntry* vdso_entry, struct VDSOSymbol* vdso, int size);
+int proc_get_vdso_symbols(
+    struct ProcMapEntry* vdso_entry, struct VDSOSymbol* vdso, int size);
 
 #endif

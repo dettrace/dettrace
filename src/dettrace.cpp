@@ -168,11 +168,10 @@ static pid_t _dettrace(const TraceOptions* opts) {
     }
   }
 
-
-  auto clone_args = CloneArgs {
-    opts,
-    vdsoSyms,
-    numVdsoSyms,
+  auto clone_args = CloneArgs{
+      opts,
+      vdsoSyms,
+      numVdsoSyms,
   };
 
   pid_t child = clone(
@@ -382,7 +381,6 @@ static int runTracee(
     const TraceOptions& opts,
     const char* devrandFifoPath,
     const char* devUrandFifoPath) {
-
   // Set stdio file descriptors. This gives the parent process the ability to
   // control the stdio file descriptors. Note that dup2 closes the destination
   // file descriptor and will do nothing if both file descriptor arguments are
