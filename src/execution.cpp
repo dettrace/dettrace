@@ -253,13 +253,14 @@ void execution::handlePostSystemCall(state& currState) {
         tracer.getReturnValue());
   }
 
+  callPostHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
+
   if (sys_exit_hook && syscallNum != SYS_arch_prctl) {
     rnr::callPostHook(
         user_data, sys_exit_hook, syscallNum, myGlobalState, currState, tracer,
         myScheduler);
   }
 
-  callPostHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
   log.writeToLog(
       Importance::info, "Value after handler: %d\n", tracer.getReturnValue());
 
