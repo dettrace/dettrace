@@ -183,7 +183,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid) {
   bool callPostHook =
       callPreHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
 
-  if (sys_enter_hook && syscallNum != SYS_arch_prctl) {
+  if (sys_enter_hook && syscallNum != SYS_arch_prctl && !currState.syscallInjected) {
     rnr::callPreHook(
         user_data, sys_enter_hook, syscallNum, myGlobalState, currState, tracer,
         myScheduler);
@@ -255,7 +255,7 @@ void execution::handlePostSystemCall(state& currState) {
 
   callPostHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
 
-  if (sys_exit_hook && syscallNum != SYS_arch_prctl) {
+  if (sys_exit_hook && syscallNum != SYS_arch_prctl && !currState.syscallInjected) {
     rnr::callPostHook(
         user_data, sys_exit_hook, syscallNum, myGlobalState, currState, tracer,
         myScheduler);
