@@ -220,7 +220,7 @@ int proc_get_vdso_vvar(pid_t pid, struct ProcMapEntry* vdso, struct ProcMapEntry
     while (s && *s == '\n' && *s != '\0') ++s;
 
     struct ProcMapEntry mapEntry;
-    char* line = s;
+    char* line;
 
     while ((line = strsep(&s, "\n")) != NULL) {
         if (parse_entry(line, &mapEntry) != 0) {
