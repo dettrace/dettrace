@@ -25,7 +25,6 @@
 
 #include <elf.h>
 #include <algorithm>
-#include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -137,7 +136,7 @@ int parseProcMapEntries(pid_t pid, ProcMapEntry* ep, int size) {
   unsigned long buffer_size = 0x100000;
   unsigned char* buffer = (unsigned char*)mmap(0, buffer_size, 
       PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  assert(buffer != (unsigned char*)-1L);
+  VERIFY(buffer != (unsigned char*)-1L);
 
   unsigned long nr = 0;
   char *line = NULL, *text = (char*)buffer;
@@ -227,7 +226,7 @@ int vdsoGetSymbols(pid_t pid, VDSOSymbol* vdso, int size) {
     const char* name = (const char*)((unsigned long)strtab + sym->st_name);
     if (ELF64_ST_BIND(sym->st_info) == STB_GLOBAL &&
         ELF64_ST_TYPE(sym->st_info) == STT_FUNC) {
-      assert(sym->st_shndx < ehdr->e_shnum);
+      VERIFY(sym->st_shndx < ehdr->e_shnum);
       unsigned long alignment = sym->st_shndx < ehdr->e_shnum
                                     ? shbase[sym->st_shndx].sh_addralign
                                     : 16;

@@ -9,7 +9,6 @@
 #include <time.h>
 #include <unistd.h>
 
-#include <cassert>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -160,7 +159,7 @@ static int run_main(programArgs& args) {
 
   // Create program arguments.
   auto argv = make_argv(args.args);
-  assert(argv.size() > 0);
+  VERIFY(argv.size() > 0);
 
   // Create environment.
   // NOTE: gcc needs to be somewhere along PATH or it gets very confused, see

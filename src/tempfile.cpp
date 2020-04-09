@@ -1,4 +1,3 @@
-#include <assert.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
@@ -109,7 +108,7 @@ NamedTempFile::NamedTempFile() {
   std::string path;
   std::tie(fd, path) = make_temp_file();
   file = fdopen(fd, "wb");
-  assert(file != NULL);
+  VERIFY(file != NULL);
   name = std::move(path);
 }
 
@@ -118,7 +117,7 @@ NamedTempFile::NamedTempFile(TempDir& dir) {
   std::string path;
   std::tie(fd, path) = make_temp_file(dir.path());
   file = fdopen(fd, "wb");
-  assert(file != NULL);
+  VERIFY(file != NULL);
   name = std::move(path);
 }
 
@@ -133,7 +132,7 @@ TempFile::TempFile() {
 
   std::tie(fd, path) = make_temp_file();
   file = fdopen(fd, "wb");
-  assert(file != NULL);
+  VERIFY(file != NULL);
   unlink(path.c_str());
 }
 
@@ -143,7 +142,7 @@ TempFile::TempFile(TempDir& dir) {
 
   std::tie(fd, path) = make_temp_file(dir.path());
   file = fdopen(fd, "wb");
-  assert(file != NULL);
+  VERIFY(file != NULL);
   unlink(path.c_str());
 }
 

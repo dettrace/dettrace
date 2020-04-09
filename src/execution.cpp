@@ -11,7 +11,6 @@
 #include "vdso.hpp"
 
 #include <sys/utsname.h>
-#include <cassert>
 #include <stack>
 #include <tuple>
 
@@ -692,7 +691,7 @@ void execution::disableVdso(pid_t pid) {
       unsigned long target = vdsoMap.procMapBase + sym.offset;
       unsigned long nbUpper = alignUp(sym.size, sym.alignment);
       unsigned long nb = alignUp(sym.code_size, sym.alignment);
-      assert(nb <= nbUpper);
+      VERIFY(nb <= nbUpper);
 
       for (auto i = 0; i < nb / sizeof(long); i++) {
         uint64_t val;
@@ -709,7 +708,7 @@ void execution::disableVdso(pid_t pid) {
         off += sizeof(long);
         nb += sizeof(long);
       }
-      assert(nb == nbUpper);
+      VERIFY(nb == nbUpper);
     }
   }
 
@@ -732,8 +731,8 @@ void execution::disableVdso(pid_t pid) {
 
     ptracer::doPtrace(PTRACE_SETREGS, pid, 0, &regs);
     ptracer::doPtrace(PTRACE_CONT, pid, 0, 0);
-    assert(waitpid(pid, &status, 0) == pid);
-    assert(WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP);
+    VERIFY(waitpid(pid, &status, 0) == pid);
+    VERIFY(WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP);
     ptracer::doPtrace(PTRACE_GETREGS, pid, 0, &regs);
     if ((long)regs.rax < 0) {
       string err = "unable to inject mprotect, error: \n";
@@ -762,8 +761,8 @@ static unsigned long traceePreinitMmap(pid_t pid, ptracer& t) {
   int status;
   ptracer::doPtrace(PTRACE_SETREGS, pid, 0, &regs);
   ptracer::doPtrace(PTRACE_CONT, pid, 0, 0);
-  assert(waitpid(pid, &status, 0) == pid);
-  assert(WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP);
+  VERIFY(waitpid(pid, &status, 0) == pid);
+  VERIFY(WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP);
   ptracer::doPtrace(PTRACE_GETREGS, pid, 0, &regs);
   if ((long)regs.rax < 0) {
     string err = "unable to inject syscall page, error: \n";
@@ -792,8 +791,8 @@ void execution::handleExecEvent(pid_t pid) {
   ptracer::doPtrace(PTRACE_CONT, pid, 0, 0);
 
   int status;
-  assert(waitpid(pid, &status, 0) == pid);
-  assert(WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP);
+  VERIFY(waitpid(pid, &status, 0) == pid);
+  VERIFY(WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP);
 
   unsigned long mmapAddr = traceePreinitMmap(pid, tracer);
 
@@ -955,11 +954,11 @@ void execution::handleSignal(int sigNum, const pid_t traceesPid) {
       // fill in canonical cpuid return values
 
       const unsigned long nleafs = sizeof(cpuids) / sizeof(cpuids[0]);
-      assert(nleafs == 1 + cpuids[0].eax);
+      VERIFY(nleafs == 1 + cpuids[0].eax);
 
       const unsigned long nleafs_ext =
           0x80000000ul + sizeof(extended_cpuids) / sizeof(extended_cpuids[0]);
-      assert(nleafs_ext == 1 + extended_cpuids[0].eax);
+      VERIFY(nleafs_ext == 1 + extended_cpuids[0].eax);
 
       switch (regs.rax) {
       case 0x0 ... nleafs: {

@@ -64,7 +64,7 @@ extern "C" pid_t dettrace(const TraceOptions* opts) {
 static execution* globalExeObject = nullptr;
 
 void sigalrmHandler(int _) {
-  assert(nullptr != globalExeObject);
+  VERIFY(nullptr != globalExeObject);
   globalExeObject->killAllProcesses();
   // TODO: print out message about timeout expiring
   runtimeError("dettrace timeout expired\n");
@@ -229,8 +229,6 @@ static int _dettrace_child(const CloneArgs* clone_args) {
         "failed to mount / as slave");
   }
 
-  // TODO assert is bad (does not print buffered log output).
-  // Switch to throw runtime exception.
   if ((opts->clone_ns_flags & CLONE_NEWPID) == CLONE_NEWPID) {
     pid_t first_pid;
     if ((first_pid = getpid()) != 1) {
@@ -364,7 +362,7 @@ static int _dettrace_child(const CloneArgs* clone_args) {
     int ready = 0;
     doWithCheck(
         read(pipefds[0], &ready, sizeof(int)), "spawnTracerTracee, pipe read");
-    assert(ready == 1);
+    VERIFY(ready == 1);
     return runTracee(*opts, devrandFifoPath, devUrandFifoPath);
   }
 

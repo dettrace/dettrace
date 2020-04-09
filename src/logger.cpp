@@ -6,7 +6,6 @@
 #include <climits>
 #include <string>
 
-#include <assert.h>
 #include "logger.hpp"
 #include "util.hpp"
 
@@ -34,7 +33,7 @@ logger::logger(string logFile, int debugLevel, bool useColor)
       if (0 != rv) break; // file doesn't exist, we can use this name!
     }
     FILE* logfile = fopen(buf, "w");
-    assert(nullptr != logfile);
+    VERIFY(logfile != NULL);
 
     fin = logfile;
   }
