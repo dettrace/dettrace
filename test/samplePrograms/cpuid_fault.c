@@ -4,12 +4,13 @@
 #include <sys/prctl.h>
 #include <asm/prctl.h>
 #include <fcntl.h>
-#include <assert.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <cpuid.h>
 #include <signal.h>
 #include <string.h>
+
+#include "util/assert.h"
 
 int arch_prctl(int code, unsigned long addr);
 

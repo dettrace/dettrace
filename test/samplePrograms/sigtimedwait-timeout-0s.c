@@ -1,18 +1,16 @@
-#include <sys/types.h>
-#include <unistd.h>
-#include <signal.h>
+#include <errno.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdatomic.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <errno.h>
-#include <assert.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include "util/assert.h"
 
 static _Atomic int thread_should_exit;
-static pthread_cond_t run_first = PTHREAD_COND_INITIALIZER;
-static pthread_mutex_t cond_mutex = PTHREAD_MUTEX_INITIALIZER;
-static volatile pthread_t thread_suspend;
 
 static void thread_exit(int signum, siginfo_t* info, void* uctxt) {
   write(STDOUT_FILENO, "caught SIGTERM, preparing exit\n", 31);
@@ -20,22 +18,15 @@ static void thread_exit(int signum, siginfo_t* info, void* uctxt) {
 }
 
 static void* second_thread(void* param) {
-  assert(pthread_mutex_lock(&cond_mutex) == 0);
-  assert(pthread_cond_wait(&run_first, &cond_mutex) == 0);
-  assert(pthread_mutex_unlock(&cond_mutex) == 0);
+  pthread_t thread_suspend = *(pthread_t*)param;
 
-  while(!thread_suspend);
   write(STDOUT_FILENO, "2. sending SIGTERM\n", 19);
   pthread_kill(thread_suspend, SIGTERM);
-  
+
   return NULL;
 }
 
 static void* first_thread(void* param) {
-  assert(pthread_mutex_lock(&cond_mutex) == 0);
-  assert(pthread_cond_signal(&run_first) == 0);
-  assert(pthread_mutex_unlock(&cond_mutex) == 0);
-
   sigset_t set;
   siginfo_t siginfo;
   struct timespec tp = {0, 0};
@@ -50,8 +41,7 @@ static void* first_thread(void* param) {
   return NULL;
 }
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
   sigset_t set, oldset;
   pthread_t threads[2];
 
@@ -67,14 +57,11 @@ int main(int argc, char* argv[])
 
   assert(sigaction(SIGTERM, &sa, NULL) == 0);
 
-  assert(pthread_create(&threads[1], NULL, second_thread, NULL) == 0);
   assert(pthread_create(&threads[0], NULL, first_thread, NULL) == 0);
-
-  thread_suspend = threads[0];
+  assert(pthread_create(&threads[1], NULL, second_thread, &threads[0]) == 0);
 
   pthread_join(threads[0], NULL);
   pthread_join(threads[1], NULL);
 
   return 0;
 }
-

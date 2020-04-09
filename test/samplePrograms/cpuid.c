@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <assert.h>
-
 #include <cpuid.h>
 // #include <immintrin.h>
+
+#include "util/assert.h"
 
 char vendor_id[12];
 unsigned version;
@@ -71,7 +71,7 @@ int main(void)
 
   unsigned int eax=0,ebx=0,ecx=0,edx=0;
   for(int i=0; i<1; i++) {
-    assert(1 == __get_cpuid(1, &eax,&ebx,&ecx,&edx));
+    assert(__get_cpuid(1, &eax,&ebx,&ecx,&edx) == 1);
     printf("Result of __get_cpuid(1) eax|ebx|ecx|edx: %08X %08X %08X %08X\n",
            eax,ebx,ecx,edx);
   }

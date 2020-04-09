@@ -11,8 +11,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <sched.h>
-#include <errno.h>
-#include <assert.h>
+
+#include "util/assert.h"
 
 #define ARRAY_SIZE(arr) ( sizeof(arr) / sizeof((arr)[0]) )
 
@@ -59,4 +59,3 @@ int main(int argc, char* argv[])
 
   return 0;
 }
-

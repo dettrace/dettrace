@@ -4,7 +4,8 @@
 #include <time.h>
 #include <unistd.h>
 #include <stdatomic.h>
-#include <assert.h>
+
+#include "util/assert.h"
 
 static _Atomic unsigned long counter_loc;
 static volatile _Atomic unsigned long* pcounter = &counter_loc;
@@ -57,4 +58,3 @@ int main(int argc, char* argv[])
   }
   return 0;
 }
-

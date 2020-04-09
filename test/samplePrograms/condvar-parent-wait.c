@@ -1,7 +1,9 @@
 /* build with `-O -pthread -D_GNU_SOURCE=1` */
-#include <unistd.h>
 #include <pthread.h>
-#include <assert.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+#include "util/assert.h"
 
 static pthread_cond_t run_first = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t cond_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -19,8 +21,7 @@ static void* first_thread(void* param) {
   return NULL;
 }
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
   pthread_t first, second;
 
   assert(pthread_mutex_lock(&cond_mutex) == 0);
@@ -33,4 +34,3 @@ int main(int argc, char* argv[])
   assert(pthread_mutex_destroy(&cond_mutex) == 0);
   return 0;
 }
-

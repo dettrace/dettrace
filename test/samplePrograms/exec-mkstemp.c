@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
-#include <assert.h>
 
 int main(int argc, char* argv[])
 {
@@ -26,8 +25,8 @@ int main(int argc, char* argv[])
       char* const env[]  = { "PATH=/bin:/usr/bin", NULL };
       int rc = execve(exe, argv, env);
       if (rc != 0) {
-	fprintf(stderr, "execve failed: %s\n", strerror(errno));
-	exit(1);
+        fprintf(stderr, "execve failed: %s\n", strerror(errno));
+        exit(1);
       }
     }
   } else {
@@ -39,4 +38,3 @@ int main(int argc, char* argv[])
   }
   return 0;
 }
-
