@@ -1,4 +1,5 @@
 timerfd_create fd: 3
+timerfd_set completed (relative timer)
 [0] read expired count: 1
 [1] read expired count: 1
 [2] read expired count: 1
