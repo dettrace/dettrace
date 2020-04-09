@@ -4,7 +4,7 @@
 int main(){
   // Big number, dettrace will turn it to zero. So if it's takes any amount of time,
   // or times out in our tests, dettrace did something wrong...
-  const struct timespec req = { 100, 1};
+  const struct timespec req = { 5, 1};
   struct timespec rem = {0};
   int ret = nanosleep(& req, & rem);
   printf("nanosleep ret %d\n", ret);
