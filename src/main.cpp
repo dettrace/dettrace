@@ -1,5 +1,6 @@
 #include <getopt.h>
 #include <string.h>
+#include <sys/mount.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -37,7 +38,9 @@ using namespace std;
 struct MountPoint {
   string source;
   string target;
-  string type;
+  string fstype;
+  unsigned long flags = MS_BIND;
+  string data;
   bool is_valid(void) const { return !source.empty() && !target.empty(); }
 };
 
@@ -113,6 +116,8 @@ static std::vector<std::unique_ptr<char[]>> make_argv(
     std::vector<std::string>& args);
 static std::vector<std::unique_ptr<char[]>> make_envp(
     std::unordered_map<std::string, std::string>& envvars);
+static std::vector<std::unique_ptr<Mount>> make_mounts(
+    const std::vector<MountPoint>& mounts);
 
 // =======================================================================================
 
@@ -166,24 +171,45 @@ static int run_main(programArgs& args) {
   // https://github.com/dettrace/dettrace/issues/23
   auto envs = make_envp(args.envs);
 
-  // TODO: Mount things from our rootfs
-  //
-  // If args.with_proc_overrides is true, then we should mount "/proc/meminfo",
-  // "/proc/stat", and "/proc/filesystems".
-  //
-  // If args.with_etc_overrides is true, then we should mount "/etc/hosts",
-  // "/etc/passwd", "/etc/group", and "/etc/ld.so.cache".
-  std::vector<std::unique_ptr<Mount>> mounts;
-  mounts.push_back(nullptr);
+  // Create our list of mounts.
+  std::vector<MountPoint> mounts;
+
+  if (args.with_proc_overrides) {
+    mounts.push_back(MountPoint{.source = args.pathToChroot + "/proc/meminfo",
+                                .target = "/proc/meminfo"});
+    mounts.push_back(MountPoint{.source = args.pathToChroot + "/proc/stat",
+                                .target = "/proc/stat"});
+    mounts.push_back(
+        MountPoint{.source = args.pathToChroot + "/proc/filesystems",
+                   .target = "/proc/filesystems"});
+  }
+
+  if (args.with_etc_overrides) {
+    mounts.push_back(MountPoint{.source = args.pathToChroot + "/etc/hosts",
+                                .target = "/etc/hosts"});
+    mounts.push_back(MountPoint{.source = args.pathToChroot + "/etc/passwd",
+                                .target = "/etc/passwd"});
+    mounts.push_back(MountPoint{.source = args.pathToChroot + "/etc/group",
+                                .target = "/etc/group"});
+    mounts.push_back(
+        MountPoint{.source = args.pathToChroot + "/etc/ld.so.cache",
+                   .target = "/etc/ld.so.cache"});
+  }
+
+  // Add all the user-specified mounts *after* so that they can override our
+  // defaults if needed.
+  mounts.insert(mounts.end(), args.volume.begin(), args.volume.end());
+
+  auto mountPtrs = make_mounts(mounts);
 
   TraceOptions options{
       .program = argv[0].get(),
       .argv = (char* const*)(argv.data()),
       .envs = (char* const*)(envs.data()),
       .workdir = args.workdir.c_str(),
-      .stdin = STDIN_FILENO, // inherit stdin
-      .stdout = STDOUT_FILENO, // inherit stdout
-      .stderr = STDERR_FILENO, // inherit stderr
+      .stdin = -1, // inherit stdin
+      .stdout = -1, // inherit stdout
+      .stderr = -1, // inherit stderr
       .clone_ns_flags = cloneFlags,
       .timeout = args.timeoutSeconds,
       .sys_enter = nullptr,
@@ -195,7 +221,7 @@ static int run_main(programArgs& args) {
       .allow_network = args.allow_network,
       .with_aslr = args.with_aslr,
       .convert_uids = args.convertUids,
-      .mounts = (Mount* const*)(mounts.data()),
+      .mounts = (Mount* const*)(mountPtrs.data()),
       .chroot_dir = nullptr,
       .with_devrand_overrides = args.with_devrand_overrides,
       .debug_level = args.debugLevel,
@@ -272,6 +298,30 @@ static std::vector<std::unique_ptr<char[]>> make_envp(
   envs.push_back(nullptr);
 
   return envs;
+}
+
+/**
+ * Creates a vector of pointers to the given mounts. Note that the mounts passed
+ * in must outlive the returned vector of pointers.
+ */
+static std::vector<std::unique_ptr<Mount>> make_mounts(
+    const std::vector<MountPoint>& mounts) {
+  std::vector<std::unique_ptr<Mount>> ptrs;
+  ptrs.reserve(mounts.size() + 1);
+
+  for (const auto& v : mounts) {
+    auto mount = new Mount;
+    mount->source = v.source.empty() ? nullptr : v.source.c_str();
+    mount->target = v.target.empty() ? nullptr : v.target.c_str();
+    mount->fstype = v.fstype.empty() ? nullptr : v.fstype.c_str();
+    mount->flags = v.flags;
+    mount->data = v.data.empty() ? nullptr : v.data.c_str();
+    ptrs.push_back(std::unique_ptr<Mount>(mount));
+  }
+
+  ptrs.push_back(nullptr);
+
+  return ptrs;
 }
 
 /**
