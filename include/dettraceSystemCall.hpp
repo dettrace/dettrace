@@ -906,22 +906,6 @@ public:
   const int syscallNumber = SYS_pipe2;
   const string syscallName = "pipe2";
 };
-// =======================================================================================
-/**
- * int arch_prctl(int code, unsigned long addr);
- * arch-specific thread state - currently we use this for establishing a SIGSEGV
- * on CPUID
- */
-class arch_prctlSystemCall {
-public:
-  static bool handleDetPre(
-      globalState& gs, state& s, ptracer& t, scheduler& sched);
-  static void handleDetPost(
-      globalState& gs, state& s, ptracer& t, scheduler& sched);
-
-  const int syscallNumber = SYS_arch_prctl;
-  const string syscallName = "arch_prctl";
-};
 
 // =======================================================================================
 /**

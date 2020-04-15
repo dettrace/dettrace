@@ -22,7 +22,6 @@ void deleteMultimapEntry(
     unordered_multimap<pid_t, pid_t>& mymap, pid_t key, pid_t value);
 pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process);
 bool kernelCheck(int a, int b, int c);
-void trapCPUID(globalState& gs, state& s, ptracer& t);
 
 bool kernelCheck(int a, int b, int c) {
   struct utsname utsname = {};
@@ -79,7 +78,7 @@ execution::execution(
           allow_network},
       myScheduler{startingPid, log},
       debugLevel{debugLevel},
-      vdsoFuncs(vdsoFuncs, vdsoFuncs + nbVdsoFuncs),
+      vdsoFuncs(vdsoFuncs, vdsoFuncs+nbVdsoFuncs),
       epoch(epoch),
       clock_step(clock_step),
       prngSeed(prngSeed),
@@ -185,8 +184,7 @@ bool execution::handlePreSystemCall(state& currState, const pid_t traceesPid) {
   bool callPostHook =
       callPreHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
 
-  if (sys_enter_hook && syscallNum != SYS_arch_prctl &&
-      !currState.syscallInjected) {
+  if (sys_enter_hook && !currState.syscallInjected) {
     rnr::callPreHook(
         user_data, sys_enter_hook, syscallNum, myGlobalState, currState, tracer,
         myScheduler);
@@ -258,8 +256,7 @@ void execution::handlePostSystemCall(state& currState) {
 
   callPostHook(syscallNum, myGlobalState, currState, tracer, myScheduler);
 
-  if (sys_exit_hook && syscallNum != SYS_arch_prctl &&
-      !currState.syscallInjected) {
+  if (sys_exit_hook && !currState.syscallInjected) {
     rnr::callPostHook(
         user_data, sys_exit_hook, syscallNum, myGlobalState, currState, tracer,
         myScheduler);
@@ -673,6 +670,7 @@ static inline unsigned long alignUp(unsigned long size, int align) {
 }
 
 void execution::disableVdso(pid_t pid) {
+  const int MAX_PROC_MAP_ENTRY = 8192;
   struct ProcMapEntry vdsoMap, vvarMap;
 
   memset(&vdsoMap, 0, sizeof(vdsoMap));
@@ -738,6 +736,21 @@ void execution::disableVdso(pid_t pid) {
       runtimeError(err + strerror((long)-regs.rax));
     }
     ptracer::doPtrace(PTRACE_SETREGS, pid, 0, &oldRegs);
+  }
+}
+
+// =======================================================================================
+static void trapCPUID(globalState& gs, state& s, ptracer& t) {
+  SyscallArgs args(ARCH_SET_CPUID, 0);
+  long retval = injectSystemCall(t.getPid(), SYS_arch_prctl, args);
+  if (retval != 0) {
+    string errmsg("cpuid interception (cpuid_fault) via arch_prctl failed: ");
+    errmsg += strerror(-t.getReturnValue());
+    errmsg += "\nPlease check `cpuid_fault` flag from `cat /proc/cpuinfo`";
+    gs.log.writeToLog(Importance::inter, errmsg);
+    gs.allow_trapCPUID = false;
+  } else {
+    gs.allow_trapCPUID = true;
   }
 }
 
@@ -837,10 +850,16 @@ void execution::handleExecEvent(pid_t pid) {
   states.at(pid).mmapMemory.setAddr(traceePtr<void>((void*)mmapAddr));
 
   SyscallArgs args(SYSCALL_STUB_PAGE_START, SYSCALL_STUB_PAGE_SIZE, PROT_READ | PROT_EXEC);
-  
+
   // make sure syscall stubs is read only.
   VERIFY(injectSystemCall(pid, SYS_mprotect, args) == 0);
-
+  if (myGlobalState.allow_trapCPUID) {
+    if (!states.at(pid).CPUIDTrapSet && !myGlobalState.kernelPre4_12 &&
+        NULL == getenv("DETTRACE_NO_CPUID_INTERCEPTION")) {
+      // check if CPUID needs to be set, if it does, set trap
+      trapCPUID(myGlobalState, states.at(pid), tracer);
+    }
+  }
   ptracer::doPtrace(PTRACE_POKETEXT, pid, (void*)rip, (void*)saved_insn);
 }
 
@@ -870,15 +889,6 @@ bool execution::handleSeccomp(const pid_t traceesPid) {
   // small optimization we might not want to...
   // Get registers from tracee.
   tracer.updateState(traceesPid);
-
-  if (myGlobalState.allow_trapCPUID) {
-    if (!states.at(traceesPid).CPUIDTrapSet && !myGlobalState.kernelPre4_12 &&
-        NULL == getenv("DETTRACE_NO_CPUID_INTERCEPTION")) {
-      // check if CPUID needs to be set, if it does, set trap
-      trapCPUID(myGlobalState, states.at(traceesPid), tracer);
-    }
-  }
-
   auto callPostHook = handlePreSystemCall(states.at(traceesPid), traceesPid);
   return callPostHook;
 }
@@ -1040,9 +1050,6 @@ bool execution::callPreHook(
 
   case SYS_alarm:
     return alarmSystemCall::handleDetPre(gs, s, t, sched);
-
-  case SYS_arch_prctl:
-    return arch_prctlSystemCall::handleDetPre(gs, s, t, sched);
 
   case SYS_chdir:
     return chdirSystemCall::handleDetPre(gs, s, t, sched);
@@ -1381,9 +1388,6 @@ void execution::callPostHook(
 
   case SYS_alarm:
     return alarmSystemCall::handleDetPost(gs, s, t, sched);
-
-  case SYS_arch_prctl:
-    return arch_prctlSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_chdir:
     return chdirSystemCall::handleDetPost(gs, s, t, sched);
@@ -1899,35 +1903,6 @@ pid_t eraseChildEntry(multimap<pid_t, pid_t>& map, pid_t process) {
   }
 
   return parent;
-}
-// =======================================================================================
-
-void trapCPUID(globalState& gs, state& s, ptracer& t) {
-  gs.log.writeToLog(
-      Importance::info,
-      "Injecting arch_prctl call to tracee to intercept CPUID!\n");
-  // Save current register state to restore after arch_prctl
-  s.regSaver.pushRegisterState(t.getRegs());
-
-  // Inject arch_prctl system call
-  s.syscallInjected = true;
-
-  // Call arch_prctl
-  t.writeArg1(ARCH_SET_CPUID);
-  t.writeArg2(0);
-
-  uint16_t minus2 = t.readFromTracee(
-      traceePtr<uint16_t>((uint16_t*)((uint64_t)t.getRip().ptr - 2)),
-      t.getPid());
-  if (!(minus2 == 0x80CD || minus2 == 0x340F || minus2 == 0x050F)) {
-    runtimeError("IP does not point to system call instruction!\n");
-  }
-
-  gs.totalReplays++;
-  // Replay system call!
-  t.changeSystemCall(SYS_arch_prctl);
-  t.writeIp((uint64_t)t.getRip().ptr - 2);
-  gs.log.writeToLog(Importance::info, "arch_prctl(%d, 0)\n", ARCH_SET_CPUID);
 }
 
 void deleteMultimapEntry(

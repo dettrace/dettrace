@@ -61,59 +61,7 @@ void accessSystemCall::handleDetPost(
     globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return;
 }
-// =======================================================================================
-bool arch_prctlSystemCall::handleDetPre(
-    globalState& gs, state& s, ptracer& t, scheduler& sched) {
-  gs.log.writeToLog(
-      Importance::info,
-      "pre-hook for arch_prctl(%d, 0) == ARCH_SET_CPUID? %d\n", t.arg1(),
-      t.arg1() == ARCH_SET_CPUID);
 
-  // System call injected due to us needing CPUID interception added to this
-  // process!
-  if (s.syscallInjected) {
-    return true;
-  }
-
-  return false;
-}
-void arch_prctlSystemCall::handleDetPost(
-    globalState& gs, state& s, ptracer& t, scheduler& sched) {
-  if (!s.syscallInjected) {
-    // This should be impossible.
-    runtimeError("Got to arch_prctl post-hook without it being injected.");
-  }
-
-  gs.log.writeToLog(
-      Importance::info, "post-hook for arch_prctl, returning %d\n",
-      t.getReturnValue());
-
-  if (s.CPUIDTrapSet) {
-    // This should be impossible.
-    runtimeError(
-        "Got to arch_prctl post-hook without it needing to have CPUID trap "
-        "set.");
-  }
-
-  // arch_prctl could return ENODEV when `cpuid_fault` flag is absent (cpuinfo).
-  if (0 != t.getReturnValue()) {
-    string errmsg("cpuid interception (cpuid_fault) via arch_prctl failed: ");
-    errmsg += strerror(-t.getReturnValue());
-    errmsg += "\nPlease check `cpuid_fault` flag from `cat /proc/cpuinfo`";
-    gs.log.writeToLog(Importance::inter, errmsg);
-    gs.allow_trapCPUID = false;
-  } else {
-    s.CPUIDTrapSet = true;
-  }
-
-  s.syscallInjected = false;
-  // I don't believe arch_prctl(ARCH_SET_CPUID) writes to tracee memory at all.
-  t.setRegs(s.regSaver.popRegisterState());
-
-  gs.log.writeToLog(
-      Importance::info, "restored register state from arch_prctl post-hook\n");
-  replaySystemCall(gs, t, t.getSystemCallNumber());
-}
 // =======================================================================================
 bool alarmSystemCall::handleDetPre(
     globalState& gs, state& s, ptracer& t, scheduler& sched) {
