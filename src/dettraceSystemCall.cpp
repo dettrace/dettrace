@@ -40,8 +40,8 @@
 #include "dettraceSystemCall.hpp"
 #include "execution.hpp"
 #include "ptracer.hpp"
-#include "utilSystemCalls.hpp"
 #include "syscallStubs.hpp"
+#include "utilSystemCalls.hpp"
 
 // Enable tracee reads that are not strictly necessary for functionality, but
 // are enabled for instrumentation or sanity checking. For example, verify,
@@ -1154,8 +1154,7 @@ bool nanosleepSystemCall::handleDetPre(
 }
 
 void nanosleepSystemCall::handleDetPost(
-    globalState& gs, state& s, ptracer& t, scheduler& sched) {
-}
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {}
 // =======================================================================================
 bool clock_nanosleepSystemCall::handleDetPre(
     globalState& gs, state& s, ptracer& t, scheduler& sched) {
@@ -1167,8 +1166,7 @@ bool clock_nanosleepSystemCall::handleDetPre(
 }
 
 void clock_nanosleepSystemCall::handleDetPost(
-    globalState& gs, state& s, ptracer& t, scheduler& sched) {
-}
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {}
 // =======================================================================================
 bool mkdirSystemCall::handleDetPre(
     globalState& gs, state& s, ptracer& t, scheduler& sched) {

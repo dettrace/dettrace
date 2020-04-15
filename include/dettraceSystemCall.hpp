@@ -703,10 +703,11 @@ public:
 };
 // =======================================================================================
 /**
- * int clock_nanosleep(clockid_t id, int flags, const struct timespec *req, struct timespec *rem);
+ * int clock_nanosleep(clockid_t id, int flags, const struct timespec *req,
+ struct timespec *rem);
  *
- * clock_nanosleep()  suspends  the  execution of the calling thread until either at
- least the
+ * clock_nanosleep()  suspends  the  execution of the calling thread until
+ either at least the
  * time specified in *req has elapsed. rem is populated with the time left if
  this system
  * call was interrupted by a signal.

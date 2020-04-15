@@ -745,17 +745,13 @@ static unsigned long traceePreinitMmap(pid_t pid, ptracer& t) {
 
   /**
    * 0:   0f 05           syscall
-   * 2:   c3              retq          ; not filered by seccomp, untraced_syscall
-   * 3:   90              nop
-   * 4:   0f 05           syscall       ; traced syscall
-   * 6:   c3              retq
-   * 7:   90              nop
-   * 8:   e8 f3 ff ff ff  callq  0 <_do_syscall>      ; untraced syscall, then breakpoint.
-   * d:   cc              int3
-   * e:   66 90           xchg   %ax,%ax
-   * 10:  e8 ef ff ff ff  callq  4 <_do_syscall+0x4>  ; traced syscall, then breakpoint
-   * 15:  cc              int3
-   * 16:  66 90           xchg   %ax,%ax
+   * 2:   c3              retq          ; not filered by seccomp,
+   * untraced_syscall 3:   90              nop 4:   0f 05           syscall ;
+   * traced syscall 6:   c3              retq 7:   90              nop 8:   e8
+   * f3 ff ff ff  callq  0 <_do_syscall>      ; untraced syscall, then
+   * breakpoint. d:   cc              int3 e:   66 90           xchg   %ax,%ax
+   * 10:  e8 ef ff ff ff  callq  4 <_do_syscall+0x4>  ; traced syscall, then
+   * breakpoint 15:  cc              int3 16:  66 90           xchg   %ax,%ax
    */
   unsigned long injected_insns[] = {
       0x90c3050f90c3050fUL,

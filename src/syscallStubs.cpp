@@ -1,12 +1,16 @@
-#include <sys/types.h>
 #include <sys/ptrace.h>
+#include <sys/types.h>
 #include <tuple>
 
-#include "utilSystemCalls.hpp"
 #include "syscallStubs.hpp"
+#include "utilSystemCalls.hpp"
 
 // =======================================================================================
-extern "C" long untraced_syscall(pid_t pid, struct SyscallTrap* trap_syscall, int syscall, const unsigned long args[]) {
+extern "C" long untraced_syscall(
+    pid_t pid,
+    struct SyscallTrap* trap_syscall,
+    int syscall,
+    const unsigned long args[]) {
   struct user_regs_struct regs;
   VERIFY(ptrace(PTRACE_GETREGS, pid, NULL, (void*)&regs) == 0);
 
@@ -50,7 +54,8 @@ long injectSystemCall(pid_t pid, int syscall, SyscallArgs& args) {
   return untraced_syscall(pid, NULL, syscall, args.args);
 }
 
-std::tuple<long, unsigned long, unsigned long> injectTrappedSystemCall(pid_t pid, int syscall, const SyscallArgs& args) {
+std::tuple<long, unsigned long, unsigned long> injectTrappedSystemCall(
+    pid_t pid, int syscall, const SyscallArgs& args) {
   SyscallTrap trap;
   long retval = untraced_syscall(pid, &trap, syscall, args.args);
   std::tuple<long, unsigned long, unsigned long> res;

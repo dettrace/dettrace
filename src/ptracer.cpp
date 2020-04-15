@@ -18,8 +18,8 @@ extern "C" {
 #include <tuple>
 
 #include "dettraceSystemCall.hpp"
-#include "utilSystemCalls.hpp"
 #include "ptracer.hpp"
+#include "utilSystemCalls.hpp"
 
 using namespace std;
 
