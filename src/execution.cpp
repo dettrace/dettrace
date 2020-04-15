@@ -232,7 +232,6 @@ void execution::handlePtraceEventExit(pid_t traceesPid) {
 
       auto msg = "Manually exiting thread %d after exit_group.\n";
       log.writeToLog(Importance::info, msg, thread);
-      int status;
 
       int ret = ptrace(PTRACE_CONT, thread, 0, 0);
       // see BUGS in man 2 ptrace

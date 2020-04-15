@@ -154,7 +154,6 @@ int proc_get_map_entries(pid_t pid, struct ProcMapEntry* ep, int size) {
   close(fd);
   buffer[nr] = '\0';
 
-  struct ProcMapEntry mapEntry;
   while (res < size && (line = strsep(&text, "\n")) != NULL) {
     if (parse_entry(line, &ep[res]) == 0) {
       ++res;
@@ -165,20 +164,6 @@ out:
   if (fd >= 0) close(fd);
   munmap(buffer, buffer_size);
   return res;
-}
-
-static const char* vdsoGetFuncNames(enum VDSOFunc func) {
-  switch (func) {
-  case VDSO_clock_gettime:
-    return "__vdso_clock_gettime";
-  case VDSO_getcpu:
-    return "__vdso_getcpu";
-  case VDSO_gettimeofday:
-    return "__vdso_gettimeofday";
-  case VDSO_time:
-    return "__vdso_time";
-    // no default let the compiler do exhaustive check
-  }
 }
 
 /// parse [vdso] and [vvar] from /proc/pid/maps.
