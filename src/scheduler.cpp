@@ -119,7 +119,7 @@ void scheduler::remove(pid_t process) {
 }
 
 // CHECK
-bool scheduler::removeAndScheduleNext(pid_t process) {
+void scheduler::removeAndScheduleNext(pid_t process) {
   // This process was removed from the heaps a while ago, it only lives in the
   // finished set now. Note not all processes are marked as finished, only
   // processes that had children alive at their time of exit. This may seem more
@@ -137,10 +137,9 @@ bool scheduler::removeAndScheduleNext(pid_t process) {
   }
 
   if (runnableHeap.empty() && blockedHeap.empty()) {
-    return true;
+    nextPid = -1;
   } else {
     nextPid = scheduleNextProcess();
-    return false;
   }
 }
 

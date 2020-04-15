@@ -31,23 +31,6 @@ using namespace std;
 const size_t wordSize = 8; /**< Size of word, 8 bytes for x86_64. */
 
 /**
- * ptrace event enum.
- * Types of events we expect returned from getNextEvent(), I wish we had ADTs.
- */
-enum class ptraceEvent {
-  syscall, /**< Post system call execution event. */
-  nonEventExit, /** Process/thread has exited. */
-  eventExit, /**< Process/thread has exited. */
-  signal, /**< Received signal. */
-  exec, /**< Execve event. */
-  clone, /**< Clone event. */
-  fork, /**< fork event. */
-  vfork, /** fork event. */
-  terminatedBySignal, /**< Tracee terminated by signal. */
-  seccomp,
-};
-
-/**
  * State of SysCall enum.
  * Ptrace does not keep track for us if this is a pre or a post event. Instead
  * we must track this ourselves.

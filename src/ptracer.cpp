@@ -18,18 +18,40 @@ extern "C" {
 #include <tuple>
 
 #include "dettraceSystemCall.hpp"
+#include "utilSystemCalls.hpp"
 #include "ptracer.hpp"
 
 using namespace std;
 
+static void ptrace_setOptions(pid_t pid) {
+  VERIFY(ptrace(PTRACE_SETOPTIONS, pid, NULL, (void*)
+	   (PTRACE_O_EXITKILL | // If Tracer exits. Send SIGKIll signal to all tracees.
+	    PTRACE_O_TRACECLONE | // enroll child of tracee when clone is called.
+	    // We don't really need to catch execves, but we get a spurious signal 5
+	    // from ptrace if we don't.
+	    PTRACE_O_TRACEEXEC |
+	    PTRACE_O_TRACEFORK |
+	    PTRACE_O_TRACEVFORK |
+	    // Stop tracee right as it is about to exit. This is needed as we cannot
+	    // assume WIFEXITED will work, see man ptrace 2.
+	    PTRACE_O_TRACEEXIT |
+	    PTRACE_O_TRACESYSGOOD |
+	    PTRACE_O_TRACESECCOMP |
+      PTRACE_O_TRACEEXEC
+	    )) == 0);
+}
+
 ptracer::ptracer(pid_t pid) {
   traceePid = pid;
 
-  int startingStatus;
-  if (-1 == waitpid(pid, &startingStatus, 0)) {
-    throw runtime_error(
-        "Unable to start first process: " + string{strerror(errno)});
-  }
+  int status;
+
+  VERIFY(waitpid(pid, &status, 0) == pid);
+  VERIFY(WIFSTOPPED(status) && WSTOPSIG(status) == SIGSTOP);
+  // First process is special and we must set the options ourselves.
+  // This is done everytime a new process is spawned.
+  ptrace_setOptions(pid);
+  VERIFY(ptrace(PTRACE_CONT, pid, 0, 0) == 0);
 }
 
 uint64_t ptracer::arg1() { return regs.rdi; }
@@ -98,7 +120,6 @@ void ptracer::setOptions(pid_t pid) {
 	    PTRACE_O_TRACESECCOMP |
       PTRACE_O_TRACEEXEC
 	    ));
-  return;
 }
 
 string ptracer::readTraceeCString(

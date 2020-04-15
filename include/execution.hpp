@@ -195,10 +195,24 @@ public:
    * Processs is done. Remove it from our process scheduler stack and let parent
    * process run.
    * @param traceesPid the pid of the tracee
+   * @see runProgram()
+   */
+  void handleNonEventExit(pid_t traceesPid, int exit_status);
+
+  /**
+   * Handles PTRACE_EXIT_EVENT
+   * this is the exit event cought by ptrace.
+   * @param traceesPid the pid of the tracee
+   * @see runProgram()
+   */
+  void handlePtraceEventExit(pid_t traceesPid);
+  /**
+   * Handles ptrace events from current process.
+   * @param traceesPid the pid of the tracee
    * @return Exit status for runProgram
    * @see runProgram()
    */
-  bool handleNonEventExit(const pid_t traceesPid);
+  void handlePtraceEvent(pid_t traceesPid, int event);
 
   /**
    * Handles system call pre-hook.
@@ -209,7 +223,7 @@ public:
    * REVIEW @return whether to go into post-interception hook
    * @see runProgram()
    */
-  bool handlePreSystemCall(state& currState, const pid_t traceesPid);
+  bool handlePreSystemCall(state& currState, pid_t traceesPid);
 
   /**
    * Handles exit from current process.
@@ -238,14 +252,14 @@ public:
    * @param traceesPid the pid of the tracee
    * @see handleFork.
    */
-  pid_t handleForkEvent(const pid_t traceesPid, bool isThread);
+  pid_t handleForkEvent(pid_t traceesPid, bool isThread);
 
   /**
    * Handle signal event in trace.
    * @param signum signal number
    * @param traceesPid the pid of the tracee
    */
-  void handleSignal(int signum, const pid_t traceesPid);
+  void handleSignal(pid_t traceesPid, int signal);
 
   /**
    * Handle the signal part of @handleFork.
@@ -262,15 +276,9 @@ public:
    * @return Return value dictates whether the postHook should be called as
    * well.
    */
-  bool handleSeccomp(const pid_t traceesPid);
+  void handleSeccomp(pid_t traceesPid);
 
-  /**
-   * Handle seccomp event.
-   * This happens everytime we intercept a system call before the system call is
-   * called. Return value dictates whether the postHook should be called as
-   * well.
-   */
-  bool handleSeccomp();
+  void handlePtraceSyscall(pid_t pid);
 
   /**
    * Call system call handler based on system call number, if number is not a
@@ -292,38 +300,14 @@ public:
       ptracer& t,
       scheduler& sched);
 
-  /**
-   * Catch next event from any process that we are tracing. Return the event
-   * type as well as the pid for the process that created this event, also set
-   * the status.
-   * @param currentPid: the pid of the previously intercepted process. If this
-   * is the first time calling, it is the original process to trace.
-   * @param ptraceSyscall continue with a PTRACE_SYSCALL as the action, if
-   * false, if do PTRACE_CONT instead.
-   * @return tuple of info for intercepted process: event type, pid of the
-   * process we just intercepted, and status retured by waitpid.
-   */
-  tuple<ptraceEvent, pid_t, int> getNextEvent(
-      pid_t currentPid, bool ptraceSystemCall);
-
-  /**
-   * Gets PtraceEvent type.
-   * @param status status number
-   * @return ptrace event type
-   */
-  ptraceEvent getPtraceEvent(const int status);
-
-  /**
-   * Logic for unresponsive thread after exit group, basically, the kernel does
-   * not guarantee this thread will respond to ptrace events, it may already
-   * have exited we wait and see if it sends an exit message through wait.
-   */
-  ptraceEvent handleExitedThread(pid_t currentPid);
-
-  // Core looping logic used by handleExitedThread.
-  pair<bool, ptraceEvent> loopOnWaitpid(pid_t currentPid);
-
   void killAllProcesses() { myScheduler.killAllProcesses(); }
+
+private:
+  void handleRdtscs(pid_t pid, bool is_rdtscp);
+  void handleCpuid(pid_t pid, const struct user_regs_struct& regs);
+  void handleSignalDelivery(pid_t pid, int signal);
+  void handleBreakpoint(pid_t pid, const struct user_regs_struct& regs);
+  void handleSeccompContinue(pid_t pid, bool is_ptrace_syscall);
 };
 
 #endif

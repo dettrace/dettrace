@@ -70,7 +70,7 @@ public:
    * @return return true if we're all done with all processes in the scheduler.
    * This marks the end of the program.
    */
-  bool removeAndScheduleNext(pid_t process);
+  void removeAndScheduleNext(pid_t process);
 
   /**
    * Removes specified process, let our parent run to completion.
