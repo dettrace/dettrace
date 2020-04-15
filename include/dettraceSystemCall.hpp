@@ -703,6 +703,30 @@ public:
 };
 // =======================================================================================
 /**
+ * int clock_nanosleep(clockid_t id, int flags, const struct timespec *req, struct timespec *rem);
+ *
+ * clock_nanosleep()  suspends  the  execution of the calling thread until either at
+ least the
+ * time specified in *req has elapsed. rem is populated with the time left if
+ this system
+ * call was interrupted by a signal.
+
+ * Surprisingly, I think this sytem was is deterministic for our purposes if we
+ have a
+ * handle on signals.
+ */
+class clock_nanosleepSystemCall {
+public:
+  static bool handleDetPre(
+      globalState& gs, state& s, ptracer& t, scheduler& sched);
+  static void handleDetPost(
+      globalState& gs, state& s, ptracer& t, scheduler& sched);
+
+  const int syscallNumber = SYS_clock_nanosleep;
+  const string syscallName = "clock_nanosleep";
+};
+// =======================================================================================
+/**
  *
  * int mkdir(const char *pathname, mode_t mode);
  *

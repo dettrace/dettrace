@@ -41,6 +41,7 @@
 #include "execution.hpp"
 #include "ptracer.hpp"
 #include "utilSystemCalls.hpp"
+#include "syscallStubs.hpp"
 
 // Enable tracee reads that are not strictly necessary for functionality, but
 // are enabled for instrumentation or sanity checking. For example, verify,
@@ -1145,21 +1146,28 @@ void lgetxattrSystemCall::handleDetPost(
 // =======================================================================================
 bool nanosleepSystemCall::handleDetPre(
     globalState& gs, state& s, ptracer& t, scheduler& sched) {
-  // Write 0 seconds to time. Required to skip waiting at all.
-  struct timespec* req = (struct timespec*)t.arg1();
-  if (req != nullptr) {
-    struct timespec* myReq = (timespec*)s.mmapMemory.getAddr().ptr;
-    struct timespec localReq = {0};
-
-    t.writeToTracee(traceePtr<struct timespec>(myReq), localReq, s.traceePid);
-    t.writeArg1((uint64_t)myReq);
-  }
+  cancelSystemCall(gs, s, t);
+  SyscallArgs args;
+  injectSystemCall(s.traceePid, SYS_sched_yield, args);
+  t.setReturnRegister(0);
   return false;
 }
 
 void nanosleepSystemCall::handleDetPost(
     globalState& gs, state& s, ptracer& t, scheduler& sched) {
-  runtimeError("nanosleep post-hook should never be called.");
+}
+// =======================================================================================
+bool clock_nanosleepSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  cancelSystemCall(gs, s, t);
+  SyscallArgs args;
+  injectSystemCall(s.traceePid, SYS_sched_yield, args);
+  t.setReturnRegister(0);
+  return false;
+}
+
+void clock_nanosleepSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
 }
 // =======================================================================================
 bool mkdirSystemCall::handleDetPre(
