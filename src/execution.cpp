@@ -9,6 +9,8 @@
 #include "systemCallList.hpp"
 #include "util.hpp"
 #include "vdso.hpp"
+#include "utilSystemCalls.hpp"
+#include "syscallStubs.hpp"
 
 #include <sys/utsname.h>
 #include <stack>
@@ -748,8 +750,13 @@ static unsigned long traceePreinitMmap(pid_t pid, ptracer& t) {
 
   regs.orig_rax = SYS_mmap;
   regs.rax = SYS_mmap;
-  regs.rdi = 0x70000000;
-  regs.rsi = 0x2000;
+  // mmap two fixed pages @0x7000_0000
+  // 0x7000_0000 -- 0x7000_1000 is used for syscall stubs
+  //   perm: r-xp
+  // 0x7000_1000 -- 0x7000_2000 is used for dettrace mmap page
+  //   perm: rwxp
+  regs.rdi = SYSCALL_STUB_PAGE_START;
+  regs.rsi = 0x2000;  // keep syscall stubs and mmap page together, 4KB each.
   regs.rdx = PROT_READ | PROT_WRITE | PROT_EXEC;
   regs.r10 = MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED;
   regs.r8 = -1;
@@ -777,8 +784,22 @@ static unsigned long traceePreinitMmap(pid_t pid, ptracer& t) {
      * 4:   0f 05                   syscall                  // traced syscall
      * 6:   c3                      retq
      * 7:   90                      nop
+     * 8:   e8 f3 ff ff ff          callq  0 <_do_syscall>   // untraced syscall, then breakpoint.
+     * d:   cc                      int3
+     * e:   66 90                   xchg   %ax,%ax
+     * 10:  e8 ef ff ff ff          callq  4 <_do_syscall+0x4> // traced syscall, then breakpoint
+     * 15:  cc                      int3
+     * 16:  66 90                   xchg   %ax,%ax
   */
-  ptracer::doPtrace(PTRACE_POKEDATA, pid, (void*)0x70000000, (void*)0x90c3050f90c3050f);
+  unsigned long injected_insns[] = {
+    0x90c3050f90c3050fUL,
+    0x9066ccfffffff3e8UL,
+    0x9066ccffffffefe8UL,
+  };
+
+  for (int i = 0; i < sizeof(injected_insns) / sizeof(injected_insns[0]); i++) {
+    ptracer::doPtrace(PTRACE_POKEDATA, pid, (void*)(SYSCALL_STUB_PAGE_START + sizeof(unsigned long) * i), (void*)injected_insns[i]);
+  }
 
   // use the 2nd page for mmapedMemory, which length is set to 2048B in state.cpp constr.
   return ret + 0x1000;
@@ -814,6 +835,11 @@ void execution::handleExecEvent(pid_t pid) {
   states.at(pid).fdStatus = make_shared<unordered_map<int, descriptorType>>();
 
   states.at(pid).mmapMemory.setAddr(traceePtr<void>((void*)mmapAddr));
+
+  SyscallArgs args(SYSCALL_STUB_PAGE_START, SYSCALL_STUB_PAGE_SIZE, PROT_READ | PROT_EXEC);
+  
+  // make sure syscall stubs is read only.
+  VERIFY(injectSystemCall(pid, SYS_mprotect, args) == 0);
 
   ptracer::doPtrace(PTRACE_POKETEXT, pid, (void*)rip, (void*)saved_insn);
 }
