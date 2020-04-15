@@ -1183,9 +1183,6 @@ bool execution::callPreHook(
   case SYS_linkat:
     return linkatSystemCall::handleDetPre(gs, s, t, sched);
 
-  case SYS_mmap:
-    return mmapSystemCall::handleDetPre(gs, s, t, sched);
-
   case SYS_open:
     return openSystemCall::handleDetPre(gs, s, t, sched);
 
@@ -1517,9 +1514,6 @@ void execution::callPostHook(
 
   case SYS_linkat:
     return linkatSystemCall::handleDetPost(gs, s, t, sched);
-
-  case SYS_mmap:
-    return mmapSystemCall::handleDetPost(gs, s, t, sched);
 
   case SYS_open:
     return openSystemCall::handleDetPost(gs, s, t, sched);

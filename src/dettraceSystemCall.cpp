@@ -1143,39 +1143,6 @@ bool lgetxattrSystemCall::handleDetPre(
 void lgetxattrSystemCall::handleDetPost(
     globalState& gs, state& s, ptracer& t, scheduler& sched) {}
 // =======================================================================================
-bool mmapSystemCall::handleDetPre(
-    globalState& gs, state& s, ptracer& t, scheduler& sched) {
-  return true;
-}
-
-void mmapSystemCall::handleDetPost(
-    globalState& gs, state& s, ptracer& t, scheduler& sched) {
-  // This isn't a natural call mmap from the tracee we injected this call
-  // ourselves!
-  if (s.syscallInjected) {
-    gs.log.writeToLog(
-        Importance::info,
-        "This mmap was inject for use in pre and post hook purposes.\n");
-
-    if (t.getRax().ptr == MAP_FAILED) {
-      runtimeError(
-          "Unable to properly inject mmap call to tracee!\n"
-          "mmap call returned: " +
-          to_string(t.getReturnValue()) + "\n");
-    }
-    s.syscallInjected = false;
-
-    // save memory address to be used later
-    s.mmapMemory.setAddr(t.getRax());
-
-    // Inject original system call:
-    // Previous state that should have been set by system call that created this
-    // fstat injection.
-    t.setRegs(s.regSaver.popRegisterState());
-    replaySystemCall(gs, t, t.getSystemCallNumber());
-  }
-}
-// =======================================================================================
 bool nanosleepSystemCall::handleDetPre(
     globalState& gs, state& s, ptracer& t, scheduler& sched) {
   // Write 0 seconds to time. Required to skip waiting at all.

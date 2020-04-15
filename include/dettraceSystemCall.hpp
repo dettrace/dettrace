@@ -655,24 +655,6 @@ public:
 };
 
 // =======================================================================================
-/*
- * void* mmap(void* addr, size_t length, int prot, int flags, int fd, off_t
- * offset);
- *
- * TODO: This is currently implemented to handle injected calls only
- */
-class mmapSystemCall {
-public:
-  static bool handleDetPre(
-      globalState& gs, state& s, ptracer& t, scheduler& sched);
-  static void handleDetPost(
-      globalState& gs, state& s, ptracer& t, scheduler& sched);
-
-  const int syscallNumber = SYS_mmap;
-  const string syscallName = "mmap";
-};
-
-// =======================================================================================
 /**
  * int fstatat(int dirfd, const char *pathname, struct stat *statbuf, int
  * flags);
