@@ -748,10 +748,10 @@ static unsigned long traceePreinitMmap(pid_t pid, ptracer& t) {
 
   regs.orig_rax = SYS_mmap;
   regs.rax = SYS_mmap;
-  regs.rdi = 0;
-  regs.rsi = 0x10000;
+  regs.rdi = 0x70000000;
+  regs.rsi = 0x2000;
   regs.rdx = PROT_READ | PROT_WRITE | PROT_EXEC;
-  regs.r10 = MAP_PRIVATE | MAP_ANONYMOUS;
+  regs.r10 = MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED;
   regs.r8 = -1;
   regs.r9 = 0;
 
@@ -770,7 +770,18 @@ static unsigned long traceePreinitMmap(pid_t pid, ptracer& t) {
   memcpy(&regs, &oldRegs, sizeof(regs));
   ptracer::doPtrace(PTRACE_SETREGS, pid, 0, &regs);
 
-  return ret;
+  /*
+     * 0:   0f 05                   syscall
+     * 2:   c3                      retq                     // not filered by seccomp, untraced_syscall
+     * 3:   90                      nop
+     * 4:   0f 05                   syscall                  // traced syscall
+     * 6:   c3                      retq
+     * 7:   90                      nop
+  */
+  ptracer::doPtrace(PTRACE_POKEDATA, pid, (void*)0x70000000, (void*)0x90c3050f90c3050f);
+
+  // use the 2nd page for mmapedMemory, which length is set to 2048B in state.cpp constr.
+  return ret + 0x1000;
 }
 
 void execution::handleExecEvent(pid_t pid) {
@@ -802,7 +813,6 @@ void execution::handleExecEvent(pid_t pid) {
   // Reset file descriptor state, it is wiped after execve.
   states.at(pid).fdStatus = make_shared<unordered_map<int, descriptorType>>();
 
-  states.at(pid).mmapMemory.doesExist = true;
   states.at(pid).mmapMemory.setAddr(traceePtr<void>((void*)mmapAddr));
 
   ptracer::doPtrace(PTRACE_POKETEXT, pid, (void*)rip, (void*)saved_insn);

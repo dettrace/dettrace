@@ -482,16 +482,14 @@ static int runTracee(
   // Perform execve based on user command.
   ptracer::doPtrace(PTRACE_TRACEME, 0, NULL, NULL);
 
-  // Set up seccomp + bpf filters using libseccomp.
-  // Default action to take when no rule applies to system call. We send a
-  // PTRACE_SECCOMP event message to the tracer with a unique data: INT16_MAX
-  seccomp myFilter{opts.debug_level, opts.convert_uids};
-
   // Stop ourselves until the tracer is ready. This ensures the tracer has time
   // to get set up.
   raise(SIGSTOP);
 
-  myFilter.loadFilterToKernel();
+  // Set up seccomp + bpf filters using libseccomp.
+  // Default action to take when no rule applies to system call. We send a
+  // PTRACE_SECCOMP event message to the tracer with a unique data: INT16_MAX
+  seccomp myFilter{opts.debug_level, opts.convert_uids};
 
   // execvpe() duplicates the actions of the shell in searching for an
   // executable file if the specified filename does not contain a slash (/)
