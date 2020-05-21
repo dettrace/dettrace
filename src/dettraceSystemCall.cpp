@@ -469,6 +469,7 @@ void epoll_pwaitSystemCall::handleDetPost(
 // =======================================================================================
 bool execveSystemCall::handleDetPre(
     globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  string execvePath = t.readTraceeCString(traceePtr<char>((char*)t.arg1()), s.traceePid);
   printInfoString(t.arg1(), gs.log, s.traceePid, t);
 
   auto tgNumber = gs.threadGroupNumber.at(s.traceePid);
@@ -519,6 +520,20 @@ bool execveSystemCall::handleDetPre(
     auto msg2 =
         "Envp: " + gs.log.makeTextColored(Color::green, execveEnvp) + "\n";
     gs.log.writeToLogNoFormat(Importance::info, msg2);
+  }
+
+  bool isExempted = false;
+  for (auto exemptedBinary : gs.exemptedBinaries) {
+    // TODO RGS: Don't require the full path?
+    if (exemptedBinary == execvePath) {
+      isExempted = true;
+      break;
+    }
+  }
+
+  if (isExempted) {
+    std::cout << "RGS exempted" << std::endl;;
+    ptracer::doPtrace(PTRACE_DETACH, s.traceePid, NULL, NULL);
   }
 
   // WARNING: Never change this, there is no execve post-hook event. You will

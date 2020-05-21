@@ -336,6 +336,7 @@ static int _dettrace_child(const CloneArgs* clone_args) {
                   opts->allow_network,
                   logical_clock::from_time_t(opts->epoch),
                   chrono::microseconds(opts->clock_step),
+                  opts->exempted_binaries,
                   opts->sys_enter,
                   opts->sys_exit,
                   opts->user_data};

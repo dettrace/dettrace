@@ -160,6 +160,8 @@ private:
 
   unsigned prngSeed;
 
+  std::vector<std::string> exempted_binaries;
+
   SysEnter sys_enter_hook = nullptr;
   SysExit sys_exit_hook = nullptr;
   void* user_data;
@@ -186,6 +188,7 @@ public:
       bool allow_network,
       logical_clock::time_point epoch,
       logical_clock::duration clock_step,
+      std::vector<std::string> exempted_binaries,
       SysEnter sys_enter_hook,
       SysExit sys_exit_hook,
       void* user_data);

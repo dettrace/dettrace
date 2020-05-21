@@ -3,6 +3,7 @@
 
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "PRNG.hpp"
 #include "ValueMapper.hpp"
@@ -35,6 +36,7 @@ public:
       bool kernelPre4_12,
       unsigned prngSeed,
       logical_clock::time_point epoch,
+      std::vector<std::string> exemptedBinaries,
       bool allow_network = false);
 
   /**
@@ -155,6 +157,8 @@ public:
    * which can happen in old CPUs or in certain VM.
    */
   bool allow_trapCPUID;
+
+  std::vector<std::string> exemptedBinaries;
 };
 
 #endif

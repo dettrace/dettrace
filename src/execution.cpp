@@ -60,6 +60,7 @@ execution::execution(
     bool allow_network,
     logical_clock::time_point epoch,
     logical_clock::duration clock_step,
+    std::vector<std::string> exempted_binaries,
     SysEnter sys_enter_hook,
     SysExit sys_exit_hook,
     void* user_data)
@@ -71,16 +72,17 @@ execution::execution(
       tracer{startingPid},
       // Create our global state once, share across class.
       myGlobalState{
-          log,          ValueMapper<ino_t, ino_t>{log, "inode map", 1},
-          ModTimeMap{}, kernelCheck(4, 12, 0),
-          prngSeed,     epoch,
-          allow_network},
+          log,               ValueMapper<ino_t, ino_t>{log, "inode map", 1},
+          ModTimeMap{},      kernelCheck(4, 12, 0),
+          prngSeed,          epoch,
+          exempted_binaries, allow_network},
       myScheduler{startingPid, log},
       debugLevel{debugLevel},
       vdsoFuncs(vdsoFuncs, vdsoFuncs + nbVdsoFuncs),
       epoch(epoch),
       clock_step(clock_step),
       prngSeed(prngSeed),
+      exempted_binaries(exempted_binaries),
       sys_enter_hook(sys_enter_hook),
       sys_exit_hook(sys_exit_hook),
       user_data(user_data) {

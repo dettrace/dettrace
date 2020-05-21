@@ -3,6 +3,9 @@
 
 #include <time.h>
 
+#include <string>
+#include <vector>
+
 extern "C" {
 
 struct SyscallState {
@@ -118,6 +121,9 @@ typedef struct {
   bool use_color;
   bool print_statistics;
   const char* log_file;
+
+  // Exempted binaries
+  std::vector<std::string> exempted_binaries;
 } TraceOptions;
 
 /**

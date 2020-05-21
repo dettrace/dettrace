@@ -84,6 +84,8 @@ struct programArgs {
   unsigned short prng_seed;
   bool in_docker;
 
+  std::vector<std::string> exemptedBinaries;
+
   programArgs(int argc, char* argv[]) {
     this->argc = argc;
     this->argv = argv;
@@ -228,6 +230,7 @@ static int run_main(programArgs& args) {
       .use_color = args.useColor,
       .print_statistics = args.printStatistics,
       .log_file = args.logFile.c_str(),
+      .exempted_binaries = args.exemptedBinaries,
   };
 
   pid_t pid = dettrace(&options);
@@ -529,6 +532,13 @@ programArgs parseProgramArguments(int argc, char* argv[]) {
       "read/write retries, rdtsc, rdtscp, cpuid. The default is `false`.",
       cxxopts::value<bool>()->default_value("false"));
 
+  options.add_options(
+     "4. Exempted binaries\n"
+    " --------------------\n")
+    ( "exemptedBinary",
+      "Don't sandbox this binary. This flag can be passed multiple times.",
+      cxxopts::value<std::vector<std::string>>());
+
   // internal options
   options.add_options(
      "4. Internal/Advanced flags you are unlikely to use\n"
@@ -715,6 +725,12 @@ programArgs parseProgramArguments(int argc, char* argv[]) {
         }
       }
     }
+
+    const std::vector<std::string> emptyExemptedBinaries;
+    auto exemptedBinaries =
+        (static_cast<OptionValue1>(result["exemptedBinary"])).unwrap_or(emptyExemptedBinaries);
+    std::copy(
+        exemptedBinaries.begin(), exemptedBinaries.end(), std::back_inserter(args.exemptedBinaries));
 
     args.args.clear();
     if (!result["program"].count()) {
