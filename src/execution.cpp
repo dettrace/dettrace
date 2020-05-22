@@ -290,8 +290,17 @@ int execution::runProgram() {
     ptraceEvent ret;
 
     pid_t nextPid = myScheduler.getNext();
-    bool post = states.at(nextPid).callPostHook;
-    tie(ret, traceesPid, status) = getNextEvent(nextPid, post);
+
+    // Mock exit event and let error handling code take care of cleaning
+    // up.
+    if(myGlobalState.binaryExempted.count(nextPid) != 0){
+      status = 0;
+      ret = ptraceEvent::nonEventExit;
+      traceesPid = nextPid;
+    } else {
+      bool post = states.at(nextPid).callPostHook;
+      tie(ret, traceesPid, status) = getNextEvent(nextPid, post);
+    }
 
     // Most common event. We handle the pre-hook for system calls here.
     if (ret == ptraceEvent::seccomp) {
@@ -1674,7 +1683,7 @@ void execution::callPostHook(
 // =======================================================================================
 tuple<ptraceEvent, pid_t, int> execution::getNextEvent(
     pid_t pidToContinue, bool ptraceSystemcall) {
-  // fprintf(stderr, "Getting next event for pid %d\n", pidToContinue);
+  cout << "Getting next event for pid: " << pidToContinue << " ptraceSystemcall: " << ptraceSystemcall << endl;
   // 3rd return value of this function. Holds the status after waitpid call.
   int status = 0;
   // Pid of the process whose event we just intercepted through ptrace.

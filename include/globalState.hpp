@@ -159,6 +159,12 @@ public:
   bool allow_trapCPUID;
 
   std::vector<std::string> exemptedBinaries;
+
+  // Deep in the execve prehook handler we can decide to detach a process
+  // and excempt it from being ptraced. The logic for handling process exit
+  // and scheduling is complicated. So instead of doing it ourselves we
+  // fake an exit event and let the code handle it!
+  unordered_set<pid_t> binaryExempted;
 };
 
 #endif
