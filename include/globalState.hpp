@@ -165,6 +165,7 @@ public:
   // and scheduling is complicated. So instead of doing it ourselves we
   // fake an exit event and let the code handle it!
   unordered_set<pid_t> binaryExempted;
+  unordered_set<pid_t> pidsToBeDetached;
 };
 
 #endif

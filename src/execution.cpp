@@ -302,6 +302,15 @@ int execution::runProgram() {
       tie(ret, traceesPid, status) = getNextEvent(nextPid, post);
     }
 
+    if (ret != ptraceEvent::exec && myGlobalState.pidsToBeDetached.count(traceesPid) != 0) {
+      // Detach exempted process
+      std::cout << "RGS detached" << std::endl;;
+      doWithCheck(
+                  ptracer::doPtrace(PTRACE_DETACH, traceesPid, NULL, NULL),
+                  "cannot ptrace detach");
+      myGlobalState.binaryExempted.insert(traceesPid);
+    }
+
     // Most common event. We handle the pre-hook for system calls here.
     if (ret == ptraceEvent::seccomp) {
       log.writeToLog(Importance::extra, "Is seccomp event!\n");

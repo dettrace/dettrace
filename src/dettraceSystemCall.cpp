@@ -532,12 +532,9 @@ bool execveSystemCall::handleDetPre(
   }
 
   if (isExempted) {
-    std::cout << "RGS exempted" << std::endl;;
-    doWithCheck(
-                ptracer::doPtrace(PTRACE_DETACH, s.traceePid, NULL, NULL),
-                "cannot ptrace detach");
+    std::cout << "RGS to be detached" << std::endl;;
     // TODO Check and fail if pid was already present.
-    gs.binaryExempted.insert(t.getPid());
+    gs.pidsToBeDetached.insert(t.getPid());
   }
 
   // WARNING: Never change this, there is no execve post-hook event. You will
