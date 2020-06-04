@@ -309,6 +309,7 @@ int execution::runProgram() {
                   ptracer::doPtrace(PTRACE_DETACH, traceesPid, NULL, NULL),
                   "cannot ptrace detach");
       myGlobalState.binaryExempted.insert(traceesPid);
+      myGlobalState.pidsToBeDetached.erase(traceesPid);
       continue;
     }
 
