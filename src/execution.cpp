@@ -309,6 +309,7 @@ int execution::runProgram() {
                   ptracer::doPtrace(PTRACE_DETACH, traceesPid, NULL, NULL),
                   "cannot ptrace detach");
       myGlobalState.binaryExempted.insert(traceesPid);
+      continue;
     }
 
     // Most common event. We handle the pre-hook for system calls here.
