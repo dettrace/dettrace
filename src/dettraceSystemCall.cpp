@@ -1024,6 +1024,21 @@ void getrusageSystemCall::handleDetPost(
   return;
 }
 // =======================================================================================
+bool getsidSystemCall::handleDetPre(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  return true;
+}
+void getsidSystemCall::handleDetPost(
+    globalState& gs, state& s, ptracer& t, scheduler& sched) {
+  // NB: pretend everyone is in their own session
+  pid_t sid = t.getPid();
+  if (0 != t.arg1()) {
+    sid = t.arg1();
+  }
+  t.setReturnRegister(sid);
+  return;
+}
+// =======================================================================================
 bool gettimeofdaySystemCall::handleDetPre(
     globalState& gs, state& s, ptracer& t, scheduler& sched) {
   return true;
