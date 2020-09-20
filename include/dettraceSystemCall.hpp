@@ -576,6 +576,24 @@ public:
 // =======================================================================================
 /**
  *
+ * pid_t getsid(pid_t pid);
+ *
+ * returns a session ID
+ *
+ */
+class getsidSystemCall {
+public:
+  static bool handleDetPre(
+      globalState& gs, state& s, ptracer& t, scheduler& sched);
+  static void handleDetPost(
+      globalState& gs, state& s, ptracer& t, scheduler& sched);
+
+  const int syscallNumber = SYS_getsid;
+  const string syscallName = "getsid";
+};
+// =======================================================================================
+/**
+ *
  * int gettimeofday(struct timeval *tv, struct timezone *tz);
  *
  * gives the number of seconds and microseconds since the Epoch

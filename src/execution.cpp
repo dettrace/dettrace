@@ -1110,6 +1110,9 @@ bool execution::callPreHook(
   case SYS_getrusage:
     return getrusageSystemCall::handleDetPre(gs, s, t, sched);
 
+  case SYS_getsid:
+    return getsidSystemCall::handleDetPre(gs, s, t, sched);
+
   case SYS_gettimeofday:
     return gettimeofdaySystemCall::handleDetPre(gs, s, t, sched);
 
