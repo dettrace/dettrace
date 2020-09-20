@@ -1453,7 +1453,7 @@ void execution::callPostHook(
 
   case SYS_getsid:
     return getsidSystemCall::handleDetPost(gs, s, t, sched);
-    
+
   case SYS_gettimeofday:
     return gettimeofdaySystemCall::handleDetPost(gs, s, t, sched);
 
